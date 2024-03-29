@@ -1,5 +1,5 @@
-use base64::Engine;
 use base64::prelude::BASE64_URL_SAFE_NO_PAD;
+use base64::Engine;
 use p256::ecdsa::{Signature, SigningKey};
 use p256::ecdsa::signature::Signer;
 use p256::FieldBytes;
@@ -18,7 +18,7 @@ pub struct TurnkeyApiKey {
     pub public_key_hex: String,
 }
 
-pub fn stamp(request_body: String, api_key: &TurnkeyApiKey) -> Result<String, StampError> {
+pub fn stamp(request_body: String, api_key: &TurnkeyApiKey) -> String {
     let private_key_bytes = hex::decode(&api_key.private_key_hex).unwrap();
     let signing_key: SigningKey = SigningKey::from_bytes(FieldBytes::from_slice(&private_key_bytes)).unwrap();
     let sig: Signature = signing_key.sign(request_body.as_bytes());

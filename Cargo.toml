@@ -5,8 +5,8 @@ edition = "2021"
 publish = false
 
 [dependencies]
-p256 = { version = "0.13.2", default-features = false }
-base64 = { version = "0.22.0", default-features = false }
+p256 = { version = "0.13.2", default-features = false, features = ["ecdsa"] }
+base64 = { version = "0.22.0", default-features = false, features = ["std"] }
 serde = { version = "1.0.197", default-features = false, features = ["std", "derive"] }
-serde_json = { version = "1.0.115", default-features = false }
-hex = { version = "0.4.3", default-features = false }
+serde_json = { version = "1.0.115", default-features = false, features = ["std"] }
+hex = { version = "0.4.3", default-features = false, features = ["std"] }
