@@ -6,6 +6,8 @@ Unlike other languages ([Typescript](https://github.com/tkhq/sdk), [Ruby](https:
 
 If you are working on a project in Rust and would benefit from a Rust SDK please open an issue or get in touch with us (hello@turnkey.com) and we can discuss prioritizing this.
 
-The main challenge when making requests to the Turnkey API is [request stamping](https://docs.turnkey.com/api-design/stamps). This repo includes a stamper for reference, credits go to @luca992!
+The main challenge when making requests to the Turnkey API is [request stamping](https://docs.turnkey.com/api-design/stamps). This repo includes a code to sign API request bodies. Credits go to [@luca992](https://github.com/luca992) for the initial snippet!
 
 ==> [`lib.rs`](./src/lib.rs)
+
+There is another Rust client available, maintained by [@Eliascm17](https://github.com/Eliascm17) : [Eliascm17/turnkey](https://github.com/Eliascm17/turnkey) with some more structure around API requests/responses.
