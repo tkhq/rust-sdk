@@ -18,7 +18,7 @@ pub struct TurnkeyApiKey {
     pub public_key_hex: String,
 }
 
-pub fn stamp(request_body: String, api_key: &TurnkeyApiKey) -> String {
+pub fn stamp(request_body: String, api_key: &TurnkeyApiKey) -> Result<String, StampError> {
     let private_key_bytes = hex::decode(&api_key.private_key_hex).unwrap();
     let signing_key: SigningKey = SigningKey::from_bytes(FieldBytes::from_slice(&private_key_bytes)).unwrap();
     let sig: Signature = signing_key.sign(request_body.as_bytes());
