@@ -11,3 +11,4 @@ p256 = { version = "0.13.2", default-features = false, features = ["ecdsa"] }
 serde = { version = "1.0.197", default-features = false, features = ["std", "derive"] }
 serde_json = { version = "1.0.115", default-features = false, features = ["std"] }
 thiserror = { version = "1.0.58", default-features = false }
+serde_repr = { version = "0.1.19", default-features = false }

@@ -6,6 +6,10 @@ use p256::FieldBytes;
 use serde::Serialize;
 use thiserror::Error;
 
+mod models;
+mod requests;
+mod responses;
+
 #[derive(Error, Debug, PartialEq)]
 pub enum StampError {
     #[error("cannot decode private key: invalid hex")]
