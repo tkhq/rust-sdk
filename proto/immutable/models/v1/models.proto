@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package immutable.models.v1;
+
+import "immutable/common/v1/common.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/immutable/models/v1";
+
+// These messages are considered immutable because:
+// 1. The payload and signature values are stored in traditional DB columns
+// 2. The signatures are created by signing a digest of the payload
+// 3. Modifying the payload (e.g. adding or removing fields) will invalidate all stored signatures
+
+message AccountPayload {
+  string organization_id = 1;
+  string wallet_id = 2;
+  immutable.common.v1.Curve curve = 3;
+  immutable.common.v1.PathFormat path_format = 4;
+  string path = 5;
+  immutable.common.v1.AddressFormat address_format = 6;
+  string address = 7;
+  bool exported = 8;
+}
+
+message Account {
+  AccountPayload payload = 1;
+  // Signer signature over hash(payload)
+  Signature signature = 2;
+}
+
+message NotarizationPayload {
+  // Hash of the organization data
+  string organization_digest = 1;
+  // Hash of the previous notarization; used to verify notarization digest
+  string previous_notarization_digest = 2;
+  // Used to verifiy notarization hash and recency requirements
+  // This timestamp is in ms, in UTC. It comes directly from the NSM.
+  uint64 timestamp = 3;
+  // The serialized organization version used to calculate the digest
+  string organization_data_version = 4;
+  // The UUID of the organization
+  string organization_id = 5;
+}
+
+message Notarization {
+  NotarizationPayload payload = 8;
+  // Notarizer signature over hash(payload)
+  Signature signature = 7;
+}
+
+// while not technically immutable, this felt like the logical place to put this for now
+message NotarizedOrganization {
+  bytes data_bytes = 1;
+  immutable.models.v1.Notarization notarization = 2;
+}
+
+enum SignatureScheme {
+  SIGNATURE_SCHEME_UNSPECIFIED = 0;
+  // Scheme used for Turnkey's public API
+  SIGNATURE_SCHEME_TK_API_P256 = 1;
+  // Scheme used on our UI when users sign with Webauthn
+  // Public keys are encoded using COSE (https://www.w3.org/TR/webauthn-2/#sctn-encoded-credPubKey-examples)
+  SIGNATURE_SCHEME_TK_WEBAUTHN = 2;
+  // Scheme used by our enclave applications
+  SIGNATURE_SCHEME_TK_QUORUM_P256 = 3;
+}
+
+message Signature {
+  SignatureScheme scheme = 1;
+  string public_key = 2;
+  string message = 3;
+  string signature = 4;
+}

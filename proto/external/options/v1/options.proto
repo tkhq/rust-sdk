@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package external.options.v1;
+
+import "vendor/google/api/field_behavior.proto";
+import "vendor/protoc-gen-openapiv2/options/annotations.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/external/options/v1";
+
+message Pagination {
+  string limit = 1 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A limit of the number of object to be returned, between 1 and 100. Defaults to 10."}
+  ];
+  string before = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A pagination cursor. This is an object ID that enables you to fetch all objects before this ID."}
+  ];
+  string after = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A pagination cursor. This is an object ID that enables you to fetch all objects after this ID."}
+  ];
+}

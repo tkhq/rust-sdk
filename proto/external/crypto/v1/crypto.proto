@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package external.crypto.v1;
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/external/crypto/v1";
+
+message Signature {
+  SignatureScheme scheme = 1;
+  string public_key = 2;
+  string message = 3;
+  string signature = 4;
+}
+
+enum SignatureScheme {
+  SIGNATURE_SCHEME_UNSPECIFIED = 0;
+  // Scheme used for Turnkey's public API
+  SIGNATURE_SCHEME_TK_API_P256 = 1;
+  // Scheme used on our UI when users sign with Webauthn
+  // Public keys are encoded using COSE (https://www.w3.org/TR/webauthn-2/#sctn-encoded-credPubKey-examples)
+  SIGNATURE_SCHEME_TK_WEBAUTHN = 2;
+  // Scheme used by our enclave applications
+  SIGNATURE_SCHEME_TK_QUORUM_P256 = 3;
+}
+
+enum HashFunction {
+  // Default value if a hash function is not set explicitly.
+  HASH_FUNCTION_UNSPECIFIED = 0;
+  // No-op function. Useful if you want to pass raw digests to sign (ECDSA-only)
+  HASH_FUNCTION_NO_OP = 1;
+  // Standard SHA-256. Used in the Bitcoin ecosystem.
+  HASH_FUNCTION_SHA256 = 2;
+  // Keccak-256 (not the same as NIST SHA-3!).
+  // This is the hash function used in the Ethereum ecosystem.
+  HASH_FUNCTION_KECCAK256 = 3;
+  // Callers must use this enum value when signing with ed25519 keys.
+  // This is because, unlike ECDSA, EdDSA's API does not support signing raw digests (see RFC 8032).
+  HASH_FUNCTION_NOT_APPLICABLE = 4;
+}
+
+enum PayloadEncoding {
+  // Default value if payload encoding is not set explicitly
+  PAYLOAD_ENCODING_UNSPECIFIED = 0;
+  // Payload is encoded in hexadecimal
+  // We accept 0x-prefixed or non-0x prefixed payloads.
+  // We accept any casing (uppercase, lowercase, or mixed)
+  PAYLOAD_ENCODING_HEXADECIMAL = 1;
+  // Payload is encoded as utf-8 text
+  // Will be converted to bytes for signature with Rust's standard String.as_bytes()
+  PAYLOAD_ENCODING_TEXT_UTF8 = 2;
+}
+
+enum Curve {
+  CURVE_UNSPECIFIED = 0;
+  // Curve SECP256K1 as defined in https://www.secg.org/sec2-v2.pdf
+  CURVE_SECP256K1 = 1;
+  // Curve ED25519 as defined in https://www.rfc-editor.org/rfc/rfc8032
+  CURVE_ED25519 = 2;
+}
