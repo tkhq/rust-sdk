@@ -3,6 +3,12 @@ name = "rust_sdk"
 version = "0.0.1"
 edition = "2021"
 publish = false
+build = false
+
+[[bin]]
+name = "generate"
+path = "generate.rs"
+required-features = ["build_deps"]
 
 [dependencies]
 base64 = { version = "0.22.0", default-features = false, features = ["std"] }
@@ -11,3 +17,9 @@ p256 = { version = "0.13.2", default-features = false, features = ["ecdsa"] }
 serde = { version = "1.0.197", default-features = false, features = ["std", "derive"] }
 serde_json = { version = "1.0.115", default-features = false, features = ["std"] }
 thiserror = { version = "1.0.58", default-features = false }
+bytes = { version = "1.6.0", default-features = false }
+prost = { version = "0.12.6", default-features = false }
+prost-build = { version = "0.12.6", default-features = false, optional = true }
+
+[features]
+build_deps = ["prost-build"]
