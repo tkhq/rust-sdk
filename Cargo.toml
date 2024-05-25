@@ -20,6 +20,8 @@ thiserror = { version = "1.0.58", default-features = false }
 bytes = { version = "1.6.0", default-features = false }
 prost = { version = "0.12.6", default-features = false }
 prost-build = { version = "0.12.6", default-features = false, optional = true }
+reqwest = { version = "0.12.4", default-features = false, features = ["json"] }
+dotenv = "0.15.0"
 
 [features]
 build_deps = ["prost-build"]
