@@ -11,3 +11,10 @@ The main challenge when making requests to the Turnkey API is [request stamping]
 ==> [`lib.rs`](./src/lib.rs)
 
 There is another Rust client available, maintained by [@Eliascm17](https://github.com/Eliascm17): [Eliascm17/turnkey](https://github.com/Eliascm17/turnkey). This client offers some structure around API requests/responses on top of bare request signing.
+
+## Generating code from protos
+
+To generate code from the checked-in protos:
+```
+OUT_DIR=src/gen cargo run --bin generate --features build_deps
+```

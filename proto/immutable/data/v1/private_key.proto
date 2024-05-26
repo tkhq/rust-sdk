@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package immutable.data.v1;
+
+import "immutable/common/v1/common.proto";
+import "immutable/data/v1/common.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/immutable/data/v1";
+
+message PrivateKey {
+  string uuid = 1;
+  // public key (!= address)
+  string public_key = 2;
+  // encrypted private key
+  string encrypted_private_key = 3;
+  string label = 4;
+  immutable.data.v1.Curve curve = 5;
+  repeated immutable.data.v1.Address addresses = 6;
+  repeated string tags = 7;
+  immutable.data.v1.Timestamp created_at = 8;
+  immutable.data.v1.Timestamp updated_at = 9;
+  // has this private key been exported?
+  bool exported = 10;
+}
+
+enum Curve {
+  CURVE_UNSPECIFIED = 0;
+  CURVE_SECP256K1 = 1;
+  CURVE_ED25519 = 2;
+}
+
+message Address {
+  immutable.common.v1.AddressFormat format = 1;
+  string address = 2;
+}
