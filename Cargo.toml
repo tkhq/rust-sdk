@@ -1,5 +1,5 @@
 [package]
-name = "rust_sdk"
+name = "tkhq-rust-sdk"
 version = "0.0.1"
 edition = "2021"
 publish = false
@@ -17,16 +17,25 @@ p256 = { version = "0.13.2", default-features = false, features = ["ecdsa"] }
 serde = { version = "1.0.197", default-features = false, features = ["std", "derive"] }
 serde_json = { version = "1.0.115", default-features = false, features = ["std"] }
 thiserror = { version = "1.0.58", default-features = false }
-bytes = { version = "1.6.0", default-features = false }
+bytes = { version = "^1.4.0", default-features = false }
+reqwest = { version = "0.12.4", features=["json"]}
 prost = { version = "0.12.6" }
 prost-types = { version = "0.12.6" }
+pbjson-types = { version = "0.6.0" }
+pbjson = { version = "0.6.0" }
+log = { version = "0.4.21" }
+
+# only needed for the generate binary
 prost-build = { version = "0.12.6", default-features = false, optional = true }
-pbjson-build = "0.6.2"
-pbjson-types = "0.6.0"
-pbjson = "0.6.0"
+pbjson-build = { version = "0.6.2", default-features = false, optional = true }
 
 [features]
-build_deps = ["prost-build"]
+build_deps = ["prost-build", "pbjson-build"]
+
+[dev-dependencies]
+dotenv = "0.15.0"
+env_logger = "0.11.3"
+tokio = { version = "1.38.0", features = ["full"] }
 
 [patch.crates-io]
 pbjson-build = { git = "https://github.com/mountainpath9/pbjson.git", branch="mpath-fix-result-scoping" }
