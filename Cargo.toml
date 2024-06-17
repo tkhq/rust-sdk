@@ -18,8 +18,15 @@ serde = { version = "1.0.197", default-features = false, features = ["std", "der
 serde_json = { version = "1.0.115", default-features = false, features = ["std"] }
 thiserror = { version = "1.0.58", default-features = false }
 bytes = { version = "1.6.0", default-features = false }
-prost = { version = "0.12.6", default-features = false }
+prost = { version = "0.12.6" }
+prost-types = { version = "0.12.6" }
 prost-build = { version = "0.12.6", default-features = false, optional = true }
+pbjson-build = "0.6.2"
+pbjson-types = "0.6.0"
+pbjson = "0.6.0"
 
 [features]
 build_deps = ["prost-build"]
+
+[patch.crates-io]
+pbjson-build = { git = "https://github.com/mountainpath9/pbjson.git", branch="mpath-fix-result-scoping" }

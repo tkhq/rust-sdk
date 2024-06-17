@@ -93,7 +93,7 @@ pub struct Swagger {
     /// extra functionality that is not covered by the standard OpenAPI Specification.
     /// See: <https://swagger.io/docs/specification/2-0/swagger-extensions/>
     #[prost(map="string, message", tag="15")]
-    pub extensions: ::std::collections::HashMap<::prost::alloc::string::String, ::prost_types::Value>,
+    pub extensions: ::std::collections::HashMap<::prost::alloc::string::String, ::pbjson_types::Value>,
 }
 /// `Operation` is a representation of OpenAPI v2 specification's Operation object.
 ///
@@ -178,7 +178,7 @@ pub struct Operation {
     /// extra functionality that is not covered by the standard OpenAPI Specification.
     /// See: <https://swagger.io/docs/specification/2-0/swagger-extensions/>
     #[prost(map="string, message", tag="13")]
-    pub extensions: ::std::collections::HashMap<::prost::alloc::string::String, ::prost_types::Value>,
+    pub extensions: ::std::collections::HashMap<::prost::alloc::string::String, ::pbjson_types::Value>,
     /// Custom parameters such as HTTP request headers.
     /// See: <https://swagger.io/docs/specification/2-0/describing-parameters/>
     /// and <https://swagger.io/specification/v2/#parameter-object.>
@@ -313,7 +313,7 @@ pub struct Response {
     /// extra functionality that is not covered by the standard OpenAPI Specification.
     /// See: <https://swagger.io/docs/specification/2-0/swagger-extensions/>
     #[prost(map="string, message", tag="5")]
-    pub extensions: ::std::collections::HashMap<::prost::alloc::string::String, ::prost_types::Value>,
+    pub extensions: ::std::collections::HashMap<::prost::alloc::string::String, ::pbjson_types::Value>,
 }
 /// `Info` is a representation of OpenAPI v2 specification's Info object.
 ///
@@ -366,7 +366,7 @@ pub struct Info {
     /// extra functionality that is not covered by the standard OpenAPI Specification.
     /// See: <https://swagger.io/docs/specification/2-0/swagger-extensions/>
     #[prost(map="string, message", tag="7")]
-    pub extensions: ::std::collections::HashMap<::prost::alloc::string::String, ::prost_types::Value>,
+    pub extensions: ::std::collections::HashMap<::prost::alloc::string::String, ::pbjson_types::Value>,
 }
 /// `Contact` is a representation of OpenAPI v2 specification's Contact object.
 ///
@@ -593,7 +593,7 @@ pub struct JsonSchema {
     /// extra functionality that is not covered by the standard OpenAPI Specification.
     /// See: <https://swagger.io/docs/specification/2-0/swagger-extensions/>
     #[prost(map="string, message", tag="48")]
-    pub extensions: ::std::collections::HashMap<::prost::alloc::string::String, ::prost_types::Value>,
+    pub extensions: ::std::collections::HashMap<::prost::alloc::string::String, ::pbjson_types::Value>,
 }
 /// Nested message and enum types in `JSONSchema`.
 pub mod json_schema {
@@ -677,7 +677,7 @@ pub struct Tag {
     /// extra functionality that is not covered by the standard OpenAPI Specification.
     /// See: <https://swagger.io/docs/specification/2-0/swagger-extensions/>
     #[prost(map="string, message", tag="4")]
-    pub extensions: ::std::collections::HashMap<::prost::alloc::string::String, ::prost_types::Value>,
+    pub extensions: ::std::collections::HashMap<::prost::alloc::string::String, ::pbjson_types::Value>,
 }
 /// `SecurityDefinitions` is a representation of OpenAPI v2 specification's
 /// Security Definitions object.
@@ -746,7 +746,7 @@ pub struct SecurityScheme {
     /// extra functionality that is not covered by the standard OpenAPI Specification.
     /// See: <https://swagger.io/docs/specification/2-0/swagger-extensions/>
     #[prost(map="string, message", tag="9")]
-    pub extensions: ::std::collections::HashMap<::prost::alloc::string::String, ::prost_types::Value>,
+    pub extensions: ::std::collections::HashMap<::prost::alloc::string::String, ::pbjson_types::Value>,
 }
 /// Nested message and enum types in `SecurityScheme`.
 pub mod security_scheme {
