@@ -17,11 +17,11 @@ pub type TurnkeyResult<T> = std::result::Result<T, TurnkeyError>;
 
 #[derive(Error, Debug)]
 pub enum TurnkeyError {
-    #[error("failed to construct stamper")]
+    #[error("failed to construct stamper: {0}")]
     StampError(StampError),
-    #[error("failed to make http request")]
+    #[error("failed to make http request: {0}")]
     HttpError(ReqwestError),
-    #[error("a failure occurred")]
+    #[error("failed: {0}")]
     OtherError(String),
 }
 
@@ -157,18 +157,19 @@ impl TurnkeyClient {
             .await
             .map_err(TurnkeyError::HttpError)?;
 
-        match response.status() {
-            reqwest::StatusCode::OK => match response.json::<O>().await {
+        let status_response = response.error_for_status_ref().map(|_| ());
+        match status_response {
+            Ok(_) => match response.json::<O>().await {
                 Ok(parsed) => Ok(parsed),
-                Err(e) => Err(TurnkeyError::OtherError(e.to_string())),
+                Err(e) => Err(TurnkeyError::OtherError(format!(
+                    "failed to parse response: {}",
+                    e.to_string()
+                ))),
             },
-            other => {
+            Err(e) => {
                 let body = response.text().await.map_err(TurnkeyError::HttpError)?;
-                log::debug!("error status: {}, body: {}", other, body);
-                Err(TurnkeyError::OtherError(format!(
-                    "Received status code: {}",
-                    other
-                )))
+                log::error!("request failed: {}, body: {}", e.status().unwrap(), body);
+                Err(TurnkeyError::HttpError(e))
             }
         }
     }
