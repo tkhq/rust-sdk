@@ -1,0 +1,148 @@
+syntax = "proto3";
+
+package immutable.webauthn.v1;
+
+import "vendor/google/api/field_behavior.proto";
+import "vendor/protoc-gen-openapiv2/options/annotations.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/immutable/webauthn/v1";
+
+// This proto is in "immutable" because it's shared between Rust code and external interfaces.
+// Also: given these fields are mandated by the spec, we should not change these protos very often, if at all
+
+// Note: another reason why these have to be immutable: some of these protos are used in our intents.
+
+message PublicKeyCredentialDescriptor {
+  // Must be literal string "public-key"
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["public-key"]
+    }
+  ];
+  // ENCODING: base64url
+  string id = 2 [(google.api.field_behavior) = REQUIRED];
+  repeated AuthenticatorTransport transports = 3 [(google.api.field_behavior) = OPTIONAL];
+}
+
+enum AuthenticatorTransport {
+  AUTHENTICATOR_TRANSPORT_UNSPECIFIED = 0;
+  AUTHENTICATOR_TRANSPORT_BLE = 1;
+  AUTHENTICATOR_TRANSPORT_INTERNAL = 2;
+  AUTHENTICATOR_TRANSPORT_NFC = 3;
+  AUTHENTICATOR_TRANSPORT_USB = 4;
+  AUTHENTICATOR_TRANSPORT_HYBRID = 5;
+}
+
+message AuthenticatorAssertionResponse {
+  // ENCODING: base64url
+  string client_data_JSON = 1 [(google.api.field_behavior) = REQUIRED];
+  // ENCODING: base64url
+  string authenticator_data = 2 [(google.api.field_behavior) = REQUIRED];
+  // ENCODING: base64url
+  string signature = 3 [(google.api.field_behavior) = REQUIRED];
+  // NOTE(keyan): The (TypeScript) spec says this field is non-optional but nullable, i.e.
+  //   `userHandle: string | null`
+  //
+  // What we have here is optional and nullable:
+  //   `userHandle?: string | null`
+  //
+  // We need it to be optional because the field needs to be nil-able in go.
+  // However, a future version of TypeScript (w/ stricter options) might not like the type.
+  optional string user_handle = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      extensions: {
+        key: "x-nullable";
+        value {bool_value: true}
+      }
+    }
+  ];
+}
+
+message AuthenticatorAttestationResponse {
+  // ENCODING: base64url
+  string client_data_json = 1 [(google.api.field_behavior) = REQUIRED];
+  // ENCODING: base64url
+  string attestation_object = 2 [(google.api.field_behavior) = REQUIRED];
+  repeated AuthenticatorTransport transports = 3 [(google.api.field_behavior) = OPTIONAL];
+  optional string authenticator_attachment = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: [
+        "cross-platform",
+        "platform"
+      ],
+      extensions: {
+        key: "x-nullable";
+        value {bool_value: true}
+      }
+    }
+  ];
+}
+
+message PublicKeyCredentialWithAttestation {
+  string id = 1 [(google.api.field_behavior) = REQUIRED];
+  // Must be literal string "public-key"
+  string type = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["public-key"]
+    }
+  ];
+  // ENCODING: base64url
+  string raw_id = 3 [(google.api.field_behavior) = REQUIRED];
+  optional string authenticator_attachment = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: [
+        "cross-platform",
+        "platform"
+      ],
+      extensions: {
+        key: "x-nullable";
+        value {bool_value: true}
+      }
+    }
+  ];
+  AuthenticatorAttestationResponse response = 5 [(google.api.field_behavior) = REQUIRED];
+  SimpleClientExtensionResults client_extension_results = 6 [(google.api.field_behavior) = REQUIRED];
+}
+
+message PublicKeyCredentialWithAssertion {
+  string id = 1 [(google.api.field_behavior) = REQUIRED];
+  // Must be literal string "public-key"
+  string type = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["public-key"]
+    }
+  ];
+  // ENCODING: base64url
+  string raw_id = 3 [(google.api.field_behavior) = REQUIRED];
+  optional string authenticator_attachment = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: [
+        "cross-platform",
+        "platform"
+      ],
+      extensions: {
+        key: "x-nullable";
+        value {bool_value: true}
+      }
+    }
+  ];
+  AuthenticatorAssertionResponse response = 5 [(google.api.field_behavior) = REQUIRED];
+  SimpleClientExtensionResults client_extension_results = 6 [(google.api.field_behavior) = REQUIRED];
+}
+
+message SimpleClientExtensionResults {
+  optional bool appid = 1 [(google.api.field_behavior) = OPTIONAL];
+  optional bool appid_exclude = 2 [(google.api.field_behavior) = OPTIONAL];
+  optional CredPropsAuthenticationExtensionsClientOutputs cred_props = 3 [(google.api.field_behavior) = OPTIONAL];
+}
+
+message CredPropsAuthenticationExtensionsClientOutputs {
+  bool rk = 1 [(google.api.field_behavior) = REQUIRED];
+}

@@ -6,7 +6,7 @@ set -e
 cargo build
 
 # Check formatting
-cargo fmt -- --check
+cargo fmt -- --check || (printf "ERROR! cargo fmt failed! Consider running \"cargo fmt --\" to automatically format your code.\n\n" && exit 1)
 
 # Run Clippy
 cargo clippy -- -D warnings
