@@ -1,0 +1,106 @@
+// Protos representing the setting of a payment method
+
+syntax = "proto3";
+
+// buf:lint:ignore PACKAGE_VERSION_SUFFIX
+package immutable.activity.billing;
+
+import "vendor/google/api/field_behavior.proto";
+import "vendor/protoc-gen-openapiv2/options/annotations.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/immutable/activity/billing";
+
+message SetPaymentMethodIntent {
+  // @inject_tag: validate:"required,max=16,numeric"
+  string number = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The account number of the customer's credit card."
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"required,max=4,numeric"
+  string cvv = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The verification digits of the customer's credit card."
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"required,numeric,len=2"
+  string expiry_month = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The month that the credit card expires."
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"required,numeric,len=4"
+  string expiry_year = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The year that the credit card expires."
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"required,email,tk_email"
+  string card_holder_email = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The email that will receive invoices for the credit card."
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"required,tk_label_length"
+  string card_holder_name = 6 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The name associated with the credit card."
+      title: ""
+    }
+  ];
+}
+
+message SetPaymentMethodIntentV2 {
+  // @inject_tag: validate:"required,max=256"
+  string payment_method_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The id of the payment method that was created clientside."
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"required,email,tk_email"
+  string card_holder_email = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The email that will receive invoices for the credit card."
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"required,tk_label_length"
+  string card_holder_name = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The name associated with the credit card."
+      title: ""
+    }
+  ];
+}
+
+message SetPaymentMethodResult {
+  string last_four = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The last four digits of the credit card added."}
+  ];
+
+  string card_holder_name = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The name associated with the payment method."}
+  ];
+
+  string card_holder_email = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The email address associated with the payment method."}
+  ];
+}

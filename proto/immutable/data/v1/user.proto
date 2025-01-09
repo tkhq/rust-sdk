@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package immutable.data.v1;
+
+import "immutable/data/v1/common.proto";
+import "immutable/webauthn/v1/webauthn.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/immutable/data/v1";
+
+message User {
+  string uuid = 1;
+  string alias = 2;
+  // some users do not have emails (programmatic users)
+  optional string email = 3;
+  repeated immutable.data.v1.Authenticator authenticators = 5;
+  repeated immutable.data.v1.ApiKey api_keys = 6;
+  repeated string tags = 7;
+  immutable.data.v1.Timestamp created_at = 8;
+  immutable.data.v1.Timestamp updated_at = 9;
+}
+
+message ApiKey {
+  immutable.data.v1.Credential credential = 1;
+  string uuid = 3;
+  string label = 4;
+  immutable.data.v1.Timestamp created_at = 5;
+  immutable.data.v1.Timestamp updated_at = 6;
+  optional uint64 expiration_seconds = 7;
+}
+
+message Authenticator {
+  repeated immutable.webauthn.v1.AuthenticatorTransport transports = 1;
+  string attestation_type = 2;
+  string aaguid = 3;
+  string credential_id = 5;
+  string model = 6;
+  immutable.data.v1.Credential credential = 7;
+  string uuid = 8;
+  string label = 9;
+  immutable.data.v1.Timestamp created_at = 10;
+  immutable.data.v1.Timestamp updated_at = 11;
+}
+
+message EncryptionKey {
+  string uuid = 1;
+  // public key of the target (e.g. signer enclave)
+  string target_public_key = 2;
+  // encrypted enclave target keypair
+  string encrypted_target_key = 3;
+  immutable.data.v1.Timestamp created_at = 4;
+}

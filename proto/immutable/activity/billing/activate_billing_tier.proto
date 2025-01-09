@@ -1,0 +1,29 @@
+// Proto representing a billing tier activatieon
+
+syntax = "proto3";
+
+// buf:lint:ignore PACKAGE_VERSION_SUFFIX
+package immutable.activity.billing;
+
+import "vendor/google/api/field_behavior.proto";
+import "vendor/protoc-gen-openapiv2/options/annotations.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/immutable/activity/billing";
+
+message ActivateBillingTierIntent {
+  // @inject_tag: validate:"required"
+  string product_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The product that the customer wants to subscribe to."
+      title: ""
+    }
+  ];
+}
+
+message ActivateBillingTierResult {
+  string product_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The id of the product being subscribed to."}
+  ];
+}

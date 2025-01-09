@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package immutable.data.v1;
+
+import "immutable/common/v1/common.proto";
+import "immutable/data/v1/common.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/immutable/data/v1";
+
+message Invitation {
+  string uuid = 1;
+  string receiver_alias = 2;
+  string receiver_email = 3;
+  repeated string receiver_tags = 4;
+  immutable.common.v1.AccessType access_type = 5;
+  InvitationStatus status = 6;
+  immutable.data.v1.Timestamp created_at = 7;
+  immutable.data.v1.Timestamp updated_at = 8;
+  string sender_user_id = 9;
+}
+
+enum InvitationStatus {
+  INVITATION_STATUS_UNSPECIFIED = 0;
+  INVITATION_STATUS_CREATED = 1;
+  INVITATION_STATUS_ACCEPTED = 2;
+  reserved 3; // deprecated INVITATION_STATUS_REVOKED
+}

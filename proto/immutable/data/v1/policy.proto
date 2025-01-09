@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package immutable.data.v1;
+
+import "immutable/common/v1/common.proto";
+import "immutable/data/v1/common.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/immutable/data/v1";
+
+message Policy {
+  string uuid = 1;
+  string label = 2;
+  immutable.common.v1.Effect effect = 3;
+  immutable.data.v1.Timestamp created_at = 5;
+  immutable.data.v1.Timestamp updated_at = 6;
+  string notes = 7;
+  optional string consensus = 8;
+  optional string condition = 9;
+}

@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package immutable.data.v2;
+
+import "immutable/data/v1/common.proto";
+import "immutable/data/v1/user.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/immutable/data/v2";
+
+message User {
+  string uuid = 1;
+  string alias = 2;
+  // some users do not have emails (programmatic users)
+  optional string email = 3;
+  repeated immutable.data.v1.Authenticator authenticators = 5;
+  repeated immutable.data.v1.ApiKey api_keys = 6;
+  repeated string tags = 7;
+  immutable.data.v1.Timestamp created_at = 8;
+  immutable.data.v1.Timestamp updated_at = 9;
+  repeated immutable.data.v1.EncryptionKey encryption_keys = 10;
+}
