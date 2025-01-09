@@ -25,6 +25,39 @@ impl PathFormat {
         }
     }
 }
+/// Cryptographic Curve used to generate a given API key
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum ApiKeyCurve {
+    Unspecified = 0,
+    P256 = 2,
+    Secp256k1 = 3,
+    Ed25519 = 4,
+}
+impl ApiKeyCurve {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            ApiKeyCurve::Unspecified => "API_KEY_CURVE_UNSPECIFIED",
+            ApiKeyCurve::P256 => "API_KEY_CURVE_P256",
+            ApiKeyCurve::Secp256k1 => "API_KEY_CURVE_SECP256K1",
+            ApiKeyCurve::Ed25519 => "API_KEY_CURVE_ED25519",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "API_KEY_CURVE_UNSPECIFIED" => Some(Self::Unspecified),
+            "API_KEY_CURVE_P256" => Some(Self::P256),
+            "API_KEY_CURVE_SECP256K1" => Some(Self::Secp256k1),
+            "API_KEY_CURVE_ED25519" => Some(Self::Ed25519),
+            _ => None,
+        }
+    }
+}
 /// Cryptographic Curve used to generate a given Private Key.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
@@ -67,6 +100,41 @@ pub enum AddressFormat {
     Solana = 4,
     Cosmos = 5,
     Tron = 6,
+    Sui = 7,
+    Aptos = 8,
+    /// Bitcoin Mainnet address types
+    BitcoinMainnetP2pkh = 9,
+    BitcoinMainnetP2sh = 10,
+    BitcoinMainnetP2wpkh = 11,
+    BitcoinMainnetP2wsh = 12,
+    BitcoinMainnetP2tr = 13,
+    /// Bitcoin Testnet address types
+    BitcoinTestnetP2pkh = 14,
+    BitcoinTestnetP2sh = 15,
+    BitcoinTestnetP2wpkh = 16,
+    BitcoinTestnetP2wsh = 17,
+    BitcoinTestnetP2tr = 18,
+    /// Bitcoin Signet address types
+    BitcoinSignetP2pkh = 19,
+    BitcoinSignetP2sh = 20,
+    BitcoinSignetP2wpkh = 21,
+    BitcoinSignetP2wsh = 22,
+    BitcoinSignetP2tr = 23,
+    /// Bitcoin Regtest address types
+    BitcoinRegtestP2pkh = 24,
+    BitcoinRegtestP2sh = 25,
+    BitcoinRegtestP2wpkh = 26,
+    BitcoinRegtestP2wsh = 27,
+    BitcoinRegtestP2tr = 28,
+    Sei = 29,
+    Xlm = 30,
+    /// Doge Addresses
+    DogeMainnet = 31,
+    DogeTestnet = 32,
+    /// TON Addresses
+    TonV3r2 = 33,
+    TonV4r2 = 34,
+    Xrp = 35,
 }
 impl AddressFormat {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -82,6 +150,35 @@ impl AddressFormat {
             AddressFormat::Solana => "ADDRESS_FORMAT_SOLANA",
             AddressFormat::Cosmos => "ADDRESS_FORMAT_COSMOS",
             AddressFormat::Tron => "ADDRESS_FORMAT_TRON",
+            AddressFormat::Sui => "ADDRESS_FORMAT_SUI",
+            AddressFormat::Aptos => "ADDRESS_FORMAT_APTOS",
+            AddressFormat::BitcoinMainnetP2pkh => "ADDRESS_FORMAT_BITCOIN_MAINNET_P2PKH",
+            AddressFormat::BitcoinMainnetP2sh => "ADDRESS_FORMAT_BITCOIN_MAINNET_P2SH",
+            AddressFormat::BitcoinMainnetP2wpkh => "ADDRESS_FORMAT_BITCOIN_MAINNET_P2WPKH",
+            AddressFormat::BitcoinMainnetP2wsh => "ADDRESS_FORMAT_BITCOIN_MAINNET_P2WSH",
+            AddressFormat::BitcoinMainnetP2tr => "ADDRESS_FORMAT_BITCOIN_MAINNET_P2TR",
+            AddressFormat::BitcoinTestnetP2pkh => "ADDRESS_FORMAT_BITCOIN_TESTNET_P2PKH",
+            AddressFormat::BitcoinTestnetP2sh => "ADDRESS_FORMAT_BITCOIN_TESTNET_P2SH",
+            AddressFormat::BitcoinTestnetP2wpkh => "ADDRESS_FORMAT_BITCOIN_TESTNET_P2WPKH",
+            AddressFormat::BitcoinTestnetP2wsh => "ADDRESS_FORMAT_BITCOIN_TESTNET_P2WSH",
+            AddressFormat::BitcoinTestnetP2tr => "ADDRESS_FORMAT_BITCOIN_TESTNET_P2TR",
+            AddressFormat::BitcoinSignetP2pkh => "ADDRESS_FORMAT_BITCOIN_SIGNET_P2PKH",
+            AddressFormat::BitcoinSignetP2sh => "ADDRESS_FORMAT_BITCOIN_SIGNET_P2SH",
+            AddressFormat::BitcoinSignetP2wpkh => "ADDRESS_FORMAT_BITCOIN_SIGNET_P2WPKH",
+            AddressFormat::BitcoinSignetP2wsh => "ADDRESS_FORMAT_BITCOIN_SIGNET_P2WSH",
+            AddressFormat::BitcoinSignetP2tr => "ADDRESS_FORMAT_BITCOIN_SIGNET_P2TR",
+            AddressFormat::BitcoinRegtestP2pkh => "ADDRESS_FORMAT_BITCOIN_REGTEST_P2PKH",
+            AddressFormat::BitcoinRegtestP2sh => "ADDRESS_FORMAT_BITCOIN_REGTEST_P2SH",
+            AddressFormat::BitcoinRegtestP2wpkh => "ADDRESS_FORMAT_BITCOIN_REGTEST_P2WPKH",
+            AddressFormat::BitcoinRegtestP2wsh => "ADDRESS_FORMAT_BITCOIN_REGTEST_P2WSH",
+            AddressFormat::BitcoinRegtestP2tr => "ADDRESS_FORMAT_BITCOIN_REGTEST_P2TR",
+            AddressFormat::Sei => "ADDRESS_FORMAT_SEI",
+            AddressFormat::Xlm => "ADDRESS_FORMAT_XLM",
+            AddressFormat::DogeMainnet => "ADDRESS_FORMAT_DOGE_MAINNET",
+            AddressFormat::DogeTestnet => "ADDRESS_FORMAT_DOGE_TESTNET",
+            AddressFormat::TonV3r2 => "ADDRESS_FORMAT_TON_V3R2",
+            AddressFormat::TonV4r2 => "ADDRESS_FORMAT_TON_V4R2",
+            AddressFormat::Xrp => "ADDRESS_FORMAT_XRP",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -94,6 +191,35 @@ impl AddressFormat {
             "ADDRESS_FORMAT_SOLANA" => Some(Self::Solana),
             "ADDRESS_FORMAT_COSMOS" => Some(Self::Cosmos),
             "ADDRESS_FORMAT_TRON" => Some(Self::Tron),
+            "ADDRESS_FORMAT_SUI" => Some(Self::Sui),
+            "ADDRESS_FORMAT_APTOS" => Some(Self::Aptos),
+            "ADDRESS_FORMAT_BITCOIN_MAINNET_P2PKH" => Some(Self::BitcoinMainnetP2pkh),
+            "ADDRESS_FORMAT_BITCOIN_MAINNET_P2SH" => Some(Self::BitcoinMainnetP2sh),
+            "ADDRESS_FORMAT_BITCOIN_MAINNET_P2WPKH" => Some(Self::BitcoinMainnetP2wpkh),
+            "ADDRESS_FORMAT_BITCOIN_MAINNET_P2WSH" => Some(Self::BitcoinMainnetP2wsh),
+            "ADDRESS_FORMAT_BITCOIN_MAINNET_P2TR" => Some(Self::BitcoinMainnetP2tr),
+            "ADDRESS_FORMAT_BITCOIN_TESTNET_P2PKH" => Some(Self::BitcoinTestnetP2pkh),
+            "ADDRESS_FORMAT_BITCOIN_TESTNET_P2SH" => Some(Self::BitcoinTestnetP2sh),
+            "ADDRESS_FORMAT_BITCOIN_TESTNET_P2WPKH" => Some(Self::BitcoinTestnetP2wpkh),
+            "ADDRESS_FORMAT_BITCOIN_TESTNET_P2WSH" => Some(Self::BitcoinTestnetP2wsh),
+            "ADDRESS_FORMAT_BITCOIN_TESTNET_P2TR" => Some(Self::BitcoinTestnetP2tr),
+            "ADDRESS_FORMAT_BITCOIN_SIGNET_P2PKH" => Some(Self::BitcoinSignetP2pkh),
+            "ADDRESS_FORMAT_BITCOIN_SIGNET_P2SH" => Some(Self::BitcoinSignetP2sh),
+            "ADDRESS_FORMAT_BITCOIN_SIGNET_P2WPKH" => Some(Self::BitcoinSignetP2wpkh),
+            "ADDRESS_FORMAT_BITCOIN_SIGNET_P2WSH" => Some(Self::BitcoinSignetP2wsh),
+            "ADDRESS_FORMAT_BITCOIN_SIGNET_P2TR" => Some(Self::BitcoinSignetP2tr),
+            "ADDRESS_FORMAT_BITCOIN_REGTEST_P2PKH" => Some(Self::BitcoinRegtestP2pkh),
+            "ADDRESS_FORMAT_BITCOIN_REGTEST_P2SH" => Some(Self::BitcoinRegtestP2sh),
+            "ADDRESS_FORMAT_BITCOIN_REGTEST_P2WPKH" => Some(Self::BitcoinRegtestP2wpkh),
+            "ADDRESS_FORMAT_BITCOIN_REGTEST_P2WSH" => Some(Self::BitcoinRegtestP2wsh),
+            "ADDRESS_FORMAT_BITCOIN_REGTEST_P2TR" => Some(Self::BitcoinRegtestP2tr),
+            "ADDRESS_FORMAT_SEI" => Some(Self::Sei),
+            "ADDRESS_FORMAT_XLM" => Some(Self::Xlm),
+            "ADDRESS_FORMAT_DOGE_MAINNET" => Some(Self::DogeMainnet),
+            "ADDRESS_FORMAT_DOGE_TESTNET" => Some(Self::DogeTestnet),
+            "ADDRESS_FORMAT_TON_V3R2" => Some(Self::TonV3r2),
+            "ADDRESS_FORMAT_TON_V4R2" => Some(Self::TonV4r2),
+            "ADDRESS_FORMAT_XRP" => Some(Self::Xrp),
             _ => None,
         }
     }
@@ -286,6 +412,10 @@ pub enum CredentialType {
     WebauthnAuthenticator = 1,
     ApiKeyP256 = 2,
     RecoverUserKeyP256 = 3,
+    ApiKeySecp256k1 = 4,
+    EmailAuthKeyP256 = 5,
+    ApiKeyEd25519 = 6,
+    OtpAuthKeyP256 = 7,
 }
 impl CredentialType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -298,6 +428,10 @@ impl CredentialType {
             CredentialType::WebauthnAuthenticator => "CREDENTIAL_TYPE_WEBAUTHN_AUTHENTICATOR",
             CredentialType::ApiKeyP256 => "CREDENTIAL_TYPE_API_KEY_P256",
             CredentialType::RecoverUserKeyP256 => "CREDENTIAL_TYPE_RECOVER_USER_KEY_P256",
+            CredentialType::ApiKeySecp256k1 => "CREDENTIAL_TYPE_API_KEY_SECP256K1",
+            CredentialType::EmailAuthKeyP256 => "CREDENTIAL_TYPE_EMAIL_AUTH_KEY_P256",
+            CredentialType::ApiKeyEd25519 => "CREDENTIAL_TYPE_API_KEY_ED25519",
+            CredentialType::OtpAuthKeyP256 => "CREDENTIAL_TYPE_OTP_AUTH_KEY_P256",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -307,6 +441,10 @@ impl CredentialType {
             "CREDENTIAL_TYPE_WEBAUTHN_AUTHENTICATOR" => Some(Self::WebauthnAuthenticator),
             "CREDENTIAL_TYPE_API_KEY_P256" => Some(Self::ApiKeyP256),
             "CREDENTIAL_TYPE_RECOVER_USER_KEY_P256" => Some(Self::RecoverUserKeyP256),
+            "CREDENTIAL_TYPE_API_KEY_SECP256K1" => Some(Self::ApiKeySecp256k1),
+            "CREDENTIAL_TYPE_EMAIL_AUTH_KEY_P256" => Some(Self::EmailAuthKeyP256),
+            "CREDENTIAL_TYPE_API_KEY_ED25519" => Some(Self::ApiKeyEd25519),
+            "CREDENTIAL_TYPE_OTP_AUTH_KEY_P256" => Some(Self::OtpAuthKeyP256),
             _ => None,
         }
     }
@@ -321,6 +459,8 @@ pub enum FeatureName {
     EmailAuth = 3,
     EmailRecovery = 4,
     Webhook = 5,
+    SmsAuth = 6,
+    OtpEmailAuth = 7,
 }
 impl FeatureName {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -335,6 +475,8 @@ impl FeatureName {
             FeatureName::EmailAuth => "FEATURE_NAME_EMAIL_AUTH",
             FeatureName::EmailRecovery => "FEATURE_NAME_EMAIL_RECOVERY",
             FeatureName::Webhook => "FEATURE_NAME_WEBHOOK",
+            FeatureName::SmsAuth => "FEATURE_NAME_SMS_AUTH",
+            FeatureName::OtpEmailAuth => "FEATURE_NAME_OTP_EMAIL_AUTH",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -346,6 +488,8 @@ impl FeatureName {
             "FEATURE_NAME_EMAIL_AUTH" => Some(Self::EmailAuth),
             "FEATURE_NAME_EMAIL_RECOVERY" => Some(Self::EmailRecovery),
             "FEATURE_NAME_WEBHOOK" => Some(Self::Webhook),
+            "FEATURE_NAME_SMS_AUTH" => Some(Self::SmsAuth),
+            "FEATURE_NAME_OTP_EMAIL_AUTH" => Some(Self::OtpEmailAuth),
             _ => None,
         }
     }
@@ -356,6 +500,8 @@ pub enum TransactionType {
     Unspecified = 0,
     /// Unsigned Ethereum transaction, RLP-encoded and hex-encoded
     Ethereum = 1,
+    /// Unsigned Solana transaction in hex bytes
+    Solana = 2,
 }
 impl TransactionType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -366,6 +512,7 @@ impl TransactionType {
         match self {
             TransactionType::Unspecified => "TRANSACTION_TYPE_UNSPECIFIED",
             TransactionType::Ethereum => "TRANSACTION_TYPE_ETHEREUM",
+            TransactionType::Solana => "TRANSACTION_TYPE_SOLANA",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -373,6 +520,7 @@ impl TransactionType {
         match value {
             "TRANSACTION_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
             "TRANSACTION_TYPE_ETHEREUM" => Some(Self::Ethereum),
+            "TRANSACTION_TYPE_SOLANA" => Some(Self::Solana),
             _ => None,
         }
     }
@@ -386,6 +534,7 @@ pub enum Outcome {
     DenyImplicit = 3,
     RequiresConsensus = 4,
     Rejected = 5,
+    Error = 6,
 }
 impl Outcome {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -400,6 +549,7 @@ impl Outcome {
             Outcome::DenyImplicit => "OUTCOME_DENY_IMPLICIT",
             Outcome::RequiresConsensus => "OUTCOME_REQUIRES_CONSENSUS",
             Outcome::Rejected => "OUTCOME_REJECTED",
+            Outcome::Error => "OUTCOME_ERROR",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -411,6 +561,7 @@ impl Outcome {
             "OUTCOME_DENY_IMPLICIT" => Some(Self::DenyImplicit),
             "OUTCOME_REQUIRES_CONSENSUS" => Some(Self::RequiresConsensus),
             "OUTCOME_REJECTED" => Some(Self::Rejected),
+            "OUTCOME_ERROR" => Some(Self::Error),
             _ => None,
         }
     }

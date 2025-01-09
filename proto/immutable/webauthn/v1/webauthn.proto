@@ -53,8 +53,8 @@ message AuthenticatorAssertionResponse {
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
       extensions: {
-        key: "x-nullable";
-        value {bool_value: true}
+        key: "x-nullable"
+        value: {bool_value: true}
       }
     }
   ];
@@ -72,10 +72,10 @@ message AuthenticatorAttestationResponse {
       enum: [
         "cross-platform",
         "platform"
-      ],
+      ]
       extensions: {
-        key: "x-nullable";
-        value {bool_value: true}
+        key: "x-nullable"
+        value: {bool_value: true}
       }
     }
   ];
@@ -98,10 +98,10 @@ message PublicKeyCredentialWithAttestation {
       enum: [
         "cross-platform",
         "platform"
-      ],
+      ]
       extensions: {
-        key: "x-nullable";
-        value {bool_value: true}
+        key: "x-nullable"
+        value: {bool_value: true}
       }
     }
   ];
@@ -126,10 +126,10 @@ message PublicKeyCredentialWithAssertion {
       enum: [
         "cross-platform",
         "platform"
-      ],
+      ]
       extensions: {
-        key: "x-nullable";
-        value {bool_value: true}
+        key: "x-nullable"
+        value: {bool_value: true}
       }
     }
   ];

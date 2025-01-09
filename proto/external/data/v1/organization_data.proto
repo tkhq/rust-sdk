@@ -26,6 +26,43 @@ message OrganizationData {
   repeated Wallet wallets = 19;
 }
 
+message OauthProvider {
+  string provider_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for an OAuth Provider"}
+  ];
+  string provider_name = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Human-readable name to identify a Provider."
+      title: ""
+    }
+  ];
+  string issuer = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The issuer of the token, typically a URL indicating the authentication server, e.g https://accounts.google.com"
+      title: ""
+    }
+  ];
+  string audience = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Expected audience ('aud' attribute of the signed token) which represents the app ID"
+      title: ""
+    }
+  ];
+  string subject = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Expected subject ('sub' attribute of the signed token) which represents the user ID"
+      title: ""
+    }
+  ];
+  Timestamp created_at = 6 [(google.api.field_behavior) = REQUIRED];
+  Timestamp updated_at = 7 [(google.api.field_behavior) = REQUIRED];
+}
+
 message User {
   string user_id = 1 [
     (google.api.field_behavior) = REQUIRED,
@@ -37,7 +74,11 @@ message User {
   ];
   // some users do not have emails (programmatic users)
   optional string user_email = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-    description: "The user's email address.",
+    description: "The user's email address."
+    title: ""
+  }];
+  optional string user_phone_number = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+    description: "The user's phone number in E.164 format e.g. +13214567890"
     title: ""
   }];
   repeated Authenticator authenticators = 5 [
@@ -52,8 +93,12 @@ message User {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of User Tag IDs."}
   ];
-  Timestamp created_at = 8 [(google.api.field_behavior) = REQUIRED];
-  Timestamp updated_at = 9 [(google.api.field_behavior) = REQUIRED];
+  repeated OauthProvider oauth_providers = 8 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of Oauth Providers."}
+  ];
+  Timestamp created_at = 9 [(google.api.field_behavior) = REQUIRED];
+  Timestamp updated_at = 10 [(google.api.field_behavior) = REQUIRED];
 }
 
 message ApiKey {
@@ -281,4 +326,9 @@ message Wallet {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "True when a given Wallet is imported, false otherwise."}
   ];
+}
+
+message Config {
+  repeated immutable.data.v1.Feature features = 1;
+  Quorum quorum = 2;
 }

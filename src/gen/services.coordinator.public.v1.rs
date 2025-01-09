@@ -29,6 +29,20 @@ pub struct GetWhoamiResponse {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetAttestationDocumentRequest {
+    #[prost(string, tag="1")]
+    pub organization_id: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub enclave_type: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetAttestationDocumentResponse {
+    #[prost(bytes="vec", tag="1")]
+    pub attestation_document: ::prost::alloc::vec::Vec<u8>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetSubOrgIdsRequest {
     #[prost(string, tag="1")]
     pub organization_id: ::prost::alloc::string::String,
@@ -41,7 +55,25 @@ pub struct GetSubOrgIdsRequest {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetVerifiedSubOrgIdsRequest {
+    #[prost(string, tag="1")]
+    pub organization_id: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub filter_type: ::prost::alloc::string::String,
+    #[prost(string, tag="3")]
+    pub filter_value: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="4")]
+    pub pagination_options: ::core::option::Option<super::super::super::super::external::options::v1::Pagination>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetSubOrgIdsResponse {
+    #[prost(string, repeated, tag="1")]
+    pub organization_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetVerifiedSubOrgIdsResponse {
     #[prost(string, repeated, tag="1")]
     pub organization_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
@@ -171,6 +203,20 @@ pub struct GetAuthenticatorsResponse {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetOauthProvidersRequest {
+    #[prost(string, tag="1")]
+    pub organization_id: ::prost::alloc::string::String,
+    #[prost(string, optional, tag="2")]
+    pub user_id: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetOauthProvidersResponse {
+    #[prost(message, repeated, tag="1")]
+    pub oauth_providers: ::prost::alloc::vec::Vec<super::super::super::super::external::data::v1::OauthProvider>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetApiKeyRequest {
     #[prost(string, tag="1")]
     pub organization_id: ::prost::alloc::string::String,
@@ -288,4 +334,16 @@ pub struct ListPrivateKeyTagsRequest {
 pub struct ListPrivateKeyTagsResponse {
     #[prost(message, repeated, tag="1")]
     pub private_key_tags: ::prost::alloc::vec::Vec<super::super::super::super::external::data::v1::Tag>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetOrganizationConfigsRequest {
+    #[prost(string, tag="1")]
+    pub organization_id: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetOrganizationConfigsResponse {
+    #[prost(message, optional, tag="1")]
+    pub configs: ::core::option::Option<super::super::super::super::external::data::v1::Config>,
 }

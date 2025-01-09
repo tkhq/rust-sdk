@@ -3,7 +3,7 @@
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Intent {
-    #[prost(oneof="intent::Inner", tags="1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65")]
+    #[prost(oneof="intent::Inner", tags="1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80")]
     pub inner: ::core::option::Option<intent::Inner>,
 }
 /// Nested message and enum types in `Intent`.
@@ -60,11 +60,11 @@ pub mod intent {
         #[prost(message, tag="25")]
         CreatePolicyIntentV2(super::CreatePolicyIntentV2),
         #[prost(message, tag="26")]
-        SetPaymentMethodIntent(super::SetPaymentMethodIntent),
+        SetPaymentMethodIntent(super::super::billing::SetPaymentMethodIntent),
         #[prost(message, tag="27")]
-        ActivateBillingTierIntent(super::ActivateBillingTierIntent),
+        ActivateBillingTierIntent(super::super::billing::ActivateBillingTierIntent),
         #[prost(message, tag="28")]
-        DeletePaymentMethodIntent(super::DeletePaymentMethodIntent),
+        DeletePaymentMethodIntent(super::super::billing::DeletePaymentMethodIntent),
         #[prost(message, tag="29")]
         CreatePolicyIntentV3(super::CreatePolicyIntentV3),
         #[prost(message, tag="30")]
@@ -96,7 +96,7 @@ pub mod intent {
         #[prost(message, tag="43")]
         UpdatePolicyIntent(super::UpdatePolicyIntent),
         #[prost(message, tag="44")]
-        SetPaymentMethodIntentV2(super::SetPaymentMethodIntentV2),
+        SetPaymentMethodIntentV2(super::super::billing::SetPaymentMethodIntentV2),
         #[prost(message, tag="45")]
         CreateSubOrganizationIntentV3(super::CreateSubOrganizationIntentV3),
         #[prost(message, tag="46")]
@@ -139,55 +139,37 @@ pub mod intent {
         SignRawPayloadsIntent(super::SignRawPayloadsIntent),
         #[prost(message, tag="65")]
         CreateReadOnlySessionIntent(super::CreateReadOnlySessionIntent),
+        #[prost(message, tag="66")]
+        CreateOauthProvidersIntent(super::CreateOauthProvidersIntent),
+        #[prost(message, tag="67")]
+        DeleteOauthProvidersIntent(super::DeleteOauthProvidersIntent),
+        #[prost(message, tag="68")]
+        CreateSubOrganizationIntentV5(super::CreateSubOrganizationIntentV5),
+        #[prost(message, tag="69")]
+        OauthIntent(super::OauthIntent),
+        #[prost(message, tag="70")]
+        CreateApiKeysIntentV2(super::CreateApiKeysIntentV2),
+        #[prost(message, tag="71")]
+        CreateReadWriteSessionIntent(super::CreateReadWriteSessionIntent),
+        #[prost(message, tag="72")]
+        EmailAuthIntentV2(super::EmailAuthIntentV2),
+        #[prost(message, tag="73")]
+        CreateSubOrganizationIntentV6(super::CreateSubOrganizationIntentV6),
+        #[prost(message, tag="74")]
+        DeletePrivateKeysIntent(super::DeletePrivateKeysIntent),
+        #[prost(message, tag="75")]
+        DeleteWalletsIntent(super::DeleteWalletsIntent),
+        #[prost(message, tag="76")]
+        CreateReadWriteSessionIntentV2(super::CreateReadWriteSessionIntentV2),
+        #[prost(message, tag="77")]
+        DeleteSubOrganizationIntent(super::DeleteSubOrganizationIntent),
+        #[prost(message, tag="78")]
+        InitOtpAuthIntent(super::InitOtpAuthIntent),
+        #[prost(message, tag="79")]
+        OtpAuthIntent(super::OtpAuthIntent),
+        #[prost(message, tag="80")]
+        CreateSubOrganizationIntentV7(super::CreateSubOrganizationIntentV7),
     }
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct DeletePaymentMethodIntent {
-    #[prost(string, optional, tag="1")]
-    pub payment_method_id: ::core::option::Option<::prost::alloc::string::String>,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ActivateBillingTierIntent {
-    /// @inject_tag: validate:"required"
-    #[prost(string, tag="1")]
-    pub product_id: ::prost::alloc::string::String,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct SetPaymentMethodIntent {
-    /// @inject_tag: validate:"required,max=16,numeric"
-    #[prost(string, tag="1")]
-    pub number: ::prost::alloc::string::String,
-    /// @inject_tag: validate:"required,max=4,numeric"
-    #[prost(string, tag="2")]
-    pub cvv: ::prost::alloc::string::String,
-    /// @inject_tag: validate:"required,numeric,len=2"
-    #[prost(string, tag="3")]
-    pub expiry_month: ::prost::alloc::string::String,
-    /// @inject_tag: validate:"required,numeric,len=4"
-    #[prost(string, tag="4")]
-    pub expiry_year: ::prost::alloc::string::String,
-    /// @inject_tag: validate:"required,email,tk_email"
-    #[prost(string, tag="5")]
-    pub card_holder_email: ::prost::alloc::string::String,
-    /// @inject_tag: validate:"required,tk_label_length"
-    #[prost(string, tag="6")]
-    pub card_holder_name: ::prost::alloc::string::String,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct SetPaymentMethodIntentV2 {
-    /// @inject_tag: validate:"required,max=256"
-    #[prost(string, tag="1")]
-    pub payment_method_id: ::prost::alloc::string::String,
-    /// @inject_tag: validate:"required,email,tk_email"
-    #[prost(string, tag="2")]
-    pub card_holder_email: ::prost::alloc::string::String,
-    /// @inject_tag: validate:"required,tk_label_length"
-    #[prost(string, tag="3")]
-    pub card_holder_name: ::prost::alloc::string::String,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -244,7 +226,17 @@ pub struct CreateAuthenticatorsIntentV2 {
 pub struct CreateApiKeysIntent {
     /// @inject_tag: validate:"dive,required"
     #[prost(message, repeated, tag="1")]
-    pub api_keys: ::prost::alloc::vec::Vec<ApiKeyParams>,
+    pub api_keys: ::prost::alloc::vec::Vec<super::api::ApiKeyParams>,
+    /// @inject_tag: validate:"required,uuid"
+    #[prost(string, tag="2")]
+    pub user_id: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CreateApiKeysIntentV2 {
+    /// @inject_tag: validate:"dive,required"
+    #[prost(message, repeated, tag="1")]
+    pub api_keys: ::prost::alloc::vec::Vec<ApiKeyParamsV2>,
     /// @inject_tag: validate:"required,uuid"
     #[prost(string, tag="2")]
     pub user_id: ::prost::alloc::string::String,
@@ -278,6 +270,9 @@ pub struct UpdateUserIntent {
     /// @inject_tag: validate:"omitempty,dive,uuid"
     #[prost(string, repeated, tag="4")]
     pub user_tag_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    /// @inject_tag: validate:"omitempty,e164"
+    #[prost(string, optional, tag="5")]
+    pub user_phone_number: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -454,6 +449,34 @@ pub struct CreatePoliciesIntent {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CreateReadOnlySessionIntent {
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CreateReadWriteSessionIntent {
+    #[prost(string, tag="1")]
+    pub target_public_key: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"email,tk_email"
+    #[prost(string, tag="2")]
+    pub email: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"omitempty,tk_label_length,tk_label"
+    #[prost(string, optional, tag="3")]
+    pub api_key_name: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag="4")]
+    pub expiration_seconds: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CreateReadWriteSessionIntentV2 {
+    #[prost(string, tag="1")]
+    pub target_public_key: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"omitempty,uuid"
+    #[prost(string, optional, tag="2")]
+    pub user_id: ::core::option::Option<::prost::alloc::string::String>,
+    /// @inject_tag: validate:"omitempty,tk_label_length,tk_label"
+    #[prost(string, optional, tag="3")]
+    pub api_key_name: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag="4")]
+    pub expiration_seconds: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -715,6 +738,78 @@ pub struct CreateSubOrganizationIntentV4 {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CreateSubOrganizationIntentV5 {
+    /// @inject_tag: validate:"omitempty,tk_label,tk_label_length"
+    #[prost(string, tag="1")]
+    pub sub_organization_name: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    #[prost(message, repeated, tag="2")]
+    pub root_users: ::prost::alloc::vec::Vec<RootUserParamsV2>,
+    /// @inject_tag: validate:"required"
+    #[prost(int32, tag="3")]
+    pub root_quorum_threshold: i32,
+    /// @inject_tag: validate:"omitempty"
+    #[prost(message, optional, tag="4")]
+    pub wallet: ::core::option::Option<WalletParams>,
+    /// @inject_tag: validate:"omitempty"
+    #[prost(bool, optional, tag="5")]
+    pub disable_email_recovery: ::core::option::Option<bool>,
+    /// @inject_tag: validate:"omitempty"
+    #[prost(bool, optional, tag="6")]
+    pub disable_email_auth: ::core::option::Option<bool>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CreateSubOrganizationIntentV6 {
+    /// @inject_tag: validate:"omitempty,tk_label,tk_label_length"
+    #[prost(string, tag="1")]
+    pub sub_organization_name: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    #[prost(message, repeated, tag="2")]
+    pub root_users: ::prost::alloc::vec::Vec<RootUserParamsV3>,
+    /// @inject_tag: validate:"required"
+    #[prost(int32, tag="3")]
+    pub root_quorum_threshold: i32,
+    /// @inject_tag: validate:"omitempty"
+    #[prost(message, optional, tag="4")]
+    pub wallet: ::core::option::Option<WalletParams>,
+    /// @inject_tag: validate:"omitempty"
+    #[prost(bool, optional, tag="5")]
+    pub disable_email_recovery: ::core::option::Option<bool>,
+    /// @inject_tag: validate:"omitempty"
+    #[prost(bool, optional, tag="6")]
+    pub disable_email_auth: ::core::option::Option<bool>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CreateSubOrganizationIntentV7 {
+    /// @inject_tag: validate:"omitempty,tk_label,tk_label_length"
+    #[prost(string, tag="1")]
+    pub sub_organization_name: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    #[prost(message, repeated, tag="2")]
+    pub root_users: ::prost::alloc::vec::Vec<RootUserParamsV4>,
+    /// @inject_tag: validate:"required"
+    #[prost(int32, tag="3")]
+    pub root_quorum_threshold: i32,
+    /// @inject_tag: validate:"omitempty"
+    #[prost(message, optional, tag="4")]
+    pub wallet: ::core::option::Option<WalletParams>,
+    /// @inject_tag: validate:"omitempty"
+    #[prost(bool, optional, tag="5")]
+    pub disable_email_recovery: ::core::option::Option<bool>,
+    /// @inject_tag: validate:"omitempty"
+    #[prost(bool, optional, tag="6")]
+    pub disable_email_auth: ::core::option::Option<bool>,
+    /// @inject_tag: validate:"omitempty"
+    #[prost(bool, optional, tag="7")]
+    pub disable_sms_auth: ::core::option::Option<bool>,
+    /// @inject_tag: validate:"omitempty"
+    #[prost(bool, optional, tag="8")]
+    pub disable_otp_email_auth: ::core::option::Option<bool>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UpdatePolicyIntent {
     /// @inject_tag: validate:"uuid"
     #[prost(string, tag="1")]
@@ -810,10 +905,70 @@ pub struct RootUserParams {
     pub user_email: ::core::option::Option<::prost::alloc::string::String>,
     /// @inject_tag: validate:"dive"
     #[prost(message, repeated, tag="5")]
-    pub api_keys: ::prost::alloc::vec::Vec<ApiKeyParams>,
+    pub api_keys: ::prost::alloc::vec::Vec<super::api::ApiKeyParams>,
     /// @inject_tag: validate:"dive"
     #[prost(message, repeated, tag="6")]
     pub authenticators: ::prost::alloc::vec::Vec<AuthenticatorParamsV2>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RootUserParamsV2 {
+    /// @inject_tag: validate:"required,tk_label_length,tk_label"
+    #[prost(string, tag="2")]
+    pub user_name: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"omitempty,email,tk_email"
+    #[prost(string, optional, tag="3")]
+    pub user_email: ::core::option::Option<::prost::alloc::string::String>,
+    /// @inject_tag: validate:"dive"
+    #[prost(message, repeated, tag="5")]
+    pub api_keys: ::prost::alloc::vec::Vec<super::api::ApiKeyParams>,
+    /// @inject_tag: validate:"dive"
+    #[prost(message, repeated, tag="6")]
+    pub authenticators: ::prost::alloc::vec::Vec<AuthenticatorParamsV2>,
+    /// @inject_tag: validate:"dive"
+    #[prost(message, repeated, tag="7")]
+    pub oauth_providers: ::prost::alloc::vec::Vec<OauthProviderParams>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RootUserParamsV3 {
+    /// @inject_tag: validate:"required,tk_label_length,tk_label"
+    #[prost(string, tag="2")]
+    pub user_name: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"omitempty,email,tk_email"
+    #[prost(string, optional, tag="3")]
+    pub user_email: ::core::option::Option<::prost::alloc::string::String>,
+    /// @inject_tag: validate:"dive"
+    #[prost(message, repeated, tag="5")]
+    pub api_keys: ::prost::alloc::vec::Vec<ApiKeyParamsV2>,
+    /// @inject_tag: validate:"dive"
+    #[prost(message, repeated, tag="6")]
+    pub authenticators: ::prost::alloc::vec::Vec<AuthenticatorParamsV2>,
+    /// @inject_tag: validate:"dive"
+    #[prost(message, repeated, tag="7")]
+    pub oauth_providers: ::prost::alloc::vec::Vec<OauthProviderParams>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RootUserParamsV4 {
+    /// @inject_tag: validate:"required,tk_label_length,tk_label"
+    #[prost(string, tag="2")]
+    pub user_name: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"omitempty,email,tk_email"
+    #[prost(string, optional, tag="3")]
+    pub user_email: ::core::option::Option<::prost::alloc::string::String>,
+    /// @inject_tag: validate:"omitempty,e164"
+    #[prost(string, optional, tag="4")]
+    pub user_phone_number: ::core::option::Option<::prost::alloc::string::String>,
+    /// @inject_tag: validate:"dive"
+    #[prost(message, repeated, tag="5")]
+    pub api_keys: ::prost::alloc::vec::Vec<ApiKeyParamsV2>,
+    /// @inject_tag: validate:"dive"
+    #[prost(message, repeated, tag="6")]
+    pub authenticators: ::prost::alloc::vec::Vec<AuthenticatorParamsV2>,
+    /// @inject_tag: validate:"dive"
+    #[prost(message, repeated, tag="7")]
+    pub oauth_providers: ::prost::alloc::vec::Vec<OauthProviderParams>,
 }
 /// Each of these customization parameters are optional; resort to defaults if any are not provided.
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -838,6 +993,13 @@ pub struct EmailCustomizationParams {
     #[prost(string, optional, tag="5")]
     pub template_id: ::core::option::Option<::prost::alloc::string::String>,
 }
+/// Each of these customization parameters are optional; resort to defaults if any are not provided.
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SmsCustomizationParams {
+    #[prost(string, optional, tag="1")]
+    pub template: ::core::option::Option<::prost::alloc::string::String>,
+}
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct InitUserEmailRecoveryIntent {
@@ -851,6 +1013,56 @@ pub struct InitUserEmailRecoveryIntent {
     pub expiration_seconds: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(message, optional, tag="5")]
     pub email_customization: ::core::option::Option<EmailCustomizationParams>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct InitOtpAuthIntent {
+    /// @inject_tag: validate:"required,oneof=OTP_TYPE_SMS OTP_TYPE_EMAIL"
+    #[prost(string, tag="1")]
+    pub otp_type: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub contact: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="3")]
+    pub email_customization: ::core::option::Option<EmailCustomizationParams>,
+    #[prost(message, optional, tag="4")]
+    pub sms_customization: ::core::option::Option<SmsCustomizationParams>,
+    #[prost(string, optional, tag="5")]
+    pub user_identifier: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct OtpAuthIntent {
+    /// @inject_tag: validate:"required"
+    #[prost(string, tag="1")]
+    pub otp_id: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required,len=6,numeric"
+    #[prost(string, tag="2")]
+    pub otp_code: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"omitempty,hexadecimal"
+    #[prost(string, tag="3")]
+    pub target_public_key: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"omitempty,tk_label_length,tk_label"
+    #[prost(string, optional, tag="4")]
+    pub api_key_name: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag="5")]
+    pub expiration_seconds: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(bool, optional, tag="6")]
+    pub invalidate_existing: ::core::option::Option<bool>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct OauthIntent {
+    /// @inject_tag: validate:"required"
+    #[prost(string, tag="1")]
+    pub oidc_token: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"hexadecimal"
+    #[prost(string, tag="2")]
+    pub target_public_key: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"omitempty,tk_label_length,tk_label"
+    #[prost(string, optional, tag="3")]
+    pub api_key_name: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag="4")]
+    pub expiration_seconds: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -868,6 +1080,27 @@ pub struct EmailAuthIntent {
     pub expiration_seconds: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(message, optional, tag="5")]
     pub email_customization: ::core::option::Option<EmailCustomizationParams>,
+    #[prost(bool, optional, tag="6")]
+    pub invalidate_existing: ::core::option::Option<bool>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct EmailAuthIntentV2 {
+    /// @inject_tag: validate:"email,tk_email"
+    #[prost(string, tag="1")]
+    pub email: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"hexadecimal"
+    #[prost(string, tag="2")]
+    pub target_public_key: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"omitempty,tk_label_length,tk_label"
+    #[prost(string, optional, tag="3")]
+    pub api_key_name: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag="4")]
+    pub expiration_seconds: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(message, optional, tag="5")]
+    pub email_customization: ::core::option::Option<EmailCustomizationParams>,
+    #[prost(bool, optional, tag="6")]
+    pub invalidate_existing: ::core::option::Option<bool>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -904,11 +1137,55 @@ pub struct ImportPrivateKeyIntent {
     #[prost(enumeration="super::super::common::v1::AddressFormat", repeated, packed="false", tag="5")]
     pub address_formats: ::prost::alloc::vec::Vec<i32>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CreateOauthProvidersIntent {
+    /// @inject_tag: validate:"required,uuid"
+    #[prost(string, tag="1")]
+    pub user_id: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required,dive,required,uuid"
+    #[prost(message, repeated, tag="7")]
+    pub oauth_providers: ::prost::alloc::vec::Vec<OauthProviderParams>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DeleteOauthProvidersIntent {
+    /// @inject_tag: validate:"required,uuid"
+    #[prost(string, tag="1")]
+    pub user_id: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"dive,required,uuid"
+    #[prost(string, repeated, tag="2")]
+    pub provider_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DeletePrivateKeysIntent {
+    /// @inject_tag: validate:"required,dive,uuid"
+    #[prost(string, repeated, tag="1")]
+    pub private_key_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(bool, optional, tag="2")]
+    pub delete_without_export: ::core::option::Option<bool>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DeleteWalletsIntent {
+    /// @inject_tag: validate:"required,dive,uuid"
+    #[prost(string, repeated, tag="1")]
+    pub wallet_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(bool, optional, tag="2")]
+    pub delete_without_export: ::core::option::Option<bool>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DeleteSubOrganizationIntent {
+    #[prost(bool, optional, tag="1")]
+    pub delete_without_export: ::core::option::Option<bool>,
+}
 /// Result of the intended action.
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Result {
-    #[prost(oneof="result::Inner", tags="1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53")]
+    #[prost(oneof="result::Inner", tags="1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66")]
     pub inner: ::core::option::Option<result::Inner>,
 }
 /// Nested message and enum types in `Result`.
@@ -959,11 +1236,11 @@ pub mod result {
         #[prost(message, tag="22")]
         DeletePrivateKeyTagsResult(super::DeletePrivateKeyTagsResult),
         #[prost(message, tag="23")]
-        SetPaymentMethodResult(super::SetPaymentMethodResult),
+        SetPaymentMethodResult(super::super::billing::SetPaymentMethodResult),
         #[prost(message, tag="24")]
-        ActivateBillingTierResult(super::ActivateBillingTierResult),
+        ActivateBillingTierResult(super::super::billing::ActivateBillingTierResult),
         #[prost(message, tag="25")]
-        DeletePaymentMethodResult(super::DeletePaymentMethodResult),
+        DeletePaymentMethodResult(super::super::billing::DeletePaymentMethodResult),
         #[prost(message, tag="26")]
         CreateApiOnlyUsersResult(super::CreateApiOnlyUsersResult),
         #[prost(message, tag="27")]
@@ -1020,29 +1297,33 @@ pub mod result {
         SignRawPayloadsResult(super::SignRawPayloadsResult),
         #[prost(message, tag="53")]
         CreateReadOnlySessionResult(super::CreateReadOnlySessionResult),
+        #[prost(message, tag="54")]
+        CreateOauthProvidersResult(super::CreateOauthProvidersResult),
+        #[prost(message, tag="55")]
+        DeleteOauthProvidersResult(super::DeleteOauthProvidersResult),
+        #[prost(message, tag="56")]
+        CreateSubOrganizationResultV5(super::CreateSubOrganizationResultV5),
+        #[prost(message, tag="57")]
+        OauthResult(super::OauthResult),
+        #[prost(message, tag="58")]
+        CreateReadWriteSessionResult(super::CreateReadWriteSessionResult),
+        #[prost(message, tag="59")]
+        CreateSubOrganizationResultV6(super::CreateSubOrganizationResultV6),
+        #[prost(message, tag="60")]
+        DeletePrivateKeysResult(super::DeletePrivateKeysResult),
+        #[prost(message, tag="61")]
+        DeleteWalletsResult(super::DeleteWalletsResult),
+        #[prost(message, tag="62")]
+        CreateReadWriteSessionResultV2(super::CreateReadWriteSessionResultV2),
+        #[prost(message, tag="63")]
+        DeleteSubOrganizationResult(super::DeleteSubOrganizationResult),
+        #[prost(message, tag="64")]
+        InitOtpAuthResult(super::InitOtpAuthResult),
+        #[prost(message, tag="65")]
+        OtpAuthResult(super::OtpAuthResult),
+        #[prost(message, tag="66")]
+        CreateSubOrganizationResultV7(super::CreateSubOrganizationResultV7),
     }
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct DeletePaymentMethodResult {
-    #[prost(string, tag="1")]
-    pub payment_method_id: ::prost::alloc::string::String,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ActivateBillingTierResult {
-    #[prost(string, tag="1")]
-    pub product_id: ::prost::alloc::string::String,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct SetPaymentMethodResult {
-    #[prost(string, tag="1")]
-    pub last_four: ::prost::alloc::string::String,
-    #[prost(string, tag="2")]
-    pub card_holder_name: ::prost::alloc::string::String,
-    #[prost(string, tag="3")]
-    pub card_holder_email: ::prost::alloc::string::String,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1160,6 +1441,32 @@ pub struct InitUserEmailRecoveryResult {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct InitOtpAuthResult {
+    #[prost(string, tag="1")]
+    pub otp_id: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct OtpAuthResult {
+    #[prost(string, tag="1")]
+    pub user_id: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub api_key_id: ::prost::alloc::string::String,
+    #[prost(string, tag="3")]
+    pub credential_bundle: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct OauthResult {
+    #[prost(string, tag="1")]
+    pub user_id: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub api_key_id: ::prost::alloc::string::String,
+    #[prost(string, tag="3")]
+    pub credential_bundle: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EmailAuthResult {
     #[prost(string, tag="1")]
     pub user_id: ::prost::alloc::string::String,
@@ -1199,6 +1506,38 @@ pub struct CreateReadOnlySessionResult {
     pub session: ::prost::alloc::string::String,
     #[prost(uint64, tag="6")]
     pub session_expiry: u64,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CreateReadWriteSessionResult {
+    #[prost(string, tag="1")]
+    pub organization_id: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub organization_name: ::prost::alloc::string::String,
+    #[prost(string, tag="3")]
+    pub user_id: ::prost::alloc::string::String,
+    #[prost(string, tag="4")]
+    pub username: ::prost::alloc::string::String,
+    #[prost(string, tag="5")]
+    pub api_key_id: ::prost::alloc::string::String,
+    #[prost(string, tag="6")]
+    pub credential_bundle: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CreateReadWriteSessionResultV2 {
+    #[prost(string, tag="1")]
+    pub organization_id: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub organization_name: ::prost::alloc::string::String,
+    #[prost(string, tag="3")]
+    pub user_id: ::prost::alloc::string::String,
+    #[prost(string, tag="4")]
+    pub username: ::prost::alloc::string::String,
+    #[prost(string, tag="5")]
+    pub api_key_id: ::prost::alloc::string::String,
+    #[prost(string, tag="6")]
+    pub credential_bundle: ::prost::alloc::string::String,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1292,10 +1631,12 @@ pub struct SignTransactionResult {
     #[prost(string, tag="1")]
     pub signed_transaction: ::prost::alloc::string::String,
 }
+/// TODO: this should include the new root quorum
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UpdateRootQuorumResult {
 }
+/// TODO: this should include the new origins
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UpdateAllowedOriginsResult {
@@ -1331,6 +1672,36 @@ pub struct WalletResult {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CreateSubOrganizationResultV4 {
+    #[prost(string, tag="1")]
+    pub sub_organization_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
+    pub wallet: ::core::option::Option<WalletResult>,
+    #[prost(string, repeated, tag="3")]
+    pub root_user_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CreateSubOrganizationResultV5 {
+    #[prost(string, tag="1")]
+    pub sub_organization_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
+    pub wallet: ::core::option::Option<WalletResult>,
+    #[prost(string, repeated, tag="3")]
+    pub root_user_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CreateSubOrganizationResultV6 {
+    #[prost(string, tag="1")]
+    pub sub_organization_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
+    pub wallet: ::core::option::Option<WalletResult>,
+    #[prost(string, repeated, tag="3")]
+    pub root_user_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CreateSubOrganizationResultV7 {
     #[prost(string, tag="1")]
     pub sub_organization_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag="2")]
@@ -1410,14 +1781,54 @@ pub struct ImportPrivateKeyResult {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ApiKeyParams {
+pub struct CreateOauthProvidersResult {
+    #[prost(string, repeated, tag="1")]
+    pub provider_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DeleteOauthProvidersResult {
+    #[prost(string, repeated, tag="1")]
+    pub provider_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DeletePrivateKeysResult {
+    #[prost(string, repeated, tag="1")]
+    pub private_key_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DeleteWalletsResult {
+    #[prost(string, repeated, tag="1")]
+    pub wallet_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DeleteSubOrganizationResult {
+    #[prost(string, tag="1")]
+    pub sub_organization_uuid: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct OauthProviderParams {
+    #[prost(string, tag="1")]
+    pub provider_name: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub oidc_token: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ApiKeyParamsV2 {
     /// @inject_tag: validate:"required,tk_label_length,tk_label"
     #[prost(string, tag="1")]
     pub api_key_name: ::prost::alloc::string::String,
-    /// @inject_tag: validate:"hexadecimal,len=66"
+    /// @inject_tag: validate:"hexadecimal,tk_varlen=64;66"
     #[prost(string, tag="2")]
     pub public_key: ::prost::alloc::string::String,
-    #[prost(string, optional, tag="3")]
+    #[prost(enumeration="super::super::common::v1::ApiKeyCurve", tag="3")]
+    pub curve_type: i32,
+    #[prost(string, optional, tag="4")]
     pub expiration_seconds: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -1434,7 +1845,7 @@ pub struct UserParams {
     pub access_type: i32,
     /// @inject_tag: validate:"dive,uuid"
     #[prost(message, repeated, tag="5")]
-    pub api_keys: ::prost::alloc::vec::Vec<ApiKeyParams>,
+    pub api_keys: ::prost::alloc::vec::Vec<super::api::ApiKeyParams>,
     /// @inject_tag: validate:"dive"
     #[prost(message, repeated, tag="6")]
     pub authenticators: ::prost::alloc::vec::Vec<AuthenticatorParams>,
@@ -1453,7 +1864,7 @@ pub struct UserParamsV2 {
     pub user_email: ::core::option::Option<::prost::alloc::string::String>,
     /// @inject_tag: validate:"dive,uuid"
     #[prost(message, repeated, tag="5")]
-    pub api_keys: ::prost::alloc::vec::Vec<ApiKeyParams>,
+    pub api_keys: ::prost::alloc::vec::Vec<super::api::ApiKeyParams>,
     /// @inject_tag: validate:"dive"
     #[prost(message, repeated, tag="6")]
     pub authenticators: ::prost::alloc::vec::Vec<AuthenticatorParamsV2>,
@@ -1536,7 +1947,7 @@ pub struct ApiOnlyUserParams {
     pub user_tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     /// @inject_tag: validate:"dive,uuid"
     #[prost(message, repeated, tag="5")]
-    pub api_keys: ::prost::alloc::vec::Vec<ApiKeyParams>,
+    pub api_keys: ::prost::alloc::vec::Vec<super::api::ApiKeyParams>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1582,6 +1993,24 @@ pub struct WalletAccountParams {
     /// @inject_tag: validate:"required"
     #[prost(enumeration="super::super::common::v1::AddressFormat", tag="4")]
     pub address_format: i32,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DeletePrivateKeysParams {
+    /// @inject_tag: validate:"required,dive,uuid"
+    #[prost(string, repeated, tag="1")]
+    pub private_key_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(bool, optional, tag="2")]
+    pub delete_without_export: ::core::option::Option<bool>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DeleteWalletsParams {
+    /// @inject_tag: validate:"required,dive,uuid"
+    #[prost(string, repeated, tag="1")]
+    pub wallet_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(bool, optional, tag="2")]
+    pub delete_without_export: ::core::option::Option<bool>,
 }
 //
 // These are all of the types of user-facing activities on Turnkey.
@@ -1657,6 +2086,21 @@ pub enum ActivityType {
     CreatePolicies = 62,
     SignRawPayloads = 63,
     CreateReadOnlySession = 64,
+    CreateOauthProviders = 65,
+    DeleteOauthProviders = 66,
+    CreateSubOrganizationV5 = 67,
+    Oauth = 68,
+    CreateApiKeysV2 = 69,
+    CreateReadWriteSession = 70,
+    EmailAuthV2 = 71,
+    CreateSubOrganizationV6 = 72,
+    DeletePrivateKeys = 73,
+    DeleteWallets = 74,
+    CreateReadWriteSessionV2 = 75,
+    DeleteSubOrganization = 76,
+    InitOtpAuth = 77,
+    OtpAuth = 78,
+    CreateSubOrganizationV7 = 79,
 }
 impl ActivityType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -1730,6 +2174,21 @@ impl ActivityType {
             ActivityType::CreatePolicies => "ACTIVITY_TYPE_CREATE_POLICIES",
             ActivityType::SignRawPayloads => "ACTIVITY_TYPE_SIGN_RAW_PAYLOADS",
             ActivityType::CreateReadOnlySession => "ACTIVITY_TYPE_CREATE_READ_ONLY_SESSION",
+            ActivityType::CreateOauthProviders => "ACTIVITY_TYPE_CREATE_OAUTH_PROVIDERS",
+            ActivityType::DeleteOauthProviders => "ACTIVITY_TYPE_DELETE_OAUTH_PROVIDERS",
+            ActivityType::CreateSubOrganizationV5 => "ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V5",
+            ActivityType::Oauth => "ACTIVITY_TYPE_OAUTH",
+            ActivityType::CreateApiKeysV2 => "ACTIVITY_TYPE_CREATE_API_KEYS_V2",
+            ActivityType::CreateReadWriteSession => "ACTIVITY_TYPE_CREATE_READ_WRITE_SESSION",
+            ActivityType::EmailAuthV2 => "ACTIVITY_TYPE_EMAIL_AUTH_V2",
+            ActivityType::CreateSubOrganizationV6 => "ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V6",
+            ActivityType::DeletePrivateKeys => "ACTIVITY_TYPE_DELETE_PRIVATE_KEYS",
+            ActivityType::DeleteWallets => "ACTIVITY_TYPE_DELETE_WALLETS",
+            ActivityType::CreateReadWriteSessionV2 => "ACTIVITY_TYPE_CREATE_READ_WRITE_SESSION_V2",
+            ActivityType::DeleteSubOrganization => "ACTIVITY_TYPE_DELETE_SUB_ORGANIZATION",
+            ActivityType::InitOtpAuth => "ACTIVITY_TYPE_INIT_OTP_AUTH",
+            ActivityType::OtpAuth => "ACTIVITY_TYPE_OTP_AUTH",
+            ActivityType::CreateSubOrganizationV7 => "ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V7",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -1800,6 +2259,21 @@ impl ActivityType {
             "ACTIVITY_TYPE_CREATE_POLICIES" => Some(Self::CreatePolicies),
             "ACTIVITY_TYPE_SIGN_RAW_PAYLOADS" => Some(Self::SignRawPayloads),
             "ACTIVITY_TYPE_CREATE_READ_ONLY_SESSION" => Some(Self::CreateReadOnlySession),
+            "ACTIVITY_TYPE_CREATE_OAUTH_PROVIDERS" => Some(Self::CreateOauthProviders),
+            "ACTIVITY_TYPE_DELETE_OAUTH_PROVIDERS" => Some(Self::DeleteOauthProviders),
+            "ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V5" => Some(Self::CreateSubOrganizationV5),
+            "ACTIVITY_TYPE_OAUTH" => Some(Self::Oauth),
+            "ACTIVITY_TYPE_CREATE_API_KEYS_V2" => Some(Self::CreateApiKeysV2),
+            "ACTIVITY_TYPE_CREATE_READ_WRITE_SESSION" => Some(Self::CreateReadWriteSession),
+            "ACTIVITY_TYPE_EMAIL_AUTH_V2" => Some(Self::EmailAuthV2),
+            "ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V6" => Some(Self::CreateSubOrganizationV6),
+            "ACTIVITY_TYPE_DELETE_PRIVATE_KEYS" => Some(Self::DeletePrivateKeys),
+            "ACTIVITY_TYPE_DELETE_WALLETS" => Some(Self::DeleteWallets),
+            "ACTIVITY_TYPE_CREATE_READ_WRITE_SESSION_V2" => Some(Self::CreateReadWriteSessionV2),
+            "ACTIVITY_TYPE_DELETE_SUB_ORGANIZATION" => Some(Self::DeleteSubOrganization),
+            "ACTIVITY_TYPE_INIT_OTP_AUTH" => Some(Self::InitOtpAuth),
+            "ACTIVITY_TYPE_OTP_AUTH" => Some(Self::OtpAuth),
+            "ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V7" => Some(Self::CreateSubOrganizationV7),
             _ => None,
         }
     }

@@ -4,6 +4,9 @@ package external.activity.v1;
 
 import "external/data/v1/common.proto";
 import "external/data/v1/organization_data.proto";
+import "immutable/activity/billing/activate_billing_tier.proto";
+import "immutable/activity/billing/delete_payment_method.proto";
+import "immutable/activity/billing/set_payment_method.proto";
 import "immutable/activity/v1/activity.proto";
 import "vendor/google/api/field_behavior.proto";
 import "vendor/google/rpc/status.proto";
@@ -113,7 +116,7 @@ message DeletePaymentMethodRequest {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
-  immutable.activity.v1.DeletePaymentMethodIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  immutable.activity.billing.DeletePaymentMethodIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
 }
 
 message ActivateBillingTierRequest {
@@ -131,7 +134,7 @@ message ActivateBillingTierRequest {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
-  immutable.activity.v1.ActivateBillingTierIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  immutable.activity.billing.ActivateBillingTierIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
 }
 
 message SetPaymentMethodRequest {
@@ -149,7 +152,7 @@ message SetPaymentMethodRequest {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
-  immutable.activity.v1.SetPaymentMethodIntentV2 parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  immutable.activity.billing.SetPaymentMethodIntentV2 parameters = 4 [(google.api.field_behavior) = REQUIRED];
 }
 
 message CreatePolicyRequest {
@@ -240,6 +243,24 @@ message CreateReadOnlySessionRequest {
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   immutable.activity.v1.CreateReadOnlySessionIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+}
+
+message CreateReadWriteSessionRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_CREATE_READ_WRITE_SESSION_V2"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.CreateReadWriteSessionIntentV2 parameters = 4 [(google.api.field_behavior) = REQUIRED];
 }
 
 message CreateInvitationsRequest {
@@ -462,7 +483,7 @@ message CreateApiKeysRequest {
   string type = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      enum: ["ACTIVITY_TYPE_CREATE_API_KEYS"]
+      enum: ["ACTIVITY_TYPE_CREATE_API_KEYS_V2"]
     }
   ];
   string timestamp_ms = 2 [
@@ -473,7 +494,7 @@ message CreateApiKeysRequest {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
-  immutable.activity.v1.CreateApiKeysIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  immutable.activity.v1.CreateApiKeysIntentV2 parameters = 4 [(google.api.field_behavior) = REQUIRED];
 }
 
 message DeleteApiKeysRequest {
@@ -732,7 +753,7 @@ message CreateSubOrganizationRequest {
   string type = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      enum: ["ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V4"]
+      enum: ["ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V7"]
     }
   ];
   string timestamp_ms = 2 [
@@ -743,7 +764,7 @@ message CreateSubOrganizationRequest {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
-  immutable.activity.v1.CreateSubOrganizationIntentV4 parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  immutable.activity.v1.CreateSubOrganizationIntentV7 parameters = 4 [(google.api.field_behavior) = REQUIRED];
 }
 
 message InitUserEmailRecoveryRequest {
@@ -908,11 +929,11 @@ message CreateWalletAccountsRequest {
   immutable.activity.v1.CreateWalletAccountsIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
 }
 
-message EmailAuthRequest {
+message OauthRequest {
   string type = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      enum: ["ACTIVITY_TYPE_EMAIL_AUTH"]
+      enum: ["ACTIVITY_TYPE_OAUTH"]
     }
   ];
   string timestamp_ms = 2 [
@@ -923,7 +944,61 @@ message EmailAuthRequest {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
-  immutable.activity.v1.EmailAuthIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  immutable.activity.v1.OauthIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+}
+
+message InitOtpAuthRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_INIT_OTP_AUTH"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.InitOtpAuthIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+}
+
+message OtpAuthRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_OTP_AUTH"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.OtpAuthIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+}
+
+message EmailAuthRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_EMAIL_AUTH_V2"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.EmailAuthIntentV2 parameters = 4 [(google.api.field_behavior) = REQUIRED];
 }
 
 message InitImportWalletRequest {
@@ -996,4 +1071,94 @@ message ImportPrivateKeyRequest {
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   immutable.activity.v1.ImportPrivateKeyIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+}
+
+message CreateOauthProvidersRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_CREATE_OAUTH_PROVIDERS"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.CreateOauthProvidersIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+}
+
+message DeleteOauthProvidersRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_DELETE_OAUTH_PROVIDERS"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.DeleteOauthProvidersIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+}
+
+message DeletePrivateKeysRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_DELETE_PRIVATE_KEYS"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.DeletePrivateKeysIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+}
+
+message DeleteWalletsRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_DELETE_WALLETS"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.DeleteWalletsIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+}
+
+message DeleteSubOrganizationRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_DELETE_SUB_ORGANIZATION"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.DeleteSubOrganizationIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
 }

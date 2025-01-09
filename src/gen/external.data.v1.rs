@@ -37,6 +37,24 @@ pub struct OrganizationData {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct OauthProvider {
+    #[prost(string, tag="1")]
+    pub provider_id: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub provider_name: ::prost::alloc::string::String,
+    #[prost(string, tag="3")]
+    pub issuer: ::prost::alloc::string::String,
+    #[prost(string, tag="4")]
+    pub audience: ::prost::alloc::string::String,
+    #[prost(string, tag="5")]
+    pub subject: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="6")]
+    pub created_at: ::core::option::Option<Timestamp>,
+    #[prost(message, optional, tag="7")]
+    pub updated_at: ::core::option::Option<Timestamp>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct User {
     #[prost(string, tag="1")]
     pub user_id: ::prost::alloc::string::String,
@@ -45,15 +63,19 @@ pub struct User {
     /// some users do not have emails (programmatic users)
     #[prost(string, optional, tag="3")]
     pub user_email: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag="4")]
+    pub user_phone_number: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(message, repeated, tag="5")]
     pub authenticators: ::prost::alloc::vec::Vec<Authenticator>,
     #[prost(message, repeated, tag="6")]
     pub api_keys: ::prost::alloc::vec::Vec<ApiKey>,
     #[prost(string, repeated, tag="7")]
     pub user_tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(message, optional, tag="8")]
-    pub created_at: ::core::option::Option<Timestamp>,
+    #[prost(message, repeated, tag="8")]
+    pub oauth_providers: ::prost::alloc::vec::Vec<OauthProvider>,
     #[prost(message, optional, tag="9")]
+    pub created_at: ::core::option::Option<Timestamp>,
+    #[prost(message, optional, tag="10")]
     pub updated_at: ::core::option::Option<Timestamp>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -217,6 +239,14 @@ pub struct Wallet {
     #[prost(bool, tag="6")]
     pub imported: bool,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Config {
+    #[prost(message, repeated, tag="1")]
+    pub features: ::prost::alloc::vec::Vec<super::super::super::immutable::data::v1::Feature>,
+    #[prost(message, optional, tag="2")]
+    pub quorum: ::core::option::Option<Quorum>,
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum InvitationStatus {
@@ -283,26 +313,28 @@ impl TagType {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WalletAccount {
     #[prost(string, tag="1")]
-    pub organization_id: ::prost::alloc::string::String,
+    pub wallet_account_id: ::prost::alloc::string::String,
     #[prost(string, tag="2")]
+    pub organization_id: ::prost::alloc::string::String,
+    #[prost(string, tag="3")]
     pub wallet_id: ::prost::alloc::string::String,
-    #[prost(enumeration="super::super::super::immutable::common::v1::Curve", tag="3")]
+    #[prost(enumeration="super::super::super::immutable::common::v1::Curve", tag="4")]
     pub curve: i32,
-    #[prost(enumeration="super::super::super::immutable::common::v1::PathFormat", tag="4")]
+    #[prost(enumeration="super::super::super::immutable::common::v1::PathFormat", tag="5")]
     pub path_format: i32,
-    #[prost(string, tag="5")]
+    #[prost(string, tag="6")]
     pub path: ::prost::alloc::string::String,
-    #[prost(enumeration="super::super::super::immutable::common::v1::AddressFormat", tag="6")]
+    #[prost(enumeration="super::super::super::immutable::common::v1::AddressFormat", tag="7")]
     pub address_format: i32,
-    #[prost(string, tag="7")]
+    #[prost(string, tag="8")]
     pub address: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="8")]
+    #[prost(message, optional, tag="9")]
     pub created_at: ::core::option::Option<Timestamp>,
     /// TODO(tim): temporarily removing this since it's always "false"
     /// bool exported = 10 [
     ///   (google.api.field_behavior) = REQUIRED,
     ///   (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "True when a given Account is exported, false otherwise."}
     /// ];
-    #[prost(message, optional, tag="9")]
+    #[prost(message, optional, tag="10")]
     pub updated_at: ::core::option::Option<Timestamp>,
 }

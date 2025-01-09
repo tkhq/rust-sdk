@@ -65,7 +65,7 @@ pub struct DeletePaymentMethodRequest {
     #[prost(string, tag="3")]
     pub organization_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag="4")]
-    pub parameters: ::core::option::Option<super::super::super::immutable::activity::v1::DeletePaymentMethodIntent>,
+    pub parameters: ::core::option::Option<super::super::super::immutable::activity::billing::DeletePaymentMethodIntent>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -77,7 +77,7 @@ pub struct ActivateBillingTierRequest {
     #[prost(string, tag="3")]
     pub organization_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag="4")]
-    pub parameters: ::core::option::Option<super::super::super::immutable::activity::v1::ActivateBillingTierIntent>,
+    pub parameters: ::core::option::Option<super::super::super::immutable::activity::billing::ActivateBillingTierIntent>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -89,7 +89,7 @@ pub struct SetPaymentMethodRequest {
     #[prost(string, tag="3")]
     pub organization_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag="4")]
-    pub parameters: ::core::option::Option<super::super::super::immutable::activity::v1::SetPaymentMethodIntentV2>,
+    pub parameters: ::core::option::Option<super::super::super::immutable::activity::billing::SetPaymentMethodIntentV2>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -150,6 +150,18 @@ pub struct CreateReadOnlySessionRequest {
     pub organization_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag="4")]
     pub parameters: ::core::option::Option<super::super::super::immutable::activity::v1::CreateReadOnlySessionIntent>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CreateReadWriteSessionRequest {
+    #[prost(string, tag="1")]
+    pub r#type: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub timestamp_ms: ::prost::alloc::string::String,
+    #[prost(string, tag="3")]
+    pub organization_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="4")]
+    pub parameters: ::core::option::Option<super::super::super::immutable::activity::v1::CreateReadWriteSessionIntentV2>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -305,7 +317,7 @@ pub struct CreateApiKeysRequest {
     #[prost(string, tag="3")]
     pub organization_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag="4")]
-    pub parameters: ::core::option::Option<super::super::super::immutable::activity::v1::CreateApiKeysIntent>,
+    pub parameters: ::core::option::Option<super::super::super::immutable::activity::v1::CreateApiKeysIntentV2>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -485,7 +497,7 @@ pub struct CreateSubOrganizationRequest {
     #[prost(string, tag="3")]
     pub organization_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag="4")]
-    pub parameters: ::core::option::Option<super::super::super::immutable::activity::v1::CreateSubOrganizationIntentV4>,
+    pub parameters: ::core::option::Option<super::super::super::immutable::activity::v1::CreateSubOrganizationIntentV7>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -597,6 +609,42 @@ pub struct CreateWalletAccountsRequest {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct OauthRequest {
+    #[prost(string, tag="1")]
+    pub r#type: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub timestamp_ms: ::prost::alloc::string::String,
+    #[prost(string, tag="3")]
+    pub organization_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="4")]
+    pub parameters: ::core::option::Option<super::super::super::immutable::activity::v1::OauthIntent>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct InitOtpAuthRequest {
+    #[prost(string, tag="1")]
+    pub r#type: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub timestamp_ms: ::prost::alloc::string::String,
+    #[prost(string, tag="3")]
+    pub organization_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="4")]
+    pub parameters: ::core::option::Option<super::super::super::immutable::activity::v1::InitOtpAuthIntent>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct OtpAuthRequest {
+    #[prost(string, tag="1")]
+    pub r#type: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub timestamp_ms: ::prost::alloc::string::String,
+    #[prost(string, tag="3")]
+    pub organization_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="4")]
+    pub parameters: ::core::option::Option<super::super::super::immutable::activity::v1::OtpAuthIntent>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EmailAuthRequest {
     #[prost(string, tag="1")]
     pub r#type: ::prost::alloc::string::String,
@@ -605,7 +653,7 @@ pub struct EmailAuthRequest {
     #[prost(string, tag="3")]
     pub organization_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag="4")]
-    pub parameters: ::core::option::Option<super::super::super::immutable::activity::v1::EmailAuthIntent>,
+    pub parameters: ::core::option::Option<super::super::super::immutable::activity::v1::EmailAuthIntentV2>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -654,4 +702,64 @@ pub struct ImportPrivateKeyRequest {
     pub organization_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag="4")]
     pub parameters: ::core::option::Option<super::super::super::immutable::activity::v1::ImportPrivateKeyIntent>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CreateOauthProvidersRequest {
+    #[prost(string, tag="1")]
+    pub r#type: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub timestamp_ms: ::prost::alloc::string::String,
+    #[prost(string, tag="3")]
+    pub organization_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="4")]
+    pub parameters: ::core::option::Option<super::super::super::immutable::activity::v1::CreateOauthProvidersIntent>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DeleteOauthProvidersRequest {
+    #[prost(string, tag="1")]
+    pub r#type: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub timestamp_ms: ::prost::alloc::string::String,
+    #[prost(string, tag="3")]
+    pub organization_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="4")]
+    pub parameters: ::core::option::Option<super::super::super::immutable::activity::v1::DeleteOauthProvidersIntent>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DeletePrivateKeysRequest {
+    #[prost(string, tag="1")]
+    pub r#type: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub timestamp_ms: ::prost::alloc::string::String,
+    #[prost(string, tag="3")]
+    pub organization_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="4")]
+    pub parameters: ::core::option::Option<super::super::super::immutable::activity::v1::DeletePrivateKeysIntent>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DeleteWalletsRequest {
+    #[prost(string, tag="1")]
+    pub r#type: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub timestamp_ms: ::prost::alloc::string::String,
+    #[prost(string, tag="3")]
+    pub organization_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="4")]
+    pub parameters: ::core::option::Option<super::super::super::immutable::activity::v1::DeleteWalletsIntent>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DeleteSubOrganizationRequest {
+    #[prost(string, tag="1")]
+    pub r#type: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub timestamp_ms: ::prost::alloc::string::String,
+    #[prost(string, tag="3")]
+    pub organization_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="4")]
+    pub parameters: ::core::option::Option<super::super::super::immutable::activity::v1::DeleteSubOrganizationIntent>,
 }
