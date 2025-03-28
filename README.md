@@ -2,7 +2,7 @@
 
 This repository contains tooling to interact with the Turnkey API using Rust.
 
-Unlike other languages ([Typescript](https://github.com/tkhq/sdk), [Ruby](https://github.com/tkhq/ruby-sdk)), we do not yet offer a full SDK to make API request to Turnkey using Rust.
+Unlike other languages ([Typescript](https://github.com/tkhq/sdk), [Ruby](https://github.com/tkhq/ruby-sdk)), we do not yet offer a full SDK to make API requests to Turnkey using Rust.
 
 The main challenge when making requests to the Turnkey API is [request stamping](https://docs.turnkey.com/api-design/stamps). This repository includes code to sign API requests. Credits go to [@luca992](https://github.com/luca992) for the initial snippet!
 
@@ -18,7 +18,9 @@ To make a request to Turnkey:
 * add the stamp value (bytes) inside of a new `X-Stamp` header, and attach it to the request
 * POST the request, read the response, and use the activity result
 
-For a full example, see our ['examples/' folder](./examples/).
+## Examples
+
+For fully working examples, see our ['examples/' folder](./examples/).
 
 ## Related projects
 

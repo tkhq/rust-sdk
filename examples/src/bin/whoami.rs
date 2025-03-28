@@ -1,4 +1,4 @@
-use api_key_stamper::{stamp, TurnkeyApiKey};
+use tkhq_api_key_stamper::{stamp, TurnkeyApiKey};
 use reqwest::header::{HeaderMap, HeaderValue};
 use serde_json::json;
 use std::env;

@@ -18,18 +18,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "512761e0bb2578dd7380c6baaa0f4ce03e84f95e960231d1dec8bf4d7d6e2627"
 
 [[package]]
-name = "api_key_stamper"
-version = "0.0.1"
-dependencies = [
- "base64 0.22.0",
- "hex",
- "p256",
- "serde",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
 name = "autocfg"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1271,13 +1259,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "tkhq-examples"
+name = "tkhq_api_key_stamper"
 version = "0.0.1"
 dependencies = [
- "api_key_stamper",
+ "base64 0.22.0",
+ "hex",
+ "p256",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "tkhq_examples"
+version = "0.0.1"
+dependencies = [
  "dotenv",
  "reqwest",
  "serde_json",
+ "tkhq_api_key_stamper",
  "tokio",
 ]
 
