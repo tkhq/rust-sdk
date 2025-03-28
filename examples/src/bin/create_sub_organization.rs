@@ -1,4 +1,3 @@
-use tkhq_api_key_stamper::{stamp, TurnkeyApiKey};
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     StatusCode,
@@ -6,6 +5,7 @@ use reqwest::{
 use serde_json::json;
 use std::error::Error;
 use std::{env, time};
+use tkhq_api_key_stamper::{stamp, TurnkeyApiKey};
 
 // See <https://docs.turnkey.com/api-reference/organizations/create-sub-organization> for documentation
 const TURNKEY_API_HOST: &str = "https://api.turnkey.com";

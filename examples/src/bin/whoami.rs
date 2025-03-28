@@ -1,8 +1,8 @@
-use tkhq_api_key_stamper::{stamp, TurnkeyApiKey};
 use reqwest::header::{HeaderMap, HeaderValue};
 use serde_json::json;
 use std::env;
 use std::error::Error;
+use tkhq_api_key_stamper::{stamp, TurnkeyApiKey};
 
 // See <https://docs.turnkey.com/api-reference/sessions/who-am-i> for documentation
 const TURNKEY_API_HOST: &str = "https://api.turnkey.com";
