@@ -9,7 +9,7 @@ use tkhq_api_key_stamper::{stamp, TurnkeyApiKey};
 
 // See <https://docs.turnkey.com/api-reference/organizations/create-sub-organization> for documentation
 const TURNKEY_API_HOST: &str = "https://api.turnkey.com";
-const WHOAMI_PATH: &str = "/public/v1/submit/create_sub_organization";
+const CREATE_SUB_ORGANIZATION_PATH: &str = "/public/v1/submit/create_sub_organization";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -85,7 +85,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("Sending request body:\n{}\n", body.clone());
     println!("Associated X-Stamp header:\n{}\n", stamp.clone());
     let response = client
-        .post(format!("{TURNKEY_API_HOST}{WHOAMI_PATH}"))
+        .post(format!("{TURNKEY_API_HOST}{CREATE_SUB_ORGANIZATION_PATH}"))
         .headers(headers)
         .body(body)
         .send()
