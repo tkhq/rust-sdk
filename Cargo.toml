@@ -2,6 +2,10 @@
 members = [
   # Crate to produce stamps with an API key
   "api_key_stamper",
+  # Main API client (generated)
+  "client",
+  # Contains tools and script to generate client code from proto
+  "codegen",
   # Examples using the Turnkey stamper
   "examples",
 ]

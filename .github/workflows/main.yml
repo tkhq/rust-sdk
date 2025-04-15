@@ -17,4 +17,11 @@ jobs:
         with:
           toolchain: stable
           components: clippy,rustfmt
-      - run: ./ci.sh
+      - name: Generate client
+        run: make generate
+      - name: Ensure checked-in client is up-to-date
+        run: make check-generate
+      - name: Run linters
+        run: make lint
+      - name: Run tests
+        run: make test

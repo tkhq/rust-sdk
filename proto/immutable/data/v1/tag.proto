@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package immutable.data.v1;
+
+import "immutable/data/v1/common.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/immutable/data/v1";
+
+message Tag {
+  string uuid = 1;
+  string label = 2;
+  TagType tag_type = 3;
+  immutable.data.v1.Timestamp created_at = 4;
+  immutable.data.v1.Timestamp updated_at = 5;
+}
+
+enum TagType {
+  TAG_TYPE_UNSPECIFIED = 0;
+  TAG_TYPE_USER = 1;
+  TAG_TYPE_PRIVATE_KEY = 3;
+}

@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+// buf:lint:ignore PACKAGE_VERSION_SUFFIX
+package immutable.activity.api;
+
+import "vendor/google/api/field_behavior.proto";
+import "vendor/protoc-gen-openapiv2/options/annotations.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/immutable/activity/api";
+
+message ApiKeyParams {
+  // @inject_tag: validate:"required,tk_label_length,tk_label"
+  string api_key_name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Human-readable name for an API Key."
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"hexadecimal,len=66"
+  string public_key = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The public component of a cryptographic key pair used to sign messages and transactions."
+      title: ""
+    }
+  ];
+  optional string expiration_seconds = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional window (in seconds) indicating how long the API Key should last."}
+  ];
+}

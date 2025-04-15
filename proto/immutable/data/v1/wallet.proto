@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package immutable.data.v1;
+
+import "immutable/data/v1/common.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/immutable/data/v1";
+
+message Wallet {
+  string uuid = 1;
+  string label = 2;
+  // was this wallet imported?
+  bool imported = 3;
+  // has this wallet been exported?
+  bool exported = 4;
+  repeated string tags = 5;
+  // NOTE: we can't just store the encrypted seed since the seed is created via a hashing function
+  // combining a mnemonic phrase with an optional password. We need to store these inputs so we
+  // have interoperability with other wallet implementations
+  string encrypted_seed_inputs = 6;
+  immutable.data.v1.Timestamp created_at = 7;
+  immutable.data.v1.Timestamp updated_at = 8;
+}

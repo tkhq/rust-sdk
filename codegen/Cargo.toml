@@ -1,0 +1,9 @@
+[package]
+name = "tkhq_codegen"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+regex = "1"
+prost-build = { version = "0.12.6", default-features = false }
+tonic-build = { version = "0.13" }

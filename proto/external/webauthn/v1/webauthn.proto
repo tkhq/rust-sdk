@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package external.webauthn.v1;
+
+import "vendor/google/api/field_behavior.proto";
+import "vendor/protoc-gen-openapiv2/options/annotations.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/external/webauthn/v1";
+
+// buf:lint:ignore ENUM_VALUE_PREFIX
+enum AuthenticatorType {
+  // buf:lint:ignore ENUM_ZERO_VALUE_SUFFIX
+  AUTHENTICATOR_TYPE_UNKNOWN = 0;
+  CROSS_PLATFORM = 1;
+  PLATFORM = 2;
+  UNSPECIFIED = 3;
+}
+
+// We expect this to be passed in as a JSON-encoded, then base64-encoded string within a X-Stamp-Webauthn header
+message WebAuthnStamp {
+  string credential_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A base64 url encoded Unique identifier for a given credential."}
+  ];
+  string client_data_json = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A base64 encoded payload containing metadata about the signing context and the challenge."}
+  ];
+  string authenticator_data = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A base64 encoded payload containing metadata about the authenticator."}
+  ];
+  string signature = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The base64 url encoded signature bytes contained within the WebAuthn assertion response."}
+  ];
+}

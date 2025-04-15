@@ -1,0 +1,1702 @@
+syntax = "proto3";
+
+package services.coordinator.public.v1;
+
+import "external/activity/v1/activity.proto";
+import "external/data/v1/organization_data.proto";
+import "external/data/v1/wallet_account.proto";
+import "external/options/v1/options.proto";
+import "external/webauthn/v1/webauthn.proto";
+import "immutable/activity/v1/activity.proto";
+import "vendor/google/api/annotations.proto";
+import "vendor/google/api/field_behavior.proto";
+import "vendor/google/api/visibility.proto";
+import "vendor/protoc-gen-openapiv2/options/annotations.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/services/coordinator/public/v1";
+// See https://raw.githubusercontent.com/grpc-ecosystem/grpc-gateway/master/examples/internal/proto/examplepb/a_bit_of_everything.proto
+// For a great examples of all these options used and more
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  info: {
+    title: "API Reference"
+    version: "1.0"
+    contact: {
+      name: ""
+      url: ""
+      email: ""
+    }
+    description: "Review our [API Introduction](../api-introduction) to get started."
+  }
+  host: "api.turnkey.com"
+  schemes: HTTPS
+  consumes: "application/json"
+  produces: "application/json"
+  security_definitions: {
+    security: [
+      {
+        key: "ApiKeyAuth"
+        value: {
+          type: TYPE_API_KEY
+          in: IN_HEADER
+          name: "X-Stamp"
+        }
+      },
+      {
+        key: "AuthenticatorAuth"
+        value: {
+          type: TYPE_API_KEY
+          in: IN_HEADER
+          name: "X-Stamp-WebAuthn"
+        }
+      }
+    ]
+  }
+  security: [
+    {
+      security_requirement: {
+        key: "ApiKeyAuth"
+        value: {}
+      }
+    },
+    {
+      security_requirement: {
+        key: "AuthenticatorAuth"
+        value: {}
+      }
+    }
+  ]
+  tags: [
+    {
+      name: "Organizations"
+      description:
+        "An Organization is the highest level of hierarchy in Turnkey. It can contain many Users, Private Keys, and Policies managed by a Root Quorum. The Root Quorum consists of a set of Users with a consensus threshold. This consensus threshold must be reached by Quorum members in order for any actions to take place."
+        "\n\n"
+        "See [Root Quorum](../concepts/users/root-quorum) for more information"
+    },
+    {
+      name: "Invitations"
+      description:
+        "Invitations allow you to invite Users into your Organization via email. Alternatively, Users can be added directly without an Invitation if their ApiKey or Authenticator credentials are known ahead of time."
+        "\n\n"
+        "See [Users](./api#tag/Users) for more information"
+    },
+    {
+      name: "Policies"
+      description:
+        "Policies allow for deep customization of the security of your Organization. They can be used to grant permissions or restrict usage of Users and Private Keys. The Policy Engine analyzes all of your Policies on each request to determine whether an Activity is allowed."
+        "\n\n"
+        "See [Policy Overview](../managing-policies/overview) for more information"
+    },
+    {
+      name: "Wallets"
+      description:
+        "Wallets contain collections of deterministically generated cryptographic public / private key pairs that share a common seed. Turnkey securely holds the common seed, but only you can access it. In most cases, Wallets should be preferred over Private Keys since they can be represented by a mnemonic phrase, used across a variety of cryptographic curves, and can derive many addresses."
+        "\n\n"
+        "Derived addresses can be used to create digital signatures using the corresponding underlying private key. See [Signing](./api#tag/Signing) for more information"
+    },
+    {
+      name: "Signing"
+      description: "Signers allow you to create digital signatures. Signatures are used to validate the authenticity and integrity of a digital message. Turnkey makes it easy to produce signatures by allowing you to sign with an address. If Turnkey doesn't yet support an address format you need, you can generate and sign with the public key instead by using the address format `ADDRESS_FORMAT_COMPRESSED`."
+    },
+    {
+      name: "Private Keys"
+      description:
+        "Private Keys are cryptographic public / private key pairs that can be used for cryptocurrency needs or more generalized encryption. Turnkey securely holds all private key materials for you, but only you can access them."
+        "\n\n"
+        "The Private Key ID or any derived address can be used to create digital signatures. See [Signing](./api#tag/Signing) for more information"
+    },
+    {
+      name: "Private Key Tags"
+      description: "Private Key Tags allow you to easily group and permission Private Keys through Policies."
+    },
+    {
+      name: "Users"
+      description: "Users are responsible for any action taken within an Organization. They can have ApiKey or Auuthenticator credentials, allowing you to onboard teammates to the Organization, or create API-only Users to run as part of your infrastructure."
+    },
+    {
+      name: "User Tags"
+      description: "User Key Tags allow you to easily group and permission Users through Policies."
+    },
+    {
+      name: "Authenticators"
+      description: "Authenticators are WebAuthN hardware devices, such as a Macbook TouchID or Yubikey, that can be used to authenticate requests."
+    },
+    {
+      name: "API Keys"
+      description:
+        "API Keys are used to authenticate requests"
+        "\n\n"
+        "See our [CLI](https://github.com/tkhq/tkcli) for instructions on generating API Keys"
+    },
+    {
+      name: "Activities"
+      description:
+        "Activities encapsulate all the possible actions that can be taken with Turnkey. Some examples include adding a new user, creating a private key, and signing a transaction."
+        "\n\n"
+        "Activities that modify your Organization are processed asynchronously. To confirm processing is complete and retrieve the Activity results, these activities must be polled until that status has been updated to a finalized state: `COMPLETED` when the activity is successful or `FAILED` when the activity has failed"
+    },
+    {
+      name: "Consensus"
+      description:
+        "Policies can enforce consensus requirements for Activities. For example, adding a new user requires two admins to approve the request."
+        "\n\n"
+        "Activities that have been proposed, but don't yet meet the Consesnsus requirements will have the status: `REQUIRES_CONSENSUS`. Activities in this state can be approved or rejected using the unique fingerprint generated when an Activity is created."
+    }
+  ]
+
+  extensions: {
+    key: "x-tagGroups"
+    value: {
+      list_value: {
+        values: [
+          {
+            struct_value: {
+              fields: {
+                key: "name"
+                value: {string_value: "ORGANIZATIONS"}
+              }
+              fields: {
+                key: "tags"
+                value: {
+                  list_value: {
+                    values: [
+                      {string_value: "Organizations"},
+                      {string_value: "Invitations"},
+                      {string_value: "Policies"},
+                      {string_value: "Features"}]
+                  }
+                }
+              }
+            }
+          },
+          {
+            struct_value: {
+              fields: {
+                key: "name"
+                value: {string_value: "WALLETS AND PRIVATE KEYS"}
+              }
+              fields: {
+                key: "tags"
+                value: {
+                  list_value: {
+                    values: [
+                      {string_value: "Wallets"},
+                      {string_value: "Signing"},
+                      {string_value: "Private Keys"},
+                      {string_value: "Private Key Tags"}]
+                  }
+                }
+              }
+            }
+          },
+          {
+            struct_value: {
+              fields: {
+                key: "name"
+                value: {string_value: "USERS"}
+              }
+              fields: {
+                key: "tags"
+                value: {
+                  list_value: {
+                    values: [
+                      {string_value: "Users"},
+                      {string_value: "User Tags"},
+                      {string_value: "User Recovery"},
+                      {string_value: "User Auth"}]
+                  }
+                }
+              }
+            }
+          },
+          {
+            struct_value: {
+              fields: {
+                key: "name"
+                value: {string_value: "CREDENTIALS"}
+              }
+              fields: {
+                key: "tags"
+                value: {
+                  list_value: {
+                    values: [
+                      {string_value: "Authenticators"},
+                      {string_value: "API Keys"},
+                      {string_value: "Sessions"}]
+                  }
+                }
+              }
+            }
+          },
+          {
+            struct_value: {
+              fields: {
+                key: "name"
+                value: {string_value: "ACTIVITIES"}
+              }
+              fields: {
+                key: "tags"
+                value: {
+                  list_value: {
+                    values: [
+                      {string_value: "Activities"},
+                      {string_value: "Consensus"}]
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+};
+
+service PublicApiService {
+  rpc GetWhoami(GetWhoamiRequest) returns (GetWhoamiResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/whoami"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get basic information about your current API or WebAuthN user and their organization. Affords Sub-Organization look ups via Parent Organization for WebAuthN or API key users."
+      summary: "Who am I?"
+      tags: "Sessions"
+    };
+  }
+
+  rpc TestRateLimits(TestRateLimitsRequest) returns (TestRateLimitsResponse) {
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/tkhq/api/v1/test_rate_limits"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Set a rate local rate limit just on the current endpoint, for purposes of testing with Vivosuite"
+      summary: "Test Rate Limit"
+      tags: "RateLimit"
+    };
+  }
+
+  rpc GetAttestationDocument(GetAttestationDocumentRequest) returns (GetAttestationDocumentResponse) {
+    option (google.api.method_visibility).restriction = "INTERNAL"; // TODO: remove once fully ready for primetime
+    option (google.api.http) = {
+      post: "/public/v1/query/get_attestation"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get the attestation document corresponding to an enclave."
+      summary: "Attestation"
+      tags: "Attestation"
+    };
+  }
+
+  rpc GetSubOrgIds(GetSubOrgIdsRequest) returns (GetSubOrgIdsResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/list_suborgs"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get all suborg IDs associated given a parent org ID and an optional filter."
+      summary: "Get Suborgs"
+      tags: "Organizations"
+    };
+  }
+
+  rpc GetVerifiedSubOrgIds(GetVerifiedSubOrgIdsRequest) returns (GetVerifiedSubOrgIdsResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/list_verified_suborgs"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get all email or phone verified suborg IDs associated given a parent org ID."
+      summary: "Get Verified Suborgs"
+      tags: "Organizations"
+    };
+  }
+
+  rpc GetOrganization(GetOrganizationRequest) returns (GetOrganizationResponse) {
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/query/get_organization"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get details about an Organization"
+      summary: "Get Organization"
+      tags: "Organizations"
+    };
+  }
+
+  rpc GetActivity(GetActivityRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_activity"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get details about an Activity"
+      summary: "Get Activity"
+      tags: "Activities"
+    };
+  }
+
+  rpc GetActivities(GetActivitiesRequest) returns (GetActivitiesResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/list_activities"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "List all Activities within an Organization"
+      summary: "List Activities"
+      tags: "Activities"
+    };
+  }
+
+  rpc ApproveActivity(external.activity.v1.ApproveActivityRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/approve_activity"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Approve an Activity"
+      summary: "Approve Activity"
+      tags: "Consensus"
+    };
+  }
+
+  rpc RejectActivity(external.activity.v1.RejectActivityRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/reject_activity"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Reject an Activity"
+      summary: "Reject Activity"
+      tags: "Consensus"
+    };
+  }
+
+  rpc GetUser(GetUserRequest) returns (GetUserResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_user"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get details about a User"
+      summary: "Get User"
+      tags: "Users"
+    };
+  }
+
+  rpc GetUsers(GetUsersRequest) returns (GetUsersResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/list_users"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "List all Users within an Organization"
+      summary: "List Users"
+      tags: "Users"
+    };
+  }
+
+  rpc DeleteUsers(external.activity.v1.DeleteUsersRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/delete_users"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Delete Users within an Organization"
+      summary: "Delete Users"
+      tags: "Users"
+    };
+  }
+
+  rpc CreatePolicy(external.activity.v1.CreatePolicyRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/create_policy"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Create a new Policy"
+      summary: "Create Policy"
+      tags: "Policies"
+    };
+  }
+
+  rpc CreatePolicies(external.activity.v1.CreatePoliciesRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/create_policies"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Create new Policies"
+      summary: "Create Policies"
+      tags: "Policies"
+    };
+  }
+  rpc UpdatePolicy(external.activity.v1.UpdatePolicyRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/update_policy"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Update an existing Policy"
+      summary: "Update Policy"
+      tags: "Policies"
+    };
+  }
+
+  rpc DeletePolicy(external.activity.v1.DeletePolicyRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/delete_policy"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Delete an existing Policy"
+      summary: "Delete Policy"
+      tags: "Policies"
+    };
+  }
+
+  rpc GetPolicies(GetPoliciesRequest) returns (GetPoliciesResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/list_policies"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "List all Policies within an Organization"
+      summary: "List Policies"
+      tags: "Policies"
+    };
+  }
+
+  rpc GetPolicy(GetPolicyRequest) returns (GetPolicyResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_policy"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get details about a Policy"
+      summary: "Get Policy"
+      tags: "Policies"
+    };
+  }
+
+  rpc CreateReadOnlySession(external.activity.v1.CreateReadOnlySessionRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/create_read_only_session"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Create a read only session for a user (valid for 1 hour)"
+      summary: "Create Read Only Session"
+      tags: "Sessions"
+    };
+  }
+
+  rpc CreateReadWriteSession(external.activity.v1.CreateReadWriteSessionRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/create_read_write_session"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Create a read write session for a user"
+      summary: "Create Read Write Session"
+      tags: "Sessions"
+    };
+  }
+
+  rpc CreatePrivateKeys(external.activity.v1.CreatePrivateKeysRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/create_private_keys"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Create new Private Keys"
+      summary: "Create Private Keys"
+      tags: "Private Keys"
+    };
+  }
+
+  rpc GetPrivateKey(GetPrivateKeyRequest) returns (GetPrivateKeyResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_private_key"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get details about a Private Key"
+      summary: "Get Private Key"
+      tags: "Private Keys"
+    };
+  }
+
+  rpc GetPrivateKeys(GetPrivateKeysRequest) returns (GetPrivateKeysResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/list_private_keys"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "List all Private Keys within an Organization"
+      summary: "List Private Keys"
+      tags: "Private Keys"
+    };
+  }
+
+  rpc CreateApiKeys(external.activity.v1.CreateApiKeysRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/create_api_keys"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Add api keys to an existing User"
+      summary: "Create API Keys"
+      tags: "API Keys"
+    };
+  }
+
+  rpc DeleteApiKeys(external.activity.v1.DeleteApiKeysRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/delete_api_keys"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Remove api keys from a User"
+      summary: "Delete API Keys"
+      tags: "API Keys"
+    };
+  }
+
+  rpc GetOauthProviders(GetOauthProvidersRequest) returns (GetOauthProvidersResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_oauth_providers"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get details about Oauth providers for a user"
+      summary: "Get Oauth providers"
+      tags: "User Auth"
+    };
+  }
+
+  rpc GetApiKeys(GetApiKeysRequest) returns (GetApiKeysResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_api_keys"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get details about API keys for a user"
+      summary: "Get API key"
+      tags: "API keys"
+    };
+  }
+
+  rpc GetApiKey(GetApiKeyRequest) returns (GetApiKeyResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_api_key"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get details about an API key"
+      summary: "Get API key"
+      tags: "API keys"
+    };
+  }
+
+  rpc CreateAuthenticators(external.activity.v1.CreateAuthenticatorsRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/create_authenticators"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Create Authenticators to authenticate requests to Turnkey"
+      summary: "Create Authenticators"
+      tags: "Authenticators"
+    };
+  }
+
+  rpc DeleteAuthenticators(external.activity.v1.DeleteAuthenticatorsRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/delete_authenticators"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Remove authenticators from a User"
+      summary: "Delete Authenticators"
+      tags: "Authenticators"
+    };
+  }
+
+  rpc GetAuthenticators(GetAuthenticatorsRequest) returns (GetAuthenticatorsResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_authenticators"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get details about authenticators for a user"
+      summary: "Get Authenticators"
+      tags: "Authenticators"
+    };
+  }
+
+  rpc GetAuthenticator(GetAuthenticatorRequest) returns (GetAuthenticatorResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_authenticator"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get details about an authenticator"
+      summary: "Get Authenticator"
+      tags: "Authenticators"
+    };
+  }
+
+  rpc CreateInvitations(external.activity.v1.CreateInvitationsRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/create_invitations"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Create Invitations to join an existing Organization"
+      summary: "Create Invitations"
+      tags: "Invitations"
+    };
+  }
+
+  rpc DeleteInvitation(external.activity.v1.DeleteInvitationRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/delete_invitation"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Delete an existing Invitation"
+      summary: "Delete Invitation"
+      tags: "Invitations"
+    };
+  }
+
+  rpc CreateUsers(external.activity.v1.CreateUsersRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/create_users"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Create Users in an existing Organization"
+      summary: "Create Users"
+      tags: "Users"
+    };
+  }
+
+  rpc CreateApiOnlyUsers(external.activity.v1.CreateApiOnlyUsersRequest) returns (ActivityResponse) {
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/submit/create_api_only_users"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Create API-only Users in an existing Organization"
+      summary: "Create API-only Users"
+      tags: "Users"
+    };
+  }
+
+  rpc UpdateUser(external.activity.v1.UpdateUserRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/update_user"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Update a User in an existing Organization"
+      summary: "Update User"
+      tags: "Users"
+    };
+  }
+
+  rpc CreateUserTag(external.activity.v1.CreateUserTagRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/create_user_tag"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Create a user tag and add it to users."
+      summary: "Create User Tag"
+      tags: "User Tags"
+    };
+  }
+
+  rpc CreatePrivateKeyTag(external.activity.v1.CreatePrivateKeyTagRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/create_private_key_tag"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Create a private key tag and add it to private keys."
+      summary: "Create Private Key Tag"
+      tags: "Private Key Tags"
+    };
+  }
+
+  rpc UpdateUserTag(external.activity.v1.UpdateUserTagRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/update_user_tag"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Update human-readable name or associated users. Note that this activity is atomic: all of the updates will succeed at once, or all of them will fail."
+      summary: "Update User Tag"
+      tags: "User Tags"
+    };
+  }
+
+  rpc ListUserTags(ListUserTagsRequest) returns (ListUserTagsResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/list_user_tags"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "List all User Tags within an Organization"
+      summary: "List User Tags"
+      tags: "User Tags"
+    };
+  }
+
+  rpc DeleteUserTags(external.activity.v1.DeleteUserTagsRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/delete_user_tags"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Delete User Tags within an Organization"
+      summary: "Delete User Tags"
+      tags: "User Tags"
+    };
+  }
+
+  rpc UpdatePrivateKeyTag(external.activity.v1.UpdatePrivateKeyTagRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/update_private_key_tag"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Update human-readable name or associated private keys. Note that this activity is atomic: all of the updates will succeed at once, or all of them will fail."
+      summary: "Update Private Key Tag"
+      tags: "Private Key Tags"
+    };
+  }
+
+  rpc ListPrivateKeyTags(ListPrivateKeyTagsRequest) returns (ListPrivateKeyTagsResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/list_private_key_tags"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "List all Private Key Tags within an Organization"
+      summary: "List Private Key Tags"
+      tags: "Private Key Tags"
+    };
+  }
+
+  rpc DeletePrivateKeyTags(external.activity.v1.DeletePrivateKeyTagsRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/delete_private_key_tags"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Delete Private Key Tags within an Organization"
+      summary: "Delete Private Key Tags"
+      tags: "Private Key Tags"
+    };
+  }
+
+  rpc SignRawPayload(external.activity.v1.SignRawPayloadRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/sign_raw_payload"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Sign a raw payload"
+      summary: "Sign Raw Payload"
+      tags: "Signing"
+    };
+  }
+
+  rpc SignRawPayloads(external.activity.v1.SignRawPayloadsRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/sign_raw_payloads"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Sign multiple raw payloads with the same signing parameters"
+      summary: "Sign Raw Payloads"
+      tags: "Signing"
+    };
+  }
+
+  rpc SignTransaction(external.activity.v1.SignTransactionRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/sign_transaction"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Sign a transaction"
+      summary: "Sign Transaction"
+      tags: "Signing"
+    };
+  }
+
+  rpc UpdateRootQuorum(external.activity.v1.UpdateRootQuorumRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/update_root_quorum"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Set the threshold and members of the root quorum. This activity must be approved by the current root quorum."
+      summary: "Update Root Quorum"
+      tags: "Organizations"
+    };
+  }
+
+  rpc CreateWallet(external.activity.v1.CreateWalletRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/create_wallet"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Create a Wallet and derive addresses"
+      summary: "Create Wallet"
+      tags: "Wallets"
+    };
+  }
+
+  rpc GetWallets(GetWalletsRequest) returns (GetWalletsResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/list_wallets"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "List all Wallets within an Organization"
+      summary: "List Wallets"
+      tags: "Wallets"
+    };
+  }
+
+  rpc GetWallet(GetWalletRequest) returns (GetWalletResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_wallet"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get details about a Wallet"
+      summary: "Get Wallet"
+      tags: "Wallets"
+    };
+  }
+
+  rpc CreateWalletAccounts(external.activity.v1.CreateWalletAccountsRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/create_wallet_accounts"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Derive additional addresses using an existing wallet"
+      summary: "Create Wallet Accounts"
+      tags: "Wallets"
+    };
+  }
+
+  rpc GetWalletAccounts(GetWalletAccountsRequest) returns (GetWalletAccountsResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/list_wallet_accounts"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "List all Accounts within a Wallet"
+      summary: "List Wallets Accounts"
+      tags: "Wallets"
+    };
+  }
+
+  rpc GetWalletAccount(GetWalletAccountRequest) returns (GetWalletAccountResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_wallet_account"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get a single wallet account"
+      summary: "Get Wallet Account"
+      tags: "Wallets"
+    };
+  }
+
+  rpc CreateSubOrganization(external.activity.v1.CreateSubOrganizationRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/create_sub_organization"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Create a new Sub-Organization"
+      summary: "Create Sub-Organization"
+      tags: "Organizations"
+    };
+  }
+
+  rpc InitUserEmailRecovery(external.activity.v1.InitUserEmailRecoveryRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/init_user_email_recovery"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Initializes a new email recovery"
+      summary: "Init Email Recovery"
+      tags: "User Recovery"
+    };
+  }
+
+  rpc RecoverUser(external.activity.v1.RecoverUserRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/recover_user"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Completes the process of recovering a user by adding an authenticator"
+      summary: "Recover a user"
+      tags: "User Recovery"
+    };
+  }
+
+  rpc SetOrganizationFeature(external.activity.v1.SetOrganizationFeatureRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/set_organization_feature"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Sets an organization feature. This activity must be approved by the current root quorum."
+      summary: "Set Organization Feature"
+      tags: "Features"
+    };
+  }
+
+  rpc RemoveOrganizationFeature(external.activity.v1.RemoveOrganizationFeatureRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/remove_organization_feature"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Removes an organization feature. This activity must be approved by the current root quorum."
+      summary: "Remove Organization Feature"
+      tags: "Features"
+    };
+  }
+
+  rpc ExportPrivateKey(external.activity.v1.ExportPrivateKeyRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/export_private_key"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Exports a Private Key"
+      summary: "Export Private Key"
+      tags: "Private Keys"
+    };
+  }
+
+  rpc ExportWallet(external.activity.v1.ExportWalletRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/export_wallet"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Exports a Wallet"
+      summary: "Export Wallet"
+      tags: "Wallets"
+    };
+  }
+
+  rpc EmailAuth(external.activity.v1.EmailAuthRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/email_auth"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Authenticate a user via Email"
+      summary: "Perform Email Auth"
+      tags: "User Auth"
+    };
+  }
+
+  rpc ExportWalletAccount(external.activity.v1.ExportWalletAccountRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/export_wallet_account"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Exports a Wallet Account"
+      summary: "Export Wallet Account"
+      tags: "Wallets"
+    };
+  }
+
+  rpc InitImportWallet(external.activity.v1.InitImportWalletRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/init_import_wallet"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Initializes a new wallet import"
+      summary: "Init Import Wallet"
+      tags: "Wallets"
+    };
+  }
+
+  rpc ImportWallet(external.activity.v1.ImportWalletRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/import_wallet"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Imports a wallet"
+      summary: "Import Wallet"
+      tags: "Wallets"
+    };
+  }
+
+  rpc InitImportPrivateKey(external.activity.v1.InitImportPrivateKeyRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/init_import_private_key"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Initializes a new private key import"
+      summary: "Init Import Private Key"
+      tags: "Private Keys"
+    };
+  }
+
+  rpc ImportPrivateKey(external.activity.v1.ImportPrivateKeyRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/import_private_key"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Imports a private key"
+      summary: "Import Private Key"
+      tags: "Private Keys"
+    };
+  }
+
+  rpc Oauth(external.activity.v1.OauthRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/oauth"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Authenticate a user with an Oidc token (Oauth) - BETA"
+      summary: "Oauth"
+      tags: "User Auth"
+    };
+  }
+
+  rpc InitOtpAuth(external.activity.v1.InitOtpAuthRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/init_otp_auth"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Initiate an OTP auth activity"
+      summary: "Init OTP auth"
+      tags: "User Auth"
+    };
+  }
+
+  rpc OtpAuth(external.activity.v1.OtpAuthRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/otp_auth"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Authenticate a user with an OTP code sent via email or SMS"
+      summary: "OTP auth"
+      tags: "User Auth"
+    };
+  }
+
+  rpc CreateOauthProviders(external.activity.v1.CreateOauthProvidersRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/create_oauth_providers"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Creates Oauth providers for a specified user - BETA"
+      summary: "Create Oauth Providers"
+      tags: "User Auth"
+    };
+  }
+
+  rpc DeleteOauthProviders(external.activity.v1.DeleteOauthProvidersRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/delete_oauth_providers"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Removes Oauth providers for a specified user - BETA"
+      summary: "Delete Oauth Providers"
+      tags: "User Auth"
+    };
+  }
+
+  rpc GetOrganizationConfigs(GetOrganizationConfigsRequest) returns (GetOrganizationConfigsResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_organization_configs"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get quorum settings and features for an organization"
+      summary: "Get Configs"
+      tags: "Organizations"
+    };
+  }
+
+  rpc DeletePrivateKeys(external.activity.v1.DeletePrivateKeysRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/delete_private_keys"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Deletes private keys for an organization"
+      summary: "Delete Private Keys"
+      tags: "Private Keys"
+    };
+  }
+
+  rpc UpdateWallet(external.activity.v1.UpdateWalletRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/update_wallet"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Update a wallet for an organization"
+      summary: "Update Wallet"
+      tags: "Wallets"
+    };
+  }
+
+  rpc DeleteWallets(external.activity.v1.DeleteWalletsRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/delete_wallets"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Deletes wallets for an organization"
+      summary: "Delete Wallets"
+      tags: "Wallets"
+    };
+  }
+
+  rpc DeleteSubOrganization(external.activity.v1.DeleteSubOrganizationRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/delete_sub_organization"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Deletes a sub organization"
+      summary: "Delete Sub Organization"
+      tags: "Organizations"
+    };
+  }
+
+  // This route does nothing and does not need an implementation, but please don't remove it.
+  // It's used at compile time for generating extra OpenAPI/TypeScript types
+  // that are not directly referenced in requests.
+  rpc NOOPCodegenAnchor(NOOPCodegenAnchorRequest) returns (NOOPCodegenAnchorResponse) {
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {post: "/tkhq/api/v1/noop-codegen-anchor"};
+  }
+}
+
+message NOOPCodegenAnchorRequest {}
+
+message NOOPCodegenAnchorResponse {
+  external.webauthn.v1.WebAuthnStamp stamp = 1 [(google.api.field_behavior) = REQUIRED];
+}
+
+message TestRateLimitsRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization. If the request is being made by a WebAuthN user and their Sub-Organization ID is unknown, this can be the Parent Organization ID; using the Sub-Organization ID when possible is preferred due to performance reasons."}
+  ];
+  bool is_set_limit = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether or not to set a limit on this request."}
+  ];
+  uint32 limit = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Rate limit to set for org, if is_set_limit is set to true"}
+  ];
+}
+
+message TestRateLimitsResponse {}
+
+message GetWhoamiRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization. If the request is being made by a WebAuthN user and their Sub-Organization ID is unknown, this can be the Parent Organization ID; using the Sub-Organization ID when possible is preferred due to performance reasons."}
+  ];
+}
+
+message GetWhoamiResponse {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string organization_name = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable name for an Organization."}
+  ];
+  string user_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given User."}
+  ];
+  string username = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable name for a User."}
+  ];
+}
+
+message GetAttestationDocumentRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string enclave_type = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The enclave type, one of: ump, notarizer, signer, evm-parser"}
+  ];
+}
+
+message GetAttestationDocumentResponse {
+  bytes attestation_document = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Raw (CBOR-encoded) attestation document"}
+  ];
+}
+
+message GetSubOrgIdsRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for the parent Organization. This is used to find sub-organizations within it."}
+  ];
+  string filter_type = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Specifies the type of filter to apply, i.e 'CREDENTIAL_ID', 'NAME', 'USERNAME', 'EMAIL', 'PHONE_NUMBER', 'OIDC_TOKEN' or 'PUBLIC_KEY'"}
+  ];
+  string filter_value = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The value of the filter to apply for the specified type. For example, a specific email or name string."}
+  ];
+  external.options.v1.Pagination pagination_options = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Parameters used for cursor-based pagination."}
+  ];
+}
+
+message GetVerifiedSubOrgIdsRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for the parent Organization. This is used to find sub-organizations within it."}
+  ];
+  string filter_type = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Specifies the type of filter to apply, i.e 'EMAIL', 'PHONE_NUMBER'"}
+  ];
+  string filter_value = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The value of the filter to apply for the specified type. For example, a specific email or phone number string."}
+  ];
+  external.options.v1.Pagination pagination_options = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Parameters used for cursor-based pagination."}
+  ];
+}
+
+message GetSubOrgIdsResponse {
+  repeated string organization_ids = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "List of unique identifiers for the matching sub-organizations."}
+  ];
+}
+
+message GetVerifiedSubOrgIdsResponse {
+  repeated string organization_ids = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "List of unique identifiers for the matching sub-organizations."}
+  ];
+}
+
+message GetOrganizationRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+}
+
+message GetOrganizationResponse {
+  external.data.v1.OrganizationData organization_data = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Object representing the full current and deleted / disabled collection of Users, Policies, Private Keys, and Invitations attributable to a particular Organization."}
+  ];
+}
+
+message GetActivityRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string activity_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Activity object."}
+  ];
+}
+
+message GetActivitiesRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  repeated immutable.activity.v1.ActivityStatus filter_by_status = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Array of Activity Statuses filtering which Activities will be listed in the response."}
+  ];
+  external.options.v1.Pagination pagination_options = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Parameters used for cursor-based pagination."}
+  ];
+  repeated immutable.activity.v1.ActivityType filter_by_type = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Array of Activity Types filtering which Activities will be listed in the response."}
+  ];
+}
+
+message GetActivitiesResponse {
+  repeated external.activity.v1.Activity activities = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of Activities."}
+  ];
+}
+
+message GetUserRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string user_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given User."}
+  ];
+}
+
+message GetUserResponse {
+  external.data.v1.User user = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Web and/or API user within your Organization."}
+  ];
+}
+
+message GetUsersRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+}
+
+message GetUsersResponse {
+  repeated external.data.v1.User users = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "A list of Users."
+      title: ""
+    }
+  ];
+}
+
+message ActivityResponse {
+  external.activity.v1.Activity activity = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "An action that can that can be taken within the Turnkey infrastructure."}
+  ];
+}
+
+message GetPoliciesRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+}
+
+message GetPoliciesResponse {
+  repeated external.data.v1.Policy policies = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of Policies."}
+  ];
+}
+
+message GetPolicyRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string policy_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Policy."}
+  ];
+}
+
+message GetPolicyResponse {
+  external.data.v1.Policy policy = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Object that codifies rules defining the actions that are permissible within an Organization."}
+  ];
+}
+
+message GetAuthenticatorRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string authenticator_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Authenticator."}
+  ];
+}
+
+message GetAuthenticatorResponse {
+  external.data.v1.Authenticator authenticator = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "An authenticator."}
+  ];
+}
+
+message GetAuthenticatorsRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string user_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given User."}
+  ];
+}
+
+message GetAuthenticatorsResponse {
+  repeated external.data.v1.Authenticator authenticators = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of authenticators."}
+  ];
+}
+
+message GetOauthProvidersRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  optional string user_id = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given User."}
+  ];
+}
+
+message GetOauthProvidersResponse {
+  repeated external.data.v1.OauthProvider oauth_providers = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of Oauth Providers"}
+  ];
+}
+
+message GetApiKeyRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string api_key_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given API key."}
+  ];
+}
+
+message GetApiKeyResponse {
+  external.data.v1.ApiKey api_key = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "An API key."}
+  ];
+}
+
+message GetApiKeysRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  optional string user_id = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given User."}
+  ];
+}
+
+message GetApiKeysResponse {
+  repeated external.data.v1.ApiKey api_keys = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of API keys."}
+  ];
+}
+
+message GetPrivateKeysRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+}
+
+message GetPrivateKeysResponse {
+  repeated external.data.v1.PrivateKey private_keys = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of Private Keys."}
+  ];
+}
+
+message GetPrivateKeyRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string private_key_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Private Key."}
+  ];
+}
+
+message GetPrivateKeyResponse {
+  external.data.v1.PrivateKey private_key = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Cryptographic public/private key pair that can be used for cryptocurrency needs or more generalized encryption."}
+  ];
+}
+
+message GetWalletsRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+}
+
+message GetWalletsResponse {
+  repeated external.data.v1.Wallet wallets = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of Wallets."}
+  ];
+}
+
+message GetWalletRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string wallet_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Wallet."}
+  ];
+}
+
+message GetWalletResponse {
+  external.data.v1.Wallet wallet = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A collection of deterministically generated cryptographic public / private key pairs that share a common seed"}
+  ];
+}
+
+message GetWalletAccountsRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string wallet_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Wallet."}
+  ];
+  external.options.v1.Pagination pagination_options = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Parameters used for cursor-based pagination."}
+  ];
+}
+
+message GetWalletAccountsResponse {
+  repeated external.data.v1.WalletAccount accounts = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of Accounts generated from a Wallet that share a common seed."}
+  ];
+}
+
+message GetWalletAccountRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string wallet_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Wallet."}
+  ];
+  optional string address = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address corresponding to a Wallet Account."}
+  ];
+  optional string path = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Path corresponding to a Wallet Account."}
+  ];
+}
+
+message GetWalletAccountResponse {
+  external.data.v1.WalletAccount account = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The resulting Wallet Account."}
+  ];
+}
+
+message ListUserTagsRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+}
+
+message ListUserTagsResponse {
+  repeated external.data.v1.Tag user_tags = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of User Tags"}
+  ];
+}
+
+message ListPrivateKeyTagsRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+}
+
+message ListPrivateKeyTagsResponse {
+  repeated external.data.v1.Tag private_key_tags = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of Private Key Tags"}
+  ];
+}
+
+message GetOrganizationConfigsRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+}
+
+message GetOrganizationConfigsResponse {
+  external.data.v1.Config configs = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Organization configs including quorum settings and organization features"}
+  ];
+}

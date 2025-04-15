@@ -1,0 +1,334 @@
+syntax = "proto3";
+
+package external.data.v1;
+
+import "external/data/v1/common.proto";
+import "immutable/common/v1/common.proto";
+import "immutable/data/v1/common.proto";
+import "immutable/webauthn/v1/webauthn.proto";
+import "vendor/google/api/field_behavior.proto";
+import "vendor/protoc-gen-openapiv2/options/annotations.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/external/data/v1";
+
+// This proto definition is used in our external-facing APIs.
+// It's important to leverage annotations because they're used in our external interfaces.
+message OrganizationData {
+  string organization_id = 2;
+  string name = 3;
+  repeated User users = 4;
+  repeated Policy policies = 5;
+  repeated PrivateKey private_keys = 6;
+  repeated Invitation invitations = 7;
+  repeated Tag tags = 8;
+  Quorum root_quorum = 16;
+  repeated immutable.data.v1.Feature features = 18;
+  repeated Wallet wallets = 19;
+}
+
+message OauthProvider {
+  string provider_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for an OAuth Provider"}
+  ];
+  string provider_name = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Human-readable name to identify a Provider."
+      title: ""
+    }
+  ];
+  string issuer = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The issuer of the token, typically a URL indicating the authentication server, e.g https://accounts.google.com"
+      title: ""
+    }
+  ];
+  string audience = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Expected audience ('aud' attribute of the signed token) which represents the app ID"
+      title: ""
+    }
+  ];
+  string subject = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Expected subject ('sub' attribute of the signed token) which represents the user ID"
+      title: ""
+    }
+  ];
+  Timestamp created_at = 6 [(google.api.field_behavior) = REQUIRED];
+  Timestamp updated_at = 7 [(google.api.field_behavior) = REQUIRED];
+}
+
+message User {
+  string user_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given User."}
+  ];
+  string user_name = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable name for a User."}
+  ];
+  // some users do not have emails (programmatic users)
+  optional string user_email = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+    description: "The user's email address."
+    title: ""
+  }];
+  optional string user_phone_number = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+    description: "The user's phone number in E.164 format e.g. +13214567890"
+    title: ""
+  }];
+  repeated Authenticator authenticators = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of Authenticator parameters."}
+  ];
+  repeated ApiKey api_keys = 6 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of API Key parameters. This field, if not needed, should be an empty array in your request body."}
+  ];
+  repeated string user_tags = 7 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of User Tag IDs."}
+  ];
+  repeated OauthProvider oauth_providers = 8 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of Oauth Providers."}
+  ];
+  Timestamp created_at = 9 [(google.api.field_behavior) = REQUIRED];
+  Timestamp updated_at = 10 [(google.api.field_behavior) = REQUIRED];
+}
+
+message ApiKey {
+  Credential credential = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A User credential that can be used to authenticate to Turnkey."}
+  ];
+  string api_key_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given API Key."}
+  ];
+  string api_key_name = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable name for an API Key."}
+  ];
+  Timestamp created_at = 5 [(google.api.field_behavior) = REQUIRED];
+  Timestamp updated_at = 6 [(google.api.field_behavior) = REQUIRED];
+  optional uint64 expiration_seconds = 7 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional window (in seconds) indicating how long the API Key should last."}
+  ];
+}
+
+message Authenticator {
+  repeated immutable.webauthn.v1.AuthenticatorTransport transports = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Types of transports that may be used by an Authenticator (e.g., USB, NFC, BLE)."}
+  ];
+  string attestation_type = 2 [(google.api.field_behavior) = REQUIRED];
+  string aaguid = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Identifier indicating the type of the Security Key."}
+  ];
+  string credential_id = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a WebAuthn credential."}
+  ];
+  string model = 6 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The type of Authenticator device."}
+  ];
+  Credential credential = 7 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A User credential that can be used to authenticate to Turnkey."}
+  ];
+  string authenticator_id = 8 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Authenticator."}
+  ];
+  string authenticator_name = 9 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable name for an Authenticator."}
+  ];
+  Timestamp created_at = 10 [(google.api.field_behavior) = REQUIRED];
+  Timestamp updated_at = 11 [(google.api.field_behavior) = REQUIRED];
+}
+
+message Credential {
+  string public_key = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The public component of a cryptographic key pair used to sign messages and transactions."}
+  ];
+  // To distinguish the credential type (webauthn, API key)
+  immutable.common.v1.CredentialType type = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+message Policy {
+  string policy_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Policy."}
+  ];
+  string policy_name = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable name for a Policy."}
+  ];
+  immutable.common.v1.Effect effect = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The instruction to DENY or ALLOW a particular activity following policy selector(s)."}
+  ];
+  Timestamp created_at = 5 [(google.api.field_behavior) = REQUIRED];
+  Timestamp updated_at = 6 [(google.api.field_behavior) = REQUIRED];
+  string notes = 7 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable notes added by a User to describe a particular policy."}
+  ];
+  optional string consensus = 8 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A consensus expression that evalutes to true or false."}
+  ];
+  optional string condition = 9 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A condition expression that evalutes to true or false."}
+  ];
+}
+
+message PrivateKey {
+  string private_key_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Private Key."}
+  ];
+  string public_key = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The public component of a cryptographic key pair used to sign messages and transactions."}
+  ];
+  string private_key_name = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable name for a Private Key."}
+  ];
+  immutable.common.v1.Curve curve = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Cryptographic Curve used to generate a given Private Key."}
+  ];
+  repeated Address addresses = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Derived cryptocurrency addresses for a given Private Key."}
+  ];
+  repeated string private_key_tags = 6 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of Private Key Tag IDs."}
+  ];
+  Timestamp created_at = 7 [(google.api.field_behavior) = REQUIRED];
+  Timestamp updated_at = 8 [(google.api.field_behavior) = REQUIRED];
+  bool exported = 9 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "True when a given Private Key is exported, false otherwise."}
+  ];
+  bool imported = 10 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "True when a given Private Key is imported, false otherwise."}
+  ];
+}
+
+message Address {
+  immutable.common.v1.AddressFormat format = 1;
+  string address = 2;
+}
+
+message Invitation {
+  string invitation_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Invitation object."}
+  ];
+  string receiver_user_name = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The name of the intended Invitation recipient."}
+  ];
+  string receiver_email = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The email address of the intended Invitation recipient."}
+  ];
+  repeated string receiver_user_tags = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of tags assigned to the Invitation recipient."}
+  ];
+  immutable.common.v1.AccessType access_type = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The User's permissible access method(s)."}
+  ];
+  InvitationStatus status = 6 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The current processing status of a specified Invitation."}
+  ];
+  Timestamp created_at = 7 [(google.api.field_behavior) = REQUIRED];
+  Timestamp updated_at = 8 [(google.api.field_behavior) = REQUIRED];
+  string sender_user_id = 9 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for the Sender of an Invitation."}
+  ];
+}
+
+enum InvitationStatus {
+  INVITATION_STATUS_UNSPECIFIED = 0;
+  INVITATION_STATUS_CREATED = 1;
+  INVITATION_STATUS_ACCEPTED = 2;
+  INVITATION_STATUS_REVOKED = 3;
+}
+
+message Tag {
+  string tag_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Tag."}
+  ];
+  string tag_name = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable name for a Tag."}
+  ];
+  TagType tag_type = 3 [(google.api.field_behavior) = REQUIRED];
+  Timestamp created_at = 4 [(google.api.field_behavior) = REQUIRED];
+  Timestamp updated_at = 5 [(google.api.field_behavior) = REQUIRED];
+}
+
+enum TagType {
+  TAG_TYPE_UNSPECIFIED = 0;
+  TAG_TYPE_USER = 1;
+  TAG_TYPE_PRIVATE_KEY = 3;
+}
+
+message Quorum {
+  int32 threshold = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Count of unique approvals required to meet quorum."}
+  ];
+  repeated string user_ids = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifiers of quorum set members."}
+  ];
+}
+
+message Wallet {
+  string wallet_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Wallet."}
+  ];
+  string wallet_name = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable name for a Wallet."}
+  ];
+  Timestamp created_at = 3 [(google.api.field_behavior) = REQUIRED];
+  Timestamp updated_at = 4 [(google.api.field_behavior) = REQUIRED];
+  bool exported = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "True when a given Wallet is exported, false otherwise."}
+  ];
+  bool imported = 6 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "True when a given Wallet is imported, false otherwise."}
+  ];
+}
+
+message Config {
+  repeated immutable.data.v1.Feature features = 1;
+  Quorum quorum = 2;
+}
