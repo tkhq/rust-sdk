@@ -15,7 +15,7 @@ const CREATE_SUB_ORGANIZATION_PATH: &str = "/public/v1/submit/create_sub_organiz
 async fn main() -> Result<(), Box<dyn Error>> {
     // Load .env file from the example folder (examples/.env)
     let current_dir = env::current_dir()?; // should be the workspace root
-    dotenv::from_path(current_dir.join("examples").join(".env"))?;
+    dotenvy::from_path(current_dir.join("examples").join(".env"))?;
 
     let api_public_key =
         env::var("TURNKEY_API_PUBLIC_KEY").expect("cannot load TURNKEY_API_PUBLIC_KEY");

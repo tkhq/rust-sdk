@@ -12,7 +12,7 @@ const WHOAMI_PATH: &str = "/public/v1/query/whoami";
 async fn main() -> Result<(), Box<dyn Error>> {
     // Load .env file from the example folder (examples/.env)
     let current_dir = env::current_dir()?; // should be the workspace root
-    dotenv::from_path(current_dir.join("examples").join(".env"))?;
+    dotenvy::from_path(current_dir.join("examples").join(".env"))?;
 
     // Create our API key from env
     let api_public_key =
