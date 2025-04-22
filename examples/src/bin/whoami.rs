@@ -1,12 +1,10 @@
-use reqwest::header::{HeaderMap, HeaderValue};
-use serde_json::json;
 use std::env;
 use std::error::Error;
-use tkhq_api_key_stamper::{stamp, TurnkeyApiKey};
-
+use tkhq_api_key_stamper::TurnkeyApiKey;
+use tkhq_client::generated::GetWhoamiRequest;
+use tkhq_client::RetryConfig;
 // See <https://docs.turnkey.com/api-reference/sessions/who-am-i> for documentation
 const TURNKEY_API_HOST: &str = "https://api.turnkey.com";
-const WHOAMI_PATH: &str = "/public/v1/query/whoami";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -24,34 +22,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
         public_key_hex: api_public_key,
     };
 
-    // Create the request body for our whoami request
-    let organization_id =
-        env::var("TURNKEY_ORGANIZATION_ID").expect("cannot load TURNKEY_ORGANIZATION_ID");
-    let body = json!({
-        "organizationId": organization_id,
-    })
-    .to_string();
+    let client = tkhq_client::TurnkeyClient::new(TURNKEY_API_HOST, api_key, RetryConfig::none());
+    let req = GetWhoamiRequest{ organization_id: env::var("TURNKEY_ORGANIZATION_ID").unwrap()};
 
-    // Sign the request with a stamp
-    let mut headers = HeaderMap::new();
-    let stamp = stamp(body.clone(), &api_key)?;
-    headers.insert("X-Stamp", HeaderValue::from_str(&stamp)?);
-
-    // Send the request out!
-    let client = reqwest::Client::new();
-    println!("Sending request body:\n{}\n", body.clone());
-    println!("Associated X-Stamp header:\n{}\n", stamp.clone());
-    let response = client
-        .post(format!("{TURNKEY_API_HOST}{WHOAMI_PATH}"))
-        .headers(headers)
-        .body(body)
-        .send()
-        .await?;
-
-    println!("Status: {}", response.status());
-
-    let text = response.text().await?;
-    println!("Response body\n{}", text);
+    let res = client.get_whoami(req).await?;
+    println!("Organization: \"{}\" ({})", res.organization_name, res.organization_id);
+    println!("User: \"{}\" ({})", res.username, res.user_id);
 
     Ok(())
 }

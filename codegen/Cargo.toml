@@ -7,3 +7,5 @@ edition = "2021"
 regex = "1"
 prost-build = { version = "0.12.6", default-features = false }
 tonic-build = { version = "0.13" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
@@ -8,6 +8,24 @@ const PUBLIC_API_PROTO_PATH: &str = "proto/services/coordinator/public/v1/public
 const INCLUDE_PROTO_PATH: &str = "proto";
 const GENERATED_CLIENT_DIR: &str = "client/src/generated";
 const CLIENT_TEMPLATE_PATH: &str = "codegen/src/client.template.rs";
+const ACTIVITIES_MAPPING_PATH: &str = "codegen/src/activities.json";
+
+// Necessary derive to parse from and serialize to JSON
+const SERDE_DERIVE: &str = "#[derive(::serde::Serialize, ::serde::Deserialize)]";
+const SERDE_CAMEL_CASE: &str = "#[serde(rename_all = \"camelCase\")]";
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ActivityDetails {
+    r#type: String,
+    intent_type: String,
+    result_type: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct ActivitiesFile {
+    activities: HashMap<String, ActivityDetails>,
+}
 
 fn main() {
     let out_dir = PathBuf::from(GENERATED_CLIENT_DIR);
@@ -17,6 +35,15 @@ fn main() {
     .build_client(false)
     .include_file("mod.rs")
     .out_dir(out_dir.clone())
+    .type_attribute(".services", SERDE_DERIVE)
+    .type_attribute(".services", SERDE_CAMEL_CASE)
+    .type_attribute(".external", SERDE_DERIVE)
+    .type_attribute(".external", SERDE_CAMEL_CASE)
+    .type_attribute(".immutable", SERDE_DERIVE)
+    .type_attribute(".immutable", SERDE_CAMEL_CASE)
+    .type_attribute(".google.rpc", SERDE_DERIVE)
+    .type_attribute("google.rpc", SERDE_CAMEL_CASE)
+    .field_attribute("google.rpc.Status.details", "#[serde(skip)]")
     .compile_protos(
         &[PUBLIC_API_PROTO_PATH],
         &[INCLUDE_PROTO_PATH],
@@ -40,9 +67,10 @@ fn main() {
 
     let mut generated_methods = String::new();
 
-    // Structures to track imports
-    let mut coordinator_imports = HashSet::new();
-    let mut activity_imports = HashSet::new();
+    // We manually have to specify the mapping between activity types, route, intent and result type through a file
+    // Unfortunately this information isn't available in proto directly because this mapping is semantic, not structural.
+    let activities_mapping_data = fs::read_to_string(ACTIVITIES_MAPPING_PATH).expect("cannot read activities.json");
+    let parsed_activities: ActivitiesFile = serde_json::from_str(&activities_mapping_data).expect("cannot parse activities.json");
 
     for service_caps in service_re.captures_iter(&proto) {
         let service_body = &service_caps[2];
@@ -76,33 +104,89 @@ fn main() {
             if let Some(http_caps) = http_re.captures(http_opts) {
                 let route = &http_caps[1];
 
-                let sanitized_req_type = if req_type.contains("external.activity.v1") {
+                if req_type.contains("external.activity.v1") {
+                    let activities_details = parsed_activities.activities.get(route).expect(&format!("route {} not found in activities.json", route));
+                    let activity_type = activities_details.r#type.clone();
                     // If the request type is "external.activity.v1.DeletePolicyRequest" the sanitized
                     // request type will be "DeletePolicyRequest", and we'll need to import it from the external activity namespace
-                     let short_req_type = req_type.rsplit(".").next().unwrap();
-                     activity_imports.insert(short_req_type.into());
-                     short_req_type
-                } else {
-                    // Otherwise we're fine, it'll be defined in the coordinator public API namespace.
-                    coordinator_imports.insert(req_type.into());
-                    req_type
-                };
+                    let short_req_type = req_type.rsplit(".").next().unwrap();
+                    let activity_intent = activities_details.intent_type.clone();
+                    let activity_result = activities_details.result_type.clone();
 
-                let func = format!(
-                    r#"pub async fn {fn_name}(client: &reqwest::Client, base_url: &str, request: {sanitized_req_type}, stamp: &str) -> Result<{res_type}, reqwest::Error> {{
-    let url = format!("{{}}{{}}", base_url, "{route}");
-    let res = client
-        .post(url)
-        .header("X-Stamp", stamp)
-        .json(&request)
-        .send()
-        .await?;
-    let parsed = res.json::<{res_type}>().await?;
-    Ok(parsed)
-}}
+                    // Approve and Reject activity functions are a bit different than the rest
+                    // In the mapping they have a resultType set to "*" (because they can indeed reference ANY activity.
+                    let activity_func = if activity_result == "*" {
+                        format!(
+r#"
+    pub async fn {fn_name}(&self, organization_id: String, timestamp_ms: u128, params: immutable_activity::{activity_intent}) -> Result<external_activity::Activity, TurnkeyClientError> {{
+        let url = format!("{{}}{{}}", self.base_url, "{route}");
+
+        let request = external_activity::{short_req_type} {{
+            r#type: "{activity_type}".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            organization_id: organization_id,
+            parameters: Some(params)
+        }};
+
+        let post_body = serde_json::to_string(&request).unwrap();
+
+        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+
+        self.process_activity(url, stamp, post_body).await
+    }}
+"#)
+                    } else {
+                        format!(
+r#"
+    pub async fn {fn_name}(&self, organization_id: String, timestamp_ms: u128, params: immutable_activity::{activity_intent}) -> Result<immutable_activity::{activity_result}, TurnkeyClientError> {{
+        let url = format!("{{}}{{}}", self.base_url, "{route}");
+
+        let request = external_activity::{short_req_type} {{
+            r#type: "{activity_type}".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            organization_id: organization_id,
+            parameters: Some(params)
+        }};
+
+        let post_body = serde_json::to_string(&request).unwrap();
+
+        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+
+        let activity = self.process_activity(url, stamp, post_body).await?;
+
+        let inner = activity
+            .result.ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner.ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+
+        match inner {{
+            immutable_activity::result::Inner::{activity_result}(res) => Ok(res),
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(format!("{{other:?}}"))),
+        }}
+            
+    }}
+"#)
+                    };
+                    generated_methods.push_str(&activity_func);
+                } else {
+                    let func = format!(
+                    r#"
+    pub async fn {fn_name}(&self, request: coordinator::{req_type}) -> Result<coordinator::{res_type}, TurnkeyClientError> {{
+        let url = format!("{{}}{{}}", self.base_url, "{route}");
+        let post_body = serde_json::to_string(&request).unwrap();
+        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+
+        let res = self.http
+            .post(url)
+            .header("X-Stamp", stamp)
+            .body(post_body)
+            .send()
+            .await?;
+        let parsed = res.json::<coordinator::{res_type}>().await?;
+        Ok(parsed)
+    }}
 "#);
-                generated_methods.push_str(&func);
-                coordinator_imports.insert(res_type.into());
+                    generated_methods.push_str(&func);
+                }
             }
         }
     }
@@ -111,14 +195,6 @@ fn main() {
     let method_placeholder = "// <GENERATED_METHODS_PLACEHOLDER>";
     let client_template = fs::read_to_string(CLIENT_TEMPLATE_PATH).unwrap();
     let output = client_template.replace(method_placeholder, &generated_methods);
-
-    // Populate imports for generic request/response types
-    let import_placeholder = "COORDINATOR_SERVICE_IMPORT_PLACEHOLDER";
-    let output = output.replace(import_placeholder, &coordinator_imports.into_iter().collect::<Vec<String>>().join(",\n  "));
-
-    // Do the same for activity request types (which are in a different file)
-    let import_placeholder = "ACTIVITY_IMPORT_PLACEHOLDER";
-    let output = output.replace(import_placeholder, &activity_imports.into_iter().collect::<Vec<String>>().join(",\n  "));
 
     // Write the generated client to the `client` crate
     let generated_client_path = PathBuf::from(GENERATED_CLIENT_DIR).join("client.rs");
@@ -131,8 +207,9 @@ fn main() {
     .open(out_dir.join("mod.rs")).unwrap();
 
     // This will append a new line to the end of the file
-    writeln!(mod_rs, "\n// This line was added by the codegen script").unwrap();
-    writeln!(mod_rs, "pub mod client;").unwrap();
+    writeln!(mod_rs, "\n// Added by tkhq_codegen").unwrap();
+    writeln!(mod_rs, "mod client;").unwrap();
+    writeln!(mod_rs, "pub use client::*;").unwrap();
 }
 
 fn to_snake_case(name: &str) -> String {

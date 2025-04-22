@@ -76,5 +76,9 @@ pub mod services {
     }
 }
 
-// This line was added by the codegen script
-pub mod client;
+// Added by tkhq_codegen
+mod client;
+
+pub use crate::generated::services::coordinator::public::v1::*;
+pub use crate::generated::external::activity::v1::*;
+pub use crate::generated::immutable::activity::v1::*;
