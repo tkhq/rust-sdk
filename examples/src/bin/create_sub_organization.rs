@@ -1,5 +1,5 @@
 use std::error::Error;
-use std::{env, time};
+use std::{env, time, vec};
 use tkhq_client::{generated::{immutable::common::v1::{AddressFormat, ApiKeyCurve, Curve, PathFormat}, ApiKeyParamsV2, CreateSubOrganizationIntentV7, RootUserParamsV4, WalletAccountParams, WalletParams}, RetryConfig};
 use tkhq_api_key_stamper::TurnkeyApiKey;
 
@@ -41,25 +41,32 @@ async fn main() -> Result<(), Box<dyn Error>> {
         root_users: vec![RootUserParamsV4{
             user_name: "Root User".to_string(),
             api_keys: vec![ApiKeyParamsV2 {
-                api_key_name: "Test API Key".to_string(),
-                public_key: suborg_public_key,
-                curve_type: ApiKeyCurve::P256 as i32,
-                ..Default::default()
+                api_key_name:"Test API Key".to_string(),
+                public_key:suborg_public_key,
+                curve_type:ApiKeyCurve::P256,
+                expiration_seconds: None
             }],
-            ..Default::default()
+            user_email: None,
+            user_phone_number: None,
+            authenticators: vec![],
+            oauth_providers: vec![],
         }],
         root_quorum_threshold: 1,
         wallet: Some(WalletParams {
             wallet_name: "New wallet".to_string(),
             accounts: vec![WalletAccountParams {
-                curve: Curve::Secp256k1 as i32,
-                path_format: PathFormat::Bip32 as i32,
+                curve: Curve::Secp256k1,
+                path_format: PathFormat::Bip32,
                 path: "m/44'/60'/0'/0".to_string(),
-                address_format: AddressFormat::Ethereum as i32,
+                address_format: AddressFormat::Ethereum,
             }],
-            ..Default::default()
+            mnemonic_length: None, // Let that be the default
         }),
-        ..Default::default()
+        // Defaults
+        disable_email_recovery: None,
+        disable_email_auth: None,
+        disable_sms_auth: None,
+        disable_otp_email_auth: None,
     };
     
     let res = client.create_sub_organization(organization_id, timestamp_ms, intent).await?;
