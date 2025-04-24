@@ -1,9 +1,9 @@
 //! Turnkey Client to interact with the Turnkey API
 //! See <https://docs.turnkey.com>
-use crate::{TurnkeyClient, TurnkeyClientError};
-use crate::generated::services::coordinator::public::v1 as coordinator;
 use crate::generated::external::activity::v1 as external_activity;
 use crate::generated::immutable::activity::v1 as immutable_activity;
+use crate::generated::services::coordinator::public::v1 as coordinator;
+use crate::{TurnkeyClient, TurnkeyClientError};
 use tkhq_api_key_stamper::stamp;
 impl TurnkeyClient {
     pub async fn get_whoami(
@@ -45,7 +45,8 @@ impl TurnkeyClient {
         request: coordinator::GetVerifiedSubOrgIdsRequest,
     ) -> Result<coordinator::GetVerifiedSubOrgIdsResponse, TurnkeyClientError> {
         let url = format!(
-            "{}{}", self.base_url, "/public/v1/query/list_verified_suborgs"
+            "{}{}",
+            self.base_url, "/public/v1/query/list_verified_suborgs"
         );
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -56,7 +57,9 @@ impl TurnkeyClient {
             .body(post_body)
             .send()
             .await?;
-        let parsed = res.json::<coordinator::GetVerifiedSubOrgIdsResponse>().await?;
+        let parsed = res
+            .json::<coordinator::GetVerifiedSubOrgIdsResponse>()
+            .await?;
         Ok(parsed)
     }
     pub async fn get_activity(
@@ -103,8 +106,8 @@ impl TurnkeyClient {
         let request = external_activity::ApproveActivityRequest {
             r#type: "ACTIVITY_TYPE_APPROVE_ACTIVITY".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -120,8 +123,8 @@ impl TurnkeyClient {
         let request = external_activity::RejectActivityRequest {
             r#type: "ACTIVITY_TYPE_REJECT_ACTIVITY".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -171,8 +174,8 @@ impl TurnkeyClient {
         let request = external_activity::DeleteUsersRequest {
             r#type: "ACTIVITY_TYPE_DELETE_USERS".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -184,13 +187,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::DeleteUsersResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn create_policy(
@@ -203,8 +202,8 @@ impl TurnkeyClient {
         let request = external_activity::CreatePolicyRequest {
             r#type: "ACTIVITY_TYPE_CREATE_POLICY_V3".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -216,13 +215,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::CreatePolicyResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn create_policies(
@@ -235,8 +230,8 @@ impl TurnkeyClient {
         let request = external_activity::CreatePoliciesRequest {
             r#type: "ACTIVITY_TYPE_CREATE_POLICIES".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -248,13 +243,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::CreatePoliciesResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn update_policy(
@@ -267,8 +258,8 @@ impl TurnkeyClient {
         let request = external_activity::UpdatePolicyRequest {
             r#type: "ACTIVITY_TYPE_UPDATE_POLICY_V2".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -280,13 +271,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::UpdatePolicyResultV2(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn delete_policy(
@@ -299,8 +286,8 @@ impl TurnkeyClient {
         let request = external_activity::DeletePolicyRequest {
             r#type: "ACTIVITY_TYPE_DELETE_POLICY".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -312,13 +299,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::DeletePolicyResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn get_policies(
@@ -362,13 +345,14 @@ impl TurnkeyClient {
         params: immutable_activity::CreateReadOnlySessionIntent,
     ) -> Result<immutable_activity::CreateReadOnlySessionResult, TurnkeyClientError> {
         let url = format!(
-            "{}{}", self.base_url, "/public/v1/submit/create_read_only_session"
+            "{}{}",
+            self.base_url, "/public/v1/submit/create_read_only_session"
         );
         let request = external_activity::CreateReadOnlySessionRequest {
             r#type: "ACTIVITY_TYPE_CREATE_READ_ONLY_SESSION".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -379,16 +363,10 @@ impl TurnkeyClient {
             .inner
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
-            immutable_activity::result::Inner::CreateReadOnlySessionResult(res) => {
-                Ok(res)
-            }
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            immutable_activity::result::Inner::CreateReadOnlySessionResult(res) => Ok(res),
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn create_read_write_session(
@@ -398,13 +376,14 @@ impl TurnkeyClient {
         params: immutable_activity::CreateReadWriteSessionIntentV2,
     ) -> Result<immutable_activity::CreateReadWriteSessionResultV2, TurnkeyClientError> {
         let url = format!(
-            "{}{}", self.base_url, "/public/v1/submit/create_read_write_session"
+            "{}{}",
+            self.base_url, "/public/v1/submit/create_read_write_session"
         );
         let request = external_activity::CreateReadWriteSessionRequest {
             r#type: "ACTIVITY_TYPE_CREATE_READ_WRITE_SESSION_V2".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -415,16 +394,10 @@ impl TurnkeyClient {
             .inner
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
-            immutable_activity::result::Inner::CreateReadWriteSessionResultV2(res) => {
-                Ok(res)
-            }
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            immutable_activity::result::Inner::CreateReadWriteSessionResultV2(res) => Ok(res),
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn create_private_keys(
@@ -434,13 +407,14 @@ impl TurnkeyClient {
         params: immutable_activity::CreatePrivateKeysIntentV2,
     ) -> Result<immutable_activity::CreatePrivateKeysResultV2, TurnkeyClientError> {
         let url = format!(
-            "{}{}", self.base_url, "/public/v1/submit/create_private_keys"
+            "{}{}",
+            self.base_url, "/public/v1/submit/create_private_keys"
         );
         let request = external_activity::CreatePrivateKeysRequest {
             r#type: "ACTIVITY_TYPE_CREATE_PRIVATE_KEYS_V2".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -452,13 +426,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::CreatePrivateKeysResultV2(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn get_private_key(
@@ -505,8 +475,8 @@ impl TurnkeyClient {
         let request = external_activity::CreateApiKeysRequest {
             r#type: "ACTIVITY_TYPE_CREATE_API_KEYS_V2".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -518,13 +488,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::CreateApiKeysResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn delete_api_keys(
@@ -537,8 +503,8 @@ impl TurnkeyClient {
         let request = external_activity::DeleteApiKeysRequest {
             r#type: "ACTIVITY_TYPE_DELETE_API_KEYS".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -550,20 +516,19 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::DeleteApiKeysResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn get_oauth_providers(
         &self,
         request: coordinator::GetOauthProvidersRequest,
     ) -> Result<coordinator::GetOauthProvidersResponse, TurnkeyClientError> {
-        let url = format!("{}{}", self.base_url, "/public/v1/query/get_oauth_providers");
+        let url = format!(
+            "{}{}",
+            self.base_url, "/public/v1/query/get_oauth_providers"
+        );
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
         let res = self
@@ -617,13 +582,14 @@ impl TurnkeyClient {
         params: immutable_activity::CreateAuthenticatorsIntentV2,
     ) -> Result<immutable_activity::CreateAuthenticatorsResult, TurnkeyClientError> {
         let url = format!(
-            "{}{}", self.base_url, "/public/v1/submit/create_authenticators"
+            "{}{}",
+            self.base_url, "/public/v1/submit/create_authenticators"
         );
         let request = external_activity::CreateAuthenticatorsRequest {
             r#type: "ACTIVITY_TYPE_CREATE_AUTHENTICATORS_V2".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -635,13 +601,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::CreateAuthenticatorsResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn delete_authenticators(
@@ -651,13 +613,14 @@ impl TurnkeyClient {
         params: immutable_activity::DeleteAuthenticatorsIntent,
     ) -> Result<immutable_activity::DeleteAuthenticatorsResult, TurnkeyClientError> {
         let url = format!(
-            "{}{}", self.base_url, "/public/v1/submit/delete_authenticators"
+            "{}{}",
+            self.base_url, "/public/v1/submit/delete_authenticators"
         );
         let request = external_activity::DeleteAuthenticatorsRequest {
             r#type: "ACTIVITY_TYPE_DELETE_AUTHENTICATORS".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -669,13 +632,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::DeleteAuthenticatorsResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn get_authenticators(
@@ -718,12 +677,15 @@ impl TurnkeyClient {
         timestamp_ms: u128,
         params: immutable_activity::CreateInvitationsIntent,
     ) -> Result<immutable_activity::CreateInvitationsResult, TurnkeyClientError> {
-        let url = format!("{}{}", self.base_url, "/public/v1/submit/create_invitations");
+        let url = format!(
+            "{}{}",
+            self.base_url, "/public/v1/submit/create_invitations"
+        );
         let request = external_activity::CreateInvitationsRequest {
             r#type: "ACTIVITY_TYPE_CREATE_INVITATIONS".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -735,13 +697,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::CreateInvitationsResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn delete_invitation(
@@ -754,8 +712,8 @@ impl TurnkeyClient {
         let request = external_activity::DeleteInvitationRequest {
             r#type: "ACTIVITY_TYPE_DELETE_INVITATION".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -767,13 +725,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::DeleteInvitationResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn create_users(
@@ -786,8 +740,8 @@ impl TurnkeyClient {
         let request = external_activity::CreateUsersRequest {
             r#type: "ACTIVITY_TYPE_CREATE_USERS_V3".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -799,13 +753,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::CreateUsersResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn update_user(
@@ -818,8 +768,8 @@ impl TurnkeyClient {
         let request = external_activity::UpdateUserRequest {
             r#type: "ACTIVITY_TYPE_UPDATE_USER".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -831,13 +781,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::UpdateUserResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn create_user_tag(
@@ -850,8 +796,8 @@ impl TurnkeyClient {
         let request = external_activity::CreateUserTagRequest {
             r#type: "ACTIVITY_TYPE_CREATE_USER_TAG".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -863,13 +809,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::CreateUserTagResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn create_private_key_tag(
@@ -879,13 +821,14 @@ impl TurnkeyClient {
         params: immutable_activity::CreatePrivateKeyTagIntent,
     ) -> Result<immutable_activity::CreatePrivateKeyTagResult, TurnkeyClientError> {
         let url = format!(
-            "{}{}", self.base_url, "/public/v1/submit/create_private_key_tag"
+            "{}{}",
+            self.base_url, "/public/v1/submit/create_private_key_tag"
         );
         let request = external_activity::CreatePrivateKeyTagRequest {
             r#type: "ACTIVITY_TYPE_CREATE_PRIVATE_KEY_TAG".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -897,13 +840,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::CreatePrivateKeyTagResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn update_user_tag(
@@ -916,8 +855,8 @@ impl TurnkeyClient {
         let request = external_activity::UpdateUserTagRequest {
             r#type: "ACTIVITY_TYPE_UPDATE_USER_TAG".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -929,13 +868,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::UpdateUserTagResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn list_user_tags(
@@ -965,8 +900,8 @@ impl TurnkeyClient {
         let request = external_activity::DeleteUserTagsRequest {
             r#type: "ACTIVITY_TYPE_DELETE_USER_TAGS".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -978,13 +913,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::DeleteUserTagsResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn update_private_key_tag(
@@ -994,13 +925,14 @@ impl TurnkeyClient {
         params: immutable_activity::UpdatePrivateKeyTagIntent,
     ) -> Result<immutable_activity::UpdatePrivateKeyTagResult, TurnkeyClientError> {
         let url = format!(
-            "{}{}", self.base_url, "/public/v1/submit/update_private_key_tag"
+            "{}{}",
+            self.base_url, "/public/v1/submit/update_private_key_tag"
         );
         let request = external_activity::UpdatePrivateKeyTagRequest {
             r#type: "ACTIVITY_TYPE_UPDATE_PRIVATE_KEY_TAG".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -1012,13 +944,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::UpdatePrivateKeyTagResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn list_private_key_tags(
@@ -1026,7 +954,8 @@ impl TurnkeyClient {
         request: coordinator::ListPrivateKeyTagsRequest,
     ) -> Result<coordinator::ListPrivateKeyTagsResponse, TurnkeyClientError> {
         let url = format!(
-            "{}{}", self.base_url, "/public/v1/query/list_private_key_tags"
+            "{}{}",
+            self.base_url, "/public/v1/query/list_private_key_tags"
         );
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -1037,7 +966,9 @@ impl TurnkeyClient {
             .body(post_body)
             .send()
             .await?;
-        let parsed = res.json::<coordinator::ListPrivateKeyTagsResponse>().await?;
+        let parsed = res
+            .json::<coordinator::ListPrivateKeyTagsResponse>()
+            .await?;
         Ok(parsed)
     }
     pub async fn delete_private_key_tags(
@@ -1047,13 +978,14 @@ impl TurnkeyClient {
         params: immutable_activity::DeletePrivateKeyTagsIntent,
     ) -> Result<immutable_activity::DeletePrivateKeyTagsResult, TurnkeyClientError> {
         let url = format!(
-            "{}{}", self.base_url, "/public/v1/submit/delete_private_key_tags"
+            "{}{}",
+            self.base_url, "/public/v1/submit/delete_private_key_tags"
         );
         let request = external_activity::DeletePrivateKeyTagsRequest {
             r#type: "ACTIVITY_TYPE_DELETE_PRIVATE_KEY_TAGS".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -1065,13 +997,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::DeletePrivateKeyTagsResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn sign_raw_payload(
@@ -1084,8 +1012,8 @@ impl TurnkeyClient {
         let request = external_activity::SignRawPayloadRequest {
             r#type: "ACTIVITY_TYPE_SIGN_RAW_PAYLOAD_V2".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -1097,13 +1025,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::SignRawPayloadResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn sign_raw_payloads(
@@ -1116,8 +1040,8 @@ impl TurnkeyClient {
         let request = external_activity::SignRawPayloadsRequest {
             r#type: "ACTIVITY_TYPE_SIGN_RAW_PAYLOADS".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -1129,13 +1053,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::SignRawPayloadsResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn sign_transaction(
@@ -1148,8 +1068,8 @@ impl TurnkeyClient {
         let request = external_activity::SignTransactionRequest {
             r#type: "ACTIVITY_TYPE_SIGN_TRANSACTION_V2".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -1161,13 +1081,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::SignTransactionResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn update_root_quorum(
@@ -1176,12 +1092,15 @@ impl TurnkeyClient {
         timestamp_ms: u128,
         params: immutable_activity::UpdateRootQuorumIntent,
     ) -> Result<immutable_activity::UpdateRootQuorumResult, TurnkeyClientError> {
-        let url = format!("{}{}", self.base_url, "/public/v1/submit/update_root_quorum");
+        let url = format!(
+            "{}{}",
+            self.base_url, "/public/v1/submit/update_root_quorum"
+        );
         let request = external_activity::UpdateRootQuorumRequest {
             r#type: "ACTIVITY_TYPE_UPDATE_ROOT_QUORUM".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -1193,13 +1112,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::UpdateRootQuorumResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn create_wallet(
@@ -1212,8 +1127,8 @@ impl TurnkeyClient {
         let request = external_activity::CreateWalletRequest {
             r#type: "ACTIVITY_TYPE_CREATE_WALLET".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -1225,13 +1140,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::CreateWalletResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn get_wallets(
@@ -1275,13 +1186,14 @@ impl TurnkeyClient {
         params: immutable_activity::CreateWalletAccountsIntent,
     ) -> Result<immutable_activity::CreateWalletAccountsResult, TurnkeyClientError> {
         let url = format!(
-            "{}{}", self.base_url, "/public/v1/submit/create_wallet_accounts"
+            "{}{}",
+            self.base_url, "/public/v1/submit/create_wallet_accounts"
         );
         let request = external_activity::CreateWalletAccountsRequest {
             r#type: "ACTIVITY_TYPE_CREATE_WALLET_ACCOUNTS".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -1293,13 +1205,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::CreateWalletAccountsResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn get_wallet_accounts(
@@ -1307,7 +1215,8 @@ impl TurnkeyClient {
         request: coordinator::GetWalletAccountsRequest,
     ) -> Result<coordinator::GetWalletAccountsResponse, TurnkeyClientError> {
         let url = format!(
-            "{}{}", self.base_url, "/public/v1/query/list_wallet_accounts"
+            "{}{}",
+            self.base_url, "/public/v1/query/list_wallet_accounts"
         );
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -1345,13 +1254,14 @@ impl TurnkeyClient {
         params: immutable_activity::CreateSubOrganizationIntentV7,
     ) -> Result<immutable_activity::CreateSubOrganizationResultV7, TurnkeyClientError> {
         let url = format!(
-            "{}{}", self.base_url, "/public/v1/submit/create_sub_organization"
+            "{}{}",
+            self.base_url, "/public/v1/submit/create_sub_organization"
         );
         let request = external_activity::CreateSubOrganizationRequest {
             r#type: "ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V7".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -1362,16 +1272,10 @@ impl TurnkeyClient {
             .inner
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
-            immutable_activity::result::Inner::CreateSubOrganizationResultV7(res) => {
-                Ok(res)
-            }
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            immutable_activity::result::Inner::CreateSubOrganizationResultV7(res) => Ok(res),
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn init_user_email_recovery(
@@ -1381,13 +1285,14 @@ impl TurnkeyClient {
         params: immutable_activity::InitUserEmailRecoveryIntent,
     ) -> Result<immutable_activity::InitUserEmailRecoveryResult, TurnkeyClientError> {
         let url = format!(
-            "{}{}", self.base_url, "/public/v1/submit/init_user_email_recovery"
+            "{}{}",
+            self.base_url, "/public/v1/submit/init_user_email_recovery"
         );
         let request = external_activity::InitUserEmailRecoveryRequest {
             r#type: "ACTIVITY_TYPE_INIT_USER_EMAIL_RECOVERY".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -1398,16 +1303,10 @@ impl TurnkeyClient {
             .inner
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
-            immutable_activity::result::Inner::InitUserEmailRecoveryResult(res) => {
-                Ok(res)
-            }
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            immutable_activity::result::Inner::InitUserEmailRecoveryResult(res) => Ok(res),
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn recover_user(
@@ -1420,8 +1319,8 @@ impl TurnkeyClient {
         let request = external_activity::RecoverUserRequest {
             r#type: "ACTIVITY_TYPE_RECOVER_USER".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -1433,13 +1332,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::RecoverUserResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn set_organization_feature(
@@ -1449,13 +1344,14 @@ impl TurnkeyClient {
         params: immutable_activity::SetOrganizationFeatureIntent,
     ) -> Result<immutable_activity::SetOrganizationFeatureResult, TurnkeyClientError> {
         let url = format!(
-            "{}{}", self.base_url, "/public/v1/submit/set_organization_feature"
+            "{}{}",
+            self.base_url, "/public/v1/submit/set_organization_feature"
         );
         let request = external_activity::SetOrganizationFeatureRequest {
             r#type: "ACTIVITY_TYPE_SET_ORGANIZATION_FEATURE".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -1466,16 +1362,10 @@ impl TurnkeyClient {
             .inner
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
-            immutable_activity::result::Inner::SetOrganizationFeatureResult(res) => {
-                Ok(res)
-            }
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            immutable_activity::result::Inner::SetOrganizationFeatureResult(res) => Ok(res),
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn remove_organization_feature(
@@ -1483,18 +1373,16 @@ impl TurnkeyClient {
         organization_id: String,
         timestamp_ms: u128,
         params: immutable_activity::RemoveOrganizationFeatureIntent,
-    ) -> Result<
-        immutable_activity::RemoveOrganizationFeatureResult,
-        TurnkeyClientError,
-    > {
+    ) -> Result<immutable_activity::RemoveOrganizationFeatureResult, TurnkeyClientError> {
         let url = format!(
-            "{}{}", self.base_url, "/public/v1/submit/remove_organization_feature"
+            "{}{}",
+            self.base_url, "/public/v1/submit/remove_organization_feature"
         );
         let request = external_activity::RemoveOrganizationFeatureRequest {
             r#type: "ACTIVITY_TYPE_REMOVE_ORGANIZATION_FEATURE".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -1505,16 +1393,10 @@ impl TurnkeyClient {
             .inner
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
-            immutable_activity::result::Inner::RemoveOrganizationFeatureResult(res) => {
-                Ok(res)
-            }
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            immutable_activity::result::Inner::RemoveOrganizationFeatureResult(res) => Ok(res),
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn export_private_key(
@@ -1523,12 +1405,15 @@ impl TurnkeyClient {
         timestamp_ms: u128,
         params: immutable_activity::ExportPrivateKeyIntent,
     ) -> Result<immutable_activity::ExportPrivateKeyResult, TurnkeyClientError> {
-        let url = format!("{}{}", self.base_url, "/public/v1/submit/export_private_key");
+        let url = format!(
+            "{}{}",
+            self.base_url, "/public/v1/submit/export_private_key"
+        );
         let request = external_activity::ExportPrivateKeyRequest {
             r#type: "ACTIVITY_TYPE_EXPORT_PRIVATE_KEY".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -1540,13 +1425,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::ExportPrivateKeyResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn export_wallet(
@@ -1559,8 +1440,8 @@ impl TurnkeyClient {
         let request = external_activity::ExportWalletRequest {
             r#type: "ACTIVITY_TYPE_EXPORT_WALLET".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -1572,13 +1453,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::ExportWalletResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn email_auth(
@@ -1591,8 +1468,8 @@ impl TurnkeyClient {
         let request = external_activity::EmailAuthRequest {
             r#type: "ACTIVITY_TYPE_EMAIL_AUTH_V2".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -1604,13 +1481,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::EmailAuthResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn export_wallet_account(
@@ -1620,13 +1493,14 @@ impl TurnkeyClient {
         params: immutable_activity::ExportWalletAccountIntent,
     ) -> Result<immutable_activity::ExportWalletAccountResult, TurnkeyClientError> {
         let url = format!(
-            "{}{}", self.base_url, "/public/v1/submit/export_wallet_account"
+            "{}{}",
+            self.base_url, "/public/v1/submit/export_wallet_account"
         );
         let request = external_activity::ExportWalletAccountRequest {
             r#type: "ACTIVITY_TYPE_EXPORT_WALLET_ACCOUNT".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -1638,13 +1512,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::ExportWalletAccountResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn init_import_wallet(
@@ -1653,12 +1523,15 @@ impl TurnkeyClient {
         timestamp_ms: u128,
         params: immutable_activity::InitImportWalletIntent,
     ) -> Result<immutable_activity::InitImportWalletResult, TurnkeyClientError> {
-        let url = format!("{}{}", self.base_url, "/public/v1/submit/init_import_wallet");
+        let url = format!(
+            "{}{}",
+            self.base_url, "/public/v1/submit/init_import_wallet"
+        );
         let request = external_activity::InitImportWalletRequest {
             r#type: "ACTIVITY_TYPE_INIT_IMPORT_WALLET".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -1670,13 +1543,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::InitImportWalletResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn import_wallet(
@@ -1689,8 +1558,8 @@ impl TurnkeyClient {
         let request = external_activity::ImportWalletRequest {
             r#type: "ACTIVITY_TYPE_IMPORT_WALLET".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -1702,13 +1571,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::ImportWalletResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn init_import_private_key(
@@ -1718,13 +1583,14 @@ impl TurnkeyClient {
         params: immutable_activity::InitImportPrivateKeyIntent,
     ) -> Result<immutable_activity::InitImportPrivateKeyResult, TurnkeyClientError> {
         let url = format!(
-            "{}{}", self.base_url, "/public/v1/submit/init_import_private_key"
+            "{}{}",
+            self.base_url, "/public/v1/submit/init_import_private_key"
         );
         let request = external_activity::InitImportPrivateKeyRequest {
             r#type: "ACTIVITY_TYPE_INIT_IMPORT_PRIVATE_KEY".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -1736,13 +1602,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::InitImportPrivateKeyResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn import_private_key(
@@ -1751,12 +1613,15 @@ impl TurnkeyClient {
         timestamp_ms: u128,
         params: immutable_activity::ImportPrivateKeyIntent,
     ) -> Result<immutable_activity::ImportPrivateKeyResult, TurnkeyClientError> {
-        let url = format!("{}{}", self.base_url, "/public/v1/submit/import_private_key");
+        let url = format!(
+            "{}{}",
+            self.base_url, "/public/v1/submit/import_private_key"
+        );
         let request = external_activity::ImportPrivateKeyRequest {
             r#type: "ACTIVITY_TYPE_IMPORT_PRIVATE_KEY".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -1768,13 +1633,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::ImportPrivateKeyResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn oauth(
@@ -1787,8 +1648,8 @@ impl TurnkeyClient {
         let request = external_activity::OauthRequest {
             r#type: "ACTIVITY_TYPE_OAUTH".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -1800,13 +1661,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::OauthResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn init_otp_auth(
@@ -1819,8 +1676,8 @@ impl TurnkeyClient {
         let request = external_activity::InitOtpAuthRequest {
             r#type: "ACTIVITY_TYPE_INIT_OTP_AUTH_V2".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -1832,13 +1689,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::InitOtpAuthResultV2(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn otp_auth(
@@ -1851,8 +1704,8 @@ impl TurnkeyClient {
         let request = external_activity::OtpAuthRequest {
             r#type: "ACTIVITY_TYPE_OTP_AUTH".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -1864,13 +1717,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::OtpAuthResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn create_oauth_providers(
@@ -1880,13 +1729,14 @@ impl TurnkeyClient {
         params: immutable_activity::CreateOauthProvidersIntent,
     ) -> Result<immutable_activity::CreateOauthProvidersResult, TurnkeyClientError> {
         let url = format!(
-            "{}{}", self.base_url, "/public/v1/submit/create_oauth_providers"
+            "{}{}",
+            self.base_url, "/public/v1/submit/create_oauth_providers"
         );
         let request = external_activity::CreateOauthProvidersRequest {
             r#type: "ACTIVITY_TYPE_CREATE_OAUTH_PROVIDERS".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -1898,13 +1748,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::CreateOauthProvidersResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn delete_oauth_providers(
@@ -1914,13 +1760,14 @@ impl TurnkeyClient {
         params: immutable_activity::DeleteOauthProvidersIntent,
     ) -> Result<immutable_activity::DeleteOauthProvidersResult, TurnkeyClientError> {
         let url = format!(
-            "{}{}", self.base_url, "/public/v1/submit/delete_oauth_providers"
+            "{}{}",
+            self.base_url, "/public/v1/submit/delete_oauth_providers"
         );
         let request = external_activity::DeleteOauthProvidersRequest {
             r#type: "ACTIVITY_TYPE_DELETE_OAUTH_PROVIDERS".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -1932,13 +1779,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::DeleteOauthProvidersResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn get_organization_configs(
@@ -1946,7 +1789,8 @@ impl TurnkeyClient {
         request: coordinator::GetOrganizationConfigsRequest,
     ) -> Result<coordinator::GetOrganizationConfigsResponse, TurnkeyClientError> {
         let url = format!(
-            "{}{}", self.base_url, "/public/v1/query/get_organization_configs"
+            "{}{}",
+            self.base_url, "/public/v1/query/get_organization_configs"
         );
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -1957,7 +1801,9 @@ impl TurnkeyClient {
             .body(post_body)
             .send()
             .await?;
-        let parsed = res.json::<coordinator::GetOrganizationConfigsResponse>().await?;
+        let parsed = res
+            .json::<coordinator::GetOrganizationConfigsResponse>()
+            .await?;
         Ok(parsed)
     }
     pub async fn delete_private_keys(
@@ -1967,13 +1813,14 @@ impl TurnkeyClient {
         params: immutable_activity::DeletePrivateKeysIntent,
     ) -> Result<immutable_activity::DeletePrivateKeysResult, TurnkeyClientError> {
         let url = format!(
-            "{}{}", self.base_url, "/public/v1/submit/delete_private_keys"
+            "{}{}",
+            self.base_url, "/public/v1/submit/delete_private_keys"
         );
         let request = external_activity::DeletePrivateKeysRequest {
             r#type: "ACTIVITY_TYPE_DELETE_PRIVATE_KEYS".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -1985,13 +1832,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::DeletePrivateKeysResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn update_wallet(
@@ -2004,8 +1847,8 @@ impl TurnkeyClient {
         let request = external_activity::UpdateWalletRequest {
             r#type: "ACTIVITY_TYPE_UPDATE_WALLET".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -2017,13 +1860,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::UpdateWalletResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn delete_wallets(
@@ -2036,8 +1875,8 @@ impl TurnkeyClient {
         let request = external_activity::DeleteWalletsRequest {
             r#type: "ACTIVITY_TYPE_DELETE_WALLETS".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -2049,13 +1888,9 @@ impl TurnkeyClient {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::DeleteWalletsResult(res) => Ok(res),
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
     pub async fn delete_sub_organization(
@@ -2065,13 +1900,14 @@ impl TurnkeyClient {
         params: immutable_activity::DeleteSubOrganizationIntent,
     ) -> Result<immutable_activity::DeleteSubOrganizationResult, TurnkeyClientError> {
         let url = format!(
-            "{}{}", self.base_url, "/public/v1/submit/delete_sub_organization"
+            "{}{}",
+            self.base_url, "/public/v1/submit/delete_sub_organization"
         );
         let request = external_activity::DeleteSubOrganizationRequest {
             r#type: "ACTIVITY_TYPE_DELETE_SUB_ORGANIZATION".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
-            organization_id: organization_id,
             parameters: Some(params),
+            organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
         let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
@@ -2082,16 +1918,10 @@ impl TurnkeyClient {
             .inner
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
-            immutable_activity::result::Inner::DeleteSubOrganizationResult(res) => {
-                Ok(res)
-            }
-            other => {
-                Err(
-                    TurnkeyClientError::UnexpectedInnerActivityResult(
-                        serde_json::to_string(&other)?,
-                    ),
-                )
-            }
+            immutable_activity::result::Inner::DeleteSubOrganizationResult(res) => Ok(res),
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
         }
     }
 }

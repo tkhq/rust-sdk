@@ -1,10 +1,11 @@
 .PHONY: generate
 generate:
 	cargo run -p tkhq_codegen
+	cargo fmt --
 
 .PHONY: check-generate
 check-generate:
-	cargo run -p tkhq_codegen
+	make generate
 	git diff --exit-code client/src/generated/client.rs
 
 .PHONY: lint

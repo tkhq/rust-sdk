@@ -1,13 +1,13 @@
+use heck::ToShoutySnakeCase;
+use proc_macro2::TokenStream;
+use quote::{quote, ToTokens};
+use regex::Regex;
 use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
-use heck::ToShoutySnakeCase;
-use regex::Regex;
 use syn::{parse::Parser, punctuated::Punctuated, Token};
 use walkdir::WalkDir;
-use proc_macro2::TokenStream;
-use quote::{quote, ToTokens};
 
 const PUBLIC_API_PROTO_PATH: &str = "proto/services/coordinator/public/v1/public_api.proto";
 const INCLUDE_PROTO_PATH: &str = "proto";
@@ -37,25 +37,22 @@ fn main() {
     let out_dir = PathBuf::from(GENERATED_CLIENT_DIR);
 
     tonic_build::configure()
-    .build_server(false)
-    .build_client(false)
-    .include_file("mod.rs")
-    .out_dir(out_dir.clone())
-    .type_attribute(".services", SERDE_DERIVE)
-    .type_attribute(".services", SERDE_CAMEL_CASE)
-    .type_attribute(".external", SERDE_DERIVE)
-    .type_attribute(".external", SERDE_CAMEL_CASE)
-    .type_attribute(".immutable", SERDE_DERIVE)
-    .type_attribute(".immutable", SERDE_CAMEL_CASE)
-    .type_attribute(".google.rpc", SERDE_DERIVE)
-    .type_attribute(".google.rpc", DEBUG_TRAIT)
-    .field_attribute("google.rpc.Status.details", "#[serde(skip)]")
-    .type_attribute("google.rpc", SERDE_CAMEL_CASE)
-    .compile_protos(
-        &[PUBLIC_API_PROTO_PATH],
-        &[INCLUDE_PROTO_PATH],
-    )
-    .unwrap();
+        .build_server(false)
+        .build_client(false)
+        .include_file("mod.rs")
+        .out_dir(out_dir.clone())
+        .type_attribute(".services", SERDE_DERIVE)
+        .type_attribute(".services", SERDE_CAMEL_CASE)
+        .type_attribute(".external", SERDE_DERIVE)
+        .type_attribute(".external", SERDE_CAMEL_CASE)
+        .type_attribute(".immutable", SERDE_DERIVE)
+        .type_attribute(".immutable", SERDE_CAMEL_CASE)
+        .type_attribute(".google.rpc", SERDE_DERIVE)
+        .type_attribute(".google.rpc", DEBUG_TRAIT)
+        .field_attribute("google.rpc.Status.details", "#[serde(skip)]")
+        .type_attribute("google.rpc", SERDE_CAMEL_CASE)
+        .compile_protos(&[PUBLIC_API_PROTO_PATH], &[INCLUDE_PROTO_PATH])
+        .unwrap();
 
     let proto = fs::read_to_string(PUBLIC_API_PROTO_PATH).expect("Failed to read proto file");
 
@@ -76,19 +73,21 @@ fn main() {
 
     // We manually have to specify the mapping between activity types, route, intent and result type through a file
     // Unfortunately this information isn't available in proto directly because this mapping is semantic, not structural.
-    let activities_mapping_data = fs::read_to_string(ACTIVITIES_MAPPING_PATH).expect("cannot read activities.json");
-    let parsed_activities: ActivitiesFile = serde_json::from_str(&activities_mapping_data).expect("cannot parse activities.json");
+    let activities_mapping_data =
+        fs::read_to_string(ACTIVITIES_MAPPING_PATH).expect("cannot read activities.json");
+    let parsed_activities: ActivitiesFile =
+        serde_json::from_str(&activities_mapping_data).expect("cannot parse activities.json");
 
     for service_caps in service_re.captures_iter(&proto) {
         let service_body = &service_caps[2];
-        
+
         for rpc_caps in rpc_re.captures_iter(service_body) {
             // e.g. "DeletePolicy"
             let fn_name = to_snake_case(&rpc_caps[1]);
-            
+
             // e.g. "external.activity.v1.DeletePolicyRequest"
             let req_type = &rpc_caps[2];
-            
+
             let res_type = &rpc_caps[3];
             // Sample captured block:
             //     option (google.api.http) = {
@@ -101,7 +100,9 @@ fn main() {
             //      tags: "Policies"
             //    };
             let http_opts = &rpc_caps[4];
-            if http_opts.contains("option (google.api.method_visibility).restriction = \"INTERNAL\"") {
+            if http_opts
+                .contains("option (google.api.method_visibility).restriction = \"INTERNAL\"")
+            {
                 // Skip internal-only endpoints
                 continue;
             }
@@ -111,7 +112,10 @@ fn main() {
                 let route = &http_caps[1];
 
                 if req_type.contains("external.activity.v1") {
-                    let activities_details = parsed_activities.activities.get(route).expect(&format!("route {} not found in activities.json", route));
+                    let activities_details = parsed_activities
+                        .activities
+                        .get(route)
+                        .unwrap_or_else(|| panic!("route {} not found in activities.json", route));
                     let activity_type = activities_details.r#type.clone();
                     // If the request type is "external.activity.v1.DeletePolicyRequest" the sanitized
                     // request type will be "DeletePolicyRequest", and we'll need to import it from the external activity namespace
@@ -122,15 +126,16 @@ fn main() {
                     // Approve and Reject activity functions are a bit different than the rest
                     // In the mapping they have a resultType set to "*" (because they can indeed reference ANY activity.
                     let activity_func = if activity_result == "*" {
-                        format!(r#"
+                        format!(
+                            r#"
                             pub async fn {fn_name}(&self, organization_id: String, timestamp_ms: u128, params: immutable_activity::{activity_intent}) -> Result<external_activity::Activity, TurnkeyClientError> {{
                                 let url = format!("{{}}{{}}", self.base_url, "{route}");
 
                                 let request = external_activity::{short_req_type} {{
                                     r#type: "{activity_type}".to_string(),
                                     timestamp_ms: timestamp_ms.to_string(),
-                                    organization_id: organization_id,
-                                    parameters: Some(params)
+                                    parameters: Some(params),
+                                    organization_id,
                                 }};
 
                                 let post_body = serde_json::to_string(&request).unwrap();
@@ -139,17 +144,19 @@ fn main() {
 
                                 self.process_activity(url, stamp, post_body).await
                             }}
-                        "#)
+                        "#
+                        )
                     } else {
-                        format!(r#"
+                        format!(
+                            r#"
                             pub async fn {fn_name}(&self, organization_id: String, timestamp_ms: u128, params: immutable_activity::{activity_intent}) -> Result<immutable_activity::{activity_result}, TurnkeyClientError> {{
                                 let url = format!("{{}}{{}}", self.base_url, "{route}");
 
                                 let request = external_activity::{short_req_type} {{
                                     r#type: "{activity_type}".to_string(),
                                     timestamp_ms: timestamp_ms.to_string(),
-                                    organization_id: organization_id,
-                                    parameters: Some(params)
+                                    parameters: Some(params),
+                                    organization_id,
                                 }};
 
                                 let post_body = serde_json::to_string(&request).unwrap();
@@ -168,13 +175,15 @@ fn main() {
                                 }}
                                     
                             }}
-                        "#)
+                        "#
+                        )
                     };
 
                     println!("Generating {} (activity)", fn_name);
                     generated_methods.push_str(&activity_func);
                 } else {
-                    let func = format!(r#"
+                    let func = format!(
+                        r#"
                         pub async fn {fn_name}(&self, request: coordinator::{req_type}) -> Result<coordinator::{res_type}, TurnkeyClientError> {{
                             let url = format!("{{}}{{}}", self.base_url, "{route}");
                             let post_body = serde_json::to_string(&request).unwrap();
@@ -189,7 +198,8 @@ fn main() {
                             let parsed = res.json::<coordinator::{res_type}>().await?;
                             Ok(parsed)
                         }}
-                    "#);
+                    "#
+                    );
                     println!("Generating {} (query)", fn_name);
                     generated_methods.push_str(&func);
                 }
@@ -209,8 +219,9 @@ fn main() {
 
     // Now add client.rs to the generated/mod.rs file
     let mut mod_rs = fs::OpenOptions::new()
-    .append(true)
-    .open(out_dir.join("mod.rs")).unwrap();
+        .append(true)
+        .open(out_dir.join("mod.rs"))
+        .unwrap();
 
     // This will append a new line to the end of the file
     writeln!(mod_rs, "\n// Added by tkhq_codegen").unwrap();
@@ -234,7 +245,10 @@ fn main() {
         .filter(|e| {
             e.path().extension().map_or(false, |ext| ext == "rs")
                 && !e.file_name().to_string_lossy().contains("google.api")
-                && !e.file_name().to_string_lossy().contains("grpc.gateway.protoc_gen_openapiv2")
+                && !e
+                    .file_name()
+                    .to_string_lossy()
+                    .contains("grpc.gateway.protoc_gen_openapiv2")
         })
     {
         let path = entry.path();
@@ -297,19 +311,23 @@ fn mutate_enum(enum_item: &syn::ItemEnum) -> TokenStream {
     let generics = &enum_item.generics;
 
     // Filter attributes: remove #[derive(...)] prost traits and all #[prost(...)] attrs
-    let mut attrs: Vec<_> = enum_item.attrs.iter().filter_map(|attr| {
-        // Remove #[repr(i32)]
-        if attr.path().is_ident("repr") {
-            if let syn::Meta::List(meta_list) = &attr.meta {
-                if meta_list.tokens.to_string().trim() == "i32" {
-                    return None;
+    let mut attrs: Vec<_> = enum_item
+        .attrs
+        .iter()
+        .filter_map(|attr| {
+            // Remove #[repr(i32)]
+            if attr.path().is_ident("repr") {
+                if let syn::Meta::List(meta_list) = &attr.meta {
+                    if meta_list.tokens.to_string().trim() == "i32" {
+                        return None;
+                    }
                 }
             }
-        }
 
-        // Also strip prost derive traits like Message, Oneof, Enumeration
-        strip_prost_derive_from_attr(attr)
-    }).collect();
+            // Also strip prost derive traits like Message, Oneof, Enumeration
+            strip_prost_derive_from_attr(attr)
+        })
+        .collect();
 
     // Remove any existing #[serde(rename_all = "...")]
     attrs.retain(|attr| {
@@ -318,34 +336,31 @@ fn mutate_enum(enum_item: &syn::ItemEnum) -> TokenStream {
 
     let enum_name_upper = ident.to_string().to_shouty_snake_case();
 
-    let variants = enum_item
-        .variants
-        .iter()
-        .map(|v| {
-            let mut v = v.clone();
-            v.attrs.retain(|attr| !attr.path().is_ident("prost"));
+    let variants = enum_item.variants.iter().map(|v| {
+        let mut v = v.clone();
+        v.attrs.retain(|attr| !attr.path().is_ident("prost"));
 
-            // Add #[serde(rename = "ENUM_NAME_VARIANT")]
-            let variant_name = &v.ident;
-            let full_name = format!(
-                "{}_{}",
-                enum_name_upper,
-                variant_name.to_string().to_shouty_snake_case()
+        // Add #[serde(rename = "ENUM_NAME_VARIANT")]
+        let variant_name = &v.ident;
+        let full_name = format!(
+            "{}_{}",
+            enum_name_upper,
+            variant_name.to_string().to_shouty_snake_case()
+        );
+
+        // A bit of a special case, but it doesn't make sense to have these renames for our result::Inner and intent::Inner
+        // enums, which are complex enums anyway.
+        // TODO: would be nice to filter this in a more generic way: basically if the enum isn't a "simple" enum, we shouldn't
+        // have to individually rename the variants
+        if ident != "Inner" {
+            let rename_attr: syn::Attribute = syn::parse_quote!(
+                #[serde(rename = #full_name)]
             );
-            
-            // A bit of a special case, but it doesn't make sense to have these renames for our result::Inner and intent::Inner
-            // enums, which are complex enums anyway.
-            // TODO: would be nice to filter this in a more generic way: basically if the enum isn't a "simple" enum, we shouldn't
-            // have to individually rename the variants
-            if ident != "Inner" {
-                let rename_attr: syn::Attribute = syn::parse_quote!(
-                    #[serde(rename = #full_name)]
-                );
-                v.attrs.push(rename_attr);
-            }
+            v.attrs.push(rename_attr);
+        }
 
-            quote! { #v }
-        });
+        quote! { #v }
+    });
 
     // Another quick special case: Result::Inner and Intent::Inner require #[serde(rename_all = "camelCase")]
     if ident == "Inner" {
@@ -369,7 +384,7 @@ fn mutate_struct(struct_value: &syn::ItemStruct) -> TokenStream {
     let struct_attrs: Vec<TokenStream> = struct_value
         .attrs
         .iter()
-        .filter_map(|attr| strip_prost_derive_from_attr(attr))
+        .filter_map(strip_prost_derive_from_attr)
         .collect();
 
     let fields = struct_value.fields.iter().map(|field| {
@@ -377,7 +392,7 @@ fn mutate_struct(struct_value: &syn::ItemStruct) -> TokenStream {
 
         if let Some(enum_type) = extract_field_enum_type(&field) {
             let enum_ident = &enum_type.name;
-        
+
             let rewritten_ty: syn::Type = if enum_type.repeated {
                 syn::parse_str(&format!("Vec<{}>", enum_ident)).unwrap()
             } else if enum_type.optional {
@@ -385,7 +400,7 @@ fn mutate_struct(struct_value: &syn::ItemStruct) -> TokenStream {
             } else {
                 syn::parse_str(enum_ident).unwrap()
             };
-        
+
             field.ty = rewritten_ty;
         }
 
@@ -424,19 +439,26 @@ fn strip_prost_derive_from_attr(attr: &syn::Attribute) -> Option<proc_macro2::To
         return Some(attr.to_token_stream());
     }
 
-    let parsed = attr.parse_args_with(syn::punctuated::Punctuated::<syn::Path, syn::Token![,]>::parse_terminated);
-    let Ok(derives) = parsed else { return Some(attr.to_token_stream()); };
+    let parsed = attr.parse_args_with(
+        syn::punctuated::Punctuated::<syn::Path, syn::Token![,]>::parse_terminated,
+    );
+    let Ok(derives) = parsed else {
+        return Some(attr.to_token_stream());
+    };
 
     // Keep everything that is not Message or ::prost::Message
     let new_derives = derives
-    .into_iter()
-    .filter(|path| {
-        !path.is_ident("Message")
-            && !path.is_ident("Oneof")
-            && !path.is_ident("Enumeration")
-            && !path.segments.iter().any(|s| s.ident == "Message" || s.ident == "Oneof" || s.ident == "Enumeration")
-    })
-    .collect::<Punctuated<syn::Path, Token![,]>>();
+        .into_iter()
+        .filter(|path| {
+            !path.is_ident("Message")
+                && !path.is_ident("Oneof")
+                && !path.is_ident("Enumeration")
+                && !path
+                    .segments
+                    .iter()
+                    .any(|s| s.ident == "Message" || s.ident == "Oneof" || s.ident == "Enumeration")
+        })
+        .collect::<Punctuated<syn::Path, Token![,]>>();
 
     if new_derives.is_empty() {
         return None;
@@ -463,7 +485,9 @@ fn extract_field_enum_type(field: &syn::Field) -> Option<EnumField> {
 
     for attr in &field.attrs {
         let meta = &attr.meta;
-        let syn::Meta::List(meta_list) = meta else { continue };
+        let syn::Meta::List(meta_list) = meta else {
+            continue;
+        };
         if !meta_list.path.is_ident("prost") {
             continue;
         }
@@ -512,16 +536,17 @@ fn should_add_default(ty: &syn::Type) -> bool {
         syn::Type::Path(type_path) => {
             let ident = type_path.path.segments.last().map(|s| s.ident.to_string());
 
-            matches!(ident.as_deref(),
+            matches!(
+                ident.as_deref(),
                 Some("Option")
-                | Some("Vec")
-                | Some("bool")
-                | Some("u32")
-                | Some("i32")
-                | Some("u64")
-                | Some("i64")
-                | Some("HashMap")
-                | Some("BTreeMap")
+                    | Some("Vec")
+                    | Some("bool")
+                    | Some("u32")
+                    | Some("i32")
+                    | Some("u64")
+                    | Some("i64")
+                    | Some("HashMap")
+                    | Some("BTreeMap")
             )
         }
         _ => false,

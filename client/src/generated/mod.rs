@@ -75,6 +75,6 @@ pub mod services {
     }
 }
 mod client;
-pub use services::coordinator::public::v1::*;
 pub use external::activity::v1::*;
 pub use immutable::activity::v1::*;
+pub use services::coordinator::public::v1::*;

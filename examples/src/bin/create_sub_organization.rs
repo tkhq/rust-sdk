@@ -1,7 +1,14 @@
 use std::error::Error;
 use std::{env, time, vec};
-use tkhq_client::{generated::{immutable::common::v1::{AddressFormat, ApiKeyCurve, Curve, PathFormat}, ApiKeyParamsV2, CreateSubOrganizationIntentV7, RootUserParamsV4, WalletAccountParams, WalletParams}, RetryConfig};
 use tkhq_api_key_stamper::TurnkeyApiKey;
+use tkhq_client::{
+    generated::{
+        immutable::common::v1::{AddressFormat, ApiKeyCurve, Curve, PathFormat},
+        ApiKeyParamsV2, CreateSubOrganizationIntentV7, RootUserParamsV4, WalletAccountParams,
+        WalletParams,
+    },
+    RetryConfig,
+};
 
 // See <https://docs.turnkey.com/api-reference/organizations/create-sub-organization> for documentation
 const TURNKEY_API_HOST: &str = "https://api.turnkey.com";
@@ -36,15 +43,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .as_millis();
 
     let client = tkhq_client::TurnkeyClient::new(TURNKEY_API_HOST, api_key, RetryConfig::none());
-    let intent = CreateSubOrganizationIntentV7{
+    let intent = CreateSubOrganizationIntentV7 {
         sub_organization_name: "New sub-organization".to_string(),
-        root_users: vec![RootUserParamsV4{
+        root_users: vec![RootUserParamsV4 {
             user_name: "Root User".to_string(),
             api_keys: vec![ApiKeyParamsV2 {
-                api_key_name:"Test API Key".to_string(),
-                public_key:suborg_public_key,
-                curve_type:ApiKeyCurve::P256,
-                expiration_seconds: None
+                api_key_name: "Test API Key".to_string(),
+                public_key: suborg_public_key,
+                curve_type: ApiKeyCurve::P256,
+                expiration_seconds: None,
             }],
             user_email: None,
             user_phone_number: None,
@@ -68,10 +75,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
         disable_sms_auth: None,
         disable_otp_email_auth: None,
     };
-    
-    let res = client.create_sub_organization(organization_id, timestamp_ms, intent).await?;
-    
-    println!("New sub-organization created: {} (root users: {:?})", res.sub_organization_id, res.root_user_ids);
+
+    let res = client
+        .create_sub_organization(organization_id, timestamp_ms, intent)
+        .await?;
+
+    println!(
+        "New sub-organization created: {} (root users: {:?})",
+        res.sub_organization_id, res.root_user_ids
+    );
 
     Ok(())
 }

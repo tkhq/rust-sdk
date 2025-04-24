@@ -23,10 +23,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let client = tkhq_client::TurnkeyClient::new(TURNKEY_API_HOST, api_key, RetryConfig::none());
-    let req = GetWhoamiRequest{ organization_id: env::var("TURNKEY_ORGANIZATION_ID").unwrap()};
+    let req = GetWhoamiRequest {
+        organization_id: env::var("TURNKEY_ORGANIZATION_ID").unwrap(),
+    };
 
     let res = client.get_whoami(req).await?;
-    println!("Organization: \"{}\" ({})", res.organization_name, res.organization_id);
+    println!(
+        "Organization: \"{}\" ({})",
+        res.organization_name, res.organization_id
+    );
     println!("User: \"{}\" ({})", res.username, res.user_id);
 
     Ok(())
