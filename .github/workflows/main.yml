@@ -20,7 +20,7 @@ jobs:
       - name: install protoc
         uses: arduino/setup-protoc@v3
         with:
-        version: "21.4"
+          version: "21.4"
       - name: Ensure checked-in client is up-to-date
         run: make check-generate
       - name: Run linters
