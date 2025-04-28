@@ -31,3 +31,4 @@ test: build
 examples: build
 	cargo run -p tkhq_examples --bin whoami
 	cargo run -p tkhq_examples --bin create_sub_organization
+	cargo run -p tkhq_examples --bin wallet
