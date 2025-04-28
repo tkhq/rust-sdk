@@ -10,7 +10,14 @@ const TURNKEY_API_HOST: &str = "https://api.turnkey.com";
 async fn main() -> Result<(), Box<dyn Error>> {
     // Load .env file from the example folder (examples/.env)
     let current_dir = env::current_dir()?; // should be the workspace root
-    dotenvy::from_path(current_dir.join("examples").join(".env"))?;
+    let env_path = current_dir.join("examples").join(".env");
+
+    if env_path.exists() {
+        dotenvy::from_path(&env_path)?;
+    } else {
+        println!("No .env file found at {:?}", env_path);
+        println!("Continuing because env might already be populated with the right variables");
+    }
 
     // Create our API key from env
     let api_public_key =
