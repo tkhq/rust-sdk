@@ -24,17 +24,8 @@ pub enum TurnkeyClientError {
     #[error("Serde JSON failure: {0}")]
     SerdeJsonFailure(#[from] serde_json::Error),
 
-    #[error("Request timed out")]
-    Timeout,
-
     #[error("Missing activity from response")]
     MissingActivity,
-
-    #[error("Prost decoding error: {0}")]
-    ProstDecode(#[from] prost::DecodeError),
-
-    #[error("Prost encoding error: {0}")]
-    ProstEncode(#[from] prost::EncodeError),
 
     #[error("Missing result from activity")]
     MissingResult,
