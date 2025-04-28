@@ -8,6 +8,10 @@ check-generate:
 	make generate
 	git diff --exit-code client/src/generated/client.rs
 
+.PHONY: fmt
+fmt:
+	cargo fmt --
+
 .PHONY: lint
 lint:
 	# Check formatting

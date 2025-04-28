@@ -84,7 +84,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     println!(
         "New sub-organization created: {} (root user ID: {})",
-        res.sub_organization_id, res.root_user_ids.first().unwrap()
+        res.sub_organization_id,
+        res.root_user_ids.first().unwrap()
     );
 
     Ok(())
