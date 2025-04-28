@@ -80,9 +80,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .create_sub_organization(organization_id, timestamp_ms, intent)
         .await?;
 
+    assert_eq!(res.root_user_ids.len(), 1);
+
     println!(
-        "New sub-organization created: {} (root users: {:?})",
-        res.sub_organization_id, res.root_user_ids
+        "New sub-organization created: {} (root user ID: {})",
+        res.sub_organization_id, res.root_user_ids.first().unwrap()
     );
 
     Ok(())

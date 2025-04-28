@@ -22,3 +22,8 @@ build:
 .PHONY: test
 test: build
 	cargo test
+
+.PHONY: examples
+examples: build
+	cargo run -p tkhq_examples --bin whoami
+	cargo run -p tkhq_examples --bin create_sub_organization

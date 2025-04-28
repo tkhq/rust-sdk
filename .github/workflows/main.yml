@@ -27,3 +27,9 @@ jobs:
         run: make lint
       - name: Run tests
         run: make test
+      - name: Run examples
+        run: |
+          export TURNKEY_ORGANIZATION_ID="651b573c-861b-4f10-a478-cbcfe0c226af"
+          # TURNKEY_API_PRIVATE_KEY is defined as a Github env secret
+          export TURNKEY_API_PUBLIC_KEY="03bf162576eb8dfecf33d9275d09595284f6c4df0db6156c3c582777886a0ee0ac"
+          make examples
