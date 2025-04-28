@@ -1,3 +1,4 @@
+#[derive(Debug)]
 /// An action that can that can be taken within the Turnkey infrastructure.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -29,6 +30,7 @@ pub struct Activity {
     #[serde(default)]
     pub failure: ::core::option::Option<super::super::super::google::rpc::Status>,
 }
+#[derive(Debug)]
 /// Object representing a particular User's approval or rejection of a Consensus request, including all relevant metadata.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -47,6 +49,7 @@ pub struct Vote {
     #[serde(default)]
     pub created_at: ::core::option::Option<super::super::data::v1::Timestamp>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -59,6 +62,7 @@ pub struct DeletePaymentMethodRequest {
         super::super::super::immutable::activity::billing::DeletePaymentMethodIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -71,6 +75,7 @@ pub struct ActivateBillingTierRequest {
         super::super::super::immutable::activity::billing::ActivateBillingTierIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -83,6 +88,7 @@ pub struct SetPaymentMethodRequest {
         super::super::super::immutable::activity::billing::SetPaymentMethodIntentV2,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -95,6 +101,7 @@ pub struct CreatePolicyRequest {
         super::super::super::immutable::activity::v1::CreatePolicyIntentV3,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -107,6 +114,7 @@ pub struct CreatePoliciesRequest {
         super::super::super::immutable::activity::v1::CreatePoliciesIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -119,6 +127,7 @@ pub struct UpdatePolicyRequest {
         super::super::super::immutable::activity::v1::UpdatePolicyIntentV2,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -131,6 +140,7 @@ pub struct DeletePolicyRequest {
         super::super::super::immutable::activity::v1::DeletePolicyIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -143,6 +153,7 @@ pub struct CreateReadOnlySessionRequest {
         super::super::super::immutable::activity::v1::CreateReadOnlySessionIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -155,6 +166,7 @@ pub struct CreateReadWriteSessionRequest {
         super::super::super::immutable::activity::v1::CreateReadWriteSessionIntentV2,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -167,6 +179,7 @@ pub struct CreateInvitationsRequest {
         super::super::super::immutable::activity::v1::CreateInvitationsIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -179,6 +192,7 @@ pub struct DeleteInvitationRequest {
         super::super::super::immutable::activity::v1::DeleteInvitationIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -191,6 +205,7 @@ pub struct AcceptInvitationRequest {
         super::super::super::immutable::activity::v1::AcceptInvitationIntentV2,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -203,6 +218,7 @@ pub struct CreateApiOnlyUsersRequest {
         super::super::super::immutable::activity::v1::CreateApiOnlyUsersIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -215,6 +231,7 @@ pub struct CreatePrivateKeysRequest {
         super::super::super::immutable::activity::v1::CreatePrivateKeysIntentV2,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -227,6 +244,7 @@ pub struct SignRawPayloadRequest {
         super::super::super::immutable::activity::v1::SignRawPayloadIntentV2,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -239,6 +257,7 @@ pub struct SignRawPayloadsRequest {
         super::super::super::immutable::activity::v1::SignRawPayloadsIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -251,6 +270,7 @@ pub struct CreateUsersRequest {
         super::super::super::immutable::activity::v1::CreateUsersIntentV3,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -263,6 +283,7 @@ pub struct UpdateUserRequest {
         super::super::super::immutable::activity::v1::UpdateUserIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -275,6 +296,7 @@ pub struct DeleteUsersRequest {
         super::super::super::immutable::activity::v1::DeleteUsersIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -287,6 +309,7 @@ pub struct CreateAuthenticatorsRequest {
         super::super::super::immutable::activity::v1::CreateAuthenticatorsIntentV2,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -299,6 +322,7 @@ pub struct DeleteAuthenticatorsRequest {
         super::super::super::immutable::activity::v1::DeleteAuthenticatorsIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -311,6 +335,7 @@ pub struct CreateApiKeysRequest {
         super::super::super::immutable::activity::v1::CreateApiKeysIntentV2,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -323,6 +348,7 @@ pub struct DeleteApiKeysRequest {
         super::super::super::immutable::activity::v1::DeleteApiKeysIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -335,6 +361,7 @@ pub struct CreateUserTagRequest {
         super::super::super::immutable::activity::v1::CreateUserTagIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -347,6 +374,7 @@ pub struct UpdateUserTagRequest {
         super::super::super::immutable::activity::v1::UpdateUserTagIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -359,6 +387,7 @@ pub struct DeleteUserTagsRequest {
         super::super::super::immutable::activity::v1::DeleteUserTagsIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -371,6 +400,7 @@ pub struct CreatePrivateKeyTagRequest {
         super::super::super::immutable::activity::v1::CreatePrivateKeyTagIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -383,6 +413,7 @@ pub struct UpdatePrivateKeyTagRequest {
         super::super::super::immutable::activity::v1::UpdatePrivateKeyTagIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -395,6 +426,7 @@ pub struct DeletePrivateKeyTagsRequest {
         super::super::super::immutable::activity::v1::DeletePrivateKeyTagsIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -407,6 +439,7 @@ pub struct CreateOrganizationRequest {
         super::super::super::immutable::activity::v1::CreateOrganizationIntentV2,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -419,6 +452,7 @@ pub struct DeleteOrganizationRequest {
         super::super::super::immutable::activity::v1::DeleteOrganizationIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -431,6 +465,7 @@ pub struct SignTransactionRequest {
         super::super::super::immutable::activity::v1::SignTransactionIntentV2,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -443,6 +478,7 @@ pub struct ApproveActivityRequest {
         super::super::super::immutable::activity::v1::ApproveActivityIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -455,6 +491,7 @@ pub struct RejectActivityRequest {
         super::super::super::immutable::activity::v1::RejectActivityIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -467,6 +504,7 @@ pub struct UpdateRootQuorumRequest {
         super::super::super::immutable::activity::v1::UpdateRootQuorumIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -479,6 +517,7 @@ pub struct UpdateAllowedOriginsRequest {
         super::super::super::immutable::activity::v1::UpdateAllowedOriginsIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -491,6 +530,7 @@ pub struct CreateSubOrganizationRequest {
         super::super::super::immutable::activity::v1::CreateSubOrganizationIntentV7,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -503,6 +543,7 @@ pub struct InitUserEmailRecoveryRequest {
         super::super::super::immutable::activity::v1::InitUserEmailRecoveryIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -515,6 +556,7 @@ pub struct RecoverUserRequest {
         super::super::super::immutable::activity::v1::RecoverUserIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -527,6 +569,7 @@ pub struct ExportPrivateKeyRequest {
         super::super::super::immutable::activity::v1::ExportPrivateKeyIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -539,6 +582,7 @@ pub struct ExportWalletRequest {
         super::super::super::immutable::activity::v1::ExportWalletIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -551,6 +595,7 @@ pub struct ExportWalletAccountRequest {
         super::super::super::immutable::activity::v1::ExportWalletAccountIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -563,6 +608,7 @@ pub struct SetOrganizationFeatureRequest {
         super::super::super::immutable::activity::v1::SetOrganizationFeatureIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -575,6 +621,7 @@ pub struct RemoveOrganizationFeatureRequest {
         super::super::super::immutable::activity::v1::RemoveOrganizationFeatureIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -587,6 +634,7 @@ pub struct CreateWalletRequest {
         super::super::super::immutable::activity::v1::CreateWalletIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -599,6 +647,7 @@ pub struct CreateWalletAccountsRequest {
         super::super::super::immutable::activity::v1::CreateWalletAccountsIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -611,6 +660,7 @@ pub struct OauthRequest {
         super::super::super::immutable::activity::v1::OauthIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -623,6 +673,7 @@ pub struct InitOtpAuthRequest {
         super::super::super::immutable::activity::v1::InitOtpAuthIntentV2,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -635,6 +686,7 @@ pub struct OtpAuthRequest {
         super::super::super::immutable::activity::v1::OtpAuthIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -647,6 +699,7 @@ pub struct EmailAuthRequest {
         super::super::super::immutable::activity::v1::EmailAuthIntentV2,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -659,6 +712,7 @@ pub struct InitImportWalletRequest {
         super::super::super::immutable::activity::v1::InitImportWalletIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -671,6 +725,7 @@ pub struct ImportWalletRequest {
         super::super::super::immutable::activity::v1::ImportWalletIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -683,6 +738,7 @@ pub struct InitImportPrivateKeyRequest {
         super::super::super::immutable::activity::v1::InitImportPrivateKeyIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -695,6 +751,7 @@ pub struct ImportPrivateKeyRequest {
         super::super::super::immutable::activity::v1::ImportPrivateKeyIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -707,6 +764,7 @@ pub struct CreateOauthProvidersRequest {
         super::super::super::immutable::activity::v1::CreateOauthProvidersIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -719,6 +777,7 @@ pub struct DeleteOauthProvidersRequest {
         super::super::super::immutable::activity::v1::DeleteOauthProvidersIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -731,6 +790,7 @@ pub struct DeletePrivateKeysRequest {
         super::super::super::immutable::activity::v1::DeletePrivateKeysIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -743,6 +803,7 @@ pub struct DeleteWalletsRequest {
         super::super::super::immutable::activity::v1::DeleteWalletsIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -755,6 +816,7 @@ pub struct DeleteSubOrganizationRequest {
         super::super::super::immutable::activity::v1::DeleteSubOrganizationIntent,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]

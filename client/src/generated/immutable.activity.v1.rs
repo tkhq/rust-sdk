@@ -1,3 +1,4 @@
+#[derive(Debug)]
 /// Intent object crafted by Turnkey based on the user request, used to assess the permissibility of an action.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -12,6 +13,7 @@ pub mod intent {
     #[derive(::serde::Serialize, ::serde::Deserialize)]
     #[derive(Clone, PartialEq)]
     #[serde(rename_all = "camelCase")]
+    #[derive(Debug)]
     pub enum Inner {
         CreateOrganizationIntent(super::CreateOrganizationIntent),
         CreateAuthenticatorsIntent(super::CreateAuthenticatorsIntent),
@@ -98,6 +100,7 @@ pub mod intent {
         InitOtpAuthIntentV2(super::InitOtpAuthIntentV2),
     }
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -112,6 +115,7 @@ pub struct CreateOrganizationIntent {
     #[serde(default)]
     pub root_user_id: ::core::option::Option<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -126,6 +130,7 @@ pub struct CreateOrganizationIntentV2 {
     #[serde(default)]
     pub root_user_id: ::core::option::Option<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -136,6 +141,7 @@ pub struct CreateAuthenticatorsIntent {
     /// @inject_tag: validate:"required,uuid"
     pub user_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -146,6 +152,7 @@ pub struct CreateAuthenticatorsIntentV2 {
     /// @inject_tag: validate:"required,uuid"
     pub user_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -156,6 +163,7 @@ pub struct CreateApiKeysIntent {
     /// @inject_tag: validate:"required,uuid"
     pub user_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -166,6 +174,7 @@ pub struct CreateApiKeysIntentV2 {
     /// @inject_tag: validate:"required,uuid"
     pub user_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -174,6 +183,7 @@ pub struct CreateUsersIntent {
     #[serde(default)]
     pub users: ::prost::alloc::vec::Vec<UserParams>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -182,6 +192,7 @@ pub struct CreateUsersIntentV2 {
     #[serde(default)]
     pub users: ::prost::alloc::vec::Vec<UserParamsV2>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -190,6 +201,7 @@ pub struct CreateUsersIntentV3 {
     #[serde(default)]
     pub users: ::prost::alloc::vec::Vec<UserParamsV3>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -209,6 +221,7 @@ pub struct UpdateUserIntent {
     #[serde(default)]
     pub user_phone_number: ::core::option::Option<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -218,6 +231,7 @@ pub struct UpdateWalletIntent {
     /// @inject_tag: validate:"omitempty,tk_label,tk_label_length"
     pub wallet_name: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -226,6 +240,7 @@ pub struct CreateInvitationsIntent {
     #[serde(default)]
     pub invitations: ::prost::alloc::vec::Vec<InvitationParams>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -238,6 +253,7 @@ pub struct AcceptInvitationIntent {
     #[serde(default)]
     pub authenticator: ::core::option::Option<AuthenticatorParams>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -250,6 +266,7 @@ pub struct AcceptInvitationIntentV2 {
     #[serde(default)]
     pub authenticator: ::core::option::Option<AuthenticatorParamsV2>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -258,6 +275,7 @@ pub struct CreateApiOnlyUsersIntent {
     #[serde(default)]
     pub api_only_users: ::prost::alloc::vec::Vec<ApiOnlyUserParams>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -271,6 +289,7 @@ pub struct CreateWalletIntent {
     #[serde(default)]
     pub mnemonic_length: ::core::option::Option<i32>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -281,6 +300,7 @@ pub struct CreateWalletAccountsIntent {
     #[serde(default)]
     pub accounts: ::prost::alloc::vec::Vec<WalletAccountParams>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -289,6 +309,7 @@ pub struct CreatePrivateKeysIntent {
     #[serde(default)]
     pub private_keys: ::prost::alloc::vec::Vec<PrivateKeyParams>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -297,6 +318,7 @@ pub struct CreatePrivateKeysIntentV2 {
     #[serde(default)]
     pub private_keys: ::prost::alloc::vec::Vec<PrivateKeyParams>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -309,6 +331,7 @@ pub struct SignRawPayloadIntent {
     pub encoding: super::super::common::v1::PayloadEncoding,
     pub hash_function: super::super::common::v1::HashFunction,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -321,6 +344,7 @@ pub struct SignRawPayloadIntentV2 {
     pub encoding: super::super::common::v1::PayloadEncoding,
     pub hash_function: super::super::common::v1::HashFunction,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -334,6 +358,7 @@ pub struct SignRawPayloadsIntent {
     pub encoding: super::super::common::v1::PayloadEncoding,
     pub hash_function: super::super::common::v1::HashFunction,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -346,6 +371,7 @@ pub struct CreatePolicyIntent {
     pub effect: super::super::common::v1::Effect,
     pub notes: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -358,6 +384,7 @@ pub struct CreatePolicyIntentV2 {
     pub effect: super::super::common::v1::Effect,
     pub notes: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -372,6 +399,7 @@ pub struct CreatePolicyIntentV3 {
     pub consensus: ::core::option::Option<::prost::alloc::string::String>,
     pub notes: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -379,10 +407,12 @@ pub struct CreatePoliciesIntent {
     #[serde(default)]
     pub policies: ::prost::alloc::vec::Vec<CreatePolicyIntentV3>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, Copy, PartialEq)]
 pub struct CreateReadOnlySessionIntent {}
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -396,6 +426,7 @@ pub struct CreateReadWriteSessionIntent {
     #[serde(default)]
     pub expiration_seconds: ::core::option::Option<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -412,6 +443,7 @@ pub struct CreateReadWriteSessionIntentV2 {
     #[serde(default)]
     pub invalidate_existing: ::core::option::Option<bool>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -420,6 +452,7 @@ pub struct Selector {
     pub operator: super::super::common::v1::Operator,
     pub target: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -429,6 +462,7 @@ pub struct SelectorV2 {
     #[serde(default)]
     pub targets: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -436,6 +470,7 @@ pub struct DisablePrivateKeyIntent {
     /// @inject_tag: validate:"required,uuid"
     pub private_key_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -444,6 +479,7 @@ pub struct DeleteUsersIntent {
     #[serde(default)]
     pub user_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -451,6 +487,7 @@ pub struct DeleteInvitationIntent {
     /// @inject_tag: validate:"required,uuid"
     pub invitation_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -461,6 +498,7 @@ pub struct DeleteApiKeysIntent {
     #[serde(default)]
     pub api_key_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -471,6 +509,7 @@ pub struct DeleteAuthenticatorsIntent {
     #[serde(default)]
     pub authenticator_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -478,6 +517,7 @@ pub struct DeleteOrganizationIntent {
     /// @inject_tag: validate:"required,uuid"
     pub organization_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -485,6 +525,7 @@ pub struct DeletePolicyIntent {
     /// @inject_tag: validate:"required,uuid"
     pub policy_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -495,6 +536,7 @@ pub struct CreateUserTagIntent {
     #[serde(default)]
     pub user_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -511,6 +553,7 @@ pub struct UpdateUserTagIntent {
     #[serde(default)]
     pub remove_user_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -519,6 +562,7 @@ pub struct DeleteUserTagsIntent {
     #[serde(default)]
     pub user_tag_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -529,6 +573,7 @@ pub struct CreatePrivateKeyTagIntent {
     #[serde(default)]
     pub private_key_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -545,6 +590,7 @@ pub struct UpdatePrivateKeyTagIntent {
     #[serde(default)]
     pub remove_private_key_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -553,6 +599,7 @@ pub struct DeletePrivateKeyTagsIntent {
     #[serde(default)]
     pub private_key_tag_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -564,6 +611,7 @@ pub struct SignTransactionIntent {
     /// @inject_tag: validate:"required"
     pub r#type: super::super::common::v1::TransactionType,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -575,6 +623,7 @@ pub struct SignTransactionIntentV2 {
     /// @inject_tag: validate:"required"
     pub r#type: super::super::common::v1::TransactionType,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -582,6 +631,7 @@ pub struct ApproveActivityIntent {
     /// @inject_tag: validate:"required"
     pub fingerprint: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -589,6 +639,7 @@ pub struct RejectActivityIntent {
     /// @inject_tag: validate:"required"
     pub fingerprint: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -600,6 +651,7 @@ pub struct UpdateRootQuorumIntent {
     #[serde(default)]
     pub user_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -608,6 +660,7 @@ pub struct UpdateAllowedOriginsIntent {
     #[serde(default)]
     pub allowed_origins: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -617,6 +670,7 @@ pub struct CreateSubOrganizationIntent {
     #[serde(default)]
     pub root_authenticator: ::core::option::Option<AuthenticatorParamsV2>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -630,6 +684,7 @@ pub struct CreateSubOrganizationIntentV2 {
     #[serde(default)]
     pub root_quorum_threshold: i32,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -646,6 +701,7 @@ pub struct CreateSubOrganizationIntentV3 {
     #[serde(default)]
     pub private_keys: ::prost::alloc::vec::Vec<PrivateKeyParams>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -668,6 +724,7 @@ pub struct CreateSubOrganizationIntentV4 {
     #[serde(default)]
     pub disable_email_auth: ::core::option::Option<bool>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -690,6 +747,7 @@ pub struct CreateSubOrganizationIntentV5 {
     #[serde(default)]
     pub disable_email_auth: ::core::option::Option<bool>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -712,6 +770,7 @@ pub struct CreateSubOrganizationIntentV6 {
     #[serde(default)]
     pub disable_email_auth: ::core::option::Option<bool>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -740,6 +799,7 @@ pub struct CreateSubOrganizationIntentV7 {
     #[serde(default)]
     pub disable_otp_email_auth: ::core::option::Option<bool>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -758,6 +818,7 @@ pub struct UpdatePolicyIntent {
     #[serde(default)]
     pub policy_notes: ::core::option::Option<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -776,6 +837,7 @@ pub struct UpdatePolicyIntentV2 {
     #[serde(default)]
     pub policy_notes: ::core::option::Option<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -785,6 +847,7 @@ pub struct RecoverUserIntent {
     /// @inject_tag: validate:"required,uuid"
     pub user_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -793,12 +856,14 @@ pub struct SetOrganizationFeatureIntent {
     #[serde(default)]
     pub value: ::core::option::Option<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, Copy, PartialEq)]
 pub struct RemoveOrganizationFeatureIntent {
     pub name: super::super::common::v1::FeatureName,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -808,6 +873,7 @@ pub struct ExportPrivateKeyIntent {
     /// @inject_tag: validate:"hexadecimal"
     pub target_public_key: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -820,6 +886,7 @@ pub struct ExportWalletIntent {
     #[serde(default)]
     pub language: Option<super::super::common::v1::MnemonicLanguage>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -829,18 +896,21 @@ pub struct ExportWalletAccountIntent {
     /// @inject_tag: validate:"hexadecimal"
     pub target_public_key: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct InitImportWalletIntent {
     pub user_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct InitImportPrivateKeyIntent {
     pub user_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -857,6 +927,7 @@ pub struct RootUserParams {
     #[serde(default)]
     pub authenticators: ::prost::alloc::vec::Vec<AuthenticatorParamsV2>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -876,6 +947,7 @@ pub struct RootUserParamsV2 {
     #[serde(default)]
     pub oauth_providers: ::prost::alloc::vec::Vec<OauthProviderParams>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -895,6 +967,7 @@ pub struct RootUserParamsV3 {
     #[serde(default)]
     pub oauth_providers: ::prost::alloc::vec::Vec<OauthProviderParams>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -917,6 +990,7 @@ pub struct RootUserParamsV4 {
     #[serde(default)]
     pub oauth_providers: ::prost::alloc::vec::Vec<OauthProviderParams>,
 }
+#[derive(Debug)]
 /// Each of these customization parameters are optional; resort to defaults if any are not provided.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -941,6 +1015,7 @@ pub struct EmailCustomizationParams {
     #[serde(default)]
     pub template_id: ::core::option::Option<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 /// Each of these customization parameters are optional; resort to defaults if any are not provided.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -949,6 +1024,7 @@ pub struct SmsCustomizationParams {
     #[serde(default)]
     pub template: ::core::option::Option<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -962,6 +1038,7 @@ pub struct InitUserEmailRecoveryIntent {
     #[serde(default)]
     pub email_customization: ::core::option::Option<EmailCustomizationParams>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -984,6 +1061,7 @@ pub struct InitOtpAuthIntent {
         ::prost::alloc::string::String,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1011,6 +1089,7 @@ pub struct InitOtpAuthIntentV2 {
         ::prost::alloc::string::String,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1028,6 +1107,7 @@ pub struct OtpAuthIntent {
     #[serde(default)]
     pub invalidate_existing: ::core::option::Option<bool>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1044,6 +1124,7 @@ pub struct OauthIntent {
     #[serde(default)]
     pub invalidate_existing: ::core::option::Option<bool>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1070,6 +1151,7 @@ pub struct EmailAuthIntent {
         ::prost::alloc::string::String,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1096,6 +1178,7 @@ pub struct EmailAuthIntentV2 {
         ::prost::alloc::string::String,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1110,6 +1193,7 @@ pub struct ImportWalletIntent {
     #[serde(default)]
     pub accounts: ::prost::alloc::vec::Vec<WalletAccountParams>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1126,6 +1210,7 @@ pub struct ImportPrivateKeyIntent {
     #[serde(default)]
     pub address_formats: Vec<super::super::common::v1::AddressFormat>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1136,6 +1221,7 @@ pub struct CreateOauthProvidersIntent {
     #[serde(default)]
     pub oauth_providers: ::prost::alloc::vec::Vec<OauthProviderParams>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1146,6 +1232,7 @@ pub struct DeleteOauthProvidersIntent {
     #[serde(default)]
     pub provider_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1156,6 +1243,7 @@ pub struct DeletePrivateKeysIntent {
     #[serde(default)]
     pub delete_without_export: ::core::option::Option<bool>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1166,6 +1254,7 @@ pub struct DeleteWalletsIntent {
     #[serde(default)]
     pub delete_without_export: ::core::option::Option<bool>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, Copy, PartialEq)]
@@ -1173,6 +1262,7 @@ pub struct DeleteSubOrganizationIntent {
     #[serde(default)]
     pub delete_without_export: ::core::option::Option<bool>,
 }
+#[derive(Debug)]
 /// Result of the intended action.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1187,6 +1277,7 @@ pub mod result {
     #[derive(::serde::Serialize, ::serde::Deserialize)]
     #[derive(Clone, PartialEq)]
     #[serde(rename_all = "camelCase")]
+    #[derive(Debug)]
     pub enum Inner {
         CreateOrganizationResult(super::CreateOrganizationResult),
         CreateAuthenticatorsResult(super::CreateAuthenticatorsResult),
@@ -1258,12 +1349,14 @@ pub mod result {
         InitOtpAuthResultV2(super::InitOtpAuthResultV2),
     }
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct CreateOrganizationResult {
     pub organization_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1271,6 +1364,7 @@ pub struct CreateAuthenticatorsResult {
     #[serde(default)]
     pub authenticator_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1278,6 +1372,7 @@ pub struct CreateApiKeysResult {
     #[serde(default)]
     pub api_key_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1285,18 +1380,21 @@ pub struct CreateUsersResult {
     #[serde(default)]
     pub user_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct UpdateUserResult {
     pub user_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct UpdateWalletResult {
     pub wallet_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1304,6 +1402,7 @@ pub struct CreateApiOnlyUsersResult {
     #[serde(default)]
     pub user_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1311,6 +1410,7 @@ pub struct CreateInvitationsResult {
     #[serde(default)]
     pub invitation_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1318,6 +1418,7 @@ pub struct AcceptInvitationResult {
     pub invitation_id: ::prost::alloc::string::String,
     pub user_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1325,6 +1426,7 @@ pub struct CreatePrivateKeysResult {
     #[serde(default)]
     pub private_key_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1332,6 +1434,7 @@ pub struct CreatePrivateKeysResultV2 {
     #[serde(default)]
     pub private_keys: ::prost::alloc::vec::Vec<PrivateKeyResult>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1340,6 +1443,7 @@ pub struct PrivateKeyResult {
     #[serde(default)]
     pub addresses: ::prost::alloc::vec::Vec<Address>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1347,6 +1451,7 @@ pub struct Address {
     pub format: super::super::common::v1::AddressFormat,
     pub address: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1355,6 +1460,7 @@ pub struct SignRawPayloadResult {
     pub s: ::prost::alloc::string::String,
     pub v: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1362,6 +1468,7 @@ pub struct SignRawPayloadsResult {
     #[serde(default)]
     pub signatures: ::prost::alloc::vec::Vec<SignRawPayloadResult>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1370,6 +1477,7 @@ pub struct CreateWalletResult {
     #[serde(default)]
     pub addresses: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1377,24 +1485,28 @@ pub struct CreateWalletAccountsResult {
     #[serde(default)]
     pub addresses: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct InitUserEmailRecoveryResult {
     pub user_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct InitOtpAuthResult {
     pub otp_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct InitOtpAuthResultV2 {
     pub otp_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1403,6 +1515,7 @@ pub struct OtpAuthResult {
     pub api_key_id: ::prost::alloc::string::String,
     pub credential_bundle: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1411,6 +1524,7 @@ pub struct OauthResult {
     pub api_key_id: ::prost::alloc::string::String,
     pub credential_bundle: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1418,12 +1532,14 @@ pub struct EmailAuthResult {
     pub user_id: ::prost::alloc::string::String,
     pub api_key_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct CreatePolicyResult {
     pub policy_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1431,18 +1547,21 @@ pub struct CreatePoliciesResult {
     #[serde(default)]
     pub policy_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct UpdatePolicyResult {
     pub policy_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct UpdatePolicyResultV2 {
     pub policy_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1455,6 +1574,7 @@ pub struct CreateReadOnlySessionResult {
     #[serde(default)]
     pub session_expiry: u64,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1466,6 +1586,7 @@ pub struct CreateReadWriteSessionResult {
     pub api_key_id: ::prost::alloc::string::String,
     pub credential_bundle: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1477,12 +1598,14 @@ pub struct CreateReadWriteSessionResultV2 {
     pub api_key_id: ::prost::alloc::string::String,
     pub credential_bundle: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct DisablePrivateKeyResult {
     pub private_key_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1490,12 +1613,14 @@ pub struct DeleteUsersResult {
     #[serde(default)]
     pub user_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct DeleteInvitationResult {
     pub invitation_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1503,6 +1628,7 @@ pub struct DeleteAuthenticatorsResult {
     #[serde(default)]
     pub authenticator_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1510,18 +1636,21 @@ pub struct DeleteApiKeysResult {
     #[serde(default)]
     pub api_key_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct DeleteOrganizationResult {
     pub organization_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct DeletePolicyResult {
     pub policy_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1530,12 +1659,14 @@ pub struct CreateUserTagResult {
     #[serde(default)]
     pub user_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct UpdateUserTagResult {
     pub user_tag_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1545,6 +1676,7 @@ pub struct DeleteUserTagsResult {
     #[serde(default)]
     pub user_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1553,12 +1685,14 @@ pub struct CreatePrivateKeyTagResult {
     #[serde(default)]
     pub private_key_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct UpdatePrivateKeyTagResult {
     pub private_key_tag_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1568,22 +1702,26 @@ pub struct DeletePrivateKeyTagsResult {
     #[serde(default)]
     pub private_key_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct SignTransactionResult {
     pub signed_transaction: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 /// TODO: this should include the new root quorum
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, Copy, PartialEq)]
 pub struct UpdateRootQuorumResult {}
+#[derive(Debug)]
 /// TODO: this should include the new origins
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, Copy, PartialEq)]
 pub struct UpdateAllowedOriginsResult {}
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1592,6 +1730,7 @@ pub struct CreateSubOrganizationResult {
     #[serde(default)]
     pub root_user_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 /// Going directly to V3 to have it in parity with intent versioning
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1603,6 +1742,7 @@ pub struct CreateSubOrganizationResultV3 {
     #[serde(default)]
     pub root_user_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1611,6 +1751,7 @@ pub struct WalletResult {
     #[serde(default)]
     pub addresses: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 /// Going directly to V4 to have it in parity with intent versioning
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1622,6 +1763,7 @@ pub struct CreateSubOrganizationResultV4 {
     #[serde(default)]
     pub root_user_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1632,6 +1774,7 @@ pub struct CreateSubOrganizationResultV5 {
     #[serde(default)]
     pub root_user_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1642,6 +1785,7 @@ pub struct CreateSubOrganizationResultV6 {
     #[serde(default)]
     pub root_user_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1652,6 +1796,7 @@ pub struct CreateSubOrganizationResultV7 {
     #[serde(default)]
     pub root_user_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1659,6 +1804,7 @@ pub struct RecoverUserResult {
     #[serde(default)]
     pub authenticator_id: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1666,6 +1812,7 @@ pub struct SetOrganizationFeatureResult {
     #[serde(default)]
     pub features: ::prost::alloc::vec::Vec<super::super::data::v1::Feature>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1673,6 +1820,7 @@ pub struct RemoveOrganizationFeatureResult {
     #[serde(default)]
     pub features: ::prost::alloc::vec::Vec<super::super::data::v1::Feature>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1680,6 +1828,7 @@ pub struct ExportPrivateKeyResult {
     pub private_key_id: ::prost::alloc::string::String,
     pub export_bundle: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1687,6 +1836,7 @@ pub struct ExportWalletResult {
     pub wallet_id: ::prost::alloc::string::String,
     pub export_bundle: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1694,12 +1844,14 @@ pub struct ExportWalletAccountResult {
     pub address: ::prost::alloc::string::String,
     pub export_bundle: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct InitImportWalletResult {
     pub import_bundle: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1708,12 +1860,14 @@ pub struct ImportWalletResult {
     #[serde(default)]
     pub addresses: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct InitImportPrivateKeyResult {
     pub import_bundle: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1722,6 +1876,7 @@ pub struct ImportPrivateKeyResult {
     #[serde(default)]
     pub addresses: ::prost::alloc::vec::Vec<Address>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1729,6 +1884,7 @@ pub struct CreateOauthProvidersResult {
     #[serde(default)]
     pub provider_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1736,6 +1892,7 @@ pub struct DeleteOauthProvidersResult {
     #[serde(default)]
     pub provider_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1743,6 +1900,7 @@ pub struct DeletePrivateKeysResult {
     #[serde(default)]
     pub private_key_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1750,12 +1908,14 @@ pub struct DeleteWalletsResult {
     #[serde(default)]
     pub wallet_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct DeleteSubOrganizationResult {
     pub sub_organization_uuid: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1763,6 +1923,7 @@ pub struct OauthProviderParams {
     pub provider_name: ::prost::alloc::string::String,
     pub oidc_token: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1775,6 +1936,7 @@ pub struct ApiKeyParamsV2 {
     #[serde(default)]
     pub expiration_seconds: ::core::option::Option<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1796,6 +1958,7 @@ pub struct UserParams {
     #[serde(default)]
     pub user_tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1815,6 +1978,7 @@ pub struct UserParamsV2 {
     #[serde(default)]
     pub user_tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1840,6 +2004,7 @@ pub struct UserParamsV3 {
     #[serde(default)]
     pub user_tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1855,6 +2020,7 @@ pub struct AuthenticatorParams {
     /// @inject_tag: validate:"required,max=256"
     pub challenge: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1866,6 +2032,7 @@ pub struct AuthenticatorParamsV2 {
     #[serde(default)]
     pub attestation: ::core::option::Option<Attestation>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1879,6 +2046,7 @@ pub struct Attestation {
     #[serde(default)]
     pub transports: Vec<super::super::webauthn::v1::AuthenticatorTransport>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1895,6 +2063,7 @@ pub struct InvitationParams {
     /// @inject_tag: validate:"required,uuid"
     pub sender_user_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1911,6 +2080,7 @@ pub struct ApiOnlyUserParams {
     #[serde(default)]
     pub api_keys: ::prost::alloc::vec::Vec<super::api::ApiKeyParams>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1926,6 +2096,7 @@ pub struct PrivateKeyParams {
     #[serde(default)]
     pub address_formats: Vec<super::super::common::v1::AddressFormat>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1939,6 +2110,7 @@ pub struct WalletParams {
     #[serde(default)]
     pub mnemonic_length: ::core::option::Option<i32>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1952,6 +2124,7 @@ pub struct WalletAccountParams {
     /// @inject_tag: validate:"required"
     pub address_format: super::super::common::v1::AddressFormat,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1962,6 +2135,7 @@ pub struct DeletePrivateKeysParams {
     #[serde(default)]
     pub delete_without_export: ::core::option::Option<bool>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]

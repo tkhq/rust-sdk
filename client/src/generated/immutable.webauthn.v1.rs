@@ -1,3 +1,4 @@
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -9,6 +10,7 @@ pub struct PublicKeyCredentialDescriptor {
     #[serde(default)]
     pub transports: Vec<AuthenticatorTransport>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -30,6 +32,7 @@ pub struct AuthenticatorAssertionResponse {
     #[serde(default)]
     pub user_handle: ::core::option::Option<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -43,6 +46,7 @@ pub struct AuthenticatorAttestationResponse {
     #[serde(default)]
     pub authenticator_attachment: ::core::option::Option<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -59,6 +63,7 @@ pub struct PublicKeyCredentialWithAttestation {
     #[serde(default)]
     pub client_extension_results: ::core::option::Option<SimpleClientExtensionResults>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -75,6 +80,7 @@ pub struct PublicKeyCredentialWithAssertion {
     #[serde(default)]
     pub client_extension_results: ::core::option::Option<SimpleClientExtensionResults>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, Copy, PartialEq)]
@@ -88,6 +94,7 @@ pub struct SimpleClientExtensionResults {
         CredPropsAuthenticationExtensionsClientOutputs,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, Copy, PartialEq)]

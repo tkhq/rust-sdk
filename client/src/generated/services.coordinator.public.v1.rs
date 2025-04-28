@@ -1,7 +1,9 @@
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, Copy, PartialEq)]
 pub struct NoopCodegenAnchorRequest {}
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -11,6 +13,7 @@ pub struct NoopCodegenAnchorResponse {
         super::super::super::super::external::webauthn::v1::WebAuthnStamp,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -21,16 +24,19 @@ pub struct TestRateLimitsRequest {
     #[serde(default)]
     pub limit: u32,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, Copy, PartialEq)]
 pub struct TestRateLimitsResponse {}
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct GetWhoamiRequest {
     pub organization_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -40,6 +46,7 @@ pub struct GetWhoamiResponse {
     pub user_id: ::prost::alloc::string::String,
     pub username: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -47,6 +54,7 @@ pub struct GetAttestationDocumentRequest {
     pub organization_id: ::prost::alloc::string::String,
     pub enclave_type: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -54,6 +62,7 @@ pub struct GetAttestationDocumentResponse {
     #[serde(default)]
     pub attestation_document: ::prost::alloc::vec::Vec<u8>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -66,6 +75,7 @@ pub struct GetSubOrgIdsRequest {
         super::super::super::super::external::options::v1::Pagination,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -78,6 +88,7 @@ pub struct GetVerifiedSubOrgIdsRequest {
         super::super::super::super::external::options::v1::Pagination,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -85,6 +96,7 @@ pub struct GetSubOrgIdsResponse {
     #[serde(default)]
     pub organization_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -92,12 +104,14 @@ pub struct GetVerifiedSubOrgIdsResponse {
     #[serde(default)]
     pub organization_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct GetOrganizationRequest {
     pub organization_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -107,6 +121,7 @@ pub struct GetOrganizationResponse {
         super::super::super::super::external::data::v1::OrganizationData,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -114,6 +129,7 @@ pub struct GetActivityRequest {
     pub organization_id: ::prost::alloc::string::String,
     pub activity_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -132,6 +148,7 @@ pub struct GetActivitiesRequest {
         super::super::super::super::immutable::activity::v1::ActivityType,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -141,6 +158,7 @@ pub struct GetActivitiesResponse {
         super::super::super::super::external::activity::v1::Activity,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -148,6 +166,7 @@ pub struct GetUserRequest {
     pub organization_id: ::prost::alloc::string::String,
     pub user_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -157,12 +176,14 @@ pub struct GetUserResponse {
         super::super::super::super::external::data::v1::User,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct GetUsersRequest {
     pub organization_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -172,6 +193,7 @@ pub struct GetUsersResponse {
         super::super::super::super::external::data::v1::User,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -181,12 +203,14 @@ pub struct ActivityResponse {
         super::super::super::super::external::activity::v1::Activity,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct GetPoliciesRequest {
     pub organization_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -196,6 +220,7 @@ pub struct GetPoliciesResponse {
         super::super::super::super::external::data::v1::Policy,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -203,6 +228,7 @@ pub struct GetPolicyRequest {
     pub organization_id: ::prost::alloc::string::String,
     pub policy_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -212,6 +238,7 @@ pub struct GetPolicyResponse {
         super::super::super::super::external::data::v1::Policy,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -219,6 +246,7 @@ pub struct GetAuthenticatorRequest {
     pub organization_id: ::prost::alloc::string::String,
     pub authenticator_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -228,6 +256,7 @@ pub struct GetAuthenticatorResponse {
         super::super::super::super::external::data::v1::Authenticator,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -235,6 +264,7 @@ pub struct GetAuthenticatorsRequest {
     pub organization_id: ::prost::alloc::string::String,
     pub user_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -244,6 +274,7 @@ pub struct GetAuthenticatorsResponse {
         super::super::super::super::external::data::v1::Authenticator,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -252,6 +283,7 @@ pub struct GetOauthProvidersRequest {
     #[serde(default)]
     pub user_id: ::core::option::Option<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -261,6 +293,7 @@ pub struct GetOauthProvidersResponse {
         super::super::super::super::external::data::v1::OauthProvider,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -268,6 +301,7 @@ pub struct GetApiKeyRequest {
     pub organization_id: ::prost::alloc::string::String,
     pub api_key_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -277,6 +311,7 @@ pub struct GetApiKeyResponse {
         super::super::super::super::external::data::v1::ApiKey,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -285,6 +320,7 @@ pub struct GetApiKeysRequest {
     #[serde(default)]
     pub user_id: ::core::option::Option<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -294,12 +330,14 @@ pub struct GetApiKeysResponse {
         super::super::super::super::external::data::v1::ApiKey,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct GetPrivateKeysRequest {
     pub organization_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -309,6 +347,7 @@ pub struct GetPrivateKeysResponse {
         super::super::super::super::external::data::v1::PrivateKey,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -316,6 +355,7 @@ pub struct GetPrivateKeyRequest {
     pub organization_id: ::prost::alloc::string::String,
     pub private_key_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -325,12 +365,14 @@ pub struct GetPrivateKeyResponse {
         super::super::super::super::external::data::v1::PrivateKey,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct GetWalletsRequest {
     pub organization_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -340,6 +382,7 @@ pub struct GetWalletsResponse {
         super::super::super::super::external::data::v1::Wallet,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -347,6 +390,7 @@ pub struct GetWalletRequest {
     pub organization_id: ::prost::alloc::string::String,
     pub wallet_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -356,6 +400,7 @@ pub struct GetWalletResponse {
         super::super::super::super::external::data::v1::Wallet,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -367,6 +412,7 @@ pub struct GetWalletAccountsRequest {
         super::super::super::super::external::options::v1::Pagination,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -376,6 +422,7 @@ pub struct GetWalletAccountsResponse {
         super::super::super::super::external::data::v1::WalletAccount,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -387,6 +434,7 @@ pub struct GetWalletAccountRequest {
     #[serde(default)]
     pub path: ::core::option::Option<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -396,12 +444,14 @@ pub struct GetWalletAccountResponse {
         super::super::super::super::external::data::v1::WalletAccount,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct ListUserTagsRequest {
     pub organization_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -411,12 +461,14 @@ pub struct ListUserTagsResponse {
         super::super::super::super::external::data::v1::Tag,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct ListPrivateKeyTagsRequest {
     pub organization_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -426,12 +478,14 @@ pub struct ListPrivateKeyTagsResponse {
         super::super::super::super::external::data::v1::Tag,
     >,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct GetOrganizationConfigsRequest {
     pub organization_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]

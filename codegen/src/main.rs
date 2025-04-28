@@ -15,7 +15,6 @@ const ACTIVITIES_MAPPING_PATH: &str = "codegen/src/activities.json";
 
 // Necessary derive to parse from and serialize to JSON
 const SERDE_DERIVE: &str = "#[derive(::serde::Serialize, ::serde::Deserialize)]";
-const DEBUG_TRAIT: &str = "#[derive(Debug)]";
 const SERDE_CAMEL_CASE: &str = "#[serde(rename_all = \"camelCase\")]";
 
 #[derive(Debug, serde::Deserialize)]
@@ -46,7 +45,6 @@ fn main() {
         .type_attribute(".immutable", SERDE_DERIVE)
         .type_attribute(".immutable", SERDE_CAMEL_CASE)
         .type_attribute(".google.rpc", SERDE_DERIVE)
-        .type_attribute(".google.rpc", DEBUG_TRAIT)
         .field_attribute("google.rpc.Status.details", "#[serde(skip)]")
         .type_attribute("google.rpc", SERDE_CAMEL_CASE)
         .compile_protos(&[PUBLIC_API_PROTO_PATH], &[INCLUDE_PROTO_PATH])

@@ -1,3 +1,4 @@
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -7,6 +8,7 @@ pub struct Timestamp {
     /// Stringified int
     pub nanos: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 /// This proto definition is used in our external-facing APIs.
 /// It's important to leverage annotations because they're used in our external interfaces.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -34,6 +36,7 @@ pub struct OrganizationData {
     #[serde(default)]
     pub wallets: ::prost::alloc::vec::Vec<Wallet>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -48,6 +51,7 @@ pub struct OauthProvider {
     #[serde(default)]
     pub updated_at: ::core::option::Option<Timestamp>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -72,6 +76,7 @@ pub struct User {
     #[serde(default)]
     pub updated_at: ::core::option::Option<Timestamp>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -87,6 +92,7 @@ pub struct ApiKey {
     #[serde(default)]
     pub expiration_seconds: ::core::option::Option<u64>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -108,6 +114,7 @@ pub struct Authenticator {
     #[serde(default)]
     pub updated_at: ::core::option::Option<Timestamp>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -116,6 +123,7 @@ pub struct Credential {
     /// To distinguish the credential type (webauthn, API key)
     pub r#type: super::super::super::immutable::common::v1::CredentialType,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -133,6 +141,7 @@ pub struct Policy {
     #[serde(default)]
     pub condition: ::core::option::Option<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -154,6 +163,7 @@ pub struct PrivateKey {
     #[serde(default)]
     pub imported: bool,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -161,6 +171,7 @@ pub struct Address {
     pub format: super::super::super::immutable::common::v1::AddressFormat,
     pub address: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -178,6 +189,7 @@ pub struct Invitation {
     pub updated_at: ::core::option::Option<Timestamp>,
     pub sender_user_id: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -190,6 +202,7 @@ pub struct Tag {
     #[serde(default)]
     pub updated_at: ::core::option::Option<Timestamp>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -199,6 +212,7 @@ pub struct Quorum {
     #[serde(default)]
     pub user_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -214,6 +228,7 @@ pub struct Wallet {
     #[serde(default)]
     pub imported: bool,
 }
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -293,6 +308,7 @@ impl TagType {
         }
     }
 }
+#[derive(Debug)]
 /// An account derived from a Wallet
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]

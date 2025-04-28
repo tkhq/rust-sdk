@@ -1,3 +1,4 @@
+#[derive(Debug)]
 /// The `Status` type defines a logical error model that is suitable for
 /// different programming environments, including REST APIs and RPC APIs. It is
 /// used by [gRPC](<https://github.com/grpc>). Each `Status` message contains
@@ -6,7 +7,6 @@
 /// You can find out more about this error model and how to work with it in the
 /// [API Design Guide](<https://cloud.google.com/apis/design/errors>).
 #[derive(::serde::Serialize, ::serde::Deserialize)]
-#[derive(Debug)]
 #[derive(Clone, PartialEq)]
 pub struct Status {
     /// The status code, which should be an enum value of

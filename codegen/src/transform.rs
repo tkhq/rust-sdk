@@ -103,9 +103,11 @@ fn mutate_enum(enum_item: &syn::ItemEnum) -> TokenStream {
     });
 
     // Another quick special case: Result::Inner and Intent::Inner require #[serde(rename_all = "camelCase")]
+    // We also derive "Debug", it's very useful to be able to serialize activities in a pinch.
     if ident == "Inner" {
         attrs.push(quote! {
             #[serde(rename_all = "camelCase")]
+            #[derive(Debug)]
         });
     }
 
@@ -171,6 +173,7 @@ fn mutate_struct(struct_value: &syn::ItemStruct) -> TokenStream {
     });
 
     quote! {
+        #[derive(Debug)]
         #(#struct_attrs)*
         #vis struct #struct_ident #generics {
             #(#fields,)*
