@@ -66,13 +66,11 @@ impl TurnkeyClient {
         api_key: TurnkeyApiKey,
         retry_config: Option<RetryConfig>,
     ) -> Self {
-        let config = retry_config.unwrap_or(RetryConfig::default());
-
         Self {
-            http: reqwest::Client::new(),
-            base_url: base_url.into(),
             api_key,
-            retry_config: config,
+            base_url: base_url.into(),
+            http: reqwest::Client::new(),
+            retry_config: retry_config.unwrap_or_default(),
         }
     }
 

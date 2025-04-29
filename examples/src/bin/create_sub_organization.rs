@@ -1,37 +1,18 @@
 use std::error::Error;
-use std::{env, time, vec};
-use tkhq_api_key_stamper::TurnkeyApiKey;
+use std::{env, vec};
 use tkhq_client::generated::{
     immutable::common::v1::{AddressFormat, ApiKeyCurve, Curve, PathFormat},
     ApiKeyParamsV2, CreateSubOrganizationIntentV7, RootUserParamsV4, WalletAccountParams,
     WalletParams,
 };
+use tkhq_examples::{current_time_ms, load_api_key_from_env};
 
 // See <https://docs.turnkey.com/api-reference/organizations/create-sub-organization> for documentation
 const TURNKEY_API_HOST: &str = "https://api.turnkey.com";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    // Load .env file from the example folder (examples/.env)
-    let current_dir = env::current_dir()?; // should be the workspace root
-    let env_path = current_dir.join("examples").join(".env");
-
-    if env_path.exists() {
-        dotenvy::from_path(&env_path)?;
-    } else {
-        println!("No .env file found at {:?}", env_path);
-        println!("Continuing because env might already be populated with the right variables");
-    }
-
-    let api_public_key =
-        env::var("TURNKEY_API_PUBLIC_KEY").expect("cannot load TURNKEY_API_PUBLIC_KEY");
-    let api_private_key =
-        env::var("TURNKEY_API_PRIVATE_KEY").expect("cannot load TURNKEY_API_PRIVATE_KEY");
-
-    let api_key = TurnkeyApiKey {
-        private_key_hex: api_private_key,
-        public_key_hex: api_public_key.clone(),
-    };
+    let api_key = load_api_key_from_env()?;
 
     // We'll reuse the public key we have in our env, for convenience.
     // In a real scenario this will be the public key associated with an end user, or a passkey, etc.
@@ -41,10 +22,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create the request body for our create_sub_organization request
     let organization_id =
         env::var("TURNKEY_ORGANIZATION_ID").expect("cannot load TURNKEY_ORGANIZATION_ID");
-    let timestamp_ms = time::SystemTime::now()
-        .duration_since(time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
 
     let client = tkhq_client::TurnkeyClient::new(TURNKEY_API_HOST, api_key, None);
     let intent = CreateSubOrganizationIntentV7 {
@@ -81,7 +58,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let res = client
-        .create_sub_organization(organization_id, timestamp_ms, intent)
+        .create_sub_organization(organization_id, current_time_ms(), intent)
         .await?;
 
     assert_eq!(res.root_user_ids.len(), 1);
