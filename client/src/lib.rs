@@ -73,9 +73,27 @@ impl TurnkeyClient {
         }
     }
 
-    // POSTs an activity and polls until the status is "COMPLETE"
-    // If the max number of retry is reached, an error is thrown.
-    // Activities requiring consensus throw an error.
+    /// POSTs an activity and polls until the status is "COMPLETE"
+    ///
+    /// `process_activity` accepts an arbitrary URL, stamp and POST body.
+    /// It encapsulates the polling logic and is generally meant to be called by other
+    /// activity-specific client functions (e.g. `create_sub_organization`).
+    ///
+    /// Given the Turnkey API is backwards-compatible, this function can be used to submit old versions of activities.
+    /// For example, if the latest version for create_sub_organization is "ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V7",
+    /// you may want to use `process_activity` to process `ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V6`. Note that this
+    /// requires manually setting the correct URL, activity type, intent and result types, whereas using other
+    /// generated functions on the client is guaranteed type safe).
+    ///
+    /// # Returns
+    ///
+    /// This function returns an `Activity` object which contains the deserialized version of the response.
+    ///
+    /// # Errors
+    ///
+    /// If the server errors with a validation error, a server error, a deserialization error, the proper variant of `TurnkeyClientError` is returned.
+    /// If the activity is pending and exceeds the maximum amount of retries allowed, `TurnkeyClientError::ExceededRetries` is returned.
+    /// If the activity requires consensus, `TurnkeyClientError::ActivityRequiresApproval` is returned.
     pub async fn process_activity(
         &self,
         url: String,

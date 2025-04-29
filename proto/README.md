@@ -7,3 +7,4 @@ To sync manually, if you have the two repos side-by-side and you are at the root
 * `cp -r ../mono/proto/immutable proto`
 * `cp -r ../mono/proto/vendor proto`
 * `cp -r ../mono/proto/services/coordinator/public proto/services/coordinator`
+* `cp ../mono/proto/activities.json proto/activities.json`

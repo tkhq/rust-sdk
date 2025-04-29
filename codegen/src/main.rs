@@ -9,9 +9,9 @@ mod transform;
 
 const PUBLIC_API_PROTO_PATH: &str = "proto/services/coordinator/public/v1/public_api.proto";
 const INCLUDE_PROTO_PATH: &str = "proto";
+const ACTIVITIES_MAPPING_PATH: &str = "proto/activities.json";
 const GENERATED_CLIENT_DIR: &str = "client/src/generated";
 const CLIENT_TEMPLATE_PATH: &str = "codegen/src/client.template.rs";
-const ACTIVITIES_MAPPING_PATH: &str = "codegen/src/activities.json";
 
 // Necessary derive to parse from and serialize to JSON
 const SERDE_DERIVE: &str = "#[derive(::serde::Serialize, ::serde::Deserialize)]";
@@ -54,8 +54,36 @@ fn main() {
 
     // Capture the start of "service... {" until a single "}" is encountered on its own line without indentation.
     // That's just a simple alternative to writing a nesting-aware parser...
+    // We're trying to match on blocks like this one:
+    //   service PublicApiService {
+    //     rpc GetWhoami(GetWhoamiRequest) returns (GetWhoamiResponse) {
+    //       option (google.api.http) = {
+    //         post: "/public/v1/query/whoami"
+    //         body: "*"
+    //       };
+    //       option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+    //         description: "Get basic information about your current API or WebAuthN user and their organization. Affords Sub-Organization look ups via Parent Organization for WebAuthN or API key users."
+    //         summary: "Who am I?"
+    //         tags: "Sessions"
+    //       };
+    //     }
+    //     ....more rpc blocks
+    //   }
     let service_re = Regex::new(r"(?ms)^service\s+(\w+)\s*\{\n(.*?)^\}").unwrap();
 
+    // Now that we have the inside of a "service Foo {...}" block, we're parsing the rpc blocks within that
+    // We're capturing the RPC name, input type, output type, and contents. For example:
+    //  rpc GetWhoami(GetWhoamiRequest) returns (GetWhoamiResponse) {
+    //    option (google.api.http) = {
+    //      post: "/public/v1/query/whoami"
+    //      body: "*"
+    //    };
+    //    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+    //      description: "Get basic information about your current API or WebAuthN user and their organization. Affords Sub-Organization look ups via Parent Organization for WebAuthN or API key users."
+    //      summary: "Who am I?"
+    //      tags: "Sessions"
+    //    };
+    //  }
     let rpc_re = Regex::new(
         r#"(?ms)^  rpc\s+(\w+)\s*\(\s*([a-zA-Z0-9_.]+)\s*\)\s+returns\s+\(\s*([a-zA-Z0-9_.]+)\s*\)\s*\{\n(.*?)^  \}"#
     ).unwrap();
@@ -70,8 +98,11 @@ fn main() {
         serde_json::from_str(&activities_mapping_data).expect("cannot parse activities.json");
 
     for service_caps in service_re.captures_iter(&proto) {
+        // Remember: this capture group has the inside of "service Foo {...}" block,
+        // and contains many "rpc Foo(input) returns (output) {...}" blocks
         let service_body = &service_caps[2];
 
+        // Here we iterate over each "rpc Foo(input) returns (output) {...}" block
         for rpc_caps in rpc_re.captures_iter(service_body) {
             // e.g. "DeletePolicy"
             let fn_name = to_snake_case(&rpc_caps[1]);
@@ -79,9 +110,11 @@ fn main() {
             // e.g. "external.activity.v1.DeletePolicyRequest"
             let req_type = &rpc_caps[2];
 
+            // e.g.. "ActivityResponse"
             let res_type = &rpc_caps[3];
 
-            // Sample captured block:
+            // This is the inside of our "rpc Foo(input) returns (output) { ... }" block.
+            // It contains a list of options. For example:
             //     option (google.api.http) = {
             //      post: "/public/v1/submit/delete_policy"
             //      body: "*"
@@ -99,8 +132,17 @@ fn main() {
                 continue;
             }
 
+            // Now we try to parse the URL out of the option. For example:
+            //   option (google.api.http) = {
+            //     post: "/public/v1/submit/delete_policy"
+            //     body: "*"
+            //   };
+            // --> we want to extract "/public/v1/submit/delete_policy"
+            //
+            // Note that we can afford the specificity of "post" because Turnkey's API is entirely made of POST requests.
             let http_re = Regex::new(r#"post\s*:\s*\"([^\"]+)\""#).unwrap();
             if let Some(http_caps) = http_re.captures(http_opts) {
+                // This is our URL (e.g. "/public/v1/submit/delete_policy")
                 let route = &http_caps[1];
 
                 if req_type.contains("external.activity.v1") {
@@ -216,7 +258,7 @@ fn main() {
         .open(out_dir.join("mod.rs"))
         .unwrap();
 
-    // This will append a new line to the end of the file
+    // This will append new lines to the end of the mod.rs file
     writeln!(mod_rs, "\n// Added by tkhq_codegen").unwrap();
     writeln!(mod_rs, "mod client;").unwrap();
     writeln!(mod_rs, "pub use services::coordinator::public::v1::*;").unwrap();
@@ -237,11 +279,15 @@ fn main() {
         .filter_map(Result::ok)
         .filter(|e| {
             e.path().extension().map_or(false, |ext| ext == "rs")
-                && !e.file_name().to_string_lossy().contains("google.api")
+                // No need to process mod.rs
+                && !e.file_name().to_string_lossy().ends_with("mod.rs")
+                // No need to process google vendored files
+                && !e.file_name().to_string_lossy().ends_with("google.api.rs")
+                && !e.file_name().to_string_lossy().ends_with("google.rpc.rs")
                 && !e
                     .file_name()
                     .to_string_lossy()
-                    .contains("grpc.gateway.protoc_gen_openapiv2")
+                    .ends_with("grpc.gateway.protoc_gen_openapiv2.options.rs")
         })
     {
         let path = entry.path();
