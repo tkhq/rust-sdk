@@ -11,7 +11,11 @@ The two user-facing crates are:
 To make a request to Turnkey:
 * Load an API key:
   ```rust
-  let api_key
+  // You can load your API key from a file or from env
+  let api_key = TurnkeyApiKey {
+    private_key_hex: "<private key hex>".to_string(),
+    public_key_hex: "<public key hex>".to_string(),
+  }
   ```
 * Create a new client:
   ```rust
@@ -40,7 +44,7 @@ For fully working examples, see our ['examples/' folder](./examples/README.md).
 This project uses `make` to encapsulate common tasks:
 * `make lint` will run rust fmt and clippy
 * `make test` runs the unit tests
-* `make examples` runs the examples
+* `make examples` runs the examples (requires a local `.env` file, see [instructions](./examples/README.md))
 * `make generate` re-generates `client::generated` from the `proto` folder
 
 ## Related projects
