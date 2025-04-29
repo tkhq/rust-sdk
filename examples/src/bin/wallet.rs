@@ -3,12 +3,9 @@ use std::{env, time, vec};
 use tkhq_api_key_stamper::TurnkeyApiKey;
 use tkhq_client::generated::immutable::common::v1::{HashFunction, PayloadEncoding};
 use tkhq_client::generated::{CreateWalletIntent, DeleteWalletsIntent, SignRawPayloadIntentV2};
-use tkhq_client::{
-    generated::{
-        immutable::common::v1::{AddressFormat, Curve, PathFormat},
-        WalletAccountParams,
-    },
-    RetryConfig,
+use tkhq_client::generated::{
+    immutable::common::v1::{AddressFormat, Curve, PathFormat},
+    WalletAccountParams,
 };
 
 // See <https://docs.turnkey.com/api-reference/organizations/create-sub-organization> for documentation
@@ -37,7 +34,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         public_key_hex: api_public_key.clone(),
     };
 
-    // Create the request body for our create_sub_organization request
+    // Create the request body for our create_wallet request
     let organization_id =
         env::var("TURNKEY_ORGANIZATION_ID").expect("cannot load TURNKEY_ORGANIZATION_ID");
     let timestamp_ms = time::SystemTime::now()
@@ -45,7 +42,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .unwrap()
         .as_millis();
 
-    let client = tkhq_client::TurnkeyClient::new(TURNKEY_API_HOST, api_key, RetryConfig::none());
+    let client = tkhq_client::TurnkeyClient::new(TURNKEY_API_HOST, api_key, None);
     let intent = CreateWalletIntent {
         wallet_name: "New wallet".to_string(),
         accounts: vec![WalletAccountParams {

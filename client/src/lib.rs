@@ -60,16 +60,19 @@ pub struct TurnkeyClient {
 }
 
 impl TurnkeyClient {
+    /// Creates a new `TurnkeyClient`. If `retry_config` is not provided, `RetryConfig::default()` is used.
     pub fn new(
         base_url: impl Into<String>,
         api_key: TurnkeyApiKey,
-        retry_config: RetryConfig,
+        retry_config: Option<RetryConfig>,
     ) -> Self {
+        let config = retry_config.unwrap_or(RetryConfig::default());
+
         Self {
             http: reqwest::Client::new(),
             base_url: base_url.into(),
             api_key,
-            retry_config,
+            retry_config: config,
         }
     }
 
@@ -183,12 +186,12 @@ mod test {
                 private_key_hex: "00%".to_string(),
                 public_key_hex: "00".to_string(),
             },
-            RetryConfig {
+            Some(RetryConfig {
                 initial_delay: Duration::from_millis(50),
                 multiplier: 2.0,
                 max_delay: Duration::from_millis(1000),
                 max_retries: 3,
-            },
+            }),
         );
         (client, server)
     }

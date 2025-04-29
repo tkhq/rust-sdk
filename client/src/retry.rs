@@ -19,7 +19,7 @@ impl Default for RetryConfig {
         RetryConfig {
             initial_delay: Duration::from_millis(500),
             multiplier: 2.0,
-            max_delay: Duration::from_secs(10),
+            max_delay: Duration::from_secs(5),
             max_retries: 5,
         }
     }
@@ -97,7 +97,7 @@ mod test {
         assert_eq!(config.compute_delay(2), Duration::from_millis(1000));
         assert_eq!(config.compute_delay(3), Duration::from_secs(2));
         assert_eq!(config.compute_delay(4), Duration::from_secs(4));
-        assert_eq!(config.compute_delay(5), Duration::from_secs(8));
+        assert_eq!(config.compute_delay(5), Duration::from_secs(5));
     }
 
     #[test]

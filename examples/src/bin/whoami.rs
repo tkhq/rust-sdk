@@ -2,7 +2,6 @@ use std::env;
 use std::error::Error;
 use tkhq_api_key_stamper::TurnkeyApiKey;
 use tkhq_client::generated::GetWhoamiRequest;
-use tkhq_client::RetryConfig;
 // See <https://docs.turnkey.com/api-reference/sessions/who-am-i> for documentation
 const TURNKEY_API_HOST: &str = "https://api.turnkey.com";
 
@@ -29,7 +28,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         public_key_hex: api_public_key,
     };
 
-    let client = tkhq_client::TurnkeyClient::new(TURNKEY_API_HOST, api_key, RetryConfig::none());
+    let client = tkhq_client::TurnkeyClient::new(TURNKEY_API_HOST, api_key, None);
     let req = GetWhoamiRequest {
         organization_id: env::var("TURNKEY_ORGANIZATION_ID").unwrap(),
     };

@@ -1,13 +1,10 @@
 use std::error::Error;
 use std::{env, time, vec};
 use tkhq_api_key_stamper::TurnkeyApiKey;
-use tkhq_client::{
-    generated::{
-        immutable::common::v1::{AddressFormat, ApiKeyCurve, Curve, PathFormat},
-        ApiKeyParamsV2, CreateSubOrganizationIntentV7, RootUserParamsV4, WalletAccountParams,
-        WalletParams,
-    },
-    RetryConfig,
+use tkhq_client::generated::{
+    immutable::common::v1::{AddressFormat, ApiKeyCurve, Curve, PathFormat},
+    ApiKeyParamsV2, CreateSubOrganizationIntentV7, RootUserParamsV4, WalletAccountParams,
+    WalletParams,
 };
 
 // See <https://docs.turnkey.com/api-reference/organizations/create-sub-organization> for documentation
@@ -49,7 +46,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .unwrap()
         .as_millis();
 
-    let client = tkhq_client::TurnkeyClient::new(TURNKEY_API_HOST, api_key, RetryConfig::none());
+    let client = tkhq_client::TurnkeyClient::new(TURNKEY_API_HOST, api_key, None);
     let intent = CreateSubOrganizationIntentV7 {
         sub_organization_name: "New sub-organization".to_string(),
         root_users: vec![RootUserParamsV4 {
