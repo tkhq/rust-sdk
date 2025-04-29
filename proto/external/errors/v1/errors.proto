@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package external.errors.v1;
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/external/errors/v1";
+
+// buf:lint:ignore ENUM_VALUE_PREFIX
+// buf:lint:ignore ENUM_ZERO_VALUE_SUFFIX
+// Add to this list as you see fit for new error codes, these should be very specific to the error circumstance
+// Error codes should follow the scheme THING_IN_QUESTION_WHATS_WRONG_WITH_THING
+// For example: thing -> PUBLIC_KEY; whats wrong with thing -> NOT_FOUND
+// Yields: PUBLIC_KEY_NOT_FOUND
+enum TurnkeyErrorCode {
+  UNSPECIFIED = 0;
+  INTERNAL = 1;
+  ORGANIZATION_NOT_FOUND = 2;
+  API_OPERATIONS_DISABLED = 3;
+  SIGNING_QUOTA_EXCEEDED = 4;
+  REQUEST_NOT_AUTHORIZED = 5;
+  PUBLIC_KEY_NOT_FOUND = 6;
+  RATE_LIMIT_EXCEEDED = 7;
+  SIGNATURE_MISSING = 8;
+  SIGNATURE_INVALID = 9;
+  CREDENTIAL_NOT_FOUND = 10;
+  CREDENTIAL_CONFLICT = 11;
+  API_KEY_EXPIRED = 12;
+  REQUEST_INVALID = 13;
+  FORBIDDEN = 14;
+  UNAUTHENTICATED = 15;
+}

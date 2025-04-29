@@ -1,0 +1,192 @@
+// This proto file is used to define shared, immutable enums used externally and internally.
+//
+// By declaring them in this common package, we're able to simplify our SDKs by stripping
+// the package name while avoiding variable name conflicts. Reducing the duplication means we
+// don't need to worry about incorrectly casting between enum types, but does mean there is a
+// greater potential for leaking information.
+//
+// These enums can have variants appended to them, but names cannot be changed without proper
+// planning as they could cause API breaking changes as well as other potential downstream impacts.
+
+syntax = "proto3";
+
+package immutable.common.v1;
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/immutable/common/v1";
+
+enum PathFormat {
+  PATH_FORMAT_UNSPECIFIED = 0;
+  PATH_FORMAT_BIP32 = 1;
+}
+
+// Cryptographic Curve used to generate a given API key
+enum ApiKeyCurve {
+  API_KEY_CURVE_UNSPECIFIED = 0;
+  API_KEY_CURVE_P256 = 2;
+  API_KEY_CURVE_SECP256K1 = 3;
+  API_KEY_CURVE_ED25519 = 4;
+}
+
+// Cryptographic Curve used to generate a given Private Key.
+enum Curve {
+  CURVE_UNSPECIFIED = 0;
+  CURVE_SECP256K1 = 1;
+  CURVE_ED25519 = 2;
+}
+enum AddressFormat {
+  ADDRESS_FORMAT_UNSPECIFIED = 0;
+  // 04<X_COORDINATE><Y_COORDINATE>
+  ADDRESS_FORMAT_UNCOMPRESSED = 1;
+  // 02 or 03, followed by the X coordinate
+  ADDRESS_FORMAT_COMPRESSED = 2;
+  ADDRESS_FORMAT_ETHEREUM = 3;
+  ADDRESS_FORMAT_SOLANA = 4;
+  ADDRESS_FORMAT_COSMOS = 5;
+  ADDRESS_FORMAT_TRON = 6;
+  ADDRESS_FORMAT_SUI = 7;
+  ADDRESS_FORMAT_APTOS = 8;
+
+  // Bitcoin Mainnet address types
+  ADDRESS_FORMAT_BITCOIN_MAINNET_P2PKH = 9;
+  ADDRESS_FORMAT_BITCOIN_MAINNET_P2SH = 10;
+  ADDRESS_FORMAT_BITCOIN_MAINNET_P2WPKH = 11;
+  ADDRESS_FORMAT_BITCOIN_MAINNET_P2WSH = 12;
+  ADDRESS_FORMAT_BITCOIN_MAINNET_P2TR = 13;
+
+  // Bitcoin Testnet address types
+  ADDRESS_FORMAT_BITCOIN_TESTNET_P2PKH = 14;
+  ADDRESS_FORMAT_BITCOIN_TESTNET_P2SH = 15;
+  ADDRESS_FORMAT_BITCOIN_TESTNET_P2WPKH = 16;
+  ADDRESS_FORMAT_BITCOIN_TESTNET_P2WSH = 17;
+  ADDRESS_FORMAT_BITCOIN_TESTNET_P2TR = 18;
+
+  // Bitcoin Signet address types
+  ADDRESS_FORMAT_BITCOIN_SIGNET_P2PKH = 19;
+  ADDRESS_FORMAT_BITCOIN_SIGNET_P2SH = 20;
+  ADDRESS_FORMAT_BITCOIN_SIGNET_P2WPKH = 21;
+  ADDRESS_FORMAT_BITCOIN_SIGNET_P2WSH = 22;
+  ADDRESS_FORMAT_BITCOIN_SIGNET_P2TR = 23;
+
+  // Bitcoin Regtest address types
+  ADDRESS_FORMAT_BITCOIN_REGTEST_P2PKH = 24;
+  ADDRESS_FORMAT_BITCOIN_REGTEST_P2SH = 25;
+  ADDRESS_FORMAT_BITCOIN_REGTEST_P2WPKH = 26;
+  ADDRESS_FORMAT_BITCOIN_REGTEST_P2WSH = 27;
+  ADDRESS_FORMAT_BITCOIN_REGTEST_P2TR = 28;
+
+  ADDRESS_FORMAT_SEI = 29;
+  ADDRESS_FORMAT_XLM = 30;
+
+  // Doge Addresses
+  ADDRESS_FORMAT_DOGE_MAINNET = 31;
+  ADDRESS_FORMAT_DOGE_TESTNET = 32;
+
+  // TON Addresses
+  ADDRESS_FORMAT_TON_V3R2 = 33;
+  ADDRESS_FORMAT_TON_V4R2 = 34;
+
+  ADDRESS_FORMAT_XRP = 35;
+}
+
+enum HashFunction {
+  HASH_FUNCTION_UNSPECIFIED = 0;
+  HASH_FUNCTION_NO_OP = 1;
+  HASH_FUNCTION_SHA256 = 2;
+  HASH_FUNCTION_KECCAK256 = 3;
+  HASH_FUNCTION_NOT_APPLICABLE = 4;
+}
+
+enum PayloadEncoding {
+  // Default value if payload encoding is not set explicitly
+  PAYLOAD_ENCODING_UNSPECIFIED = 0;
+  // Payload is encoded in hexadecimal
+  // We accept 0x-prefixed or non-0x prefixed payloads.
+  // We accept any casing (uppercase, lowercase, or mixed)
+  PAYLOAD_ENCODING_HEXADECIMAL = 1;
+  // Payload is encoded as utf-8 text
+  // Will be converted to bytes for signature with Rust's standard String.as_bytes()
+  PAYLOAD_ENCODING_TEXT_UTF8 = 2;
+}
+
+enum MnemonicLanguage {
+  MNEMONIC_LANGUAGE_UNSPECIFIED = 0;
+  MNEMONIC_LANGUAGE_ENGLISH = 1;
+  MNEMONIC_LANGUAGE_SIMPLIFIED_CHINESE = 2;
+  MNEMONIC_LANGUAGE_TRADITIONAL_CHINESE = 3;
+  MNEMONIC_LANGUAGE_CZECH = 4;
+  MNEMONIC_LANGUAGE_FRENCH = 5;
+  MNEMONIC_LANGUAGE_ITALIAN = 6;
+  MNEMONIC_LANGUAGE_JAPANESE = 7;
+  MNEMONIC_LANGUAGE_KOREAN = 8;
+  MNEMONIC_LANGUAGE_SPANISH = 9;
+}
+
+enum Effect {
+  EFFECT_UNSPECIFIED = 0;
+  EFFECT_ALLOW = 1;
+  EFFECT_DENY = 2;
+}
+
+enum AccessType {
+  ACCESS_TYPE_UNSPECIFIED = 0;
+  ACCESS_TYPE_WEB = 1;
+  ACCESS_TYPE_API = 2;
+  ACCESS_TYPE_ALL = 3;
+}
+
+enum CredentialType {
+  CREDENTIAL_TYPE_UNSPECIFIED = 0;
+  CREDENTIAL_TYPE_WEBAUTHN_AUTHENTICATOR = 1;
+  CREDENTIAL_TYPE_API_KEY_P256 = 2;
+  CREDENTIAL_TYPE_RECOVER_USER_KEY_P256 = 3;
+  CREDENTIAL_TYPE_API_KEY_SECP256K1 = 4;
+  CREDENTIAL_TYPE_EMAIL_AUTH_KEY_P256 = 5;
+  CREDENTIAL_TYPE_API_KEY_ED25519 = 6;
+  CREDENTIAL_TYPE_OTP_AUTH_KEY_P256 = 7;
+  CREDENTIAL_TYPE_READ_WRITE_SESSION_KEY_P256 = 8;
+  CREDENTIAL_TYPE_OAUTH_KEY_P256 = 9;
+}
+
+enum FeatureName {
+  FEATURE_NAME_UNSPECIFIED = 0;
+  FEATURE_NAME_ROOT_USER_EMAIL_RECOVERY = 1; // to be deprecated in favor of rename: `FEATURE_NAME_EMAIL_RECOVERY`
+  FEATURE_NAME_WEBAUTHN_ORIGINS = 2;
+  FEATURE_NAME_EMAIL_AUTH = 3;
+  FEATURE_NAME_EMAIL_RECOVERY = 4;
+  FEATURE_NAME_WEBHOOK = 5;
+  FEATURE_NAME_SMS_AUTH = 6;
+  FEATURE_NAME_OTP_EMAIL_AUTH = 7;
+}
+
+enum TransactionType {
+  TRANSACTION_TYPE_UNSPECIFIED = 0;
+  // Unsigned Ethereum transaction, RLP-encoded and hex-encoded
+  TRANSACTION_TYPE_ETHEREUM = 1;
+  // Unsigned Solana transaction in hex bytes
+  TRANSACTION_TYPE_SOLANA = 2;
+}
+
+enum Outcome {
+  OUTCOME_UNSPECIFIED = 0;
+  OUTCOME_ALLOW = 1;
+  OUTCOME_DENY_EXPLICIT = 2;
+  OUTCOME_DENY_IMPLICIT = 3;
+  OUTCOME_REQUIRES_CONSENSUS = 4;
+  OUTCOME_REJECTED = 5;
+  OUTCOME_ERROR = 6;
+}
+
+enum Operator {
+  OPERATOR_UNSPECIFIED = 0;
+  OPERATOR_EQUAL = 1;
+  OPERATOR_MORE_THAN = 2;
+  OPERATOR_MORE_THAN_OR_EQUAL = 3;
+  OPERATOR_LESS_THAN = 4;
+  OPERATOR_LESS_THAN_OR_EQUAL = 5;
+  OPERATOR_CONTAINS = 6;
+  OPERATOR_NOT_EQUAL = 7;
+  OPERATOR_IN = 8;
+  OPERATOR_NOT_IN = 9;
+  OPERATOR_CONTAINS_ONE = 10;
+  OPERATOR_CONTAINS_ALL = 11;
+}

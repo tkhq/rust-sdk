@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package immutable.data.v1;
+
+import "immutable/common/v1/common.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/immutable/data/v1";
+
+message Timestamp {
+  string seconds = 1;
+  string nanos = 2;
+}
+
+message Credential {
+  string public_key = 1;
+  immutable.common.v1.CredentialType type = 2;
+}
+
+message Quorum {
+  int32 threshold = 1;
+  repeated string user_ids = 2;
+}
+
+message Feature {
+  immutable.common.v1.FeatureName name = 1;
+  optional string value = 2;
+}

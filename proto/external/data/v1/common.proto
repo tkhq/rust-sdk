@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package external.data.v1;
+
+import "vendor/google/api/field_behavior.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/external/data/v1";
+
+message Timestamp {
+  string seconds = 1 [(google.api.field_behavior) = REQUIRED]; /* Stringified int */
+  string nanos = 2 [(google.api.field_behavior) = REQUIRED]; /* Stringified int */
+}

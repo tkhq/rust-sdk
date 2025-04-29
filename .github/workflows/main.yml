@@ -17,4 +17,19 @@ jobs:
         with:
           toolchain: stable
           components: clippy,rustfmt
-      - run: ./ci.sh
+      - name: install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          version: "21.4"
+      - name: Ensure checked-in client is up-to-date
+        run: make check-generate
+      - name: Run linters
+        run: make lint
+      - name: Run tests
+        run: make test
+      - name: Run examples
+        env:
+          TURNKEY_ORGANIZATION_ID: 651b573c-861b-4f10-a478-cbcfe0c226af
+          TURNKEY_API_PUBLIC_KEY: 03bf162576eb8dfecf33d9275d09595284f6c4df0db6156c3c582777886a0ee0ac
+          TURNKEY_API_PRIVATE_KEY: ${{ secrets.TURNKEY_API_PRIVATE_KEY }}
+        run: make examples

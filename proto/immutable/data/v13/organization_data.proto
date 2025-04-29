@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package immutable.data.v13;
+
+import "immutable/data/v1/common.proto";
+import "immutable/data/v1/invitation.proto";
+import "immutable/data/v1/policy.proto";
+import "immutable/data/v1/tag.proto";
+import "immutable/data/v1/wallet.proto";
+import "immutable/data/v13/user.proto";
+import "immutable/data/v2/private_key.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/immutable/data/v13";
+
+// This proto definition dictates the serialization to, and deserialization from, Postgres.
+// Do NOT use this in internal RPCs.
+message OrganizationData {
+  string version = 1;
+  string uuid = 2;
+  string name = 3;
+  repeated immutable.data.v13.User users = 4;
+  repeated immutable.data.v1.Policy policies = 5;
+  repeated immutable.data.v2.PrivateKey private_keys = 6;
+  repeated immutable.data.v1.Invitation invitations = 7;
+  repeated immutable.data.v1.Tag tags = 8;
+  immutable.data.v1.Quorum root_quorum = 16;
+  optional string parent_organization_uuid = 18;
+  repeated immutable.data.v1.Feature features = 20;
+  repeated immutable.data.v1.Wallet wallets = 21;
+}
