@@ -175,7 +175,7 @@ fn main() {
 
                                 let post_body = serde_json::to_string(&request).unwrap();
 
-                                let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+                                let stamp = self.api_key.stamp(post_body.clone()).unwrap();
 
                                 self.process_activity(url, stamp, post_body).await
                             }}
@@ -194,9 +194,9 @@ fn main() {
                                     organization_id,
                                 }};
 
-                                let post_body = serde_json::to_string(&request).unwrap();
+                                let post_body = serde_json::to_string(&request)?;
 
-                                let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+                                let stamp = self.api_key.stamp(post_body.clone())?;
 
                                 let activity = self.process_activity(url, stamp, post_body).await?;
 
@@ -221,8 +221,8 @@ fn main() {
                         r#"
                         pub async fn {fn_name}(&self, request: coordinator::{req_type}) -> Result<coordinator::{res_type}, TurnkeyClientError> {{
                             let url = format!("{{}}{{}}", self.base_url, "{route}");
-                            let post_body = serde_json::to_string(&request).unwrap();
-                            let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+                            let post_body = serde_json::to_string(&request)?;
+                            let stamp = self.api_key.stamp(post_body.clone())?;
 
                             let res = self.http
                                 .post(url)

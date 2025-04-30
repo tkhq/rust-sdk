@@ -1,6 +1,6 @@
 [package]
 name = "tkhq_api_key_stamper"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2021"
 publish = false
 license = "Apache-2.0"
@@ -9,6 +9,10 @@ license = "Apache-2.0"
 base64 = { version = "0.22.0", default-features = false, features = ["std"] }
 hex = { version = "0.4.3", default-features = false, features = ["std"] }
 p256 = { version = "0.13.2", default-features = false, features = ["ecdsa"] }
+rand_core = { version = "0.6.4", default-features = false, features = ["getrandom"] }
 serde = { version = "1.0.197", default-features = false, features = ["std", "derive"] }
 serde_json = { version = "1.0.115", default-features = false, features = ["std"] }
 thiserror = { version = "1.0.58", default-features = false }
+
+[dev-dependencies]
+tempfile = { version = "3.19.1", default-features = false }

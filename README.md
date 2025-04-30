@@ -12,10 +12,7 @@ To make a request to Turnkey:
 * Load an API key:
   ```rust
   // You can load your API key from a file or from env
-  let api_key = TurnkeyApiKey {
-    private_key_hex: "<private key hex>".to_string(),
-    public_key_hex: "<public key hex>".to_string(),
-  }
+  let api_key = TurnkeyP256ApiKey::from_strings(private_key: "<private key hex>", None).expect("api key creation failed");
   ```
 * Create a new client:
   ```rust

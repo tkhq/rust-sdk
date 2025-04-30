@@ -8,7 +8,8 @@ use generated::Activity;
 use generated::ActivityResponse;
 use generated::ActivityStatus;
 
-use tkhq_api_key_stamper::TurnkeyApiKey;
+use tkhq_api_key_stamper::StamperError;
+use tkhq_api_key_stamper::TurnkeyP256ApiKey;
 
 #[cfg_attr(doc, doc(hidden))]
 pub mod generated;
@@ -50,12 +51,15 @@ pub enum TurnkeyClientError {
 
     #[error("Maximum number of attempts reached (after {0} retries)")]
     ExceededRetries(usize),
+
+    #[error("Stamper error")]
+    StamperError(#[from] StamperError),
 }
 
 pub struct TurnkeyClient {
     http: reqwest::Client,
     base_url: String,
-    api_key: TurnkeyApiKey,
+    api_key: TurnkeyP256ApiKey,
     retry_config: RetryConfig,
 }
 
@@ -63,7 +67,7 @@ impl TurnkeyClient {
     /// Creates a new `TurnkeyClient`. If `retry_config` is not provided, `RetryConfig::default()` is used.
     pub fn new(
         base_url: impl Into<String>,
-        api_key: TurnkeyApiKey,
+        api_key: TurnkeyP256ApiKey,
         retry_config: Option<RetryConfig>,
     ) -> Self {
         Self {
@@ -180,10 +184,7 @@ mod test {
         let server = MockServer::start().await;
         let client = TurnkeyClient::new(
             server.uri(),
-            TurnkeyApiKey {
-                private_key_hex: "00%".to_string(),
-                public_key_hex: "00".to_string(),
-            },
+            TurnkeyP256ApiKey::generate(),
             Some(RetryConfig {
                 initial_delay: Duration::from_millis(50),
                 multiplier: 2.0,

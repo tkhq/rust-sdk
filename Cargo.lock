@@ -1300,6 +1300,9 @@ name = "rand_core"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
+dependencies = [
+ "getrandom 0.2.15",
+]
 
 [[package]]
 name = "redox_syscall"
@@ -1770,19 +1773,21 @@ dependencies = [
 
 [[package]]
 name = "tkhq_api_key_stamper"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "base64 0.22.0",
  "hex",
  "p256",
+ "rand_core",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 1.0.58",
 ]
 
 [[package]]
 name = "tkhq_client"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "http 0.2.12",
  "prost 0.12.6",
@@ -1818,6 +1823,7 @@ name = "tkhq_examples"
 version = "0.0.1"
 dependencies = [
  "dotenvy",
+ "hex",
  "reqwest",
  "serde_json",
  "tkhq_api_key_stamper",
