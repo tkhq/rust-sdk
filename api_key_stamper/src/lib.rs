@@ -110,12 +110,7 @@ impl TurnkeyP256ApiKey {
         let public_key = fs::read_to_string(public_key_path.as_ref())
             .map_err(|e| StamperError::Io(public_key_path.as_ref().to_path_buf(), e.to_string()))?;
 
-        let private_key_hex_bytes =
-            hex::decode(private_key).map_err(|e| StamperError::HexDecode(e.to_string()))?;
-        let public_key_hex_bytes =
-            hex::decode(public_key).map_err(|e| StamperError::HexDecode(e.to_string()))?;
-
-        Self::from_bytes(private_key_hex_bytes, Some(public_key_hex_bytes))
+        Self::from_strings(private_key, Some(public_key))
     }
 
     /// Function to produce a base64-encoded stamp.

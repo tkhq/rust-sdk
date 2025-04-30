@@ -18,7 +18,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let api_key = load_api_key_from_env()?;
 
     // In a real scenario this will be the public key associated with an end user, or a passkey, etc.
-    // Instead, we generate a brand new API key
+    // We generate a brand new API key to simulate this.
     let sub_organization_api_key = TurnkeyP256ApiKey::generate();
 
     // Create the request body for our create_sub_organization request

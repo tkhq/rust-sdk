@@ -33,7 +33,10 @@ If you have generated API keys with Turnkey's [command-line tool](https://github
 ```rust
 use tkhq_api_key_stamper::TurnkeyP256ApiKey
 
-let api_key = TurnkeyP256ApiKey::load_from_files("/path/to/key.priv", "/path/to/key.pub").expect("loading should succeed");
+let api_key = TurnkeyP256ApiKey::load_from_files(
+    "/home/user/.config/turnkey/keys/key.priv",
+    Some("/home/user/.config/turnkey/keys/key.priv"
+).expect("loading should succeed"));
 ```
 
 ## Creating an API stamp to sign Turnkey requests
