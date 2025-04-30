@@ -1787,7 +1787,7 @@ dependencies = [
 
 [[package]]
 name = "tkhq_client"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "http 0.2.12",
  "prost 0.12.6",
@@ -1823,6 +1823,7 @@ name = "tkhq_examples"
 version = "0.0.1"
 dependencies = [
  "dotenvy",
+ "hex",
  "reqwest",
  "serde_json",
  "tkhq_api_key_stamper",

@@ -4,15 +4,14 @@ use crate::generated::external::activity::v1 as external_activity;
 use crate::generated::immutable::activity::v1 as immutable_activity;
 use crate::generated::services::coordinator::public::v1 as coordinator;
 use crate::{TurnkeyClient, TurnkeyClientError};
-use tkhq_api_key_stamper::stamp;
 impl TurnkeyClient {
     pub async fn get_whoami(
         &self,
         request: coordinator::GetWhoamiRequest,
     ) -> Result<coordinator::GetWhoamiResponse, TurnkeyClientError> {
         let url = format!("{}{}", self.base_url, "/public/v1/query/whoami");
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let res = self
             .http
             .post(url)
@@ -28,8 +27,8 @@ impl TurnkeyClient {
         request: coordinator::GetSubOrgIdsRequest,
     ) -> Result<coordinator::GetSubOrgIdsResponse, TurnkeyClientError> {
         let url = format!("{}{}", self.base_url, "/public/v1/query/list_suborgs");
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let res = self
             .http
             .post(url)
@@ -48,8 +47,8 @@ impl TurnkeyClient {
             "{}{}",
             self.base_url, "/public/v1/query/list_verified_suborgs"
         );
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let res = self
             .http
             .post(url)
@@ -67,8 +66,8 @@ impl TurnkeyClient {
         request: coordinator::GetActivityRequest,
     ) -> Result<coordinator::ActivityResponse, TurnkeyClientError> {
         let url = format!("{}{}", self.base_url, "/public/v1/query/get_activity");
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let res = self
             .http
             .post(url)
@@ -84,8 +83,8 @@ impl TurnkeyClient {
         request: coordinator::GetActivitiesRequest,
     ) -> Result<coordinator::GetActivitiesResponse, TurnkeyClientError> {
         let url = format!("{}{}", self.base_url, "/public/v1/query/list_activities");
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let res = self
             .http
             .post(url)
@@ -110,7 +109,7 @@ impl TurnkeyClient {
             organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let stamp = self.api_key.stamp(post_body.clone()).unwrap();
         self.process_activity(url, stamp, post_body).await
     }
     pub async fn reject_activity(
@@ -127,7 +126,7 @@ impl TurnkeyClient {
             organization_id,
         };
         let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let stamp = self.api_key.stamp(post_body.clone()).unwrap();
         self.process_activity(url, stamp, post_body).await
     }
     pub async fn get_user(
@@ -135,8 +134,8 @@ impl TurnkeyClient {
         request: coordinator::GetUserRequest,
     ) -> Result<coordinator::GetUserResponse, TurnkeyClientError> {
         let url = format!("{}{}", self.base_url, "/public/v1/query/get_user");
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let res = self
             .http
             .post(url)
@@ -152,8 +151,8 @@ impl TurnkeyClient {
         request: coordinator::GetUsersRequest,
     ) -> Result<coordinator::GetUsersResponse, TurnkeyClientError> {
         let url = format!("{}{}", self.base_url, "/public/v1/query/list_users");
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let res = self
             .http
             .post(url)
@@ -177,8 +176,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -205,8 +204,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -233,8 +232,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -261,8 +260,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -289,8 +288,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -309,8 +308,8 @@ impl TurnkeyClient {
         request: coordinator::GetPoliciesRequest,
     ) -> Result<coordinator::GetPoliciesResponse, TurnkeyClientError> {
         let url = format!("{}{}", self.base_url, "/public/v1/query/list_policies");
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let res = self
             .http
             .post(url)
@@ -326,8 +325,8 @@ impl TurnkeyClient {
         request: coordinator::GetPolicyRequest,
     ) -> Result<coordinator::GetPolicyResponse, TurnkeyClientError> {
         let url = format!("{}{}", self.base_url, "/public/v1/query/get_policy");
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let res = self
             .http
             .post(url)
@@ -354,8 +353,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -385,8 +384,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -416,8 +415,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -436,8 +435,8 @@ impl TurnkeyClient {
         request: coordinator::GetPrivateKeyRequest,
     ) -> Result<coordinator::GetPrivateKeyResponse, TurnkeyClientError> {
         let url = format!("{}{}", self.base_url, "/public/v1/query/get_private_key");
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let res = self
             .http
             .post(url)
@@ -453,8 +452,8 @@ impl TurnkeyClient {
         request: coordinator::GetPrivateKeysRequest,
     ) -> Result<coordinator::GetPrivateKeysResponse, TurnkeyClientError> {
         let url = format!("{}{}", self.base_url, "/public/v1/query/list_private_keys");
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let res = self
             .http
             .post(url)
@@ -478,8 +477,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -506,8 +505,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -529,8 +528,8 @@ impl TurnkeyClient {
             "{}{}",
             self.base_url, "/public/v1/query/get_oauth_providers"
         );
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let res = self
             .http
             .post(url)
@@ -546,8 +545,8 @@ impl TurnkeyClient {
         request: coordinator::GetApiKeysRequest,
     ) -> Result<coordinator::GetApiKeysResponse, TurnkeyClientError> {
         let url = format!("{}{}", self.base_url, "/public/v1/query/get_api_keys");
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let res = self
             .http
             .post(url)
@@ -563,8 +562,8 @@ impl TurnkeyClient {
         request: coordinator::GetApiKeyRequest,
     ) -> Result<coordinator::GetApiKeyResponse, TurnkeyClientError> {
         let url = format!("{}{}", self.base_url, "/public/v1/query/get_api_key");
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let res = self
             .http
             .post(url)
@@ -591,8 +590,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -622,8 +621,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -642,8 +641,8 @@ impl TurnkeyClient {
         request: coordinator::GetAuthenticatorsRequest,
     ) -> Result<coordinator::GetAuthenticatorsResponse, TurnkeyClientError> {
         let url = format!("{}{}", self.base_url, "/public/v1/query/get_authenticators");
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let res = self
             .http
             .post(url)
@@ -659,8 +658,8 @@ impl TurnkeyClient {
         request: coordinator::GetAuthenticatorRequest,
     ) -> Result<coordinator::GetAuthenticatorResponse, TurnkeyClientError> {
         let url = format!("{}{}", self.base_url, "/public/v1/query/get_authenticator");
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let res = self
             .http
             .post(url)
@@ -687,8 +686,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -715,8 +714,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -743,8 +742,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -771,8 +770,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -799,8 +798,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -830,8 +829,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -858,8 +857,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -878,8 +877,8 @@ impl TurnkeyClient {
         request: coordinator::ListUserTagsRequest,
     ) -> Result<coordinator::ListUserTagsResponse, TurnkeyClientError> {
         let url = format!("{}{}", self.base_url, "/public/v1/query/list_user_tags");
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let res = self
             .http
             .post(url)
@@ -903,8 +902,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -934,8 +933,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -957,8 +956,8 @@ impl TurnkeyClient {
             "{}{}",
             self.base_url, "/public/v1/query/list_private_key_tags"
         );
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let res = self
             .http
             .post(url)
@@ -987,8 +986,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -1015,8 +1014,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -1043,8 +1042,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -1071,8 +1070,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -1102,8 +1101,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -1130,8 +1129,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -1150,8 +1149,8 @@ impl TurnkeyClient {
         request: coordinator::GetWalletsRequest,
     ) -> Result<coordinator::GetWalletsResponse, TurnkeyClientError> {
         let url = format!("{}{}", self.base_url, "/public/v1/query/list_wallets");
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let res = self
             .http
             .post(url)
@@ -1167,8 +1166,8 @@ impl TurnkeyClient {
         request: coordinator::GetWalletRequest,
     ) -> Result<coordinator::GetWalletResponse, TurnkeyClientError> {
         let url = format!("{}{}", self.base_url, "/public/v1/query/get_wallet");
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let res = self
             .http
             .post(url)
@@ -1195,8 +1194,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -1218,8 +1217,8 @@ impl TurnkeyClient {
             "{}{}",
             self.base_url, "/public/v1/query/list_wallet_accounts"
         );
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let res = self
             .http
             .post(url)
@@ -1235,8 +1234,8 @@ impl TurnkeyClient {
         request: coordinator::GetWalletAccountRequest,
     ) -> Result<coordinator::GetWalletAccountResponse, TurnkeyClientError> {
         let url = format!("{}{}", self.base_url, "/public/v1/query/get_wallet_account");
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let res = self
             .http
             .post(url)
@@ -1263,8 +1262,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -1294,8 +1293,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -1322,8 +1321,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -1353,8 +1352,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -1384,8 +1383,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -1415,8 +1414,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -1443,8 +1442,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -1471,8 +1470,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -1502,8 +1501,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -1533,8 +1532,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -1561,8 +1560,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -1592,8 +1591,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -1623,8 +1622,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -1651,8 +1650,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -1679,8 +1678,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -1707,8 +1706,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -1738,8 +1737,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -1769,8 +1768,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -1792,8 +1791,8 @@ impl TurnkeyClient {
             "{}{}",
             self.base_url, "/public/v1/query/get_organization_configs"
         );
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let res = self
             .http
             .post(url)
@@ -1822,8 +1821,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -1850,8 +1849,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -1878,8 +1877,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result
@@ -1909,8 +1908,8 @@ impl TurnkeyClient {
             parameters: Some(params),
             organization_id,
         };
-        let post_body = serde_json::to_string(&request).unwrap();
-        let stamp = stamp(post_body.clone(), &self.api_key).unwrap();
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
         let activity = self.process_activity(url, stamp, post_body).await?;
         let inner = activity
             .result

@@ -12,17 +12,15 @@ let api_key = TurnkeyP256ApiKey::generate();
 
 ## Loading API keys from env
 
-If you keep API keys in env vars, load it with `from_bytes`:
+If you keep API keys in env vars, load it with `from_bytes` or `from_strings`:
 
 ```rust
 use std::env;
 use tkhq_api_key_stamper::TurnkeyP256ApiKey;
 
 // Assuming the env var is a hex-encoded string
-let api_key_hex = env::var("TURNKEY_API_PRIVATE_KEY").expect("cannot load TURNKEY_API_PRIVATE_KEY");
-let api_key = TurnkeyP256ApiKey::from_bytes(
-    hex::decode().expect("decoding hex string failed"), None
-).expect("loading API key failed");
+let api_private_key = env::var("TURNKEY_API_PRIVATE_KEY").expect("cannot load TURNKEY_API_PRIVATE_KEY");
+let api_key = TurnkeyP256ApiKey::from_strings(api_private_key, None).expect("loading API key failed");
 ```
 
 If you want to store API keys in `.env` files, use [`dotenvy`](https://docs.rs/dotenvy/latest/dotenvy/).

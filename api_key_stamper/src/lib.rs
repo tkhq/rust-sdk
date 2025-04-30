@@ -52,6 +52,7 @@ impl TurnkeyP256ApiKey {
 
     /// Creates a new API key from private key bytes.
     /// Optionally takes in public key bytes to check against, after derivation.
+    /// If the derived public key doesn't match the passed in value, `PublicKeyMismatch` is returned.
     pub fn from_bytes<B: AsRef<[u8]>>(
         private_key_bytes: B,
         public_key_bytes: Option<B>,
@@ -73,6 +74,28 @@ impl TurnkeyP256ApiKey {
         }
 
         Ok(Self { signing_key })
+    }
+
+    /// Load an API key from hex-encoded strings
+    /// Optionally takes in public a public key to check against, after derivation.
+    /// If the derived public key doesn't match the passed in value, `PublicKeyMismatch` is returned.
+    pub fn from_strings<S: AsRef<str>>(
+        private_key: S,
+        public_key: Option<S>,
+    ) -> Result<Self, StamperError> {
+        let private_key_bytes = hex::decode(private_key.as_ref())
+            .map_err(|e| StamperError::HexDecode(e.to_string()))?;
+
+        let public_key_bytes = if public_key.is_some() {
+            Some(
+                hex::decode(public_key.unwrap().as_ref())
+                    .map_err(|e| StamperError::HexDecode(e.to_string()))?,
+            )
+        } else {
+            None
+        };
+
+        Self::from_bytes(private_key_bytes, public_key_bytes)
     }
 
     /// Helper to create an API from pre-existing files. This is useful if you used
@@ -235,6 +258,41 @@ mod tests {
         assert_eq!(
             res.unwrap_err(),
             StamperError::InvalidPublicKeyBytes("signature error".to_string())
+        );
+    }
+
+    #[test]
+    fn test_from_strings_with_correct_public_key() {
+        assert!(TurnkeyP256ApiKey::from_strings(
+            "9720de87f61537e481f95f4433bed97b9d60719457c4dd20dac4bbf377f59c69",
+            None,
+        )
+        .is_ok());
+
+        assert!(TurnkeyP256ApiKey::from_strings(
+            "9720de87f61537e481f95f4433bed97b9d60719457c4dd20dac4bbf377f59c69",
+            Some("02a1d9ee281053cf73c07678d6c1231216e8434f87662b75f08c66882c2f95ee45"),
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn test_from_strings_with_bad_hex() {
+        assert_eq!(
+            TurnkeyP256ApiKey::from_strings("97230", None,)
+                .unwrap_err()
+                .to_string(),
+            "cannot decode hex: Odd number of digits".to_string()
+        );
+
+        assert_eq!(
+            TurnkeyP256ApiKey::from_strings(
+                "9720de87f61537e481f95f4433bed97b9d60719457c4dd20dac4bbf377f59c69",
+                Some("notvalid"),
+            )
+            .unwrap_err()
+            .to_string(),
+            "cannot decode hex: Invalid character 'n' at position 0".to_string()
         );
     }
 
