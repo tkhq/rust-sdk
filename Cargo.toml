@@ -6,6 +6,8 @@ members = [
   "client",
   # Contains tools and script to generate client code from proto
   "codegen",
+  # Contains utilities to encrypt and decrypt data to and from Turnkey secure enclaves
+  "enclave_encrypt",
   # Examples using the Turnkey stamper
   "examples",
 ]
