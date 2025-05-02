@@ -4,7 +4,7 @@ This crate contains example programs to interact with Turnkey.
 
 * [`whoami.rs`](./src/bin/whoami.rs) shows how to authenticate to the Turnkey API for the simplest endpoint we have.
 * [`sub_organization.rs`](./src/bin/sub_organization.rs) shows the creation and deletion of sub-organizations.
-* [`wallet.rs`](./src/bin/wallet.rs) shows basic wallet management (creation, signature, deletion).
+* [`wallet.rs`](./src/bin/wallet.rs) shows basic wallet management (creation, signature, export, deletion).
 
 
 ## Running examples
