@@ -54,4 +54,18 @@ pub enum EnclaveEncryptError {
     InvalidOrganization,
     /// Invalid user ID in the data object sent from the server.
     InvalidUser,
+    /// The provided public key bytes aren't sized correctly.
+    IncorrectQuorumPublicKeyBytesLength(usize),
+    /// Error while decoding hex bytes
+    HexDecode(String),
+    /// Invalid bytes were used to create a `VerifyingKey`
+    InvalidVerifyingKeyBytes,
+    /// Invalid Utf8 bytes
+    InvalidUtf8Bytes(String),
+    /// Invalid exported private key -- does not start with 0x...
+    InvalidExportedPrivateKey,
+    /// Invalid private key length
+    InvalidPrivateKeyByteLength,
+    /// Unable to serialize encrypted bundle (JSON serialization)
+    CannotSerializeBundle(String),
 }

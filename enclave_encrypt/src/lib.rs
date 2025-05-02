@@ -16,6 +16,7 @@ use rand_core::OsRng;
 
 pub mod client;
 pub mod errors;
+pub mod quorum_public_key;
 pub mod server;
 
 /// See the [readme](README.md#hpke-configuration) for how to configure these value.
@@ -458,7 +459,7 @@ pub mod test {
     }
 
     #[test]
-    fn server_to_client_reject_bad_encapped_public_siganture() {
+    fn server_to_client_reject_bad_encapped_public_signature() {
         let mut client = EnclaveEncryptClient::from_enclave_auth_key(quorum_pub());
         let client_target = client.target().unwrap();
 
@@ -499,52 +500,6 @@ pub mod test {
             EnclaveEncryptServer::auth_encrypt(&client_target, &example_credential()).unwrap();
         println!("{}", payload);
         assert_eq!(client.auth_decrypt(&payload).unwrap(), example_credential());
-    }
-
-    // This test shows how to decrypt an auth bundle.
-    // We simulate the case of a client with no access to encryption keys who receives a bundle
-    // encrypted to their public key.
-    #[test]
-    fn static_auth_bundle_decrypt() {
-        // This is a "noop" key which is required to construct EnclaveEncryptClient, but unused when decrypting auth bundles.
-        let noop_verify_key = *SigningKey::random(&mut OsRng).verifying_key();
-
-        // Hardcode a random client IKM to get stable test vectors across runs.
-        let client_ikm =
-            hex::decode("c8e5d3ccbf8c4e62e3bcb984681ce6dda950939905754902a394c1fc2b5c6a9e")
-                .unwrap();
-        let (client_private_key, client_public_key) = Kem::derive_keypair(&client_ikm);
-
-        // Unlikely but check just in case: same IKM should result in the same public key
-        assert_eq!(
-            hex::encode(client_private_key.to_bytes()),
-            "d2d9239a4bb25d09a6d91822e1d0991f0b21a63b102191bb98b6b77ac6fc6c91"
-        );
-
-        // Create a new `EnclaveEncryptClient` bound to the client's private/public key
-        let mut client = EnclaveEncryptClient::from_enclave_auth_key_and_target_key(
-            noop_verify_key,
-            client_public_key.clone(),
-            client_private_key,
-        );
-
-        // We can generate new auth bundles by:
-        // - converting the client public key into the proper type
-        // let target_public_key = P256Public::try_from(client_public_key.to_bytes().to_vec()).unwrap();
-        // - using the target_public key to encrypt our "example_credential"
-        // let bundle = EnclaveEncryptServer::auth_encrypt(&target_public_key, &example_credential()).unwrap();
-        // - now we can print our bundle and capture it
-        // println!("generated bundle: {}", bundle);
-
-        // But instead we fix the bundle to a static value, to simulate the case where it's e.g. coming from an activity result or an email
-        // This also ensures that future updates to this crate don't break old bundles!
-        let bundle = "skr1QFHrNyL7xcvzRpU4t9yhL8rEVPZgDcFM5YW8S1YwLYjedoagnNZwMCyJsxNYzuphKHqQBkZxt4fLWSVsMqnW9XdmLBsK2MhwC5WxuxZD9xE8ezQ";
-        let decrypted = client
-            .auth_decrypt(bundle)
-            .expect("decryption should succeed");
-
-        // Assert that what we decrypted is what was originally encrypted: our "example_credential"
-        assert_eq!(decrypted, example_credential());
     }
 
     // This might seem too specific but is necessary to test the base58 encoder we use.

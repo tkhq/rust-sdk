@@ -11,24 +11,64 @@ The flows where encryption and decryption are relevant are:
 
 ## Usage
 
-Decrypting a bundle:
+### Authentication bundles
+
+```rust
+let client = AuthenticationClient::new()
+let target_public_key = client.target_public_key(); // can be used in auth activity params
+
+let bundle = "<auth bundle>";
+
+let client.decrypt(bundle).expect("decryption should succeed");
+```
+
+If you persist client key material between initiation and decryption you may use `dangerous_from_bytes` to create an `AuthenticationClient`. Keep in mind the one-shot encryption semantics, you may not use the same client IKM to decrypt many different bundles.
 
 ```rust
 let client_ikm = hex::decode("...private bytes from client...").expect("cannot decode client secret bytes");
-let (client_private_key, client_public_key) = Kem::derive_keypair(&client_ikm);
-
-// Create a new `EnclaveEncryptClient` bound to the client's private/public key
-let mut client = EnclaveEncryptClient::from_enclave_auth_key_and_target_key(
-    // required to construct `EnclaveEncryptClient`, but unused when decrypting auth bundles.
-    *SigningKey::random(&mut OsRng).verifying_key(), 
-    // client public key (to which the bundle is encrypted)
-    client_public_key,
-    // client private key, used for decryption of the auth bundle
-    client_private_key,
-);
-
 let bundle = "<auth bundle goes here, it's a base58-encoded string>";
-let decrypted = client.auth_decrypt(bundle)
+
+let decrypted = AuthenticationClient::dangerous_from_bytes(client_ikm)
+    .decrypt(bundle)
+    .expect("decryption should succeed");
+```
+
+### Export bundles
+
+To decrypt an exported private key or wallet, use `decrypt_private_key` or `decrypt_wallet`:
+
+```rust
+let mut client = ExportClient::new(&QuorumPublicKey::production_signer());
+
+// Decrypt a wallet (result: string)
+let wallet_mnemonic_phrase = client.decrypt_wallet_mnemonic_phrase("<bundle>", "<organization id>")
+
+// Decrypt a private key (result: bytes)
+let private_key = client.decrypt_private_key("<bundle>", "<organization id>")
+```
+
+### Import bundles
+
+To encrypt private keys or wallets, use `encrypt_private_key_with_bundle` or `encrypt_wallet_with_bundle`. The resulting value is a string, ready to use as an activity param. The organization and user IDs need to match the organization and user who initiated import.
+
+```rust
+let mut client = ImportClient::new(&QuorumPublicKey::production_signer());
+
+// Encrypt private keys
+let encrypted_key = client.encrypt_private_key_with_bundle(
+    "<bytes to encrypt>",
+    "<bundle>",
+    "<organization id>",
+    "<user id>",
+).expect("encryption should succeed");
+
+// Encrypt wallet seed phrase
+let encrypted_wallet = client.encrypt_wallet_with_bundle(
+    "<mnemonic phrase>",
+    "<bundle>",
+    "<organization id>",
+    "<user id>",
+).expect("encryption should succeed");
 ```
 
 ## Running test
