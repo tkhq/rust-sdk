@@ -16,8 +16,13 @@ use rand_core::OsRng;
 
 pub mod client;
 pub mod errors;
-pub mod quorum_public_key;
+mod quorum_public_key;
 pub mod server;
+
+pub use client::AuthenticationClient;
+pub use client::ExportClient;
+pub use client::ImportClient;
+pub use quorum_public_key::QuorumPublicKey;
 
 /// See the [readme](README.md#hpke-configuration) for how to configure these value.
 /// HPKE Key encapsulation mechanism

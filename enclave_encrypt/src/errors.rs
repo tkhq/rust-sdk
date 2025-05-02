@@ -1,71 +1,102 @@
 //! errors for this crate
+use thiserror::Error;
 
 /// Errors for enclave encryption
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(missing_docs)]
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum EnclaveEncryptError {
     /// Receiver or Encap key is likely wrong.
+    #[error("Failed to set up receiver context")]
     ReceiveCtxSetupFail,
+
     /// Something is likely wrong with the receiver public key.
+    #[error("Failed to set up receiver context")]
     FailedToSetupSendCtx,
-    /// Failed to encrypt the given plaintext.
+
+    #[error("Failed to encrypt plaintext")]
     FailedToEncrypt,
-    /// Failed to decrypt the given ciphertext.
+
+    #[error("Failed to decrypt ciphertext")]
     FailedToDecrypt,
-    /// Failed to serialize the data from the server.
+
+    #[error("Failed to serialize data")]
     FailedToSerializeData,
-    /// Failed to deserialize the data from the server.
+
+    #[error("Failed to deserialize data")]
     FailedToDeserializeData,
-    /// Could not verify the quorum key signature over the servers given
-    /// target public key.
+
+    #[error("Could not verify the quorum key signature over the servers given the target public")]
     ServerTargetSignatureVerificationFail,
-    /// Could not verify the quorum key signature over the encapsulation key.
+
+    #[error("Could not verify the quorum key signature over the encapsulation key")]
     ServerEncappedKeySignatureVerificationFail,
-    /// Encapsulation key could not be deserialized.
+
+    #[error("Error while deserializing encapped key")]
     InvalidEncappedKey(hpke::HpkeError),
-    /// Could not deserialize server's target key.
+
+    #[error("Error while deserializing the server target key")]
     InvalidServerTarget(hpke::HpkeError),
-    /// Could not deserialize client target key.
+
+    #[error("Error while deserializing the client target key")]
     InvalidClientTarget(hpke::HpkeError),
-    /// Could not deserialize server's encapsulated key.
+
+    #[error("Error while deserializing the server encapsulated key")]
     InvalidSeverEncappedKeySignature,
-    /// Could not deserialize signature over server target key.
+
+    #[error("Error while deserializing signature over the server target key")]
     InvalidServerTargetSignature,
-    /// Could not use secret as signing key.
+
+    #[error("Count not use quorum secret as a valid signing key")]
     InvalidQuorumSecret,
-    /// Server target key has already been used to decrypt a message.
+
+    #[error("This server has already been used to decrypt a message")]
     ServerAlreadyUsedToDecrypt,
-    /// Client target key has already been used to decrypt a message.
+
+    #[error("This client has already been used to decrypt a message")]
     ClientAlreadyUsedToDecrypt,
-    /// P256 public key could not be coerced into fixed length array.
+
+    #[error("P256 public key could not be coerced into fixed length array")]
     InvalidP256PublicKeyLength,
-    /// P256 signature could not be coerced into fixed length array.
+
+    #[error("P256 signature could not be coerced into fixed length array")]
     InvalidP256SignatureLength,
-    /// Could not deserialize p256 public key as sec1 encoded.
+
+    #[error("Could not deserialize P-256 public key: invalid SEC1 encoding")]
     InvalidP256PublicKeySec1Encoding(String),
-    /// Failed to decode a base58-encoded string.
+
+    #[error("Invalid base58 encoding")]
     FailedToBase58Decode(String),
-    /// Email recovery payload was shorter then expected.
+
+    #[error("Email recovery payload is shorter than")]
     InvalidEmailRecoveryPayload,
-    /// Invalid enclave quorum public key.
+
+    #[error("Invalid enclave quorum public key")]
     InvalidEnclaveQuorumPublicKey,
-    /// Invalid version of the data object sent from the server.
+
+    #[error("Invalid data version")]
     InvalidDataVersion,
-    /// Invalid organization ID in the data object sent from the server.
+
+    #[error("Organization from bundle does not match the expected organization ID")]
     InvalidOrganization,
-    /// Invalid user ID in the data object sent from the server.
+
+    #[error("User from bundle does not match the expected user ID")]
     InvalidUser,
-    /// The provided public key bytes aren't sized correctly.
+
+    #[error("Provided public key bytes are not sized correctly for a Quorum public key")]
     IncorrectQuorumPublicKeyBytesLength(usize),
-    /// Error while decoding hex bytes
+
+    #[error("Error while decoding hex-encoded string: {0}")]
     HexDecode(String),
-    /// Invalid bytes were used to create a `VerifyingKey`
+
+    #[error("Cannot create a verifying key from invalid")]
     InvalidVerifyingKeyBytes,
-    /// Invalid Utf8 bytes
+
+    #[error("Bytes contain invalid UTF-8")]
     InvalidUtf8Bytes(String),
-    /// Invalid exported private key -- does not start with 0x...
-    InvalidExportedPrivateKey,
-    /// Invalid private key length
+
+    #[error("Invalid byte length for private key")]
     InvalidPrivateKeyByteLength,
-    /// Unable to serialize encrypted bundle (JSON serialization)
+
+    #[error("Cannot JSON-serialize bundle: {0}")]
     CannotSerializeBundle(String),
 }
