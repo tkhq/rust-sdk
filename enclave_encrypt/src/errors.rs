@@ -10,7 +10,7 @@ pub enum EnclaveEncryptError {
     ReceiveCtxSetupFail,
 
     /// Something is likely wrong with the receiver public key.
-    #[error("Failed to set up receiver context")]
+    #[error("Failed to set up sender context")]
     FailedToSetupSendCtx,
 
     #[error("Failed to encrypt plaintext")]
@@ -46,7 +46,7 @@ pub enum EnclaveEncryptError {
     #[error("Error while deserializing signature over the server target key")]
     InvalidServerTargetSignature,
 
-    #[error("Count not use quorum secret as a valid signing key")]
+    #[error("Could not use quorum secret as a valid signing key")]
     InvalidQuorumSecret,
 
     #[error("This server has already been used to decrypt a message")]
@@ -67,7 +67,7 @@ pub enum EnclaveEncryptError {
     #[error("Invalid base58 encoding")]
     FailedToBase58Decode(String),
 
-    #[error("Email recovery payload is shorter than")]
+    #[error("Email recovery payload is shorter than expected")]
     InvalidEmailRecoveryPayload,
 
     #[error("Invalid enclave quorum public key")]
@@ -88,7 +88,7 @@ pub enum EnclaveEncryptError {
     #[error("Error while decoding hex-encoded string: {0}")]
     HexDecode(String),
 
-    #[error("Cannot create a verifying key from invalid")]
+    #[error("Cannot create a verifying key from invalid bytes")]
     InvalidVerifyingKeyBytes,
 
     #[error("Bytes contain invalid UTF-8")]

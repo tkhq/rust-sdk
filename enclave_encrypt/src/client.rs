@@ -32,7 +32,7 @@ impl AuthenticationClient {
     /// Creates a new `AuthenticationClient` with a fresh target key pair.
     pub fn new() -> Self {
         // A VerifyingKey is required to construct `EnclaveEncryptClient`, but unused when decrypting auth bundles.
-        // This is safe not to verify auth bundles authenticity, because this bundles contain credential private key material.
+        // This is safe not to verify auth bundles authenticity, because these bundles contain credential private key material.
         // If these bundles are bogus or tampered with they would contain "bad" bytes, which implies the decrypted bytes would either not result in a valid credential, or result in a credential that is not capable to sign Turnkey activities.
         let random_key = SigningKey::random(&mut OsRng);
         let encrypt_client =
@@ -172,7 +172,7 @@ pub struct ImportClient {
 }
 
 impl ImportClient {
-    /// Creates a new Export client. Takes in a Quorum public key (use `QuorumPublicKey::production_signer()`)
+    /// Creates a new Import client. Takes in a Quorum public key (use `QuorumPublicKey::production_signer()`)
     ///
     /// # Panics
     /// Not expected, unless you are using an invalid quorum key
