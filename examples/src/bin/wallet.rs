@@ -9,7 +9,7 @@ use tkhq_client::generated::{
     CreateWalletIntent, DeleteWalletsIntent, ExportWalletIntent, SignRawPayloadIntentV2,
 };
 use tkhq_enclave_encrypt::{ExportClient, QuorumPublicKey};
-use tkhq_examples::{current_time_ms, load_api_key_from_env};
+use tkhq_examples::load_api_key_from_env;
 
 // See <https://docs.turnkey.com/api-reference/organizations/create-sub-organization> for documentation
 const TURNKEY_API_HOST: &str = "https://api.turnkey.com";
@@ -30,7 +30,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let create_wallet_result = client
         .create_wallet(
             organization_id.clone(),
-            current_time_ms(),
+            client.current_timestamp(),
             CreateWalletIntent {
                 wallet_name: "New wallet".to_string(),
                 accounts: vec![WalletAccountParams {
@@ -57,7 +57,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let signature_result = client
         .sign_raw_payload(
             organization_id.clone(),
-            current_time_ms(),
+            client.current_timestamp(),
             SignRawPayloadIntentV2 {
                 sign_with: eth_address.to_string(),
                 payload: "hello from TKHQ".to_string(),
@@ -77,7 +77,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let export_wallet_result = client
         .export_wallet(
             organization_id.clone(),
-            current_time_ms(),
+            client.current_timestamp(),
             ExportWalletIntent {
                 wallet_id: wallet_id.clone(),
                 target_public_key: export_client.target_public_key()?,
@@ -101,7 +101,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let delete_wallet_result = client
         .delete_wallets(
             organization_id,
-            current_time_ms(),
+            client.current_timestamp(),
             DeleteWalletsIntent {
                 wallet_ids: vec![wallet_id.clone()],
                 delete_without_export: Some(false),

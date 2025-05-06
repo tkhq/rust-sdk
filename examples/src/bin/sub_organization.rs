@@ -8,7 +8,7 @@ use tkhq_client::generated::{
     WalletParams,
 };
 use tkhq_client::TurnkeyClient;
-use tkhq_examples::{current_time_ms, load_api_key_from_env};
+use tkhq_examples::load_api_key_from_env;
 
 // See <https://docs.turnkey.com/api-reference/organizations/create-sub-organization> for documentation
 const TURNKEY_API_HOST: &str = "https://api.turnkey.com";
@@ -60,7 +60,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let create_res = client
-        .create_sub_organization(organization_id, current_time_ms(), intent)
+        .create_sub_organization(organization_id, client.current_timestamp(), intent)
         .await?;
 
     assert_eq!(create_res.root_user_ids.len(), 1);
@@ -78,7 +78,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let delete_res = sub_organization_client
         .delete_sub_organization(
             create_res.sub_organization_id.clone(),
-            current_time_ms(),
+            client.current_timestamp(),
             DeleteSubOrganizationIntent {
                 delete_without_export: Some(true),
             },

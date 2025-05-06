@@ -1,5 +1,7 @@
 //! Turnkey Client to interact with the Turnkey API
 //! See <https://docs.turnkey.com>
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 
@@ -21,6 +23,9 @@ pub use retry::RetryConfig;
 pub enum TurnkeyClientError {
     #[error("HTTP request failed: {0}")]
     Http(#[from] reqwest::Error),
+
+    #[error("HTTP response was not successful: {0} ({1})")]
+    UnexpectedHttpStatus(u16, String),
 
     #[error("Failed to decode response {0} ({1})")]
     Decode(String, serde_json::Error),
@@ -80,15 +85,19 @@ impl TurnkeyClient {
 
     /// POSTs an activity and polls until the status is "COMPLETE"
     ///
-    /// `process_activity` accepts an arbitrary URL, stamp and POST body.
+    /// `process_activity` accepts a  arbitrary `Request` and `path` to POST to the Turnkey API.
     /// It encapsulates the polling logic and is generally meant to be called by other
     /// activity-specific client functions (e.g. `create_sub_organization`).
     ///
     /// Given the Turnkey API is backwards-compatible, this function can be used to submit old versions of activities.
     /// For example, if the latest version for create_sub_organization is "ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V7",
     /// you may want to use `process_activity` to process `ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V6`. Note that this
-    /// requires manually setting the correct URL, activity type, intent and result types, whereas using other
-    /// generated functions on the client is guaranteed type safe).
+    /// requires manually setting the correct URL and activity request type.
+    /// The response is an generic Activity. If you're invoking this function manually you'll have to manually look at
+    /// the correct `.activity.result` enum.
+    ///
+    /// This function is used by our generated client methods and sets the right request type, URL, and deserializes into the proper result type as well.
+    /// Unless you have good reasons, prefer the type-safe client methods such as `sign_raw_payload`.
     ///
     /// # Returns
     ///
@@ -99,28 +108,16 @@ impl TurnkeyClient {
     /// If the server errors with a validation error, a server error, a deserialization error, the proper variant of `TurnkeyClientError` is returned.
     /// If the activity is pending and exceeds the maximum amount of retries allowed, `TurnkeyClientError::ExceededRetries` is returned.
     /// If the activity requires consensus, `TurnkeyClientError::ActivityRequiresApproval` is returned.
-    pub async fn process_activity(
+    pub async fn process_activity<Request: Serialize>(
         &self,
-        url: String,
-        stamp: String,
-        post_body: String,
+        request: Request,
+        path: String,
     ) -> Result<Activity, TurnkeyClientError> {
         let mut retry_count = 0;
 
         loop {
-            let res = self
-                .http
-                .post(url.clone())
-                .header("X-Stamp", stamp.clone())
-                .body(post_body.clone())
-                .send()
-                .await?;
-
-            let res_text = res.text().await?;
-            let parsed = serde_json::from_str::<ActivityResponse>(&res_text)
-                .map_err(|e| TurnkeyClientError::Decode(res_text, e))?;
-
-            let activity = parsed
+            let response: ActivityResponse = self.process_request(&request, path.clone()).await?;
+            let activity = response
                 .activity
                 .ok_or_else(|| TurnkeyClientError::MissingActivity)?;
 
@@ -153,31 +150,76 @@ impl TurnkeyClient {
         }
     }
 
-    pub fn current_timestamp(&self) -> String {
+    /// Returns the current timestamp as a u128.
+    pub fn current_timestamp(&self) -> u128 {
         let now = SystemTime::now();
 
         now.duration_since(UNIX_EPOCH)
             .expect("Time went backwards")
             .as_millis()
-            .to_string()
+    }
+
+    /// Processes a `Request` (at `path`) by:
+    /// * Serializing the request to JSON
+    /// * Signing the request with the client's API key
+    /// * POSTing the POST body and the associated stamp to the Turnkey API
+    ///
+    /// This function is generic and can handle POSTing queries or activities.
+    pub async fn process_request<Request, Response>(
+        &self,
+        request: &Request,
+        path: String,
+    ) -> Result<Response, TurnkeyClientError>
+    where
+        Request: Serialize,
+        Response: DeserializeOwned,
+    {
+        let url = format!("{}{}", self.base_url, path);
+        let post_body = serde_json::to_string(&request)?;
+        let stamp = self.api_key.stamp(post_body.clone())?;
+        let res = self
+            .http
+            .post(url)
+            .header("X-Stamp", stamp)
+            .body(post_body)
+            .send()
+            .await?;
+
+        let status = res.status();
+        let text = res.text().await?;
+
+        if !status.is_success() {
+            return Err(TurnkeyClientError::UnexpectedHttpStatus(
+                status.as_u16(),
+                text,
+            ));
+        }
+
+        let response =
+            serde_json::from_str(&text).map_err(|e| TurnkeyClientError::Decode(text, e))?;
+
+        Ok(response)
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::generated::immutable::common::v1::{HashFunction, PayloadEncoding};
     use crate::generated::result::Inner;
+    use crate::generated::SignRawPayloadIntentV2;
     use std::sync::Arc;
     use std::time::Duration;
     use wiremock::matchers::method;
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    fn dummy_post_body() -> String {
-        "{}".to_string()
-    }
-
-    fn dummy_stamp() -> String {
-        "dummy-stamp".to_string()
+    fn simple_activity_intent() -> SignRawPayloadIntentV2 {
+        SignRawPayloadIntentV2 {
+            sign_with: "0x123456".to_string(),
+            payload: "hello".to_string(),
+            encoding: PayloadEncoding::TextUtf8,
+            hash_function: HashFunction::Keccak256,
+        }
     }
 
     async fn setup_client_and_server() -> (TurnkeyClient, MockServer) {
@@ -196,7 +238,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_http_error() {
+    async fn test_raw_http_error() {
         let (client, server) = setup_client_and_server().await;
 
         // Simulate 500 Internal Server Error
@@ -207,17 +249,43 @@ mod test {
             .await;
 
         let result = client
-            .process_activity(
-                format!("{}/fail", server.uri()),
-                dummy_stamp(),
-                dummy_post_body(),
-            )
+            .process_activity(simple_activity_intent(), "/sign_raw_payload".to_string())
             .await;
 
         match result.unwrap_err() {
-            TurnkeyClientError::Decode(text, err) => {
-                assert_eq!(text, "internal server error");
-                assert_eq!(err.classify(), serde_json::error::Category::Syntax);
+            TurnkeyClientError::UnexpectedHttpStatus(status, body) => {
+                assert_eq!(status, 500);
+                assert_eq!(body, "internal server error");
+            }
+            other => panic!("unexpected error: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_http_error_with_valid_json() {
+        let (client, server) = setup_client_and_server().await;
+
+        // Simulate 500 Internal Server Error
+        let response = ResponseTemplate::new(401).set_body_json(serde_json::json!({
+            "code":2,
+            "message": "some error",
+            "details":[],
+            "turnkeyErrorCode":"SOME_ERROR_CODE",
+        }));
+
+        Mock::given(method("POST"))
+            .respond_with(response)
+            .mount(&server)
+            .await;
+
+        let result = client
+            .process_activity(simple_activity_intent(), "/sign_raw_payload".to_string())
+            .await;
+
+        match result.unwrap_err() {
+            TurnkeyClientError::UnexpectedHttpStatus(status, body) => {
+                assert_eq!(status, 401);
+                assert_eq!(body, "{\"code\":2,\"details\":[],\"message\":\"some error\",\"turnkeyErrorCode\":\"SOME_ERROR_CODE\"}");
             }
             other => panic!("unexpected error: {:?}", other),
         }
@@ -235,11 +303,7 @@ mod test {
             .await;
 
         let result = client
-            .process_activity(
-                format!("{}/noactivity", server.uri()),
-                dummy_stamp(),
-                dummy_post_body(),
-            )
+            .process_activity(simple_activity_intent(), "/sign_raw_payload".to_string())
             .await;
 
         assert!(matches!(result, Err(TurnkeyClientError::MissingActivity)));
@@ -251,7 +315,7 @@ mod test {
 
         let response = ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "activity": {
-                "type": "ACTIVITY_TYPE_CREATE_POLICY_V3",
+                "type": "ACTIVITY_TYPE_SIGN_RAW_PAYLOAD_V2",
                 "status": "ACTIVITY_STATUS_FAILED",
                 "id": "some-activity-id",
                 "organizationId": "org-id",
@@ -269,11 +333,7 @@ mod test {
             .await;
 
         let result = client
-            .process_activity(
-                format!("{}/failstatus", server.uri()),
-                dummy_stamp(),
-                dummy_post_body(),
-            )
+            .process_activity(simple_activity_intent(), "/sign_raw_payload".to_string())
             .await;
 
         match result.unwrap_err() {
@@ -297,7 +357,7 @@ mod test {
 
         let response = ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "activity": {
-                "type": "ACTIVITY_TYPE_CREATE_POLICY_V3",
+                "type": "ACTIVITY_TYPE_SIGN_RAW_PAYLOAD_V2",
                 "status": "ACTIVITY_STATUS_CONSENSUS_NEEDED",
                 "id": "some-activity-id",
                 "organizationId": "org-id",
@@ -311,11 +371,7 @@ mod test {
             .await;
 
         let result = client
-            .process_activity(
-                format!("{}/consensusneeded", server.uri()),
-                dummy_stamp(),
-                dummy_post_body(),
-            )
+            .process_activity(simple_activity_intent(), "/sign_raw_payload".to_string())
             .await;
 
         match result.unwrap_err() {
@@ -347,11 +403,7 @@ mod test {
             .await;
 
         let result = client
-            .process_activity(
-                format!("{}/rejected", server.uri()),
-                dummy_stamp(),
-                dummy_post_body(),
-            )
+            .process_activity(simple_activity_intent(), "/sign_raw_payload".to_string())
             .await;
 
         match result.unwrap_err() {
@@ -376,11 +428,7 @@ mod test {
             .await;
 
         let result = client
-            .process_activity(
-                format!("{}/completed", server.uri()),
-                dummy_stamp(),
-                dummy_post_body(),
-            )
+            .process_activity(simple_activity_intent(), "/sign_raw_payload".to_string())
             .await;
 
         let activity = result.unwrap();
@@ -455,11 +503,7 @@ mod test {
                 .await;
 
             let result = client
-                .process_activity(
-                    format!("{}/retry-then-success", server.uri()),
-                    dummy_stamp(),
-                    dummy_post_body(),
-                )
+                .process_activity(simple_activity_intent(), "/sign_raw_payload".to_string())
                 .await;
 
             assert!(result.is_ok());
@@ -487,11 +531,7 @@ mod test {
                 .await;
 
             let result = client
-                .process_activity(
-                    format!("{}/retry-fail", server.uri()),
-                    dummy_stamp(),
-                    dummy_post_body(),
-                )
+                .process_activity(simple_activity_intent(), "/sign_raw_payload".to_string())
                 .await;
 
             match result.unwrap_err() {
