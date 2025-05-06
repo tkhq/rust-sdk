@@ -5,6 +5,7 @@ This repository contains tooling to interact with the Turnkey API using Rust, an
 The two user-facing crates are:
 * [`client`](./client/): fully typed client to send requests to Turnkey
 * [`api_key_stamper`](./api_key_stamper/): used by `client` to stamp requests before they're sent to Turnkey
+* [`enclave_encrypt`](./enclave_encrypt/): used in the context of features which leverage enclave [secure channels](https://docs.turnkey.com/security/enclave-secure-channels) ([Social Logins](https://docs.turnkey.com/authentication/social-logins), [Export](https://docs.turnkey.com/wallets/export-wallets), [Import](https://docs.turnkey.com/wallets/import-wallets))
 
 ## Usage
 
@@ -34,7 +35,7 @@ To make a request to Turnkey:
 
 ## Examples
 
-For fully working examples, see our ['examples/' folder](./examples/README.md).
+For fully working code examples, see our ['examples/' folder](./examples/README.md).
 
 ## Development
 

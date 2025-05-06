@@ -1,0 +1,27 @@
+[package]
+name = "tkhq_enclave_encrypt"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+bs58 = { version = "0.5.0", features = [
+  "std",
+  "check",
+], default-features = false }
+hex = { version = "0.4.3", features = ["serde"] }
+hpke = { version = "0.10", features = [
+  "alloc",
+  "p256",
+  "serde_impls",
+], default-features = false }
+p256 = { version = "0.12", features = [
+  "ecdsa",
+  "ecdsa-core",
+  "std",
+  "serde",
+], default-features = false }
+rand_core = { version = "0.6.4", default-features = false }
+serde = { version = "1", features = ["derive"], default-features = false }
+serde_json = { version = "1", features = ["alloc"], default-features = false }
+thiserror = { version = "2.0.12" }

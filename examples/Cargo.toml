@@ -8,6 +8,7 @@ publish = false
 
 [dependencies]
 tkhq_api_key_stamper = { path = "../api_key_stamper" }
+tkhq_enclave_encrypt = { path = "../enclave_encrypt" }
 tkhq_client = { path = "../client" }
 dotenvy = { version = "0.15.0" }
 hex = { version = "0.4.3", default-features = false, features = ["std"] }
