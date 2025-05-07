@@ -3,35 +3,9 @@
 This repository contains tooling to interact with the Turnkey API using Rust, and is organized as a collection of Rust crates.
 
 The two user-facing crates are:
-* [`client`](./client/): fully typed client to send requests to Turnkey
-* [`api_key_stamper`](./api_key_stamper/): used by `client` to stamp requests before they're sent to Turnkey
-* [`enclave_encrypt`](./enclave_encrypt/): used in the context of features which leverage enclave [secure channels](https://docs.turnkey.com/security/enclave-secure-channels) ([Social Logins](https://docs.turnkey.com/authentication/social-logins), [Export](https://docs.turnkey.com/wallets/export-wallets), [Import](https://docs.turnkey.com/wallets/import-wallets))
-
-## Usage
-
-To make a request to Turnkey:
-* Load an API key:
-  ```rust
-  // You can load your API key from a file or from env
-  let api_key = TurnkeyP256ApiKey::from_strings(private_key: "<private key hex>", None).expect("api key creation failed");
-  ```
-* Create a new client:
-  ```rust
-  let client = tkhq_client::TurnkeyClient::new("https://api.turnkey.com", api_key, RetryConfig::default());
-  ```
-* Make a request (for example, a signature request)
-  ```rust
-  let signature_result = client.sign_raw_payload(
-    organization_id, // your organization ID
-    timestamp_ms, // time::SystemTime::now().duration_since(time::UNIX_EPOCH).unwrap().as_millis();
-    SignRawPayloadIntentV2 {
-        sign_with: address, // any Turnkey-generated address
-        payload: "hello from TKHQ".to_string(),
-        encoding: PayloadEncoding::TextUtf8,
-        hash_function: HashFunction::Keccak256,
-    },
-  ).await;
-  ```
+* [`client`](./client/README.md): fully typed client to send requests to Turnkey
+* [`api_key_stamper`](./api_key_stamper/README.md): used by `client` to stamp requests before they're sent to Turnkey
+* [`enclave_encrypt`](./enclave_encrypt/README.md): used in the context of features which leverage enclave [secure channels](https://docs.turnkey.com/security/enclave-secure-channels) ([Social Logins](https://docs.turnkey.com/authentication/social-logins), [Export](https://docs.turnkey.com/wallets/export-wallets), [Import](https://docs.turnkey.com/wallets/import-wallets))
 
 ## Examples
 

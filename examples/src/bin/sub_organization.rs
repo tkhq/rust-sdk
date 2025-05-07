@@ -7,11 +7,7 @@ use tkhq_client::generated::{
     ApiKeyParamsV2, CreateSubOrganizationIntentV7, RootUserParamsV4, WalletAccountParams,
     WalletParams,
 };
-use tkhq_client::TurnkeyClient;
 use tkhq_examples::load_api_key_from_env;
-
-// See <https://docs.turnkey.com/api-reference/organizations/create-sub-organization> for documentation
-const TURNKEY_API_HOST: &str = "https://api.turnkey.com";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -25,7 +21,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let organization_id =
         env::var("TURNKEY_ORGANIZATION_ID").expect("cannot load TURNKEY_ORGANIZATION_ID");
 
-    let client = tkhq_client::TurnkeyClient::new(TURNKEY_API_HOST, api_key, None);
+    let client = tkhq_client::TurnkeyClient::builder()
+        .api_key(api_key)
+        .build()?;
     let intent = CreateSubOrganizationIntentV7 {
         sub_organization_name: "New sub-organization".to_string(),
         root_users: vec![RootUserParamsV4 {
@@ -73,8 +71,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Now let's cleanup and delete our sub-organization
     // This needs to be done by the sub-organization user, authenticated by our fresh API key
-    let sub_organization_client =
-        TurnkeyClient::new(TURNKEY_API_HOST, sub_organization_api_key, None);
+    let sub_organization_client = tkhq_client::TurnkeyClient::builder()
+        .api_key(sub_organization_api_key)
+        .build()?;
     let delete_res = sub_organization_client
         .delete_sub_organization(
             create_res.sub_organization_id.clone(),

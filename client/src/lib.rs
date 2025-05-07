@@ -2,7 +2,9 @@
 //! See <https://docs.turnkey.com>
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use reqwest::header::CONTENT_TYPE;
 use thiserror::Error;
 
 use generated::google::rpc::Status;
@@ -19,13 +21,34 @@ pub mod generated;
 pub mod retry;
 pub use retry::RetryConfig;
 
+const TURNKEY_RUST_SDK_USER_AGENT: &str =
+    concat!("turnkey-rust-client/", env!("CARGO_PKG_VERSION"));
+
 #[derive(Debug, Error)]
 pub enum TurnkeyClientError {
+    #[error("Client builder is missing its API key. Call .api_key(...) to configure it.")]
+    BuilderMissingApiKey,
+
+    #[error("HTTP client builder failed: {0}")]
+    ReqwestBuilder(reqwest::Error),
+
     #[error("HTTP request failed: {0}")]
     Http(#[from] reqwest::Error),
 
     #[error("HTTP response was not successful: {0} ({1})")]
     UnexpectedHttpStatus(u16, String),
+
+    #[error("HTTP response does not have a Content-Type header")]
+    MissingContentTypeHeader,
+
+    #[error("HTTP response header could not be converted to str: {0}")]
+    HeaderToStrError(String),
+
+    #[error("HTTP response header could not be parsed from str: {0}")]
+    HeaderFromStrError(String),
+
+    #[error("HTTP response MIME type is not application/json (found {0})")]
+    UnexpectedMimeType(String),
 
     #[error("Failed to decode response {0} ({1})")]
     Decode(String, serde_json::Error),
@@ -61,6 +84,98 @@ pub enum TurnkeyClientError {
     StamperError(#[from] StamperError),
 }
 
+#[derive(Debug)]
+pub struct TurnkeyClientBuilder {
+    api_key: Option<TurnkeyP256ApiKey>,
+    base_url: Option<String>,
+    retry_config: Option<RetryConfig>,
+    reqwest_builder: reqwest::ClientBuilder,
+    timeout: Option<Duration>,
+}
+
+impl TurnkeyClientBuilder {
+    pub fn new() -> Self {
+        Self {
+            api_key: None,
+            base_url: None,
+            retry_config: None,
+            reqwest_builder: reqwest::Client::builder(),
+            timeout: None,
+        }
+    }
+
+    /// Sets the API key for the Turnkey client.
+    pub fn api_key(mut self, api_key: TurnkeyP256ApiKey) -> Self {
+        self.api_key = Some(api_key);
+        self
+    }
+
+    /// Sets the base URL for the Turnkey client. Default: "https://api.turnkey.com"
+    pub fn base_url(mut self, base_url: impl Into<String>) -> Self {
+        self.base_url = Some(base_url.into());
+        self
+    }
+
+    /// Sets the retry configuration for the Turnkey client
+    pub fn retry_config(mut self, retry_config: RetryConfig) -> Self {
+        self.retry_config = Some(retry_config);
+        self
+    }
+
+    /// Sets the connect timeout for the underlying `reqwest` client
+    pub fn connect_timeout(mut self, timeout: Duration) -> Self {
+        self.reqwest_builder = self.reqwest_builder.connect_timeout(timeout);
+        self
+    }
+
+    /// Sets the HTTP timeout for the underlying `reqwest` client
+    /// Default: 20 seconds
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+        self.reqwest_builder = self.reqwest_builder.timeout(timeout);
+        self
+    }
+
+    /// Provide your own `reqwest::ClientBuilder` (useful for power users who need to configure reqwest in specific ways)
+    pub fn with_reqwest_builder(
+        mut self,
+        f: impl FnOnce(reqwest::ClientBuilder) -> reqwest::ClientBuilder,
+    ) -> Self {
+        self.reqwest_builder = f(self.reqwest_builder);
+        self
+    }
+
+    pub fn build(mut self) -> Result<TurnkeyClient, TurnkeyClientError> {
+        if self.timeout.is_none() {
+            self.reqwest_builder = self.reqwest_builder.timeout(Duration::from_secs(20));
+        }
+
+        self.reqwest_builder = self.reqwest_builder.user_agent(TURNKEY_RUST_SDK_USER_AGENT);
+
+        Ok(TurnkeyClient {
+            api_key: self
+                .api_key
+                .ok_or(TurnkeyClientError::BuilderMissingApiKey)?,
+            base_url: self
+                .base_url
+                .unwrap_or("https://api.turnkey.com".to_string()),
+            http: self
+                .reqwest_builder
+                .build()
+                .map_err(TurnkeyClientError::ReqwestBuilder)?,
+            retry_config: self.retry_config.unwrap_or_default(),
+        })
+    }
+}
+
+impl Default for TurnkeyClientBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Base client. To create a new client, see `TurnkeyClient::builder`.
+#[derive(Debug)]
 pub struct TurnkeyClient {
     http: reqwest::Client,
     base_url: String,
@@ -69,18 +184,9 @@ pub struct TurnkeyClient {
 }
 
 impl TurnkeyClient {
-    /// Creates a new `TurnkeyClient`. If `retry_config` is not provided, `RetryConfig::default()` is used.
-    pub fn new(
-        base_url: impl Into<String>,
-        api_key: TurnkeyP256ApiKey,
-        retry_config: Option<RetryConfig>,
-    ) -> Self {
-        Self {
-            api_key,
-            base_url: base_url.into(),
-            http: reqwest::Client::new(),
-            retry_config: retry_config.unwrap_or_default(),
-        }
+    /// Creates a new `TurnkeyClientBuilder`. To get a client from a builder, call `.build()`
+    pub fn builder() -> TurnkeyClientBuilder {
+        TurnkeyClientBuilder::new()
     }
 
     /// POSTs an activity and polls until the status is "COMPLETE"
@@ -186,12 +292,26 @@ impl TurnkeyClient {
             .await?;
 
         let status = res.status();
+        let content_type = res
+            .headers()
+            .get(CONTENT_TYPE)
+            .ok_or(TurnkeyClientError::MissingContentTypeHeader)?
+            .to_str()
+            .map_err(|e| TurnkeyClientError::HeaderToStrError(e.to_string()))?
+            .parse::<mime::Mime>()
+            .map_err(|e| TurnkeyClientError::HeaderFromStrError(e.to_string()))?;
         let text = res.text().await?;
 
         if !status.is_success() {
             return Err(TurnkeyClientError::UnexpectedHttpStatus(
                 status.as_u16(),
                 text,
+            ));
+        }
+
+        if content_type != mime::APPLICATION_JSON {
+            return Err(TurnkeyClientError::UnexpectedMimeType(
+                content_type.to_string(),
             ));
         }
 
@@ -210,7 +330,7 @@ mod test {
     use crate::generated::SignRawPayloadIntentV2;
     use std::sync::Arc;
     use std::time::Duration;
-    use wiremock::matchers::method;
+    use wiremock::matchers::{header, method};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     fn simple_activity_intent() -> SignRawPayloadIntentV2 {
@@ -224,17 +344,26 @@ mod test {
 
     async fn setup_client_and_server() -> (TurnkeyClient, MockServer) {
         let server = MockServer::start().await;
-        let client = TurnkeyClient::new(
-            server.uri(),
-            TurnkeyP256ApiKey::generate(),
-            Some(RetryConfig {
+        let client = TurnkeyClient::builder()
+            .api_key(TurnkeyP256ApiKey::generate())
+            .base_url(server.uri())
+            .retry_config(RetryConfig {
                 initial_delay: Duration::from_millis(50),
                 multiplier: 2.0,
                 max_delay: Duration::from_millis(1000),
                 max_retries: 3,
-            }),
-        );
+            })
+            .build()
+            .unwrap();
         (client, server)
+    }
+
+    #[test]
+    fn client_requires_an_api_key() {
+        assert!(matches!(
+            TurnkeyClient::builder().build().unwrap_err(),
+            TurnkeyClientError::BuilderMissingApiKey
+        ));
     }
 
     #[tokio::test]
@@ -256,6 +385,29 @@ mod test {
             TurnkeyClientError::UnexpectedHttpStatus(status, body) => {
                 assert_eq!(status, 500);
                 assert_eq!(body, "internal server error");
+            }
+            other => panic!("unexpected error: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_bad_encoding() {
+        let (client, server) = setup_client_and_server().await;
+
+        // Simulate 500 Internal Server Error
+        let response = ResponseTemplate::new(200).set_body_string("success but not JSON");
+        Mock::given(method("POST"))
+            .respond_with(response)
+            .mount(&server)
+            .await;
+
+        let result = client
+            .process_activity(simple_activity_intent(), "/sign_raw_payload".to_string())
+            .await;
+
+        match result.unwrap_err() {
+            TurnkeyClientError::UnexpectedMimeType(mime_type) => {
+                assert_eq!(mime_type, "text/plain");
             }
             other => panic!("unexpected error: {:?}", other),
         }
@@ -420,7 +572,8 @@ mod test {
 
         // Real activity response captured from the network
         let raw_activity_response = "{\"activity\":{\"id\":\"019660f7-801d-75d8-a40e-e4f69944b711\", \"organizationId\":\"651b573c-861b-4f10-a478-cbcfe0c226af\", \"status\":\"ACTIVITY_STATUS_COMPLETED\", \"type\":\"ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V7\", \"intent\":{\"createSubOrganizationIntentV7\":{\"subOrganizationName\":\"New sub-organization\", \"rootUsers\":[{\"userName\":\"Root User\", \"apiKeys\":[{\"apiKeyName\":\"Test API Key\", \"publicKey\":\"03bf162576eb8dfecf33d9275d09595284f6c4df0db6156c3c582777886a0ee0ac\", \"curveType\":\"API_KEY_CURVE_P256\"}], \"authenticators\":[], \"oauthProviders\":[]}], \"rootQuorumThreshold\":1, \"wallet\":{\"walletName\":\"New wallet\", \"accounts\":[{\"curve\":\"CURVE_SECP256K1\", \"pathFormat\":\"PATH_FORMAT_BIP32\", \"path\":\"m/44'/60'/0'/0\", \"addressFormat\":\"ADDRESS_FORMAT_ETHEREUM\"}]}}}, \"result\":{\"createSubOrganizationResultV7\":{\"subOrganizationId\":\"d047f3a2-6c66-40ee-ab71-95f8a0148fe3\", \"wallet\":{\"walletId\":\"ac651e99-579f-5c7c-8e06-16430bc25dc1\", \"addresses\":[\"0x4Cb785085B399570F9Ccc0d145eeE0359CC74aCC\"]}, \"rootUserIds\":[\"00f2d4f0-0bb8-4f77-bf7e-013c76e9302d\"]}}, \"votes\":[{\"id\":\"da7460b7-9871-45bf-8ef5-c42aab01fc77\", \"userId\":\"72465bbd-469d-4f78-94d5-7920a2141641\", \"user\":{\"userId\":\"72465bbd-469d-4f78-94d5-7920a2141641\", \"userName\":\"Root user\", \"userEmail\":\"rno+rust@turnkey.io\", \"authenticators\":[{\"transports\":[\"AUTHENTICATOR_TRANSPORT_HYBRID\", \"AUTHENTICATOR_TRANSPORT_INTERNAL\"], \"attestationType\":\"none\", \"aaguid\":\"-_wwBxVOTsyMC24CBVfXvQ\", \"credentialId\":\"u2oC6Kaoo39ozqvSVZHH1-mWpLI\", \"model\":\"Security key\", \"credential\":{\"publicKey\":\"pQECAyYgASFYIOt5O_a9z7xo9u1xbvg35vywIaB06uWWTvSwxeu26dGAIlggEOmdA0TqzU7AMSuIiHKy2r7TFzKhdGR-CUJRXqGnV00\", \"type\":\"CREDENTIAL_TYPE_WEBAUTHN_AUTHENTICATOR\"}, \"authenticatorId\":\"b34b8c49-3a6c-4b31-a93d-42c0d263d987\", \"authenticatorName\":\"Laptop\", \"createdAt\":{\"seconds\":\"1743191135\", \"nanos\":\"0\"}, \"updatedAt\":{\"seconds\":\"1743191135\", \"nanos\":\"0\"}}], \"apiKeys\":[{\"credential\":{\"publicKey\":\"03bf162576eb8dfecf33d9275d09595284f6c4df0db6156c3c582777886a0ee0ac\", \"type\":\"CREDENTIAL_TYPE_API_KEY_P256\"}, \"apiKeyId\":\"7a6c2199-4903-4fe2-94da-e3f89a5e2a56\", \"apiKeyName\":\"Test\", \"createdAt\":{\"seconds\":\"1743191268\", \"nanos\":\"0\"}, \"updatedAt\":{\"seconds\":\"1743191268\", \"nanos\":\"0\"}}], \"userTags\":[], \"oauthProviders\":[], \"createdAt\":{\"seconds\":\"1743191135\", \"nanos\":\"0\"}, \"updatedAt\":{\"seconds\":\"1743191135\", \"nanos\":\"0\"}}, \"activityId\":\"019660f7-801d-75d8-a40e-e4f69944b711\", \"selection\":\"VOTE_SELECTION_APPROVED\", \"message\":\"{\\\"type\\\":\\\"ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V7\\\",\\\"timestampMs\\\":\\\"1745383554864\\\",\\\"organizationId\\\":\\\"651b573c-861b-4f10-a478-cbcfe0c226af\\\",\\\"parameters\\\":{\\\"subOrganizationName\\\":\\\"New sub-organization\\\",\\\"rootUsers\\\":[{\\\"userName\\\":\\\"Root User\\\",\\\"userEmail\\\":null,\\\"userPhoneNumber\\\":null,\\\"apiKeys\\\":[{\\\"apiKeyName\\\":\\\"Test API Key\\\",\\\"publicKey\\\":\\\"03bf162576eb8dfecf33d9275d09595284f6c4df0db6156c3c582777886a0ee0ac\\\",\\\"curveType\\\":\\\"API_KEY_CURVE_P256\\\",\\\"expirationSeconds\\\":null}],\\\"authenticators\\\":[],\\\"oauthProviders\\\":[]}],\\\"rootQuorumThreshold\\\":1,\\\"wallet\\\":{\\\"walletName\\\":\\\"New wallet\\\",\\\"accounts\\\":[{\\\"curve\\\":\\\"CURVE_SECP256K1\\\",\\\"pathFormat\\\":\\\"PATH_FORMAT_BIP32\\\",\\\"path\\\":\\\"m/44'/60'/0'/0\\\",\\\"addressFormat\\\":\\\"ADDRESS_FORMAT_ETHEREUM\\\"}],\\\"mnemonicLength\\\":null},\\\"disableEmailRecovery\\\":null,\\\"disableEmailAuth\\\":null,\\\"disableSmsAuth\\\":null,\\\"disableOtpEmailAuth\\\":null}}\", \"publicKey\":\"03bf162576eb8dfecf33d9275d09595284f6c4df0db6156c3c582777886a0ee0ac\", \"signature\":\"30450221008787fb627333f4299f28720775e447e6f6dcdb9c0f21f006aa3d59c90741a7de02205247df721eae2550f3569205b3dd155e693070ea95ae794e87b7e1684eb91814\", \"scheme\":\"SIGNATURE_SCHEME_TK_API_P256\", \"createdAt\":{\"seconds\":\"1745383555\", \"nanos\":\"0\"}}], \"fingerprint\":\"sha256:5a2d45e700283d37f537b4ce0888f1ee93cb90d794de1426c3bc033da120fe53\", \"canApprove\":false, \"canReject\":true, \"createdAt\":{\"seconds\":\"1745383555\", \"nanos\":\"0\"}, \"updatedAt\":{\"seconds\":\"1745383555\", \"nanos\":\"0\"}, \"failure\":null}}";
-        let response = ResponseTemplate::new(200).set_body_string(raw_activity_response);
+        let response = ResponseTemplate::new(200)
+            .set_body_raw(raw_activity_response.as_bytes(), "application/json");
 
         Mock::given(method("POST"))
             .respond_with(response)
@@ -449,6 +602,73 @@ mod test {
                 panic!("didn't match on the right type!")
             }
         }
+    }
+
+    #[tokio::test]
+    async fn client_respects_custom_timeout() {
+        let server = MockServer::start().await;
+
+        // This response takes 2 seconds to return
+        let delayed_response = ResponseTemplate::new(200)
+            .set_delay(Duration::from_secs(2))
+            .set_body_string("OK");
+
+        // Register the mock handler
+        Mock::given(method("POST"))
+            .respond_with(delayed_response)
+            .mount(&server)
+            .await;
+
+        // Build client with a short timeout (e.g. 1s -- intentionally shorter than the server delay of 2s)
+        let client = TurnkeyClient::builder()
+            .api_key(TurnkeyP256ApiKey::generate())
+            .base_url(&server.uri())
+            .timeout(Duration::from_secs(1))
+            .build()
+            .unwrap();
+
+        let result: Result<ActivityResponse, TurnkeyClientError> = client
+            .process_request(&simple_activity_intent(), "/sign_raw_payload".to_string())
+            .await;
+
+        match result.unwrap_err() {
+            TurnkeyClientError::Http(err) => {
+                assert!(err.is_timeout());
+            }
+            other => panic!("unexpected error: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn client_has_custom_user_agent() {
+        let server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            // Expect the request is made with the custom user agent
+            .and(header("User-Agent", TURNKEY_RUST_SDK_USER_AGENT))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "activity": {
+                    "type": "ACTIVITY_TYPE_SIGN_RAW_PAYLOAD",
+                    "status": "ACTIVITY_STATUS_COMPLETED",
+                    "id": "some-activity-id",
+                    "organizationId": "org-id",
+                    "fingerprint": "fingerprint",
+                }
+            })))
+            .mount(&server)
+            .await;
+
+        let client = TurnkeyClient::builder()
+            .api_key(TurnkeyP256ApiKey::generate())
+            .base_url(&server.uri())
+            .build()
+            .unwrap();
+
+        let res: ActivityResponse = client
+            .process_request(&simple_activity_intent(), "/sign_raw_payload".to_string())
+            .await
+            .unwrap();
+        assert_eq!(res.activity.unwrap().id, "some-activity-id".to_string());
     }
 
     mod retry {
