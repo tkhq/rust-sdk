@@ -12,8 +12,8 @@ use generated::Activity;
 use generated::ActivityResponse;
 use generated::ActivityStatus;
 
-use tkhq_api_key_stamper::StamperError;
-use tkhq_api_key_stamper::TurnkeyP256ApiKey;
+use turnkey_api_key_stamper::StamperError;
+use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 
 #[cfg_attr(doc, doc(hidden))]
 pub mod generated;

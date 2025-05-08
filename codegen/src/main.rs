@@ -238,7 +238,7 @@ fn main() {
         .unwrap();
 
     // This will append new lines to the end of the mod.rs file
-    writeln!(mod_rs, "\n// Added by tkhq_codegen").unwrap();
+    writeln!(mod_rs, "\n// Added by turnkey_codegen").unwrap();
     writeln!(mod_rs, "mod client;").unwrap();
     writeln!(mod_rs, "pub use services::coordinator::public::v1::*;").unwrap();
     writeln!(mod_rs, "pub use external::activity::v1::*;").unwrap();

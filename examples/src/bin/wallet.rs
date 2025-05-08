@@ -1,15 +1,15 @@
 use std::error::Error;
 use std::{env, vec};
-use tkhq_client::generated::immutable::common::v1::{HashFunction, PayloadEncoding};
-use tkhq_client::generated::{
+use turnkey_client::generated::immutable::common::v1::{HashFunction, PayloadEncoding};
+use turnkey_client::generated::{
     immutable::common::v1::{AddressFormat, Curve, PathFormat},
     WalletAccountParams,
 };
-use tkhq_client::generated::{
+use turnkey_client::generated::{
     CreateWalletIntent, DeleteWalletsIntent, ExportWalletIntent, SignRawPayloadIntentV2,
 };
-use tkhq_enclave_encrypt::{ExportClient, QuorumPublicKey};
-use tkhq_examples::load_api_key_from_env;
+use turnkey_enclave_encrypt::{ExportClient, QuorumPublicKey};
+use turnkey_examples::load_api_key_from_env;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -21,7 +21,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         env::var("TURNKEY_ORGANIZATION_ID").expect("cannot load TURNKEY_ORGANIZATION_ID");
 
     // Create our Turnkey client
-    let client = tkhq_client::TurnkeyClient::builder()
+    let client = turnkey_client::TurnkeyClient::builder()
         .api_key(api_key)
         .build()?;
 

@@ -1,12 +1,12 @@
 use std::env;
 use std::error::Error;
-use tkhq_client::generated::GetWhoamiRequest;
-use tkhq_examples::load_api_key_from_env;
+use turnkey_client::generated::GetWhoamiRequest;
+use turnkey_examples::load_api_key_from_env;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let api_key = load_api_key_from_env()?;
-    let client = tkhq_client::TurnkeyClient::builder()
+    let client = turnkey_client::TurnkeyClient::builder()
         .api_key(api_key)
         .build()?;
 

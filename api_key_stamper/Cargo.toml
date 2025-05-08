@@ -1,5 +1,5 @@
 [package]
-name = "tkhq_api_key_stamper"
+name = "turnkey_api_key_stamper"
 version = "0.0.2"
 edition = "2021"
 publish = false

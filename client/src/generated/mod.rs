@@ -76,7 +76,7 @@ pub mod services {
     }
 }
 
-// Added by tkhq_codegen
+// Added by turnkey_codegen
 mod client;
 pub use external::activity::v1::*;
 pub use immutable::activity::v1::*;

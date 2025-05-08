@@ -18,11 +18,11 @@ Populate your `.env` file with your own organization ID, public key and private 
 
 Run the examples with:
 ```
-cargo run -p tkhq_examples --bin
+cargo run -p turnkey_examples --bin
 ```
 
 or
 
 ```
-cargo run -p tkhq_examples --bin sub_organization
+cargo run -p turnkey_examples --bin sub_organization
 ```
