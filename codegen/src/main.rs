@@ -164,8 +164,6 @@ fn main() {
                         format!(
                             r#"
                             pub async fn {fn_name}(&self, organization_id: String, timestamp_ms: u128, params: immutable_activity::{activity_intent}) -> Result<external_activity::Activity, TurnkeyClientError> {{
-                                let url = format!("{{}}{{}}", self.base_url, "{route}");
-
                                 let request = external_activity::{short_req_type} {{
                                     r#type: "{activity_type}".to_string(),
                                     timestamp_ms: timestamp_ms.to_string(),
@@ -173,11 +171,7 @@ fn main() {
                                     organization_id,
                                 }};
 
-                                let post_body = serde_json::to_string(&request).unwrap();
-
-                                let stamp = self.api_key.stamp(post_body.clone()).unwrap();
-
-                                self.process_activity(url, stamp, post_body).await
+                                self.process_activity(&request, "{route}".to_string()).await
                             }}
                         "#
                         )
@@ -185,8 +179,6 @@ fn main() {
                         format!(
                             r#"
                             pub async fn {fn_name}(&self, organization_id: String, timestamp_ms: u128, params: immutable_activity::{activity_intent}) -> Result<immutable_activity::{activity_result}, TurnkeyClientError> {{
-                                let url = format!("{{}}{{}}", self.base_url, "{route}");
-
                                 let request = external_activity::{short_req_type} {{
                                     r#type: "{activity_type}".to_string(),
                                     timestamp_ms: timestamp_ms.to_string(),
@@ -194,21 +186,19 @@ fn main() {
                                     organization_id,
                                 }};
 
-                                let post_body = serde_json::to_string(&request)?;
-
-                                let stamp = self.api_key.stamp(post_body.clone())?;
-
-                                let activity = self.process_activity(url, stamp, post_body).await?;
+                                let activity: external_activity::Activity = self.process_activity(&request, "{route}".to_string()).await?;
 
                                 let inner = activity
-                                    .result.ok_or_else(|| TurnkeyClientError::MissingResult)?
-                                    .inner.ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
-
+                                    .result
+                                    .ok_or_else(|| TurnkeyClientError::MissingResult)?
+                                    .inner
+                                    .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
                                 match inner {{
                                     immutable_activity::result::Inner::{activity_result}(res) => Ok(res),
-                                    other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(serde_json::to_string(&other)?))
+                                    other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                                        serde_json::to_string(&other)?,
+                                    )),
                                 }}
-                                    
                             }}
                         "#
                         )
@@ -220,18 +210,7 @@ fn main() {
                     let func = format!(
                         r#"
                         pub async fn {fn_name}(&self, request: coordinator::{req_type}) -> Result<coordinator::{res_type}, TurnkeyClientError> {{
-                            let url = format!("{{}}{{}}", self.base_url, "{route}");
-                            let post_body = serde_json::to_string(&request)?;
-                            let stamp = self.api_key.stamp(post_body.clone())?;
-
-                            let res = self.http
-                                .post(url)
-                                .header("X-Stamp", stamp)
-                                .body(post_body)
-                                .send()
-                                .await?;
-                            let parsed = res.json::<coordinator::{res_type}>().await?;
-                            Ok(parsed)
+                            self.process_request(&request, "{route}".to_string()).await
                         }}
                     "#
                     );

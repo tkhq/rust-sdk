@@ -9,6 +9,7 @@ license = "Apache-2.0"
 doctest = false
 
 [dependencies]
+mime = { version = "0.3.17" }
 reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
 tkhq_api_key_stamper = { path = "../api_key_stamper" }
 prost = { version = "0.12" }

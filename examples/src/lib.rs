@@ -1,14 +1,6 @@
 use std::env;
 use std::error::Error;
-use std::time;
 use tkhq_api_key_stamper::TurnkeyP256ApiKey;
-
-pub fn current_time_ms() -> u128 {
-    time::SystemTime::now()
-        .duration_since(time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis()
-}
 
 // Convenience function shared across examples to load a Turnkey API key from the local `examples/.env` file, or from env vars.
 pub fn load_api_key_from_env() -> Result<TurnkeyP256ApiKey, Box<dyn Error>> {

@@ -2141,6 +2141,7 @@ name = "tkhq_client"
 version = "0.0.2"
 dependencies = [
  "http 0.2.12",
+ "mime",
  "prost 0.12.6",
  "prost-types 0.12.6",
  "reqwest",
