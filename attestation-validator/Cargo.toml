@@ -1,0 +1,29 @@
+[package]
+name = "attestation-validator"
+version = "0.1.0"
+authors = ["tkhq"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+# qos_hex = { path = "../qos_hex" }
+borsh = { version = "1.0", features = ["std", "derive"] , default-features = false}
+aws-nitro-enclaves-nsm-api = { version = "0.3", features = ["nix"], default-features = false }
+aws-nitro-enclaves-cose = { version = "0.5", default-features = false }
+sha2 = { version = "0.10", default-features = false }
+webpki = { version =  "0.22.4", default-features = false }
+serde_bytes = { version = "0.11", default-features = false }
+p384 = { version = "0.12", features = ["sha384", "ecdsa", "ecdsa-core", "std"], default-features = false }
+x509-cert = { version = "=0.1.0", features = ["pem"], default-features = false }
+base64 = "0.13"
+serde = { version = "1.0", features = ["derive"] }
+serde_cbor = "0.11"
+ciborium = "0.2"
+coset = "0.3.7"
+attestation-doc-validation = "0.8.0"
+x509-parser = "0.14.0"
+
+[dev-dependencies]
+hex-literal = "0.4"
+rand = "0.8"
