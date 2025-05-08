@@ -1,13 +1,11 @@
 [package]
-name = "attestation-validator"
+name = "turnkey_proofs"
 version = "0.1.0"
 authors = ["tkhq"]
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-# qos_hex = { path = "../qos_hex" }
 borsh = { version = "1.0", features = ["std", "derive"] , default-features = false}
 aws-nitro-enclaves-nsm-api = { version = "0.3", features = ["nix"], default-features = false }
 aws-nitro-enclaves-cose = { version = "0.5", default-features = false }

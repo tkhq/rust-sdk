@@ -10,5 +10,7 @@ members = [
   "enclave_encrypt",
   # Examples using the Turnkey stamper
   "examples",
+  # Contains utilities to work with Turnkey proofs (boot proofs, app proofs)
+  "proofs",
 ]
 resolver = "2"
