@@ -1,8 +1,5 @@
 //! Logic for decoding and validating the Nitro Secure Module Attestation
 //! Document.
-
-use base64;
-
 use aws_nitro_enclaves_cose::{
     crypto::{Hash, MessageDigest, SignatureAlgorithm, SigningPublicKey},
     error::CoseError,
@@ -38,7 +35,7 @@ static AWS_NITRO_CERT_SIG_ALG: &[&webpki::SignatureAlgorithm] = &[&webpki::ECDSA
 ///
 /// The `aws_root_cert.pem` contents hash as follows via SHA256:
 /// `6eb9688305e4bbca67f44b59c29a0661ae930f09b5945b5d1d9ae01125c8d6c0`.
-pub const AWS_ROOT_CERT_PEM: &[u8] = std::include_bytes!("../root.pem");
+pub const AWS_ROOT_CERT_PEM: &[u8] = std::include_bytes!("../static/aws_root.pem");
 
 /// Extract a DER encoded certificate from bytes representing a PEM encoded
 /// certificate.
@@ -297,11 +294,12 @@ impl Hash for Sha2 {
     }
 }
 
-fn main() {
-    let attestation_doc_bytes = std::include_bytes!("../turnkey_attestation.txt");
-
+pub fn parse_and_verify_aws_nitro_attestation<S: AsRef<str>>(
+    encoded_attestation: S,
+) -> Result<AttestationDoc, AttestError> {
     // Decode the base64 string
-    let decoded_bytes = base64::decode(attestation_doc_bytes).expect("Failed to decode base64-encoded attestation document");
+    let decoded_bytes = base64::decode(encoded_attestation.as_ref())
+        .map_err(|e| AttestError::Base64DecodingError(e.to_string()))?;
 
     let trusted_root_certificate = cert_from_pem(AWS_ROOT_CERT_PEM).unwrap();
 
@@ -310,14 +308,9 @@ fn main() {
         .unwrap()
         .as_secs();
 
-    let parsed_and_verified_doc = attestation_doc_from_der(
+    attestation_doc_from_der(
         decoded_bytes.as_slice(),
         trusted_root_certificate.as_slice(),
         current_time,
-    );
-
-    match parsed_and_verified_doc {
-        Ok(doc) => print!("Verified and parsed attestation doc: {:?}", doc),
-        Err(e) => print!("Unable to successfully parse and verify attestation document: {:?}", e)
-    }
+    )
 }

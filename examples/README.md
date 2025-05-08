@@ -16,13 +16,9 @@ cp .env.example .env
 
 Populate your `.env` file with your own organization ID, public key and private key. You can follow the instructions from our [quickstart](https://docs.turnkey.com/getting-started/quickstart).
 
-Run the examples with:
+Run the examples with `cargo run`:
 ```
-cargo run -p turnkey_examples --bin
-```
-
-or
-
-```
+cargo run -p turnkey_examples --bin whoami
 cargo run -p turnkey_examples --bin sub_organization
+cargo run -p turnkey_examples --bin wallet
 ```

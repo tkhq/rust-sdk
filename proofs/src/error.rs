@@ -38,8 +38,10 @@ pub enum AttestError {
     InvalidPubKey,
     /// Invalid bytes.
     InvalidBytes,
-    /// The NSM returned an unexpected response when querried
+    /// The NSM returned an unexpected response when queried
     UnexpectedNsmResponse(types::NsmResponse),
+    /// Error while decoding the attestation document (base64 encoded).
+    Base64DecodingError(String),
     /// Error while decoding PEM.
     PemDecodingError,
     /// Error trying to decode the public key in a cert.
