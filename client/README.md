@@ -1,4 +1,6 @@
-# Turnkey Client
+# `turnkey_client`
+
+This crate contains an HTTP client to interact with the Turnkey API ([documentation](https://docs.turnkey.com/api-reference/overview)).
 
 ## Usage
 
@@ -10,7 +12,7 @@ To make a request to Turnkey:
   ```
 * Create a new client:
   ```rust
-  let client = tkhq_client::TurnkeyClient::builder().api_key(api_key).build().expect("client builder failed");
+  let client = turnkey_client::TurnkeyClient::builder().api_key(api_key).build().expect("client builder failed");
   ```
 * Make a request (for example, a signature request)
   ```rust
@@ -30,7 +32,7 @@ To make a request to Turnkey:
 
 The Turnkey client uses `reqwest` under the hood. To access the `reqwest` builder, use the following:
 ```rust
-tkhq_client::TurnkeyClient::builder()
+turnkey_client::TurnkeyClient::builder()
     .api_key(api_key)
     .with_reqwest_builder(|b| b.connection_verbose(true))
 ```

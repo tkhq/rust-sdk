@@ -1,5 +1,5 @@
 [package]
-name = "tkhq_enclave_encrypt"
+name = "turnkey_enclave_encrypt"
 version = "0.1.0"
 edition = "2021"
 publish = false

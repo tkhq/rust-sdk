@@ -1,6 +1,6 @@
 use std::env;
 use std::error::Error;
-use tkhq_api_key_stamper::TurnkeyP256ApiKey;
+use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 
 // Convenience function shared across examples to load a Turnkey API key from the local `examples/.env` file, or from env vars.
 pub fn load_api_key_from_env() -> Result<TurnkeyP256ApiKey, Box<dyn Error>> {

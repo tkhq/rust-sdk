@@ -1,4 +1,4 @@
-# tkhq_enclave_encrypt
+# turnkey_enclave_encrypt
 
 This repository contains primitives to encrypt and decrypt data, sent to and from Turnkey secure enclaves (see Enclave to [end-user secure channels](https://docs.turnkey.com/security/enclave-secure-channels)).
 

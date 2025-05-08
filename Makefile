@@ -1,6 +1,6 @@
 .PHONY: generate
 generate:
-	cargo run -p tkhq_codegen
+	cargo run -p turnkey_codegen
 	cargo fmt --
 
 .PHONY: check-generate
@@ -29,6 +29,6 @@ test: build
 
 .PHONY: examples
 examples: build
-	cargo run -p tkhq_examples --bin whoami
-	cargo run -p tkhq_examples --bin sub_organization
-	cargo run -p tkhq_examples --bin wallet
+	cargo run -p turnkey_examples --bin whoami
+	cargo run -p turnkey_examples --bin sub_organization
+	cargo run -p turnkey_examples --bin wallet
