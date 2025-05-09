@@ -2,7 +2,7 @@
 
 This crate contains utilities to parse and verify Turnkey secure enclave proofs. As outlined in [the Turnkey whitepaper](https://whitepaper.turnkey.com) there are two types of proofs:
 * App proofs, signing structured data with enclave ephemeral keys.
-* Boot proofs, which are proofs that a given enclave was provisioned correctly. Boot proofs reference, among other things, enclave ephemeral key. 
+* Boot proofs, which are proofs that a given enclave was provisioned correctly. Boot proofs reference via their `public_key` field the enclave ephemeral key. This links App and Boot proofs together.
 
 ## Boot proofs
 
@@ -24,7 +24,7 @@ You may request a fresh attestation with the `turnkey` CLI (available [here](htt
 $ turnkey request --host api.turnkey.com --path /public/v1/query/get_attestation --body '{ "organizationId": "<your organization ID>", "enclaveType": "signer" }' --organization <your organization ID>
 
 {
-   "attestationDocument": "<base64-encoded attestation document -- copy and paste this into turnkey_attestation.txt>"
+   "attestationDocument": "<base64-encoded attestation document>"
 }
 ```
 
