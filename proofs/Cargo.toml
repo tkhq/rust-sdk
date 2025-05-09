@@ -11,23 +11,23 @@ keywords = ["turnkey", "nitro-enclaves", "attestation", "proofs", "cryptography"
 categories = ["cryptography", "hardware-support"]
 
 [dependencies]
-borsh = { version = "1.0", features = ["std", "derive"] , default-features = false}
+attestation-doc-validation = { version = "0.8.0", default-features = false }
 aws-nitro-enclaves-nsm-api = { version = "0.3", features = ["nix"], default-features = false }
 aws-nitro-enclaves-cose = { version = "0.5", default-features = false }
+base64 = { version = "0.13", default-features = false }
+borsh = { version = "1.0", features = ["std", "derive"] , default-features = false}
+ciborium = { version = "0.2", default-features = false }
+coset = { version = "0.3.7", default-features = false }
+p384 = { version = "0.12", features = ["sha384", "ecdsa", "ecdsa-core", "std"], default-features = false }
+serde = { version = "1.0.219", default-features = false, features = ["std", "derive"] }
+serde_bytes = { version = "0.11", default-features = false }
+serde_cbor = { version = "0.11", default-features = false }
 sha2 = { version = "0.10", default-features = false }
 webpki = { version =  "0.22.4", default-features = false }
-serde_bytes = { version = "0.11", default-features = false }
-p384 = { version = "0.12", features = ["sha384", "ecdsa", "ecdsa-core", "std"], default-features = false }
 x509-cert = { version = "=0.1.0", features = ["pem"], default-features = false }
-base64 = "0.13"
-serde = { version = "1.0", features = ["derive"] }
-serde_cbor = "0.11"
-ciborium = "0.2"
-coset = "0.3.7"
-attestation-doc-validation = "0.8.0"
-x509-parser = "0.14.0"
+x509-parser = { version = "0.14.0", default-features = false }
 
 [dev-dependencies]
 hex = { version = "0.4.3", default-features = false, features = ["std"] }
-hex-literal = "0.4"
-rand = "0.8"
+hex-literal = { version = "0.4", default-features = false }
+rand = { version = "0.8", default-features = false }
