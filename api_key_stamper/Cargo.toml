@@ -2,8 +2,12 @@
 name = "turnkey_api_key_stamper"
 version = "0.0.2"
 edition = "2021"
-publish = false
 license = "Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/tkhq/rust-sdk"
+documentation = "https://docs.rs/turnkey_api_key_stamper"
+keywords = ["turnkey", "api-key", "stamp", "ecdsa", "signature", "p256"]
+categories = ["cryptography", "authentication", "api-bindings"]
 
 [dependencies]
 base64 = { version = "0.22.0", default-features = false, features = ["std"] }
