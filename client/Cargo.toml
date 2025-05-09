@@ -2,8 +2,14 @@
 name = "turnkey_client"
 version = "0.0.2"
 edition = "2021"
-publish = false
 license = "Apache-2.0"
+description = "A Rust client to interact with the Turnkey API."
+repository = "https://github.com/tkhq/rust-sdk"
+homepage = "https://turnkey.com"
+readme = "README.md"
+documentation = "https://docs.rs/turnkey_client"
+keywords = ["turnkey", "api", "client", "cryptography"]
+categories = ["api-bindings"]
 
 [lib]
 doctest = false
