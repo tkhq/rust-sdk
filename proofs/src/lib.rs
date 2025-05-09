@@ -1,5 +1,5 @@
-//! Logic for decoding and validating the Nitro Secure Module Attestation
-//! Document.
+#![doc = include_str!("../README.md")]
+
 use aws_nitro_enclaves_cose::{
     crypto::{Hash, MessageDigest, SignatureAlgorithm, SigningPublicKey},
     error::CoseError,
@@ -294,6 +294,7 @@ impl Hash for Sha2 {
     }
 }
 
+/// Parses and verifies an AWS nitro attestation, provided as a base64 encoded string.
 pub fn parse_and_verify_aws_nitro_attestation<S: AsRef<str>>(
     encoded_attestation: S,
 ) -> Result<AttestationDoc, AttestError> {
