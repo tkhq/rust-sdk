@@ -1,5 +1,4 @@
-//! Primitives to support one shot enclave encryption protocol described in this
-//! crate's readme.
+#![doc = include_str!("../README.md")]
 
 #![forbid(unsafe_code)]
 #![deny(clippy::all, clippy::unwrap_used)]

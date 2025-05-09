@@ -1,6 +1,6 @@
 # turnkey_enclave_encrypt
 
-This repository contains primitives to encrypt and decrypt data, sent to and from Turnkey secure enclaves (see Enclave to [end-user secure channels](https://docs.turnkey.com/security/enclave-secure-channels)).
+This crate contains primitives to encrypt and decrypt data, sent to and from Turnkey secure enclaves (see Enclave to [end-user secure channels](https://docs.turnkey.com/security/enclave-secure-channels)).
 
 Encryption and decryption are "one-shot" using the HPKE standard ([RFC 9180](https://datatracker.ietf.org/doc/rfc9180/)).  Neither the client or the server should ever be reused to send/receive more than one message. We want to avoid the recipient target key being used more then once in order to improve forward secrecy; see [security profile](#security-profile) section for important details and caveats.
 

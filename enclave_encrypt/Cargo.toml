@@ -2,7 +2,13 @@
 name = "turnkey_enclave_encrypt"
 version = "0.1.0"
 edition = "2021"
-publish = false
+description = "Utilities to encrypt and decrypt data sent to and from Turnkey secure enclaves, using HPKE (RFC 9180). Used in authentication, export, and import flows."
+repository = "https://github.com/tkhq/rust-sdk"
+homepage = "https://turnkey.com"
+readme = "README.md"
+documentation = "https://docs.rs/turnkey_enclave_encrypt"
+keywords = ["turnkey", "enclave", "hpke", "encryption", "export", "import", "authentication", "bundles"]
+categories = ["cryptography", "encoding"]
 
 [dependencies]
 bs58 = { version = "0.5.0", features = [
