@@ -9,7 +9,7 @@ prettyplease = {version = "0.2", default-features = false }
 proc-macro2 = { version = "1.0.95", default-features = false }
 prost-build = { version = "0.12.6", default-features = false }
 quote = { version = "1.0", default-features = false }
-regex = { version = "1", default-features = false }
+regex = { version = "1", default-features = false, features=["unicode-perl"] }
 serde = { version = "1.0.219", default-features = false, features = ["std", "derive"] }
 serde_json = { version = "1.0.140", default-features = false, features = ["std"] }
 syn = { version = "2.0", features = ["full", "extra-traits"], default-features = false}
