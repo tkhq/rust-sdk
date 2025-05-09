@@ -23,10 +23,10 @@ let request = client.sign_raw_payload(
     "your-turnkey-organization-id".to_string(),
     client.current_timestamp(),
     SignRawPayloadIntentV2 {
-        sign_with: "0x123456".to_string(), // any Turnkey-generated address
+        sign_with: "0x123456".to_string(), // Turnkey address
         payload: "hello from TKHQ".to_string(),
         encoding: PayloadEncoding::TextUtf8,
-        hash_function: HashFunction::Keccak256,
+        hash_function: HashFunction::Keccak256, // assuming ETH
     },
 );
 
