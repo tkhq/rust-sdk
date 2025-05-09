@@ -1,4 +1,4 @@
-# turnkey_enclave_encrypt
+# `turnkey_enclave_encrypt`
 
 This crate contains primitives to encrypt and decrypt data, sent to and from Turnkey secure enclaves (see Enclave to [end-user secure channels](https://docs.turnkey.com/security/enclave-secure-channels)).
 
@@ -146,4 +146,4 @@ The underlying HPKE spec does not provide forward secrecy on the recipient side 
 
 #### Sender authentication
 
-We use OpMode Base because the sender's KEM private key is not long lived and thus does not need HPKE authentication. In order for this to be exploited one side's private key data would have to be leaked or an attacker would need to spoof a message from the sender. Turnkey mitigates this attack by layering a signature from an authentication key over payloads that contain ciphertext + encappedPub. Note that in the case of client to server the authentication signature is implicitly verified by the Ump policy engine. Read more about HPKE asymmetric authentication [here](https://datatracker.ietf.org/doc/html/rfc9180#name-authentication-using-an-asy).
+We use `OpMode` Base because the sender's KEM private key is not long lived and thus does not need HPKE authentication. In order for this to be exploited one side's private key data would have to be leaked or an attacker would need to spoof a message from the sender. Turnkey mitigates this attack by layering a signature from an authentication key over payloads that contain ciphertext + encappedPub. Note that in the case of client to server the authentication signature is implicitly verified by the Ump policy engine. Read more about HPKE asymmetric authentication [here](https://datatracker.ietf.org/doc/html/rfc9180#name-authentication-using-an-asy).
