@@ -28,5 +28,6 @@ attestation-doc-validation = "0.8.0"
 x509-parser = "0.14.0"
 
 [dev-dependencies]
+hex = { version = "0.4.3", default-features = false, features = ["std"] }
 hex-literal = "0.4"
 rand = "0.8"

@@ -2,6 +2,16 @@
 generate:
 	cargo run -p turnkey_codegen
 	cargo fmt --
+	@$(MAKE) strip-doc file=client/src/generated/google.api.rs
+	@$(MAKE) strip-doc file=client/src/generated/google.rpc.rs
+	@$(MAKE) strip-doc file=client/src/generated/grpc.gateway.protoc_gen_openapiv2.options.rs
+
+# This is necessary for some google-generated files. They have non-valid comments that rustdoc tries to parse.
+strip-doc:
+	@echo "Stripping /// doc comments from $(file)..."
+	@tmpfile=$$(mktemp) && \
+		awk '!/^[[:space:]]*\/{3}/' $(file) > $$tmpfile && \
+		mv $$tmpfile $(file)
 
 .PHONY: check-generate
 check-generate:

@@ -3061,6 +3061,7 @@ dependencies = [
  "borsh",
  "ciborium",
  "coset",
+ "hex",
  "hex-literal",
  "p384",
  "rand",

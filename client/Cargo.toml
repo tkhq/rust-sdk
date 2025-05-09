@@ -11,9 +11,6 @@ documentation = "https://docs.rs/turnkey_client"
 keywords = ["turnkey", "api", "client", "cryptography"]
 categories = ["api-bindings"]
 
-[lib]
-doctest = false
-
 [dependencies]
 mime = { version = "0.3.17" }
 reqwest = { version = "0.11", features = ["json", "rustls-tls"] }

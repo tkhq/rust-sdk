@@ -14,7 +14,6 @@ use generated::ActivityStatus;
 use turnkey_api_key_stamper::StamperError;
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 
-#[cfg_attr(doc, doc(hidden))]
 pub mod generated;
 
 pub mod retry;

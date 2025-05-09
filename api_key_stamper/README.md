@@ -14,7 +14,7 @@ let api_key = TurnkeyP256ApiKey::generate();
 
 If you keep API keys in env vars, load it with `from_bytes` or `from_strings`:
 
-```rust
+```rust,no_run
 use std::env;
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 
@@ -44,6 +44,9 @@ let api_key = TurnkeyP256ApiKey::from_files(
 The API is straightforward, once you have a handle on an API key, call `stamp`:
 
 ```rust
+use turnkey_api_key_stamper::TurnkeyP256ApiKey;
+
+let api_key = TurnkeyP256ApiKey::generate();
 let stamp = api_key.stamp("POST request body goes here");
 ```
 

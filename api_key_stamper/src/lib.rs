@@ -1,6 +1,6 @@
 #![doc = include_str!("../README.md")]
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use base64::prelude::BASE64_URL_SAFE_NO_PAD;
 use base64::Engine;
@@ -23,7 +23,7 @@ pub enum StamperError {
     PublicKeyMismatch(String, String),
 
     #[error("cannot open file at {0}: {1}")]
-    Io(PathBuf, String),
+    Io(String, String),
 
     #[error("cannot decode hex: {0}")]
     HexDecode(String),
@@ -106,10 +106,17 @@ impl TurnkeyP256ApiKey {
         public_key_path: Q,
     ) -> Result<Self, StamperError> {
         let private_key = fs::read_to_string(private_key_path.as_ref()).map_err(|e| {
-            StamperError::Io(private_key_path.as_ref().to_path_buf(), e.to_string())
+            StamperError::Io(
+                private_key_path.as_ref().display().to_string(),
+                e.to_string(),
+            )
         })?;
-        let public_key = fs::read_to_string(public_key_path.as_ref())
-            .map_err(|e| StamperError::Io(public_key_path.as_ref().to_path_buf(), e.to_string()))?;
+        let public_key = fs::read_to_string(public_key_path.as_ref()).map_err(|e| {
+            StamperError::Io(
+                public_key_path.as_ref().display().to_string(),
+                e.to_string(),
+            )
+        })?;
 
         Self::from_strings(private_key, Some(public_key))
     }
@@ -359,7 +366,7 @@ mod tests {
         assert_eq!(
             err1,
             StamperError::Io(
-                PathBuf::from("/tmp/does/not/exist/key.priv"),
+                "/tmp/does/not/exist/key.priv".to_string(),
                 "No such file or directory (os error 2)".to_string()
             )
         );
@@ -371,7 +378,7 @@ mod tests {
         assert_eq!(
             err2,
             StamperError::Io(
-                PathBuf::from("/tmp/does/not/exist/key.pub"),
+                "/tmp/does/not/exist/key.pub".to_string(),
                 "No such file or directory (os error 2)".to_string()
             )
         );

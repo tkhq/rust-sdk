@@ -30,7 +30,11 @@ $ turnkey request --host api.turnkey.com --path /public/v1/query/get_attestation
 
 This crate contains a function to parse and verify this attestation: `parse_and_verify_aws_nitro_attestation`. This returns an `AttestationDoc` containing PCR values. You can display these values like so:
 
-```rust
+```rust,no_run
+use hex;
+use turnkey_proofs::parse_and_verify_aws_nitro_attestation;
+
+let attestation_document = "<base64-encoded attestation doc>".to_string();
 let attestation = parse_and_verify_aws_nitro_attestation(attestation_document)
    .expect("cannot parse and verify attestation document");
 
