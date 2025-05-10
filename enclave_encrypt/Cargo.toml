@@ -7,7 +7,7 @@ repository = "https://github.com/tkhq/rust-sdk"
 homepage = "https://turnkey.com"
 readme = "README.md"
 documentation = "https://docs.rs/turnkey_enclave_encrypt"
-keywords = ["turnkey", "enclave", "hpke", "encryption", "export", "import", "authentication", "bundles"]
+keywords = ["turnkey", "enclave", "hpke", "encryption"]
 categories = ["cryptography", "encoding"]
 
 [dependencies]

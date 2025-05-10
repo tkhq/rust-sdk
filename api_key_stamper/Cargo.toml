@@ -7,7 +7,7 @@ description = "Generate signatures over Turnkey API requests using a P-256 key."
 readme = "README.md"
 repository = "https://github.com/tkhq/rust-sdk"
 documentation = "https://docs.rs/turnkey_api_key_stamper"
-keywords = ["turnkey", "api-key", "stamp", "ecdsa", "signature", "p256"]
+keywords = ["turnkey", "api-key", "stamp", "signature", "p256"]
 categories = ["cryptography", "authentication", "api-bindings"]
 
 [dependencies]

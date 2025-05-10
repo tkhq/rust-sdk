@@ -7,7 +7,7 @@ repository = "https://github.com/tkhq/rust-sdk"
 homepage = "https://turnkey.com"
 readme = "README.md"
 documentation = "https://docs.rs/turnkey_proofs"
-keywords = ["turnkey", "nitro-enclaves", "attestation", "proofs", "cryptography"]
+keywords = ["turnkey", "nitro", "enclaves", "attestation", "cryptography"]
 categories = ["cryptography", "hardware-support"]
 
 [dependencies]
