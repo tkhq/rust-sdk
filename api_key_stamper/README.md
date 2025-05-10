@@ -5,7 +5,7 @@ This crate contains structs and utilities to work with P-256 keys, which [Turnke
 ## Creating a new P-256 API key
 
 ```rust
-use turnkey_api_key_stamper::TurnkeyP256ApiKey
+use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 
 let api_key = TurnkeyP256ApiKey::generate();
 ```
@@ -14,7 +14,7 @@ let api_key = TurnkeyP256ApiKey::generate();
 
 If you keep API keys in env vars, load it with `from_bytes` or `from_strings`:
 
-```rust
+```rust,no_run
 use std::env;
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 
@@ -31,7 +31,7 @@ If you want to store API keys in `.env` files, use [`dotenvy`](https://docs.rs/d
 If you have generated API keys with Turnkey's [command-line tool](https://github.com/tkhq/tkcli) you can load them with:
 
 ```rust
-use turnkey_api_key_stamper::TurnkeyP256ApiKey
+use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 
 let api_key = TurnkeyP256ApiKey::from_files(
     "/home/user/.config/turnkey/keys/key.priv",
@@ -44,10 +44,13 @@ let api_key = TurnkeyP256ApiKey::from_files(
 The API is straightforward, once you have a handle on an API key, call `stamp`:
 
 ```rust
+use turnkey_api_key_stamper::TurnkeyP256ApiKey;
+
+let api_key = TurnkeyP256ApiKey::generate();
 let stamp = api_key.stamp("POST request body goes here");
 ```
 
-The stamp produced is a base64-encoded value, ready to be used as a stamp header. See https://docs.turnkey.com/developer-reference/api-overview/stamps#api-keys for more information.
+The stamp produced is a base64-encoded value, ready to be used as a stamp header. See [our documentation](https://docs.turnkey.com/developer-reference/api-overview/stamps#api-keys) for more information.
 
 ## Error handling
 

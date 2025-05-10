@@ -19,6 +19,13 @@ This project uses `make` to encapsulate common tasks:
 * `make examples` runs the examples (requires a local `.env` file, see [instructions](./examples/README.md))
 * `make generate` re-generates `client::generated` from the `proto` folder
 
+## Releases
+
+This project uses [`cargo-release`](https://github.com/crate-ci/cargo-release). Install it with:
+```
+cargo install cargo-release
+```
+
 ## Related projects
 
 There is another Rust client available, maintained by [@Eliascm17](https://github.com/Eliascm17): [Eliascm17/turnkey](https://github.com/Eliascm17/turnkey). This client offers some structure around API requests/responses on top of bare request signing.

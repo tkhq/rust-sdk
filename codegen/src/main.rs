@@ -88,6 +88,16 @@ fn main() {
         r#"(?ms)^  rpc\s+(\w+)\s*\(\s*([a-zA-Z0-9_.]+)\s*\)\s+returns\s+\(\s*([a-zA-Z0-9_.]+)\s*\)\s*\{\n(.*?)^  \}"#
     ).unwrap();
 
+    // Now we try to parse the URL out of the option. For example:
+    //   option (google.api.http) = {
+    //     post: "/public/v1/submit/delete_policy"
+    //     body: "*"
+    //   };
+    // --> we want to extract "/public/v1/submit/delete_policy"
+    //
+    // Note that we can afford the specificity of "post" because Turnkey's API is entirely made of POST requests.
+    let http_re = Regex::new(r#"post\s*:\s*\"([^\"]+)\""#).unwrap();
+
     let mut generated_methods = String::new();
 
     // We manually have to specify the mapping between activity types, route, intent and result type through a file
@@ -132,15 +142,6 @@ fn main() {
                 continue;
             }
 
-            // Now we try to parse the URL out of the option. For example:
-            //   option (google.api.http) = {
-            //     post: "/public/v1/submit/delete_policy"
-            //     body: "*"
-            //   };
-            // --> we want to extract "/public/v1/submit/delete_policy"
-            //
-            // Note that we can afford the specificity of "post" because Turnkey's API is entirely made of POST requests.
-            let http_re = Regex::new(r#"post\s*:\s*\"([^\"]+)\""#).unwrap();
             if let Some(http_caps) = http_re.captures(http_opts) {
                 // This is our URL (e.g. "/public/v1/submit/delete_policy")
                 let route = &http_caps[1];
@@ -257,7 +258,7 @@ fn main() {
         .into_iter()
         .filter_map(Result::ok)
         .filter(|e| {
-            e.path().extension().map_or(false, |ext| ext == "rs")
+            e.path().extension().is_some_and(|ext| ext == "rs")
                 // No need to process mod.rs
                 && !e.file_name().to_string_lossy().ends_with("mod.rs")
                 // No need to process google vendored files

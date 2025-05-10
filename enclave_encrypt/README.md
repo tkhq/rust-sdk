@@ -1,6 +1,6 @@
-# turnkey_enclave_encrypt
+# `turnkey_enclave_encrypt`
 
-This repository contains primitives to encrypt and decrypt data, sent to and from Turnkey secure enclaves (see Enclave to [end-user secure channels](https://docs.turnkey.com/security/enclave-secure-channels)).
+This crate contains primitives to encrypt and decrypt data, sent to and from Turnkey secure enclaves (see Enclave to [end-user secure channels](https://docs.turnkey.com/security/enclave-secure-channels)).
 
 Encryption and decryption are "one-shot" using the HPKE standard ([RFC 9180](https://datatracker.ietf.org/doc/rfc9180/)).  Neither the client or the server should ever be reused to send/receive more than one message. We want to avoid the recipient target key being used more then once in order to improve forward secrecy; see [security profile](#security-profile) section for important details and caveats.
 
@@ -13,18 +13,22 @@ The flows where encryption and decryption are relevant are:
 
 ### Authentication bundles
 
-```rust
-let client = AuthenticationClient::new()
+```rust,no_run
+use turnkey_enclave_encrypt::{AuthenticationClient, QuorumPublicKey};
+
+let mut client = AuthenticationClient::new();
 let target_public_key = client.target_public_key(); // can be used in auth activity params
 
 let bundle = "<auth bundle>";
 
-let client.decrypt(bundle).expect("decryption should succeed");
+let decrypted = client.decrypt(bundle).expect("decryption should succeed");
 ```
 
 If you persist client key material between initiation and decryption you may use `dangerous_from_bytes` to create an `AuthenticationClient`. Keep in mind the one-shot encryption semantics, you may not use the same client IKM to decrypt many different bundles.
 
-```rust
+```rust,no_run
+use turnkey_enclave_encrypt::{AuthenticationClient, QuorumPublicKey};
+
 let client_ikm = hex::decode("...private bytes from client...").expect("cannot decode client secret bytes");
 let bundle = "<auth bundle goes here, it's a base58-encoded string>";
 
@@ -37,21 +41,25 @@ let decrypted = AuthenticationClient::dangerous_from_bytes(client_ikm)
 
 To decrypt an exported private key or wallet, use `decrypt_private_key` or `decrypt_wallet`:
 
-```rust
+```rust,no_run
+use turnkey_enclave_encrypt::{ExportClient, QuorumPublicKey};
+
 let mut client = ExportClient::new(&QuorumPublicKey::production_signer());
 
 // Decrypt a wallet (result: string)
-let wallet_mnemonic_phrase = client.decrypt_wallet_mnemonic_phrase("<bundle>", "<organization id>")
+let wallet_mnemonic_phrase = client.decrypt_wallet_mnemonic_phrase("<bundle>", "<organization id>");
 
 // Decrypt a private key (result: bytes)
-let private_key = client.decrypt_private_key("<bundle>", "<organization id>")
+let private_key = client.decrypt_private_key("<bundle>", "<organization id>");
 ```
 
 ### Import bundles
 
 To encrypt private keys or wallets, use `encrypt_private_key_with_bundle` or `encrypt_wallet_with_bundle`. The resulting value is a string, ready to use as an activity param. The organization and user IDs need to match the organization and user who initiated import.
 
-```rust
+```rust,no_run
+use turnkey_enclave_encrypt::{ImportClient, QuorumPublicKey};
+
 let mut client = ImportClient::new(&QuorumPublicKey::production_signer());
 
 // Encrypt private keys
@@ -73,7 +81,7 @@ let encrypted_wallet = client.encrypt_wallet_with_bundle(
 
 ## Running test
 
-```
+```sh
 cargo test
 ```
 
@@ -138,4 +146,4 @@ The underlying HPKE spec does not provide forward secrecy on the recipient side 
 
 #### Sender authentication
 
-We use OpMode Base because the sender's KEM private key is not long lived and thus does not need HPKE authentication. In order for this to be exploited one side's private key data would have to be leaked or an attacker would need to spoof a message from the sender. Turnkey mitigates this attack by layering a signature from an authentication key over payloads that contain ciphertext + encappedPub. Note that in the case of client to server the authentication signature is implicitly verified by the Ump policy engine. Read more about HPKE asymmetric authentication [here](https://datatracker.ietf.org/doc/html/rfc9180#name-authentication-using-an-asy).
+We use `OpMode` Base because the sender's KEM private key is not long lived and thus does not need HPKE authentication. In order for this to be exploited one side's private key data would have to be leaked or an attacker would need to spoof a message from the sender. Turnkey mitigates this attack by layering a signature from an authentication key over payloads that contain ciphertext + encappedPub. Note that in the case of client to server the authentication signature is implicitly verified by the Ump policy engine. Read more about HPKE asymmetric authentication [here](https://datatracker.ietf.org/doc/html/rfc9180#name-authentication-using-an-asy).

@@ -5,34 +5,43 @@ This crate contains an HTTP client to interact with the Turnkey API ([documentat
 ## Usage
 
 To make a request to Turnkey:
-* Load an API key:
-  ```rust
-  // You can load your API key from a file or from env
-  let api_key = TurnkeyP256ApiKey::from_strings(private_key: "<private key hex>", None).expect("api key creation failed");
-  ```
-* Create a new client:
-  ```rust
-  let client = turnkey_client::TurnkeyClient::builder().api_key(api_key).build().expect("client builder failed");
-  ```
-* Make a request (for example, a signature request)
-  ```rust
-  let signature_result = client.sign_raw_payload(
-    organization_id, // your organization ID
+
+```rust,no_run
+use turnkey_api_key_stamper::TurnkeyP256ApiKey;
+use turnkey_client::generated::SignRawPayloadIntentV2;
+use turnkey_client::generated::immutable::common::v1::HashFunction;
+use turnkey_client::generated::immutable::common::v1::PayloadEncoding;
+
+// You can load your API key from a file or from env
+let api_key = TurnkeyP256ApiKey::from_strings("<private key hex>", None).expect("api key creation failed");
+
+// Create a new client:
+let client = turnkey_client::TurnkeyClient::builder().api_key(api_key).build().expect("client builder failed");
+
+// Make a request (for example, a signature request)
+let request = client.sign_raw_payload(
+    "your-turnkey-organization-id".to_string(),
     client.current_timestamp(),
     SignRawPayloadIntentV2 {
-        sign_with: address, // any Turnkey-generated address
+        sign_with: "0x123456".to_string(), // Turnkey address
         payload: "hello from TKHQ".to_string(),
         encoding: PayloadEncoding::TextUtf8,
-        hash_function: HashFunction::Keccak256,
+        hash_function: HashFunction::Keccak256, // assuming ETH
     },
-  ).await;
-  ```
+);
+
+// You can then call `request.await?` to get the signature result
+```
 
 ## Advanced usage
 
 The Turnkey client uses `reqwest` under the hood. To access the `reqwest` builder, use the following:
 ```rust
-turnkey_client::TurnkeyClient::builder()
+use turnkey_api_key_stamper::TurnkeyP256ApiKey;
+
+let api_key = TurnkeyP256ApiKey::generate();
+
+let client = turnkey_client::TurnkeyClient::builder()
     .api_key(api_key)
-    .with_reqwest_builder(|b| b.connection_verbose(true))
+    .with_reqwest_builder(|b| b.connection_verbose(true));
 ```

@@ -1,5 +1,5 @@
-//! Logic for decoding and validating the Nitro Secure Module Attestation
-//! Document.
+#![doc = include_str!("../README.md")]
+
 use aws_nitro_enclaves_cose::{
     crypto::{Hash, MessageDigest, SignatureAlgorithm, SigningPublicKey},
     error::CoseError,
@@ -173,7 +173,7 @@ pub fn unsafe_attestation_doc_from_der(
 /// * `validation_time` - a moment in time that the certificates should be
 ///   valid. This is measured in seconds since the unix epoch. Most likely this
 ///   will be the current time.
-pub fn attestation_doc_from_der(
+pub fn parse_and_verify_der_attestation(
     cose_sign1_der: &[u8],
     root_cert: &[u8],
     validation_time: u64, // seconds since unix epoch
@@ -294,6 +294,7 @@ impl Hash for Sha2 {
     }
 }
 
+/// Parses and verifies an AWS nitro attestation, provided as a base64 encoded string.
 pub fn parse_and_verify_aws_nitro_attestation<S: AsRef<str>>(
     encoded_attestation: S,
 ) -> Result<AttestationDoc, AttestError> {
@@ -308,7 +309,7 @@ pub fn parse_and_verify_aws_nitro_attestation<S: AsRef<str>>(
         .unwrap()
         .as_secs();
 
-    attestation_doc_from_der(
+    parse_and_verify_der_attestation(
         decoded_bytes.as_slice(),
         trusted_root_certificate.as_slice(),
         current_time,

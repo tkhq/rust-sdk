@@ -1,6 +1,4 @@
-//! Primitives to support one shot enclave encryption protocol described in this
-//! crate's readme.
-
+#![doc = include_str!("../README.md")]
 #![forbid(unsafe_code)]
 #![deny(clippy::all, clippy::unwrap_used)]
 #![warn(missing_docs, clippy::pedantic)]
@@ -276,7 +274,7 @@ fn additional_associated_data(
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
-pub mod test {
+mod tests {
     use p256::ecdsa::{signature::Signer, Signature, SigningKey, VerifyingKey};
 
     use crate::{client::EnclaveEncryptClient, server::EnclaveEncryptServer};

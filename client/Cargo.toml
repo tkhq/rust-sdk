@@ -2,23 +2,26 @@
 name = "turnkey_client"
 version = "0.0.2"
 edition = "2021"
-publish = false
 license = "Apache-2.0"
-
-[lib]
-doctest = false
+description = "A Rust client to interact with the Turnkey API."
+repository = "https://github.com/tkhq/rust-sdk"
+homepage = "https://turnkey.com"
+readme = "README.md"
+documentation = "https://docs.rs/turnkey_client"
+keywords = ["turnkey", "api", "client", "cryptography"]
+categories = ["api-bindings"]
 
 [dependencies]
-mime = { version = "0.3.17" }
+mime = { version = "0.3.17", default-features = false }
+prost = { version = "0.12", default-features = false, features = ["std"] }
+prost-types = { version = "0.12", default-features = false }
 reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
+serde = { version = "1.0.219", default-features = false, features = ["std", "derive"] }
+serde_json = { version = "1.0.140", default-features = false, features = ["std"] }
+thiserror = { version = "2.0.12", default-features = false }
+tokio = { version = "1.44.2", default-features = false }
 turnkey_api_key_stamper = { path = "../api_key_stamper" }
-prost = { version = "0.12" }
-prost-types = { version = "0.12" }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = { version = "1.0" }
-thiserror = { version = "2.0.12" }
-tokio = { version = "1.44.2" }
 
 [dev-dependencies]
-wiremock = "0.6"
-http = "0.2"
+wiremock = { version = "0.6", default-features = false }
+http = { version = "0.2", default-features = false }

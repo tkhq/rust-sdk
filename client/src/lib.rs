@@ -1,5 +1,4 @@
-//! Turnkey Client to interact with the Turnkey API
-//! See <https://docs.turnkey.com>
+#![doc = include_str!("../README.md")]
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -15,7 +14,6 @@ use generated::ActivityStatus;
 use turnkey_api_key_stamper::StamperError;
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 
-#[cfg_attr(doc, doc(hidden))]
 pub mod generated;
 
 pub mod retry;
@@ -84,6 +82,7 @@ pub enum TurnkeyClientError {
     StamperError(#[from] StamperError),
 }
 
+/// Builder for [`TurnkeyClient`].
 #[derive(Debug)]
 pub struct TurnkeyClientBuilder {
     api_key: Option<TurnkeyP256ApiKey>,
@@ -110,7 +109,7 @@ impl TurnkeyClientBuilder {
         self
     }
 
-    /// Sets the base URL for the Turnkey client. Default: "https://api.turnkey.com"
+    /// Sets the base URL for the Turnkey client. Default: `https://api.turnkey.com`
     pub fn base_url(mut self, base_url: impl Into<String>) -> Self {
         self.base_url = Some(base_url.into());
         self
