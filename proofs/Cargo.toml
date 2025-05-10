@@ -2,6 +2,7 @@
 name = "turnkey_proofs"
 version = "0.1.0"
 edition = "2021"
+license = "Apache-2.0"
 description = "Utilities to parse and verify Turnkey secure enclave proofs"
 repository = "https://github.com/tkhq/rust-sdk"
 homepage = "https://turnkey.com"
