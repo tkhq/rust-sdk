@@ -7,13 +7,12 @@ This crate contains an HTTP client to interact with the Turnkey API ([documentat
 To make a request to Turnkey:
 
 ```rust,no_run
-use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use turnkey_client::generated::SignRawPayloadIntentV2;
 use turnkey_client::generated::immutable::common::v1::HashFunction;
 use turnkey_client::generated::immutable::common::v1::PayloadEncoding;
 
 // You can load your API key from a file or from env
-let api_key = TurnkeyP256ApiKey::from_strings("<private key hex>", None).expect("api key creation failed");
+let api_key = turnkey_client::TurnkeyP256ApiKey::from_strings("<private key hex>", None).expect("api key creation failed");
 
 // Create a new client:
 let client = turnkey_client::TurnkeyClient::builder().api_key(api_key).build().expect("client builder failed");
@@ -37,9 +36,7 @@ let request = client.sign_raw_payload(
 
 The Turnkey client uses `reqwest` under the hood. To access the `reqwest` builder, use the following:
 ```rust
-use turnkey_api_key_stamper::TurnkeyP256ApiKey;
-
-let api_key = TurnkeyP256ApiKey::generate();
+let api_key = turnkey_client::TurnkeyP256ApiKey::generate();
 
 let client = turnkey_client::TurnkeyClient::builder()
     .api_key(api_key)

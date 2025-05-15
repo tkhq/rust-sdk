@@ -1,6 +1,6 @@
 use std::error::Error;
 use std::{env, vec};
-use turnkey_api_key_stamper::TurnkeyP256ApiKey;
+use turnkey_client::TurnkeyP256ApiKey;
 use turnkey_client::generated::DeleteSubOrganizationIntent;
 use turnkey_client::generated::{
     immutable::common::v1::{AddressFormat, ApiKeyCurve, Curve, PathFormat},

@@ -12,7 +12,8 @@ use generated::ActivityResponse;
 use generated::ActivityStatus;
 
 use turnkey_api_key_stamper::StamperError;
-use turnkey_api_key_stamper::TurnkeyP256ApiKey;
+// Re-export this for convenience
+pub use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 
 pub mod generated;
 
