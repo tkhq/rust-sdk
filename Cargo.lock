@@ -3044,7 +3044,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
- "turnkey_api_key_stamper",
  "turnkey_client",
  "turnkey_enclave_encrypt",
  "turnkey_proofs",
