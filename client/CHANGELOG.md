@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 * Re-export `turnkey_api_key_stamper::TurnkeyP256ApiKey` from `turnkey_client`
+* Add summary and description to generated method docs
 
 ## turnkey_client-v0.0.2
 
