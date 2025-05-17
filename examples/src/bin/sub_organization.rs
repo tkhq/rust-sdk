@@ -1,12 +1,12 @@
 use std::error::Error;
 use std::{env, vec};
-use turnkey_client::TurnkeyP256ApiKey;
 use turnkey_client::generated::DeleteSubOrganizationIntent;
 use turnkey_client::generated::{
     immutable::common::v1::{AddressFormat, ApiKeyCurve, Curve, PathFormat},
     ApiKeyParamsV2, CreateSubOrganizationIntentV7, RootUserParamsV4, WalletAccountParams,
     WalletParams,
 };
+use turnkey_client::TurnkeyP256ApiKey;
 use turnkey_examples::load_api_key_from_env;
 
 #[tokio::main]

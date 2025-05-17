@@ -98,6 +98,17 @@ fn main() {
     // Note that we can afford the specificity of "post" because Turnkey's API is entirely made of POST requests.
     let http_re = Regex::new(r#"post\s*:\s*\"([^\"]+)\""#).unwrap();
 
+    // Now we try to parse the description and summary out of the options. For example:
+    //    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+    //      description: "Get basic information about your current API or WebAuthN user and their organization. Affords Sub-Organization look ups via Parent Organization for WebAuthN or API key users."
+    //      summary: "Who am I?"
+    //      tags: "Sessions"
+    //    };
+    // --> we want to extract "Who Am I?" as the summary
+    // --> we want to extract "Get basic information about...." as the description
+    let description_re = Regex::new(r#"description\s*:\s*\"([^\"]+)\""#).unwrap();
+    let summary_re = Regex::new(r#"summary\s*:\s*\"([^\"]+)\""#).unwrap();
+
     let mut generated_methods = String::new();
 
     // We manually have to specify the mapping between activity types, route, intent and result type through a file
@@ -146,6 +157,14 @@ fn main() {
                 // This is our URL (e.g. "/public/v1/submit/delete_policy")
                 let route = &http_caps[1];
 
+                // We expect a description and summary for each endpoint.
+                let summary = &summary_re
+                    .captures(http_opts)
+                    .unwrap_or_else(|| panic!("no summary found for {}", route))[1];
+                let description = &description_re
+                    .captures(http_opts)
+                    .unwrap_or_else(|| panic!("no description found for {}", route))[1];
+
                 if req_type.contains("external.activity.v1") {
                     let activities_details = parsed_activities
                         .activities
@@ -164,6 +183,9 @@ fn main() {
                     let activity_func = if activity_result == "*" {
                         format!(
                             r#"
+                            /// {summary}
+                            ///
+                            /// {description}
                             pub async fn {fn_name}(&self, organization_id: String, timestamp_ms: u128, params: immutable_activity::{activity_intent}) -> Result<external_activity::Activity, TurnkeyClientError> {{
                                 let request = external_activity::{short_req_type} {{
                                     r#type: "{activity_type}".to_string(),
@@ -179,6 +201,9 @@ fn main() {
                     } else {
                         format!(
                             r#"
+                            /// {summary}
+                            ///
+                            /// {description}
                             pub async fn {fn_name}(&self, organization_id: String, timestamp_ms: u128, params: immutable_activity::{activity_intent}) -> Result<immutable_activity::{activity_result}, TurnkeyClientError> {{
                                 let request = external_activity::{short_req_type} {{
                                     r#type: "{activity_type}".to_string(),
@@ -210,6 +235,9 @@ fn main() {
                 } else {
                     let func = format!(
                         r#"
+                        /// {summary}
+                        ///
+                        /// {description}
                         pub async fn {fn_name}(&self, request: coordinator::{req_type}) -> Result<coordinator::{res_type}, TurnkeyClientError> {{
                             self.process_request(&request, "{route}".to_string()).await
                         }}

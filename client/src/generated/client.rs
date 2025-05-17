@@ -5,6 +5,9 @@ use crate::generated::immutable::activity::v1 as immutable_activity;
 use crate::generated::services::coordinator::public::v1 as coordinator;
 use crate::{TurnkeyClient, TurnkeyClientError};
 impl TurnkeyClient {
+    /// Who am I?
+    ///
+    /// Get basic information about your current API or WebAuthN user and their organization. Affords Sub-Organization look ups via Parent Organization for WebAuthN or API key users.
     pub async fn get_whoami(
         &self,
         request: coordinator::GetWhoamiRequest,
@@ -12,6 +15,9 @@ impl TurnkeyClient {
         self.process_request(&request, "/public/v1/query/whoami".to_string())
             .await
     }
+    /// Get Suborgs
+    ///
+    /// Get all suborg IDs associated given a parent org ID and an optional filter.
     pub async fn get_sub_org_ids(
         &self,
         request: coordinator::GetSubOrgIdsRequest,
@@ -19,6 +25,9 @@ impl TurnkeyClient {
         self.process_request(&request, "/public/v1/query/list_suborgs".to_string())
             .await
     }
+    /// Get Verified Suborgs
+    ///
+    /// Get all email or phone verified suborg IDs associated given a parent org ID.
     pub async fn get_verified_sub_org_ids(
         &self,
         request: coordinator::GetVerifiedSubOrgIdsRequest,
@@ -29,6 +38,9 @@ impl TurnkeyClient {
         )
         .await
     }
+    /// Get Activity
+    ///
+    /// Get details about an Activity
     pub async fn get_activity(
         &self,
         request: coordinator::GetActivityRequest,
@@ -36,6 +48,9 @@ impl TurnkeyClient {
         self.process_request(&request, "/public/v1/query/get_activity".to_string())
             .await
     }
+    /// List Activities
+    ///
+    /// List all Activities within an Organization
     pub async fn get_activities(
         &self,
         request: coordinator::GetActivitiesRequest,
@@ -43,6 +58,9 @@ impl TurnkeyClient {
         self.process_request(&request, "/public/v1/query/list_activities".to_string())
             .await
     }
+    /// Approve Activity
+    ///
+    /// Approve an Activity
     pub async fn approve_activity(
         &self,
         organization_id: String,
@@ -58,6 +76,9 @@ impl TurnkeyClient {
         self.process_activity(&request, "/public/v1/submit/approve_activity".to_string())
             .await
     }
+    /// Reject Activity
+    ///
+    /// Reject an Activity
     pub async fn reject_activity(
         &self,
         organization_id: String,
@@ -73,6 +94,9 @@ impl TurnkeyClient {
         self.process_activity(&request, "/public/v1/submit/reject_activity".to_string())
             .await
     }
+    /// Get User
+    ///
+    /// Get details about a User
     pub async fn get_user(
         &self,
         request: coordinator::GetUserRequest,
@@ -80,6 +104,9 @@ impl TurnkeyClient {
         self.process_request(&request, "/public/v1/query/get_user".to_string())
             .await
     }
+    /// List Users
+    ///
+    /// List all Users within an Organization
     pub async fn get_users(
         &self,
         request: coordinator::GetUsersRequest,
@@ -87,6 +114,9 @@ impl TurnkeyClient {
         self.process_request(&request, "/public/v1/query/list_users".to_string())
             .await
     }
+    /// Delete Users
+    ///
+    /// Delete Users within an Organization
     pub async fn delete_users(
         &self,
         organization_id: String,
@@ -114,6 +144,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Create Policy
+    ///
+    /// Create a new Policy
     pub async fn create_policy(
         &self,
         organization_id: String,
@@ -141,6 +174,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Create Policies
+    ///
+    /// Create new Policies
     pub async fn create_policies(
         &self,
         organization_id: String,
@@ -168,6 +204,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Update Policy
+    ///
+    /// Update an existing Policy
     pub async fn update_policy(
         &self,
         organization_id: String,
@@ -195,6 +234,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Delete Policy
+    ///
+    /// Delete an existing Policy
     pub async fn delete_policy(
         &self,
         organization_id: String,
@@ -222,6 +264,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// List Policies
+    ///
+    /// List all Policies within an Organization
     pub async fn get_policies(
         &self,
         request: coordinator::GetPoliciesRequest,
@@ -229,6 +274,9 @@ impl TurnkeyClient {
         self.process_request(&request, "/public/v1/query/list_policies".to_string())
             .await
     }
+    /// Get Policy
+    ///
+    /// Get details about a Policy
     pub async fn get_policy(
         &self,
         request: coordinator::GetPolicyRequest,
@@ -236,6 +284,9 @@ impl TurnkeyClient {
         self.process_request(&request, "/public/v1/query/get_policy".to_string())
             .await
     }
+    /// Create Read Only Session
+    ///
+    /// Create a read only session for a user (valid for 1 hour)
     pub async fn create_read_only_session(
         &self,
         organization_id: String,
@@ -266,6 +317,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Create Read Write Session
+    ///
+    /// Create a read write session for a user
     pub async fn create_read_write_session(
         &self,
         organization_id: String,
@@ -296,6 +350,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Create Private Keys
+    ///
+    /// Create new Private Keys
     pub async fn create_private_keys(
         &self,
         organization_id: String,
@@ -326,6 +383,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Get Private Key
+    ///
+    /// Get details about a Private Key
     pub async fn get_private_key(
         &self,
         request: coordinator::GetPrivateKeyRequest,
@@ -333,6 +393,9 @@ impl TurnkeyClient {
         self.process_request(&request, "/public/v1/query/get_private_key".to_string())
             .await
     }
+    /// List Private Keys
+    ///
+    /// List all Private Keys within an Organization
     pub async fn get_private_keys(
         &self,
         request: coordinator::GetPrivateKeysRequest,
@@ -340,6 +403,9 @@ impl TurnkeyClient {
         self.process_request(&request, "/public/v1/query/list_private_keys".to_string())
             .await
     }
+    /// Create API Keys
+    ///
+    /// Add api keys to an existing User
     pub async fn create_api_keys(
         &self,
         organization_id: String,
@@ -367,6 +433,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Delete API Keys
+    ///
+    /// Remove api keys from a User
     pub async fn delete_api_keys(
         &self,
         organization_id: String,
@@ -394,6 +463,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Get Oauth providers
+    ///
+    /// Get details about Oauth providers for a user
     pub async fn get_oauth_providers(
         &self,
         request: coordinator::GetOauthProvidersRequest,
@@ -401,6 +473,9 @@ impl TurnkeyClient {
         self.process_request(&request, "/public/v1/query/get_oauth_providers".to_string())
             .await
     }
+    /// Get API key
+    ///
+    /// Get details about API keys for a user
     pub async fn get_api_keys(
         &self,
         request: coordinator::GetApiKeysRequest,
@@ -408,6 +483,9 @@ impl TurnkeyClient {
         self.process_request(&request, "/public/v1/query/get_api_keys".to_string())
             .await
     }
+    /// Get API key
+    ///
+    /// Get details about an API key
     pub async fn get_api_key(
         &self,
         request: coordinator::GetApiKeyRequest,
@@ -415,6 +493,9 @@ impl TurnkeyClient {
         self.process_request(&request, "/public/v1/query/get_api_key".to_string())
             .await
     }
+    /// Create Authenticators
+    ///
+    /// Create Authenticators to authenticate requests to Turnkey
     pub async fn create_authenticators(
         &self,
         organization_id: String,
@@ -445,6 +526,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Delete Authenticators
+    ///
+    /// Remove authenticators from a User
     pub async fn delete_authenticators(
         &self,
         organization_id: String,
@@ -475,6 +559,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Get Authenticators
+    ///
+    /// Get details about authenticators for a user
     pub async fn get_authenticators(
         &self,
         request: coordinator::GetAuthenticatorsRequest,
@@ -482,6 +569,9 @@ impl TurnkeyClient {
         self.process_request(&request, "/public/v1/query/get_authenticators".to_string())
             .await
     }
+    /// Get Authenticator
+    ///
+    /// Get details about an authenticator
     pub async fn get_authenticator(
         &self,
         request: coordinator::GetAuthenticatorRequest,
@@ -489,6 +579,9 @@ impl TurnkeyClient {
         self.process_request(&request, "/public/v1/query/get_authenticator".to_string())
             .await
     }
+    /// Create Invitations
+    ///
+    /// Create Invitations to join an existing Organization
     pub async fn create_invitations(
         &self,
         organization_id: String,
@@ -516,6 +609,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Delete Invitation
+    ///
+    /// Delete an existing Invitation
     pub async fn delete_invitation(
         &self,
         organization_id: String,
@@ -543,6 +639,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Create Users
+    ///
+    /// Create Users in an existing Organization
     pub async fn create_users(
         &self,
         organization_id: String,
@@ -570,6 +669,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Update User
+    ///
+    /// Update a User in an existing Organization
     pub async fn update_user(
         &self,
         organization_id: String,
@@ -597,6 +699,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Create User Tag
+    ///
+    /// Create a user tag and add it to users.
     pub async fn create_user_tag(
         &self,
         organization_id: String,
@@ -624,6 +729,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Create Private Key Tag
+    ///
+    /// Create a private key tag and add it to private keys.
     pub async fn create_private_key_tag(
         &self,
         organization_id: String,
@@ -654,6 +762,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Update User Tag
+    ///
+    /// Update human-readable name or associated users. Note that this activity is atomic: all of the updates will succeed at once, or all of them will fail.
     pub async fn update_user_tag(
         &self,
         organization_id: String,
@@ -681,6 +792,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// List User Tags
+    ///
+    /// List all User Tags within an Organization
     pub async fn list_user_tags(
         &self,
         request: coordinator::ListUserTagsRequest,
@@ -688,6 +802,9 @@ impl TurnkeyClient {
         self.process_request(&request, "/public/v1/query/list_user_tags".to_string())
             .await
     }
+    /// Delete User Tags
+    ///
+    /// Delete User Tags within an Organization
     pub async fn delete_user_tags(
         &self,
         organization_id: String,
@@ -715,6 +832,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Update Private Key Tag
+    ///
+    /// Update human-readable name or associated private keys. Note that this activity is atomic: all of the updates will succeed at once, or all of them will fail.
     pub async fn update_private_key_tag(
         &self,
         organization_id: String,
@@ -745,6 +865,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// List Private Key Tags
+    ///
+    /// List all Private Key Tags within an Organization
     pub async fn list_private_key_tags(
         &self,
         request: coordinator::ListPrivateKeyTagsRequest,
@@ -755,6 +878,9 @@ impl TurnkeyClient {
         )
         .await
     }
+    /// Delete Private Key Tags
+    ///
+    /// Delete Private Key Tags within an Organization
     pub async fn delete_private_key_tags(
         &self,
         organization_id: String,
@@ -785,6 +911,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Sign Raw Payload
+    ///
+    /// Sign a raw payload
     pub async fn sign_raw_payload(
         &self,
         organization_id: String,
@@ -812,6 +941,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Sign Raw Payloads
+    ///
+    /// Sign multiple raw payloads with the same signing parameters
     pub async fn sign_raw_payloads(
         &self,
         organization_id: String,
@@ -839,6 +971,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Sign Transaction
+    ///
+    /// Sign a transaction
     pub async fn sign_transaction(
         &self,
         organization_id: String,
@@ -866,6 +1001,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Update Root Quorum
+    ///
+    /// Set the threshold and members of the root quorum. This activity must be approved by the current root quorum.
     pub async fn update_root_quorum(
         &self,
         organization_id: String,
@@ -893,6 +1031,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Create Wallet
+    ///
+    /// Create a Wallet and derive addresses
     pub async fn create_wallet(
         &self,
         organization_id: String,
@@ -920,6 +1061,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// List Wallets
+    ///
+    /// List all Wallets within an Organization
     pub async fn get_wallets(
         &self,
         request: coordinator::GetWalletsRequest,
@@ -927,6 +1071,9 @@ impl TurnkeyClient {
         self.process_request(&request, "/public/v1/query/list_wallets".to_string())
             .await
     }
+    /// Get Wallet
+    ///
+    /// Get details about a Wallet
     pub async fn get_wallet(
         &self,
         request: coordinator::GetWalletRequest,
@@ -934,6 +1081,9 @@ impl TurnkeyClient {
         self.process_request(&request, "/public/v1/query/get_wallet".to_string())
             .await
     }
+    /// Create Wallet Accounts
+    ///
+    /// Derive additional addresses using an existing wallet
     pub async fn create_wallet_accounts(
         &self,
         organization_id: String,
@@ -964,6 +1114,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// List Wallets Accounts
+    ///
+    /// List all Accounts within a Wallet
     pub async fn get_wallet_accounts(
         &self,
         request: coordinator::GetWalletAccountsRequest,
@@ -974,6 +1127,9 @@ impl TurnkeyClient {
         )
         .await
     }
+    /// Get Wallet Account
+    ///
+    /// Get a single wallet account
     pub async fn get_wallet_account(
         &self,
         request: coordinator::GetWalletAccountRequest,
@@ -981,6 +1137,9 @@ impl TurnkeyClient {
         self.process_request(&request, "/public/v1/query/get_wallet_account".to_string())
             .await
     }
+    /// Create Sub-Organization
+    ///
+    /// Create a new Sub-Organization
     pub async fn create_sub_organization(
         &self,
         organization_id: String,
@@ -1011,6 +1170,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Init Email Recovery
+    ///
+    /// Initializes a new email recovery
     pub async fn init_user_email_recovery(
         &self,
         organization_id: String,
@@ -1041,6 +1203,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Recover a user
+    ///
+    /// Completes the process of recovering a user by adding an authenticator
     pub async fn recover_user(
         &self,
         organization_id: String,
@@ -1068,6 +1233,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Set Organization Feature
+    ///
+    /// Sets an organization feature. This activity must be approved by the current root quorum.
     pub async fn set_organization_feature(
         &self,
         organization_id: String,
@@ -1098,6 +1266,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Remove Organization Feature
+    ///
+    /// Removes an organization feature. This activity must be approved by the current root quorum.
     pub async fn remove_organization_feature(
         &self,
         organization_id: String,
@@ -1128,6 +1299,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Export Private Key
+    ///
+    /// Exports a Private Key
     pub async fn export_private_key(
         &self,
         organization_id: String,
@@ -1155,6 +1329,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Export Wallet
+    ///
+    /// Exports a Wallet
     pub async fn export_wallet(
         &self,
         organization_id: String,
@@ -1182,6 +1359,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Perform Email Auth
+    ///
+    /// Authenticate a user via Email
     pub async fn email_auth(
         &self,
         organization_id: String,
@@ -1209,6 +1389,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Export Wallet Account
+    ///
+    /// Exports a Wallet Account
     pub async fn export_wallet_account(
         &self,
         organization_id: String,
@@ -1239,6 +1422,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Init Import Wallet
+    ///
+    /// Initializes a new wallet import
     pub async fn init_import_wallet(
         &self,
         organization_id: String,
@@ -1266,6 +1452,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Import Wallet
+    ///
+    /// Imports a wallet
     pub async fn import_wallet(
         &self,
         organization_id: String,
@@ -1293,6 +1482,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Init Import Private Key
+    ///
+    /// Initializes a new private key import
     pub async fn init_import_private_key(
         &self,
         organization_id: String,
@@ -1323,6 +1515,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Import Private Key
+    ///
+    /// Imports a private key
     pub async fn import_private_key(
         &self,
         organization_id: String,
@@ -1350,6 +1545,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Oauth
+    ///
+    /// Authenticate a user with an Oidc token (Oauth) - BETA
     pub async fn oauth(
         &self,
         organization_id: String,
@@ -1377,6 +1575,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Init OTP auth
+    ///
+    /// Initiate an OTP auth activity
     pub async fn init_otp_auth(
         &self,
         organization_id: String,
@@ -1404,6 +1605,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// OTP auth
+    ///
+    /// Authenticate a user with an OTP code sent via email or SMS
     pub async fn otp_auth(
         &self,
         organization_id: String,
@@ -1431,6 +1635,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Create Oauth Providers
+    ///
+    /// Creates Oauth providers for a specified user - BETA
     pub async fn create_oauth_providers(
         &self,
         organization_id: String,
@@ -1461,6 +1668,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Delete Oauth Providers
+    ///
+    /// Removes Oauth providers for a specified user - BETA
     pub async fn delete_oauth_providers(
         &self,
         organization_id: String,
@@ -1491,6 +1701,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Get Configs
+    ///
+    /// Get quorum settings and features for an organization
     pub async fn get_organization_configs(
         &self,
         request: coordinator::GetOrganizationConfigsRequest,
@@ -1501,6 +1714,9 @@ impl TurnkeyClient {
         )
         .await
     }
+    /// Delete Private Keys
+    ///
+    /// Deletes private keys for an organization
     pub async fn delete_private_keys(
         &self,
         organization_id: String,
@@ -1531,6 +1747,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Update Wallet
+    ///
+    /// Update a wallet for an organization
     pub async fn update_wallet(
         &self,
         organization_id: String,
@@ -1558,6 +1777,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Delete Wallets
+    ///
+    /// Deletes wallets for an organization
     pub async fn delete_wallets(
         &self,
         organization_id: String,
@@ -1585,6 +1807,9 @@ impl TurnkeyClient {
             )),
         }
     }
+    /// Delete Sub Organization
+    ///
+    /// Deletes a sub organization
     pub async fn delete_sub_organization(
         &self,
         organization_id: String,
