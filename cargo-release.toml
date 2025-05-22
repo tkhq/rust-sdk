@@ -1,0 +1,35 @@
+# cargo-release.toml
+# Place this at the root of your repository
+# Ensures consistent behavior across all crates in the workspace
+
+# Workspace-wide release config
+workspace = true
+
+# General release behavior
+sign-commit = true
+sign-tag = true
+push = false
+publish = false
+tag = false
+execute = false
+
+# Version bumping
+consolidate-commits = true
+consolidate-pushes = true
+pre-release-commit-message = "chore(release): prepare for {{version}}"
+
+# Ensures CHANGELOG.md is used and updated per crate
+changelog = "CHANGELOG.md"
+changelog-update = true
+changelog-replace = true
+changelog-header = "# Changelog"
+changelog-body = """
+## {{version}} - {{date}}
+
+- (placeholder for changes)
+"""
+changelog-footer = ""
+allow-branch = ["main", "release/*"]
+
+# Versioning strategy
+level = "patch"  # you can override with --level if needed
