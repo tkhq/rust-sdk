@@ -33,10 +33,6 @@ This project uses [`cargo-release`](https://github.com/crate-ci/cargo-release). 
 cargo install cargo-release
 ```
 
-## Related projects
-
-There is another Rust client available, maintained by [@Eliascm17](https://github.com/Eliascm17): [Eliascm17/turnkey](https://github.com/Eliascm17/turnkey). This client offers some structure around API requests/responses on top of bare request signing.
-
 ## Feature requests and support
 
 If you are working on a project in Rust and would benefit from improvements to this SDK, please open an issue or get in touch with us (hello@turnkey.com) and we can discuss prioritizing this.
