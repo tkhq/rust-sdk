@@ -23,7 +23,7 @@ tokio = { version = "1.44.2", default-features = false }
 turnkey_api_key_stamper = { path = "../api_key_stamper", version = "0.0.2" }
 
 [features]
-reqwest_http2 = ["reqwest/http2", "reqwest/native-tls-alpn"]
+reqwest_http2 = ["reqwest/http2", "reqwest/native-tls-vendored", "reqwest/native-tls-alpn"]
 reqwest_brotli = ["reqwest/brotli"]
 reqwest_zstd = ["reqwest/zstd"]
 reqwest_hickory_dns = ["reqwest/hickory-dns"]
