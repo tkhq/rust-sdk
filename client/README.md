@@ -42,8 +42,9 @@ let client = turnkey_client::TurnkeyClient::builder()
     .api_key(api_key)
     .with_reqwest_builder(|b| b.connection_verbose(true));
 ```
+
 Additional `reqwest` features can be enabled in your `Cargo.toml`:
 ```toml
 [dependencies]
-turnkey_client = { version = "0.0.2", features = ["reqwest_http2", "reqwest_brotli", "reqwest_zstd", "reqwest_hickory_dns"] }
+turnkey_client = { version = "0.0.2", features = ["reqwest_native_tls", "reqwest_brotli", "reqwest_zstd", "reqwest_hickory_dns"] }
 ```
