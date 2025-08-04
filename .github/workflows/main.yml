@@ -7,13 +7,24 @@ on:
   pull_request:
     branches:
       - main
+  pull_request_target:
+    branches:
+      - main
 
 jobs:
   ubuntu:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
+      - name: checkout PR code (if PR)
+        if: github.event_name == 'pull_request_target' || github.event_name == 'pull_request'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: checkout pushed code (if push)
+        if: github.event_name == 'push'
+        uses: actions/checkout@v4
+      - name: install Rust
+        uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           components: clippy,rustfmt
