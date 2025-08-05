@@ -14,6 +14,7 @@ jobs:
   release-plz-release:
     name: Release-plz release
     runs-on: ubuntu-latest
+    environment: release # access to CARGO_REGISTRY_TOKEN, requires approval
     if: ${{ github.repository_owner == 'tkhq' }}
     permissions:
       contents: write
