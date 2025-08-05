@@ -1,5 +1,7 @@
 [workspace]
 pr_labels = ["release"]
+# See https://release-plz.dev/docs/config#the-release_always-field
+release_always = false
 
 [[package]]
 name = "turnkey_api_key_stamper"
