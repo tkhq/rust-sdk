@@ -1,6 +1,6 @@
 [package]
 name = "turnkey_client"
-version = "0.0.2"
+version = "0.1.1"
 edition = "2021"
 license = "Apache-2.0"
 description = "A Rust client to interact with the Turnkey API."
@@ -20,7 +20,7 @@ serde = { version = "1.0.219", default-features = false, features = ["std", "der
 serde_json = { version = "1.0.140", default-features = false, features = ["std"] }
 thiserror = { version = "2.0.12", default-features = false }
 tokio = { version = "1.44.2", default-features = false }
-turnkey_api_key_stamper = { path = "../api_key_stamper", version = "0.0.2" }
+turnkey_api_key_stamper = { path = "../api_key_stamper", version = "0.1.1" }
 
 [features]
 reqwest_native_tls = ["reqwest/native-tls-vendored", "reqwest/native-tls-alpn"]
