@@ -9,12 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.1](https://github.com/tkhq/rust-sdk/compare/turnkey_proofs-v0.1.0...turnkey_proofs-v0.1.1) - 2025-08-05
 
+### Added
+
+- https://github.com/tkhq/rust-sdk/pull/25: Add changelogs to published crates
+
 ### Other
 
-- Remove now-redundant lockfile for the proofs subcrate
-- Add changelogs to published crates
-<!-- Add unreleased changes here -->
+- https://github.com/tkhq/rust-sdk/pull/37: Release packages with `release-plz`. Going forward all SDK package versions in this repository will stay consistent with each other on each release.
+- https://github.com/tkhq/rust-sdk/pull/30: Remove now-redundant lockfile for the proofs subcrate
 
-## turnkey_proofs-v0.1.0
+## 0.1.0
 
 Initial release of this crate.

@@ -11,23 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- add reqwest features
-
-### Fixed
-
-- add http2 to default-features, rename http2 custom features to native-tls, update README
-- also enable vendored
+- https://github.com/tkhq/rust-sdk/pull/34: implement additional `reqwest` features through features, and switch to `default-tls` as a default TLS feature.
+* https://github.com/tkhq/rust-sdk/pull/28: Add summary and description to generated method docs
+* https://github.com/tkhq/rust-sdk/pull/27: Re-export `turnkey_api_key_stamper::TurnkeyP256ApiKey` from `turnkey_client`
+- https://github.com/tkhq/rust-sdk/pull/25: Add changelogs to published crates
 
 ### Other
 
-- update README.md with reqwest features
-- Add method summary and description to generated client methods
-- Re-export TurnkeyP256ApiKey from client
-- Add changelogs to published crates
+- https://github.com/tkhq/rust-sdk/pull/37: Release packages with `release-plz`. Going forward all SDK package versions in this repository will stay consistent with each other on each release.
 
-* Re-export `turnkey_api_key_stamper::TurnkeyP256ApiKey` from `turnkey_client`
-* Add summary and description to generated method docs
-
-## turnkey_client-v0.0.2
+## 0.0.2
 
 Initial release of this crate.

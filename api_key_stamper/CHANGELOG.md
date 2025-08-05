@@ -9,10 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.1](https://github.com/tkhq/rust-sdk/compare/turnkey_api_key_stamper-v0.0.2...turnkey_api_key_stamper-v0.1.1) - 2025-08-05
 
+### Added
+
+- https://github.com/tkhq/rust-sdk/pull/25: Add changelogs to published crates
+
 ### Other
 
-- Add changelogs to published crates
-<!-- Add unreleased changes here -->
+- https://github.com/tkhq/rust-sdk/pull/37: Release packages with `release-plz`. Going forward all SDK package versions in this repository will stay consistent with each other on each release.
 
 ## turnkey_api_key_stamper-v0.0.2
 
