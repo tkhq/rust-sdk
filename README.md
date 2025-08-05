@@ -27,10 +27,16 @@ This project uses `make` to encapsulate common tasks:
 
 ## Releases
 
-This project uses [`cargo-release`](https://github.com/crate-ci/cargo-release). Install it with:
+This project uses [`release-plz`](https://github.com/release-plz/release-plz). Install it with:
 
 ```sh
-cargo install cargo-release
+cargo install --locked release-plz
+```
+
+Once you have it installed you can try a release locally, to see what the release PR would be:
+
+```
+release-plz update
 ```
 
 ## Feature requests and support

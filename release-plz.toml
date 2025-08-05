@@ -1,0 +1,35 @@
+[workspace]
+pr_labels = ["release"]
+# See https://release-plz.dev/docs/config#the-release_always-field
+release_always = false
+
+[[package]]
+name = "turnkey_api_key_stamper"
+changelog_update = true
+publish = true
+version_group = "rust-sdk"
+
+[[package]]
+name = "turnkey_client"
+changelog_update = true
+version_group = "rust-sdk"
+
+[[package]]
+name = "turnkey_codegen"
+publish = false
+release = false
+
+[[package]]
+name = "turnkey_enclave_encrypt"
+changelog_update = true
+version_group = "rust-sdk"
+
+[[package]]
+name = "turnkey_examples"
+publish = false
+release = false
+
+[[package]]
+name = "turnkey_proofs"
+changelog_update = true
+version_group = "rust-sdk"
