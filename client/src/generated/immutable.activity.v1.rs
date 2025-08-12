@@ -1562,6 +1562,7 @@ pub struct UpdatePolicyResultV2 {
     pub policy_id: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
+#[serde_with::serde_as]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1572,6 +1573,7 @@ pub struct CreateReadOnlySessionResult {
     pub username: ::prost::alloc::string::String,
     pub session: ::prost::alloc::string::String,
     #[serde(default)]
+    #[serde_as(as = "serde_with::DisplayFromStr")]
     pub session_expiry: u64,
 }
 #[derive(Debug)]
