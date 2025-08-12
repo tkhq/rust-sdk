@@ -276,9 +276,9 @@ pub fn add_serde_as_for_large_int(field: &mut Field) -> bool {
                     }
                 }
             }
-            return false;
+            false
         }
-        _ => return false,
+        _ => false,
     }
 }
 
