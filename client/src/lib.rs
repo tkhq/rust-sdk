@@ -325,9 +325,10 @@ impl TurnkeyClient {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::generated::external::data::v1::ApiKey;
     use crate::generated::immutable::common::v1::{HashFunction, PayloadEncoding};
     use crate::generated::result::Inner;
-    use crate::generated::SignRawPayloadIntentV2;
+    use crate::generated::{DeleteSubOrganizationIntent, SignRawPayloadIntentV2};
     use std::sync::Arc;
     use std::time::Duration;
     use wiremock::matchers::{header, method};
@@ -364,6 +365,34 @@ mod test {
             TurnkeyClient::builder().build().unwrap_err(),
             TurnkeyClientError::BuilderMissingApiKey
         ));
+    }
+
+    #[test]
+    fn api_key_serialization_and_parsing() {
+        // `expirationSeconds` is sent as a JSON string, not an integer.
+        // That's expected: u64 do not fit in standard JSON ints.
+        // See https://github.com/grpc-ecosystem/grpc-gateway/issues/438#issuecomment-330739676
+        assert_eq!(
+            serde_json::from_str::<ApiKey>(
+                r#"{"apiKeyId":"id","apiKeyName":"n","expirationSeconds":"123"}"#
+            )
+            .unwrap()
+            .expiration_seconds,
+            Some(123)
+        );
+
+        // Check that serialization of a u64 produces a string
+        let api_key = ApiKey {
+            api_key_id: "id".into(),
+            api_key_name: "n".into(),
+            expiration_seconds: Some(123),
+            credential: None,
+            created_at: None,
+            updated_at: None,
+        };
+        assert!(serde_json::to_string(&api_key)
+            .unwrap()
+            .contains(r#""expirationSeconds":"123""#));
     }
 
     #[tokio::test]
@@ -596,6 +625,49 @@ mod test {
                 assert_eq!(
                     res.sub_organization_id,
                     "d047f3a2-6c66-40ee-ab71-95f8a0148fe3"
+                )
+            }
+            _other => {
+                panic!("didn't match on the right type!")
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_successful_sub_organization_deletion_parsing() {
+        let (client, server) = setup_client_and_server().await;
+
+        // Real activity response captured from the network, deleting a sub-organization
+        let raw_activity_response = "{\"activity\":{\"id\":\"01989b4a-d95c-7569-87dc-e35ffc34497f\",\"organizationId\":\"35e5c619-ba95-417c-bb48-b16f1543aea0\",\"status\":\"ACTIVITY_STATUS_COMPLETED\",\"type\":\"ACTIVITY_TYPE_DELETE_SUB_ORGANIZATION\",\"intent\":{\"deleteSubOrganizationIntent\":{\"deleteWithoutExport\":true}},\"result\":{\"deleteSubOrganizationResult\":{\"subOrganizationUuid\":\"35e5c619-ba95-417c-bb48-b16f1543aea0\"}},\"votes\":[{\"id\":\"f59219dc-1d20-40eb-b1c0-8ce9b97a45bb\",\"userId\":\"071875c1-229b-4544-b2b2-028367c4c447\",\"user\":{\"userId\":\"071875c1-229b-4544-b2b2-028367c4c447\",\"userName\":\"Root User\",\"authenticators\":[],\"apiKeys\":[{\"credential\":{\"publicKey\":\"020404a8505f87edc73f7a8f7a6dca61eb1b0b3617720c7161fab7970ce31c4e12\",\"type\":\"CREDENTIAL_TYPE_API_KEY_P256\"},\"apiKeyId\":\"be541f4a-c9fc-46ec-89f2-ad26e74968b0\",\"apiKeyName\":\"Permanent API Key\",\"createdAt\":{\"seconds\":\"1754952030\",\"nanos\":\"0\"},\"updatedAt\":{\"seconds\":\"1754952030\",\"nanos\":\"0\"}},{\"credential\":{\"publicKey\":\"03c2125f68301a986cbcaf44401288eb395d0df94b0daede710ae61ab4386816a3\",\"type\":\"CREDENTIAL_TYPE_API_KEY_P256\"},\"apiKeyId\":\"70630e5c-ab9b-43d2-9de5-d97f527c92e0\",\"apiKeyName\":\"Expiring API Key\",\"createdAt\":{\"seconds\":\"1754952030\",\"nanos\":\"0\"},\"updatedAt\":{\"seconds\":\"1754952030\",\"nanos\":\"0\"},\"expirationSeconds\":\"3600\"}],\"userTags\":[],\"oauthProviders\":[],\"createdAt\":{\"seconds\":\"1754952030\",\"nanos\":\"0\"},\"updatedAt\":{\"seconds\":\"1754952030\",\"nanos\":\"0\"}},\"activityId\":\"01989b4a-d95c-7569-87dc-e35ffc34497f\",\"selection\":\"VOTE_SELECTION_APPROVED\",\"message\":\"{\\\"type\\\":\\\"ACTIVITY_TYPE_DELETE_SUB_ORGANIZATION\\\",\\\"timestampMs\\\":\\\"1754952030221\\\",\\\"organizationId\\\":\\\"35e5c619-ba95-417c-bb48-b16f1543aea0\\\",\\\"parameters\\\":{\\\"deleteWithoutExport\\\":true}}\",\"publicKey\":\"020404a8505f87edc73f7a8f7a6dca61eb1b0b3617720c7161fab7970ce31c4e12\",\"signature\":\"3046022100d8188e89ef1330881fc2d951f2284467a462840acafc80115ae871847f6a1f93022100a07fcacd0614e2ea729fc7f5e7378a108a8267a18fa1551845487acabcd97403\",\"scheme\":\"SIGNATURE_SCHEME_TK_API_P256\",\"createdAt\":{\"seconds\":\"1754952030\",\"nanos\":\"0\"}}],\"fingerprint\":\"sha256:143e777f907453d71c5a3213059d641f54b28737276c4bc6b405ef06831876cb\",\"canApprove\":false,\"canReject\":true,\"createdAt\":{\"seconds\":\"1754952030\",\"nanos\":\"0\"},\"updatedAt\":{\"seconds\":\"1754952030\",\"nanos\":\"0\"},\"failure\":null}}";
+        let response = ResponseTemplate::new(200)
+            .set_body_raw(raw_activity_response.as_bytes(), "application/json");
+
+        Mock::given(method("POST"))
+            .respond_with(response)
+            .mount(&server)
+            .await;
+
+        let result = client
+            .process_activity(
+                DeleteSubOrganizationIntent {
+                    delete_without_export: Some(true),
+                },
+                "/delete_sub_organization".to_string(),
+            )
+            .await;
+
+        let activity = result.unwrap();
+        assert_eq!(
+            activity.id,
+            "01989b4a-d95c-7569-87dc-e35ffc34497f".to_string()
+        );
+
+        // Now assert that we can access the inner result, and assert that it's the correct result type and content
+        match activity.result.unwrap().inner.unwrap() {
+            Inner::DeleteSubOrganizationResult(res) => {
+                assert_eq!(
+                    res.sub_organization_uuid,
+                    "35e5c619-ba95-417c-bb48-b16f1543aea0"
                 )
             }
             _other => {

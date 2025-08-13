@@ -1,7 +1,10 @@
 use heck::ToShoutySnakeCase;
 use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
-use syn::{parse::Parser, punctuated::Punctuated, Token};
+use syn::{
+    parse::Parser, punctuated::Punctuated, Field, GenericArgument, PathArguments, Token, Type,
+    TypePath,
+};
 
 /// Top-level function to apply transformations to generated code.
 /// This function simply parses the content of a single file, applies transformations to each parsed item,
@@ -124,56 +127,70 @@ fn mutate_enum(enum_item: &syn::ItemEnum) -> TokenStream {
 /// - use `#[serde(flatten)]` to ignore `Inner` structs at parsing time
 /// - add `#[serde(default)]` to Options and Vecs to allow for deserialization of missing fields
 /// - clean up prost derives and attributes
+/// - use `serde_with` to  deserialize big ints from JSON string fields. This requires a field-level macro & struct-level attribute (`serde_as`).
 fn mutate_struct(struct_value: &syn::ItemStruct) -> TokenStream {
     let struct_ident = &struct_value.ident;
     let vis = &struct_value.vis;
     let generics = &struct_value.generics;
-    let struct_attrs: Vec<TokenStream> = struct_value
+    let mut struct_attrs: Vec<TokenStream> = struct_value
         .attrs
         .iter()
         .filter_map(strip_prost_derive_from_attr)
         .collect();
 
-    let fields = struct_value.fields.iter().map(|field| {
-        let mut field = field.clone(); // Make a copy so we can mutate
+    let (fields, serde_as_added_bools): (Vec<TokenStream>, Vec<bool>) = struct_value
+        .fields
+        .iter()
+        .map(|field| {
+            let mut field = field.clone(); // Make a copy so we can mutate
 
-        if let Some(enum_type) = extract_field_enum_type(&field) {
-            let enum_ident = &enum_type.name;
+            if let Some(enum_type) = extract_field_enum_type(&field) {
+                let enum_ident = &enum_type.name;
 
-            let rewritten_ty: syn::Type = if enum_type.repeated {
-                syn::parse_str(&format!("Vec<{}>", enum_ident)).unwrap()
-            } else if enum_type.optional {
-                syn::parse_str(&format!("Option<{}>", enum_ident)).unwrap()
-            } else {
-                syn::parse_str(enum_ident).unwrap()
-            };
+                let rewritten_ty: syn::Type = if enum_type.repeated {
+                    syn::parse_str(&format!("Vec<{}>", enum_ident)).unwrap()
+                } else if enum_type.optional {
+                    syn::parse_str(&format!("Option<{}>", enum_ident)).unwrap()
+                } else {
+                    syn::parse_str(enum_ident).unwrap()
+                };
 
-            field.ty = rewritten_ty;
-        }
+                field.ty = rewritten_ty;
+            }
 
-        // Remove all #[prost(...)] attributes from the field
-        // This is needed because Prost messages cannot have proper enums (types) and be compatible with prost::Message
-        field.attrs.retain(|attr| !attr.path().is_ident("prost"));
+            // Remove all #[prost(...)] attributes from the field
+            // This is needed because Prost messages cannot have proper enums (types) and be compatible with prost::Message
+            field.attrs.retain(|attr| !attr.path().is_ident("prost"));
 
-        // Add "default" to fields which would benefit from it
-        if should_add_default(&field.ty) {
-            field.attrs.push(syn::parse_quote!(
-                #[serde(default)]
-            ));
-        }
+            // Add "default" to fields which would benefit from it
+            if should_add_default(&field.ty) {
+                field.attrs.push(syn::parse_quote!(
+                    #[serde(default)]
+                ));
+            }
 
-        // Flatten out Result::inner and Intent::inner since we have no "inner" key in the JSON responses we return!
-        if field.ident.as_ref().map(|i| i == "inner").unwrap_or(false) {
-            field.attrs.push(syn::parse_quote!(
-                #[serde(flatten)]
-            ));
-        }
+            // Flatten out Result::inner and Intent::inner since we have no "inner" key in the JSON responses we return!
+            if field.ident.as_ref().map(|i| i == "inner").unwrap_or(false) {
+                field.attrs.push(syn::parse_quote!(
+                    #[serde(flatten)]
+                ));
+            }
 
-        quote! { #field }
-    });
+            // Add `serde_with::serde_as` attribute if needed
+            let serde_as_added = add_serde_as_for_large_int(&mut field);
+
+            (quote! { #field }, serde_as_added)
+        })
+        .collect();
+
+    // If the struct fields has a `serde_as` added to it, add the struct-level `serde_as`
+    if serde_as_added_bools.iter().any(|&b| b) {
+        struct_attrs.insert(0, quote! {#[serde_with::serde_as]});
+    }
+    // Debug should always be present on struct, no excuse not to have it!
+    struct_attrs.insert(0, quote! {#[derive(Debug)]});
 
     quote! {
-        #[derive(Debug)]
         #(#struct_attrs)*
         #vis struct #struct_ident #generics {
             #(#fields,)*
@@ -216,6 +233,53 @@ fn strip_prost_derive_from_attr(attr: &syn::Attribute) -> Option<proc_macro2::To
     Some(quote! {
         #[derive(#new_derives)]
     })
+}
+
+// This modifies fields which are u64, i64, u128, i128 (or their option variants: Option<u64>, etc)
+// and uses `serde_with::serde_as` so these big ints can be parsed from JSON strings.
+// Returns a boolean to indicate whether the field was mutated or not.
+pub fn add_serde_as_for_large_int(field: &mut Field) -> bool {
+    // convenience function to match big ints
+    fn is_large_int(ident: &syn::Ident) -> bool {
+        matches!(ident.to_string().as_str(), "u64" | "i64" | "u128" | "i128")
+    }
+
+    match &field.ty {
+        Type::Path(TypePath { qself: None, path }) => {
+            let seg = match path.segments.last() {
+                Some(s) => s,
+                None => return false,
+            };
+
+            // Plain large int: path must be a single segment like `u64`
+            if path.segments.len() == 1 && is_large_int(&seg.ident) {
+                field
+                    .attrs
+                    .push(syn::parse_quote!(#[serde_as(as = "serde_with::DisplayFromStr")]));
+                return true;
+            }
+
+            // Option<LargeInt>: last segment must be `Option<...>`
+            if seg.ident == "Option" {
+                if let PathArguments::AngleBracketed(ab) = &seg.arguments {
+                    if let Some(GenericArgument::Type(Type::Path(TypePath {
+                        qself: None,
+                        path: inner,
+                    }))) = ab.args.first()
+                    {
+                        if inner.segments.len() == 1 && is_large_int(&inner.segments[0].ident) {
+                            field.attrs.push(
+                                syn::parse_quote!(#[serde_as(as = "Option<serde_with::DisplayFromStr>")])
+                            );
+                            return true;
+                        }
+                    }
+                }
+            }
+            false
+        }
+        _ => false,
+    }
 }
 
 struct EnumField {

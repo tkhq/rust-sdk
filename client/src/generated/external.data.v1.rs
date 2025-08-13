@@ -77,6 +77,7 @@ pub struct User {
     pub updated_at: ::core::option::Option<Timestamp>,
 }
 #[derive(Debug)]
+#[serde_with::serde_as]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -90,6 +91,7 @@ pub struct ApiKey {
     #[serde(default)]
     pub updated_at: ::core::option::Option<Timestamp>,
     #[serde(default)]
+    #[serde_as(as = "Option<serde_with::DisplayFromStr>")]
     pub expiration_seconds: ::core::option::Option<u64>,
 }
 #[derive(Debug)]
