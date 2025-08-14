@@ -19,7 +19,7 @@ use thiserror::Error;
 pub const SIGNATURE_SCHEME_P256: &str = "SIGNATURE_SCHEME_TK_API_P256";
 pub const SIGNATURE_SCHEME_SECP256K1: &str = "SIGNATURE_SCHEME_TK_API_SECP256K1";
 pub const API_KEY_STAMP_HEADER_NAME: &str = "X-Stamp";
-const SECP256K1_PRIVATE_KEY_SIZE: usize = 32;
+pub const SECP256K1_PRIVATE_KEY_SIZE: usize = 32;
 
 #[derive(Error, Debug, PartialEq)]
 pub enum StamperError {
