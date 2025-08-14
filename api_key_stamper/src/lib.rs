@@ -189,7 +189,7 @@ impl TurnkeySecp256k1ApiKey {
     ) -> Result<Self, StamperError> {
         let priv_bytes = private_key_bytes.as_ref();
 
-        // Guard against the 31-byte case to avoid GenericArray panicking.
+        // Ensure the private key is exactly 32 bytes, as required by K256SigningKey::from_bytes().
         if priv_bytes.len() != SECP256K1_PRIVATE_KEY_SIZE {
             return Err(StamperError::InvalidPrivateKeyBytes(format!(
                 "expected {} bytes, got {}",
