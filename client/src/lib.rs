@@ -199,6 +199,8 @@ impl<S: Stamp> std::fmt::Debug for TurnkeyClient<S> {
 
 impl<S: Stamp> TurnkeyClient<S> {
     /// Creates a new `TurnkeyClientBuilder<S>`. Configure with `.api_key(...)` and other options, then call `.build()`.
+    ///
+    /// The type parameter `S` must implement the [`Stamp`](trait.Stamp.html) trait.
     pub fn builder() -> TurnkeyClientBuilder<S> {
         TurnkeyClientBuilder::new()
     }
