@@ -198,7 +198,7 @@ impl<S: Stamp> std::fmt::Debug for TurnkeyClient<S> {
 }
 
 impl<S: Stamp> TurnkeyClient<S> {
-    /// Creates a new `TurnkeyClientBuilder<S>`. Call `.api_key(...)` then `.build()`.
+    /// Creates a new `TurnkeyClientBuilder<S>`. Configure with `.api_key(...)` and other options, then call `.build()`.
     pub fn builder() -> TurnkeyClientBuilder<S> {
         TurnkeyClientBuilder::new()
     }
