@@ -11,9 +11,9 @@ use generated::Activity;
 use generated::ActivityResponse;
 use generated::ActivityStatus;
 
-use turnkey_api_key_stamper::StamperError;
+use turnkey_api_key_stamper::{Stamp, StampHeader, StamperError};
 // Re-export this for convenience
-pub use turnkey_api_key_stamper::TurnkeyP256ApiKey;
+pub use turnkey_api_key_stamper::{TurnkeyP256ApiKey, TurnkeySecp256k1ApiKey};
 
 pub mod generated;
 
@@ -83,17 +83,24 @@ pub enum TurnkeyClientError {
     StamperError(#[from] StamperError),
 }
 
-/// Builder for [`TurnkeyClient`].
-#[derive(Debug)]
-pub struct TurnkeyClientBuilder {
-    api_key: Option<TurnkeyP256ApiKey>,
+/// Builder for [`TurnkeyClient<S>`].
+pub struct TurnkeyClientBuilder<S: Stamp> {
+    api_key: Option<S>,
     base_url: Option<String>,
     retry_config: Option<RetryConfig>,
     reqwest_builder: reqwest::ClientBuilder,
     timeout: Option<Duration>,
 }
 
-impl TurnkeyClientBuilder {
+impl<S: Stamp> std::fmt::Debug for TurnkeyClientBuilder<S> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TurnkeyClientBuilder")
+            .field("base_url", &self.base_url)
+            .finish()
+    }
+}
+
+impl<S: Stamp> TurnkeyClientBuilder<S> {
     pub fn new() -> Self {
         Self {
             api_key: None,
@@ -105,7 +112,7 @@ impl TurnkeyClientBuilder {
     }
 
     /// Sets the API key for the Turnkey client.
-    pub fn api_key(mut self, api_key: TurnkeyP256ApiKey) -> Self {
+    pub fn api_key(mut self, api_key: S) -> Self {
         self.api_key = Some(api_key);
         self
     }
@@ -145,7 +152,7 @@ impl TurnkeyClientBuilder {
         self
     }
 
-    pub fn build(mut self) -> Result<TurnkeyClient, TurnkeyClientError> {
+    pub fn build(mut self) -> Result<TurnkeyClient<S>, TurnkeyClientError> {
         if self.timeout.is_none() {
             self.reqwest_builder = self.reqwest_builder.timeout(Duration::from_secs(20));
         }
@@ -168,24 +175,31 @@ impl TurnkeyClientBuilder {
     }
 }
 
-impl Default for TurnkeyClientBuilder {
+impl<S: Stamp> Default for TurnkeyClientBuilder<S> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-/// Base client. To create a new client, see `TurnkeyClient::builder`.
-#[derive(Debug)]
-pub struct TurnkeyClient {
+/// Base client. To create a new client, see `TurnkeyClient::<S>::builder`.
+pub struct TurnkeyClient<S: Stamp> {
     http: reqwest::Client,
     base_url: String,
-    api_key: TurnkeyP256ApiKey,
+    api_key: S,
     retry_config: RetryConfig,
 }
 
-impl TurnkeyClient {
-    /// Creates a new `TurnkeyClientBuilder`. To get a client from a builder, call `.build()`
-    pub fn builder() -> TurnkeyClientBuilder {
+impl<S: Stamp> std::fmt::Debug for TurnkeyClient<S> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TurnkeyClient")
+            .field("base_url", &self.base_url)
+            .finish()
+    }
+}
+
+impl<S: Stamp> TurnkeyClient<S> {
+    /// Creates a new `TurnkeyClientBuilder<S>`. Call `.api_key(...)` then `.build()`.
+    pub fn builder() -> TurnkeyClientBuilder<S> {
         TurnkeyClientBuilder::new()
     }
 
@@ -282,11 +296,11 @@ impl TurnkeyClient {
     {
         let url = format!("{}{}", self.base_url, path);
         let post_body = serde_json::to_string(&request)?;
-        let stamp = self.api_key.stamp(post_body.clone())?;
+        let StampHeader { name, value } = self.api_key.stamp(post_body.as_bytes())?;
         let res = self
             .http
             .post(url)
-            .header("X-Stamp", stamp)
+            .header(name, value)
             .body(post_body)
             .send()
             .await?;
@@ -342,10 +356,27 @@ mod test {
         }
     }
 
-    async fn setup_client_and_server() -> (TurnkeyClient, MockServer) {
+    async fn setup_client_and_server() -> (TurnkeyClient<TurnkeyP256ApiKey>, MockServer) {
         let server = MockServer::start().await;
-        let client = TurnkeyClient::builder()
+        let client = TurnkeyClient::<TurnkeyP256ApiKey>::builder()
             .api_key(TurnkeyP256ApiKey::generate())
+            .base_url(server.uri())
+            .retry_config(RetryConfig {
+                initial_delay: Duration::from_millis(50),
+                multiplier: 2.0,
+                max_delay: Duration::from_millis(1000),
+                max_retries: 3,
+            })
+            .build()
+            .unwrap();
+        (client, server)
+    }
+
+    async fn setup_secp256k1_client_and_server(
+    ) -> (TurnkeyClient<TurnkeySecp256k1ApiKey>, MockServer) {
+        let server = MockServer::start().await;
+        let client = TurnkeyClient::<TurnkeySecp256k1ApiKey>::builder()
+            .api_key(TurnkeySecp256k1ApiKey::generate())
             .base_url(server.uri())
             .retry_config(RetryConfig {
                 initial_delay: Duration::from_millis(50),
@@ -361,7 +392,9 @@ mod test {
     #[test]
     fn client_requires_an_api_key() {
         assert!(matches!(
-            TurnkeyClient::builder().build().unwrap_err(),
+            TurnkeyClient::<TurnkeyP256ApiKey>::builder()
+                .build()
+                .unwrap_err(),
             TurnkeyClientError::BuilderMissingApiKey
         ));
     }
@@ -620,7 +653,7 @@ mod test {
             .await;
 
         // Build client with a short timeout (e.g. 1s -- intentionally shorter than the server delay of 2s)
-        let client = TurnkeyClient::builder()
+        let client = TurnkeyClient::<TurnkeyP256ApiKey>::builder()
             .api_key(TurnkeyP256ApiKey::generate())
             .base_url(&server.uri())
             .timeout(Duration::from_secs(1))
@@ -758,6 +791,125 @@ mod test {
                 TurnkeyClientError::ExceededRetries(n) => {
                     // Our retry configuration has 5 retries configured
                     assert_eq!(n, 3);
+                }
+                other => panic!("unexpected error: {:?}", other),
+            }
+        }
+
+        #[tokio::test]
+        async fn test_secp256k1_stamping_sends_correct_scheme() {
+            use base64::prelude::{Engine as _, BASE64_URL_SAFE_NO_PAD};
+
+            struct ValidateSecpStamp;
+            impl wiremock::Respond for ValidateSecpStamp {
+                fn respond(&self, req: &wiremock::Request) -> wiremock::ResponseTemplate {
+                    let hdr = req
+                        .headers
+                        .get_all("X-Stamp")
+                        .iter()
+                        .next()
+                        .and_then(|hv| hv.to_str().ok());
+                    match hdr {
+                        Some(val) => {
+                            let Ok(decoded) = BASE64_URL_SAFE_NO_PAD.decode(val.as_bytes()) else {
+                                return wiremock::ResponseTemplate::new(400)
+                                    .set_body_string("bad base64url in X-Stamp");
+                            };
+                            let Ok(json) = serde_json::from_slice::<serde_json::Value>(&decoded)
+                            else {
+                                return wiremock::ResponseTemplate::new(400)
+                                    .set_body_string("bad json in X-Stamp");
+                            };
+                            let scheme = json.get("scheme").and_then(|s| s.as_str()).unwrap_or("");
+                            if scheme != turnkey_api_key_stamper::SIGNATURE_SCHEME_SECP256K1 {
+                                return wiremock::ResponseTemplate::new(400)
+                                    .set_body_string(format!("wrong scheme: {scheme}"));
+                            }
+                            wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                                "activity": {
+                                    "type": "ACTIVITY_TYPE_SIGN_RAW_PAYLOAD",
+                                    "status": "ACTIVITY_STATUS_COMPLETED",
+                                    "id": "ok",
+                                    "organizationId": "org",
+                                    "fingerprint": "fp"
+                                }
+                            }))
+                        }
+                        None => {
+                            wiremock::ResponseTemplate::new(400).set_body_string("missing X-Stamp")
+                        }
+                    }
+                }
+            }
+
+            let server = wiremock::MockServer::start().await;
+
+            wiremock::Mock::given(wiremock::matchers::method("POST"))
+                .respond_with(ValidateSecpStamp)
+                .mount(&server)
+                .await;
+
+            // Build a client using secp256k1 stamper
+            let secp_api = TurnkeySecp256k1ApiKey::generate();
+            let client = TurnkeyClient::<TurnkeySecp256k1ApiKey>::builder()
+                .api_key(secp_api)
+                .base_url(server.uri())
+                .build()
+                .unwrap();
+
+            // Send any request body as we just want to validate the X-Stamp header
+            let _: ActivityResponse = client
+                .process_request(&simple_activity_intent(), "/sign_raw_payload".to_string())
+                .await
+                .unwrap();
+        }
+
+        #[tokio::test]
+        async fn test_secp256k1_retry_then_success() {
+            let (client, server) = super::setup_secp256k1_client_and_server().await;
+
+            let failures_left = Arc::new(std::sync::Mutex::new(2));
+            let responder = FailThenSucceedResponder {
+                failures_left: failures_left.clone(),
+            };
+
+            Mock::given(method("POST"))
+                .respond_with(responder)
+                .mount(&server)
+                .await;
+
+            let result = client
+                .process_activity(
+                    super::simple_activity_intent(),
+                    "/sign_raw_payload".to_string(),
+                )
+                .await;
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap().id, "retried-activity-id");
+        }
+
+        #[tokio::test]
+        async fn test_secp256k1_raw_http_error() {
+            let (client, server) = super::setup_secp256k1_client_and_server().await;
+
+            let response = ResponseTemplate::new(500).set_body_string("internal server error");
+            Mock::given(method("POST"))
+                .respond_with(response)
+                .mount(&server)
+                .await;
+
+            let result = client
+                .process_activity(
+                    super::simple_activity_intent(),
+                    "/sign_raw_payload".to_string(),
+                )
+                .await;
+
+            match result.unwrap_err() {
+                super::TurnkeyClientError::UnexpectedHttpStatus(status, body) => {
+                    assert_eq!(status, 500);
+                    assert_eq!(body, "internal server error");
                 }
                 other => panic!("unexpected error: {:?}", other),
             }

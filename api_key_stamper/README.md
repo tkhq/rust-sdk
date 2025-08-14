@@ -25,7 +25,6 @@ let api_key = TurnkeyP256ApiKey::from_strings(api_private_key, None).expect("loa
 
 If you want to store API keys in `.env` files, use [`dotenvy`](https://docs.rs/dotenvy/latest/dotenvy/).
 
-
 ## Load API keys from files
 
 If you have generated API keys with Turnkey's [command-line tool](https://github.com/tkhq/tkcli) you can load them with:
@@ -44,10 +43,10 @@ let api_key = TurnkeyP256ApiKey::from_files(
 The API is straightforward, once you have a handle on an API key, call `stamp`:
 
 ```rust
-use turnkey_api_key_stamper::TurnkeyP256ApiKey;
+use turnkey_api_key_stamper::{TurnkeyP256ApiKey, Stamp};
 
 let api_key = TurnkeyP256ApiKey::generate();
-let stamp = api_key.stamp("POST request body goes here");
+let stamp = api_key.stamp("POST request body goes here".as_bytes());
 ```
 
 The stamp produced is a base64-encoded value, ready to be used as a stamp header. See [our documentation](https://docs.turnkey.com/developer-reference/api-overview/stamps#api-keys) for more information.
