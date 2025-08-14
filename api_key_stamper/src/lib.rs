@@ -19,6 +19,7 @@ use thiserror::Error;
 pub const SIGNATURE_SCHEME_P256: &str = "SIGNATURE_SCHEME_TK_API_P256";
 pub const SIGNATURE_SCHEME_SECP256K1: &str = "SIGNATURE_SCHEME_TK_API_SECP256K1";
 pub const API_KEY_STAMP_HEADER_NAME: &str = "X-Stamp";
+const SECP256K1_PRIVATE_KEY_SIZE: usize = 32;
 
 #[derive(Error, Debug, PartialEq)]
 pub enum StamperError {
@@ -189,10 +190,11 @@ impl TurnkeySecp256k1ApiKey {
         let priv_bytes = private_key_bytes.as_ref();
 
         // Guard against the 31-byte case to avoid GenericArray panicking.
-        if priv_bytes.len() != 32 {
+        if priv_bytes.len() != SECP256K1_PRIVATE_KEY_SIZE {
             return Err(StamperError::InvalidPrivateKeyBytes(format!(
-                "expected 32 bytes, got {}",
-                priv_bytes.len()
+                "expected {} bytes, got {}",
+                SECP256K1_PRIVATE_KEY_SIZE,
+                priv_bytes.len(),
             )));
         }
 
