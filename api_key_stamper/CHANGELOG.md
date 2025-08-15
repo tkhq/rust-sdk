@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.2.0](https://github.com/tkhq/rust-sdk/compare/turnkey_api_key_stamper-v0.1.1...turnkey_api_key_stamper-v0.2.0) - 2025-08-15
+
+### Other
+
+- Update api_key_stamper/src/lib.rs
+- Update api_key_stamper/src/lib.rs
+- use constant instead of magic number for key length
+- implement secp256k1 stamping
+
 ## [0.1.1](https://github.com/tkhq/rust-sdk/compare/turnkey_api_key_stamper-v0.0.2...turnkey_api_key_stamper-v0.1.1) - 2025-08-05
 
 ### Added
