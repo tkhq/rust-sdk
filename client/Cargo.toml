@@ -32,3 +32,4 @@ reqwest_hickory_dns = ["reqwest/hickory-dns"]
 [dev-dependencies]
 wiremock = { version = "0.6", default-features = false }
 http = { version = "0.2", default-features = false }
+base64 = { version = "0.22", default-features = false, features = ["std"] }

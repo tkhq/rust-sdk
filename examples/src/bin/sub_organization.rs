@@ -6,7 +6,7 @@ use turnkey_client::generated::{
     ApiKeyParamsV2, CreateSubOrganizationIntentV7, RootUserParamsV4, WalletAccountParams,
     WalletParams,
 };
-use turnkey_client::TurnkeyP256ApiKey;
+use turnkey_client::{TurnkeyP256ApiKey, TurnkeySecp256k1ApiKey};
 use turnkey_examples::load_api_key_from_env;
 
 #[tokio::main]
@@ -15,7 +15,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // In a real scenario this will be the public key associated with an end user, or a passkey, etc.
     // We generate a brand new API key to simulate this.
-    let sub_organization_api_key = TurnkeyP256ApiKey::generate();
+    let sub_organization_p256_api_key = TurnkeyP256ApiKey::generate();
+    let sub_organization_secp256k1_api_key = TurnkeySecp256k1ApiKey::generate();
 
     // Create the request body for our create_sub_organization request
     let organization_id =
@@ -28,12 +29,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
         sub_organization_name: "New sub-organization".to_string(),
         root_users: vec![RootUserParamsV4 {
             user_name: "Root User".to_string(),
-            api_keys: vec![ApiKeyParamsV2 {
-                api_key_name: "Test API Key".to_string(),
-                public_key: hex::encode(sub_organization_api_key.compressed_public_key()),
-                curve_type: ApiKeyCurve::P256,
-                expiration_seconds: None,
-            }],
+            api_keys: vec![
+              ApiKeyParamsV2 {
+                  api_key_name: "Test API Key".to_string(),
+                  public_key: hex::encode(sub_organization_p256_api_key.compressed_public_key()),
+                  curve_type: ApiKeyCurve::P256,
+                  expiration_seconds: None,
+              },
+              ApiKeyParamsV2 {
+                  api_key_name: "Root API Key (secp256k1)".to_string(),
+                  public_key: hex::encode(sub_organization_secp256k1_api_key.compressed_public_key()),
+                  curve_type: ApiKeyCurve::Secp256k1,
+                  expiration_seconds: None,
+              },
+            ],
             user_email: None,
             user_phone_number: None,
             authenticators: vec![],
@@ -72,7 +81,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Now let's cleanup and delete our sub-organization
     // This needs to be done by the sub-organization user, authenticated by our fresh API key
     let sub_organization_client = turnkey_client::TurnkeyClient::builder()
-        .api_key(sub_organization_api_key)
+        .api_key(sub_organization_secp256k1_api_key)
         .build()?;
     let delete_res = sub_organization_client
         .delete_sub_organization(

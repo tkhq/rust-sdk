@@ -3,8 +3,8 @@
 use crate::generated::external::activity::v1 as external_activity;
 use crate::generated::immutable::activity::v1 as immutable_activity;
 use crate::generated::services::coordinator::public::v1 as coordinator;
-use crate::{TurnkeyClient, TurnkeyClientError};
-impl TurnkeyClient {
+use crate::{Stamp, TurnkeyClient, TurnkeyClientError};
+impl<S: Stamp> TurnkeyClient<S> {
     /// Who am I?
     ///
     /// Get basic information about your current API or WebAuthN user and their organization. Affords Sub-Organization look ups via Parent Organization for WebAuthN or API key users.
