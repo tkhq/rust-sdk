@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.2.0](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.1.1...turnkey_client-v0.2.0) - 2025-08-15
+
+### Added
+
+- https://github.com/tkhq/rust-sdk/pull/41: add support for secp256k1 API key stamping. **Breaking**: consumers of this crate will have to import the new `Stamp` trait to use `TurnkeyClient`.
+
+### Fixes
+
+- https://github.com/tkhq/rust-sdk/pull/42: fix code generation for large integers so we parse from, and serialize to JSON strings. This is using `serde_with::serde_as`.
+
 ## [0.1.1](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.0.2...turnkey_client-v0.1.1) - 2025-08-05
 
 ### Added

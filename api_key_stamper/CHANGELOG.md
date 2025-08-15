@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.2.0](https://github.com/tkhq/rust-sdk/compare/turnkey_api_key_stamper-v0.1.1...turnkey_api_key_stamper-v0.2.0) - 2025-08-15
+
+### Added
+
+- https://github.com/tkhq/rust-sdk/pull/41: add support for secp256k1 API key stamping. **Breaking**: consumers of this crate will have to import the new `Stamp` trait to use API keys.
+
 ## [0.1.1](https://github.com/tkhq/rust-sdk/compare/turnkey_api_key_stamper-v0.0.2...turnkey_api_key_stamper-v0.1.1) - 2025-08-05
 
 ### Added
