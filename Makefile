@@ -41,6 +41,5 @@ test: build
 examples: build
 	cargo run -p turnkey_examples --bin whoami
 	cargo run -p turnkey_examples --bin sub_organization
-	cargo run -p turnkey_examples --bin sub_organization_secp256k1
 	cargo run -p turnkey_examples --bin wallet
 	cargo run -p turnkey_examples --bin proofs
