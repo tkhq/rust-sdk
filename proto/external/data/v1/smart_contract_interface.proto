@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package external.data.v1;
+
+import "external/data/v1/common.proto";
+import "vendor/google/api/field_behavior.proto";
+import "vendor/protoc-gen-openapiv2/options/annotations.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/external/data/v1";
+
+message SmartContractInterface {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The Organization the Smart Contract Interface belongs to."}
+  ];
+  string smart_contract_interface_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Smart Contract Interface (ABI or IDL)."}
+  ];
+  string smart_contract_address = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The address corresponding to the Smart Contract or Program."}
+  ];
+  string smart_contract_interface = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The JSON corresponding to the Smart Contract Interface (ABI or IDL)."}
+  ];
+  string type = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The type corresponding to the Smart Contract Interface (either ETHEREUM or SOLANA)."}
+  ];
+  string label = 6 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The label corresponding to the Smart Contract Interface (either ETHEREUM or SOLANA)."}
+  ];
+  string notes = 7 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The notes corresponding to the Smart Contract Interface (either ETHEREUM or SOLANA)."}
+  ];
+  external.data.v1.Timestamp created_at = 8 [(google.api.field_behavior) = REQUIRED];
+  external.data.v1.Timestamp updated_at = 9 [(google.api.field_behavior) = REQUIRED];
+}

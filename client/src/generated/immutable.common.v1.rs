@@ -177,6 +177,8 @@ pub enum AddressFormat {
     TonV3r2 = 33,
     #[serde(rename = "ADDRESS_FORMAT_TON_V4R2")]
     TonV4r2 = 34,
+    #[serde(rename = "ADDRESS_FORMAT_TON_V5R1")]
+    TonV5r1 = 36,
     #[serde(rename = "ADDRESS_FORMAT_XRP")]
     Xrp = 35,
 }
@@ -222,6 +224,7 @@ impl AddressFormat {
             Self::DogeTestnet => "ADDRESS_FORMAT_DOGE_TESTNET",
             Self::TonV3r2 => "ADDRESS_FORMAT_TON_V3R2",
             Self::TonV4r2 => "ADDRESS_FORMAT_TON_V4R2",
+            Self::TonV5r1 => "ADDRESS_FORMAT_TON_V5R1",
             Self::Xrp => "ADDRESS_FORMAT_XRP",
         }
     }
@@ -263,6 +266,7 @@ impl AddressFormat {
             "ADDRESS_FORMAT_DOGE_TESTNET" => Some(Self::DogeTestnet),
             "ADDRESS_FORMAT_TON_V3R2" => Some(Self::TonV3r2),
             "ADDRESS_FORMAT_TON_V4R2" => Some(Self::TonV4r2),
+            "ADDRESS_FORMAT_TON_V5R1" => Some(Self::TonV5r1),
             "ADDRESS_FORMAT_XRP" => Some(Self::Xrp),
             _ => None,
         }
@@ -323,6 +327,16 @@ pub enum PayloadEncoding {
     /// Will be converted to bytes for signature with Rust's standard String.as_bytes()
     #[serde(rename = "PAYLOAD_ENCODING_TEXT_UTF8")]
     TextUtf8 = 2,
+    /// Payload is encoded as EIP-712 typed data
+    /// See JSON schema definition in EIP-712 documentation here: <https://eips.ethereum.org/EIPS/eip-712#parameters>
+    /// Will be converted to bytes for signing using serde_json::from_str
+    #[serde(rename = "PAYLOAD_ENCODING_EIP712")]
+    Eip712 = 3,
+    /// Payload is encoded as an EIP-7702 Authorization
+    /// See spec here: <https://eips.ethereum.org/EIPS/eip-7702#behavior>
+    /// Will be converted to bytes for signing using serde_json::from_str
+    #[serde(rename = "PAYLOAD_ENCODING_EIP7702_AUTHORIZATION")]
+    Eip7702Authorization = 4,
 }
 impl PayloadEncoding {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -334,6 +348,8 @@ impl PayloadEncoding {
             Self::Unspecified => "PAYLOAD_ENCODING_UNSPECIFIED",
             Self::Hexadecimal => "PAYLOAD_ENCODING_HEXADECIMAL",
             Self::TextUtf8 => "PAYLOAD_ENCODING_TEXT_UTF8",
+            Self::Eip712 => "PAYLOAD_ENCODING_EIP712",
+            Self::Eip7702Authorization => "PAYLOAD_ENCODING_EIP7702_AUTHORIZATION",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -342,6 +358,8 @@ impl PayloadEncoding {
             "PAYLOAD_ENCODING_UNSPECIFIED" => Some(Self::Unspecified),
             "PAYLOAD_ENCODING_HEXADECIMAL" => Some(Self::Hexadecimal),
             "PAYLOAD_ENCODING_TEXT_UTF8" => Some(Self::TextUtf8),
+            "PAYLOAD_ENCODING_EIP712" => Some(Self::Eip712),
+            "PAYLOAD_ENCODING_EIP7702_AUTHORIZATION" => Some(Self::Eip7702Authorization),
             _ => None,
         }
     }
@@ -497,6 +515,8 @@ pub enum CredentialType {
     ReadWriteSessionKeyP256 = 8,
     #[serde(rename = "CREDENTIAL_TYPE_OAUTH_KEY_P256")]
     OauthKeyP256 = 9,
+    #[serde(rename = "CREDENTIAL_TYPE_LOGIN")]
+    Login = 10,
 }
 impl CredentialType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -517,6 +537,7 @@ impl CredentialType {
                 "CREDENTIAL_TYPE_READ_WRITE_SESSION_KEY_P256"
             }
             Self::OauthKeyP256 => "CREDENTIAL_TYPE_OAUTH_KEY_P256",
+            Self::Login => "CREDENTIAL_TYPE_LOGIN",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -534,6 +555,7 @@ impl CredentialType {
                 Some(Self::ReadWriteSessionKeyP256)
             }
             "CREDENTIAL_TYPE_OAUTH_KEY_P256" => Some(Self::OauthKeyP256),
+            "CREDENTIAL_TYPE_LOGIN" => Some(Self::Login),
             _ => None,
         }
     }
@@ -558,6 +580,8 @@ pub enum FeatureName {
     SmsAuth = 6,
     #[serde(rename = "FEATURE_NAME_OTP_EMAIL_AUTH")]
     OtpEmailAuth = 7,
+    #[serde(rename = "FEATURE_NAME_AUTH_PROXY")]
+    AuthProxy = 8,
 }
 impl FeatureName {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -574,6 +598,7 @@ impl FeatureName {
             Self::Webhook => "FEATURE_NAME_WEBHOOK",
             Self::SmsAuth => "FEATURE_NAME_SMS_AUTH",
             Self::OtpEmailAuth => "FEATURE_NAME_OTP_EMAIL_AUTH",
+            Self::AuthProxy => "FEATURE_NAME_AUTH_PROXY",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -587,6 +612,433 @@ impl FeatureName {
             "FEATURE_NAME_WEBHOOK" => Some(Self::Webhook),
             "FEATURE_NAME_SMS_AUTH" => Some(Self::SmsAuth),
             "FEATURE_NAME_OTP_EMAIL_AUTH" => Some(Self::OtpEmailAuth),
+            "FEATURE_NAME_AUTH_PROXY" => Some(Self::AuthProxy),
+            _ => None,
+        }
+    }
+}
+/// The supported Fiat On Ramp Providers.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum FiatOnRampProvider {
+    #[serde(rename = "FIAT_ON_RAMP_PROVIDER_UNSPECIFIED")]
+    Unspecified = 0,
+    #[serde(rename = "FIAT_ON_RAMP_PROVIDER_COINBASE")]
+    Coinbase = 1,
+    #[serde(rename = "FIAT_ON_RAMP_PROVIDER_MOONPAY")]
+    Moonpay = 2,
+}
+impl FiatOnRampProvider {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "FIAT_ON_RAMP_PROVIDER_UNSPECIFIED",
+            Self::Coinbase => "FIAT_ON_RAMP_PROVIDER_COINBASE",
+            Self::Moonpay => "FIAT_ON_RAMP_PROVIDER_MOONPAY",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "FIAT_ON_RAMP_PROVIDER_UNSPECIFIED" => Some(Self::Unspecified),
+            "FIAT_ON_RAMP_PROVIDER_COINBASE" => Some(Self::Coinbase),
+            "FIAT_ON_RAMP_PROVIDER_MOONPAY" => Some(Self::Moonpay),
+            _ => None,
+        }
+    }
+}
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum FiatOnRampCryptoCurrency {
+    /// Unspecified
+    #[serde(rename = "FIAT_ON_RAMP_CRYPTO_CURRENCY_UNSPECIFIED")]
+    Unspecified = 0,
+    /// Bitcoin
+    #[serde(rename = "FIAT_ON_RAMP_CRYPTO_CURRENCY_BTC")]
+    Btc = 1,
+    /// Ethereum
+    #[serde(rename = "FIAT_ON_RAMP_CRYPTO_CURRENCY_ETH")]
+    Eth = 2,
+    /// Solana
+    #[serde(rename = "FIAT_ON_RAMP_CRYPTO_CURRENCY_SOL")]
+    Sol = 3,
+    /// USDC
+    #[serde(rename = "FIAT_ON_RAMP_CRYPTO_CURRENCY_USDC")]
+    Usdc = 4,
+}
+impl FiatOnRampCryptoCurrency {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "FIAT_ON_RAMP_CRYPTO_CURRENCY_UNSPECIFIED",
+            Self::Btc => "FIAT_ON_RAMP_CRYPTO_CURRENCY_BTC",
+            Self::Eth => "FIAT_ON_RAMP_CRYPTO_CURRENCY_ETH",
+            Self::Sol => "FIAT_ON_RAMP_CRYPTO_CURRENCY_SOL",
+            Self::Usdc => "FIAT_ON_RAMP_CRYPTO_CURRENCY_USDC",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "FIAT_ON_RAMP_CRYPTO_CURRENCY_UNSPECIFIED" => Some(Self::Unspecified),
+            "FIAT_ON_RAMP_CRYPTO_CURRENCY_BTC" => Some(Self::Btc),
+            "FIAT_ON_RAMP_CRYPTO_CURRENCY_ETH" => Some(Self::Eth),
+            "FIAT_ON_RAMP_CRYPTO_CURRENCY_SOL" => Some(Self::Sol),
+            "FIAT_ON_RAMP_CRYPTO_CURRENCY_USDC" => Some(Self::Usdc),
+            _ => None,
+        }
+    }
+}
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum FiatOnRampCurrency {
+    /// Unspecified
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_UNSPECIFIED")]
+    Unspecified = 0,
+    /// Australian Dollar
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_AUD")]
+    Aud = 1,
+    /// Bulgarian Lev
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_BGN")]
+    Bgn = 2,
+    /// Brazilian Real
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_BRL")]
+    Brl = 3,
+    /// Canadian Dollar
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_CAD")]
+    Cad = 4,
+    /// Swiss Franc
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_CHF")]
+    Chf = 5,
+    /// Colombian Peso
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_COP")]
+    Cop = 6,
+    /// Czech Koruna
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_CZK")]
+    Czk = 7,
+    /// Danish Krone
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_DKK")]
+    Dkk = 8,
+    /// Dominican Peso
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_DOP")]
+    Dop = 9,
+    /// Egyptian Pound
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_EGP")]
+    Egp = 10,
+    /// Euro
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_EUR")]
+    Eur = 11,
+    /// Pound Sterling
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_GBP")]
+    Gbp = 12,
+    /// Hong Kong Dollar
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_HKD")]
+    Hkd = 13,
+    /// Indonesian Rupiah
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_IDR")]
+    Idr = 14,
+    /// Israeli New Shekel
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_ILS")]
+    Ils = 15,
+    /// Jordanian Dinar
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_JOD")]
+    Jod = 16,
+    /// Kenyan Shilling
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_KES")]
+    Kes = 17,
+    /// Kuwaiti Dinar
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_KWD")]
+    Kwd = 18,
+    /// Sri Lankan Rupee
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_LKR")]
+    Lkr = 19,
+    /// Mexican Peso
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_MXN")]
+    Mxn = 20,
+    /// Nigerian Naira
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_NGN")]
+    Ngn = 21,
+    /// Norwegian Krone
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_NOK")]
+    Nok = 22,
+    /// New Zealand Dollar
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_NZD")]
+    Nzd = 23,
+    /// Omani Rial
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_OMR")]
+    Omr = 24,
+    /// Peruvian Sol
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_PEN")]
+    Pen = 25,
+    /// Polish Złoty
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_PLN")]
+    Pln = 26,
+    /// Romanian Leu
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_RON")]
+    Ron = 27,
+    /// Swedish Krona
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_SEK")]
+    Sek = 28,
+    /// Thai Baht
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_THB")]
+    Thb = 29,
+    /// Turkish Lira
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_TRY")]
+    Try = 30,
+    /// Taiwan Dollar
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_TWD")]
+    Twd = 31,
+    /// US Dollar
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_USD")]
+    Usd = 32,
+    /// Vietnamese Dong
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_VND")]
+    Vnd = 33,
+    /// South African Rand
+    #[serde(rename = "FIAT_ON_RAMP_CURRENCY_ZAR")]
+    Zar = 34,
+}
+impl FiatOnRampCurrency {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "FIAT_ON_RAMP_CURRENCY_UNSPECIFIED",
+            Self::Aud => "FIAT_ON_RAMP_CURRENCY_AUD",
+            Self::Bgn => "FIAT_ON_RAMP_CURRENCY_BGN",
+            Self::Brl => "FIAT_ON_RAMP_CURRENCY_BRL",
+            Self::Cad => "FIAT_ON_RAMP_CURRENCY_CAD",
+            Self::Chf => "FIAT_ON_RAMP_CURRENCY_CHF",
+            Self::Cop => "FIAT_ON_RAMP_CURRENCY_COP",
+            Self::Czk => "FIAT_ON_RAMP_CURRENCY_CZK",
+            Self::Dkk => "FIAT_ON_RAMP_CURRENCY_DKK",
+            Self::Dop => "FIAT_ON_RAMP_CURRENCY_DOP",
+            Self::Egp => "FIAT_ON_RAMP_CURRENCY_EGP",
+            Self::Eur => "FIAT_ON_RAMP_CURRENCY_EUR",
+            Self::Gbp => "FIAT_ON_RAMP_CURRENCY_GBP",
+            Self::Hkd => "FIAT_ON_RAMP_CURRENCY_HKD",
+            Self::Idr => "FIAT_ON_RAMP_CURRENCY_IDR",
+            Self::Ils => "FIAT_ON_RAMP_CURRENCY_ILS",
+            Self::Jod => "FIAT_ON_RAMP_CURRENCY_JOD",
+            Self::Kes => "FIAT_ON_RAMP_CURRENCY_KES",
+            Self::Kwd => "FIAT_ON_RAMP_CURRENCY_KWD",
+            Self::Lkr => "FIAT_ON_RAMP_CURRENCY_LKR",
+            Self::Mxn => "FIAT_ON_RAMP_CURRENCY_MXN",
+            Self::Ngn => "FIAT_ON_RAMP_CURRENCY_NGN",
+            Self::Nok => "FIAT_ON_RAMP_CURRENCY_NOK",
+            Self::Nzd => "FIAT_ON_RAMP_CURRENCY_NZD",
+            Self::Omr => "FIAT_ON_RAMP_CURRENCY_OMR",
+            Self::Pen => "FIAT_ON_RAMP_CURRENCY_PEN",
+            Self::Pln => "FIAT_ON_RAMP_CURRENCY_PLN",
+            Self::Ron => "FIAT_ON_RAMP_CURRENCY_RON",
+            Self::Sek => "FIAT_ON_RAMP_CURRENCY_SEK",
+            Self::Thb => "FIAT_ON_RAMP_CURRENCY_THB",
+            Self::Try => "FIAT_ON_RAMP_CURRENCY_TRY",
+            Self::Twd => "FIAT_ON_RAMP_CURRENCY_TWD",
+            Self::Usd => "FIAT_ON_RAMP_CURRENCY_USD",
+            Self::Vnd => "FIAT_ON_RAMP_CURRENCY_VND",
+            Self::Zar => "FIAT_ON_RAMP_CURRENCY_ZAR",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "FIAT_ON_RAMP_CURRENCY_UNSPECIFIED" => Some(Self::Unspecified),
+            "FIAT_ON_RAMP_CURRENCY_AUD" => Some(Self::Aud),
+            "FIAT_ON_RAMP_CURRENCY_BGN" => Some(Self::Bgn),
+            "FIAT_ON_RAMP_CURRENCY_BRL" => Some(Self::Brl),
+            "FIAT_ON_RAMP_CURRENCY_CAD" => Some(Self::Cad),
+            "FIAT_ON_RAMP_CURRENCY_CHF" => Some(Self::Chf),
+            "FIAT_ON_RAMP_CURRENCY_COP" => Some(Self::Cop),
+            "FIAT_ON_RAMP_CURRENCY_CZK" => Some(Self::Czk),
+            "FIAT_ON_RAMP_CURRENCY_DKK" => Some(Self::Dkk),
+            "FIAT_ON_RAMP_CURRENCY_DOP" => Some(Self::Dop),
+            "FIAT_ON_RAMP_CURRENCY_EGP" => Some(Self::Egp),
+            "FIAT_ON_RAMP_CURRENCY_EUR" => Some(Self::Eur),
+            "FIAT_ON_RAMP_CURRENCY_GBP" => Some(Self::Gbp),
+            "FIAT_ON_RAMP_CURRENCY_HKD" => Some(Self::Hkd),
+            "FIAT_ON_RAMP_CURRENCY_IDR" => Some(Self::Idr),
+            "FIAT_ON_RAMP_CURRENCY_ILS" => Some(Self::Ils),
+            "FIAT_ON_RAMP_CURRENCY_JOD" => Some(Self::Jod),
+            "FIAT_ON_RAMP_CURRENCY_KES" => Some(Self::Kes),
+            "FIAT_ON_RAMP_CURRENCY_KWD" => Some(Self::Kwd),
+            "FIAT_ON_RAMP_CURRENCY_LKR" => Some(Self::Lkr),
+            "FIAT_ON_RAMP_CURRENCY_MXN" => Some(Self::Mxn),
+            "FIAT_ON_RAMP_CURRENCY_NGN" => Some(Self::Ngn),
+            "FIAT_ON_RAMP_CURRENCY_NOK" => Some(Self::Nok),
+            "FIAT_ON_RAMP_CURRENCY_NZD" => Some(Self::Nzd),
+            "FIAT_ON_RAMP_CURRENCY_OMR" => Some(Self::Omr),
+            "FIAT_ON_RAMP_CURRENCY_PEN" => Some(Self::Pen),
+            "FIAT_ON_RAMP_CURRENCY_PLN" => Some(Self::Pln),
+            "FIAT_ON_RAMP_CURRENCY_RON" => Some(Self::Ron),
+            "FIAT_ON_RAMP_CURRENCY_SEK" => Some(Self::Sek),
+            "FIAT_ON_RAMP_CURRENCY_THB" => Some(Self::Thb),
+            "FIAT_ON_RAMP_CURRENCY_TRY" => Some(Self::Try),
+            "FIAT_ON_RAMP_CURRENCY_TWD" => Some(Self::Twd),
+            "FIAT_ON_RAMP_CURRENCY_USD" => Some(Self::Usd),
+            "FIAT_ON_RAMP_CURRENCY_VND" => Some(Self::Vnd),
+            "FIAT_ON_RAMP_CURRENCY_ZAR" => Some(Self::Zar),
+            _ => None,
+        }
+    }
+}
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum FiatOnRampBlockchainNetwork {
+    /// Unspecified
+    #[serde(rename = "FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_UNSPECIFIED")]
+    Unspecified = 0,
+    /// bitcoin
+    #[serde(rename = "FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_BITCOIN")]
+    Bitcoin = 1,
+    /// ethereum
+    #[serde(rename = "FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_ETHEREUM")]
+    Ethereum = 2,
+    /// solana
+    #[serde(rename = "FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_SOLANA")]
+    Solana = 3,
+    /// base
+    #[serde(rename = "FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_BASE")]
+    Base = 4,
+}
+impl FiatOnRampBlockchainNetwork {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_UNSPECIFIED",
+            Self::Bitcoin => "FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_BITCOIN",
+            Self::Ethereum => "FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_ETHEREUM",
+            Self::Solana => "FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_SOLANA",
+            Self::Base => "FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_BASE",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_UNSPECIFIED" => Some(Self::Unspecified),
+            "FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_BITCOIN" => Some(Self::Bitcoin),
+            "FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_ETHEREUM" => Some(Self::Ethereum),
+            "FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_SOLANA" => Some(Self::Solana),
+            "FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_BASE" => Some(Self::Base),
+            _ => None,
+        }
+    }
+}
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum FiatOnRampPaymentMethod {
+    /// Unspecified
+    #[serde(rename = "FIAT_ON_RAMP_PAYMENT_METHOD_UNSPECIFIED")]
+    Unspecified = 0,
+    /// Shared methods (supported by both MoonPay and Coinbase)
+    ///
+    /// MoonPay: CREDIT_DEBIT_CARD, Coinbase: CARD
+    #[serde(rename = "FIAT_ON_RAMP_PAYMENT_METHOD_CREDIT_DEBIT_CARD")]
+    CreditDebitCard = 1,
+    /// MoonPay: APPLE_PAY, Coinbase: APPLE_PAY
+    #[serde(rename = "FIAT_ON_RAMP_PAYMENT_METHOD_APPLE_PAY")]
+    ApplePay = 2,
+    /// MoonPay-specific methods
+    ///
+    /// MoonPay: GBP_BANK_TRANSFER
+    #[serde(rename = "FIAT_ON_RAMP_PAYMENT_METHOD_GBP_BANK_TRANSFER")]
+    GbpBankTransfer = 3,
+    /// MoonPay: GBP_OPEN_BANKING_PAYMENT
+    #[serde(rename = "FIAT_ON_RAMP_PAYMENT_METHOD_GBP_OPEN_BANKING_PAYMENT")]
+    GbpOpenBankingPayment = 4,
+    /// MoonPay: GOOGLE_PAY
+    #[serde(rename = "FIAT_ON_RAMP_PAYMENT_METHOD_GOOGLE_PAY")]
+    GooglePay = 5,
+    /// MoonPay: SEPA_BANK_TRANSFER
+    #[serde(rename = "FIAT_ON_RAMP_PAYMENT_METHOD_SEPA_BANK_TRANSFER")]
+    SepaBankTransfer = 6,
+    /// MoonPay: PIX_INSTANT_PAYMENT
+    #[serde(rename = "FIAT_ON_RAMP_PAYMENT_METHOD_PIX_INSTANT_PAYMENT")]
+    PixInstantPayment = 7,
+    /// MoonPay: PAYPAL
+    #[serde(rename = "FIAT_ON_RAMP_PAYMENT_METHOD_PAYPAL")]
+    Paypal = 8,
+    /// MoonPay: VENMO
+    #[serde(rename = "FIAT_ON_RAMP_PAYMENT_METHOD_VENMO")]
+    Venmo = 9,
+    /// MoonPay: MOONPAY_BALANCE
+    #[serde(rename = "FIAT_ON_RAMP_PAYMENT_METHOD_MOONPAY_BALANCE")]
+    MoonpayBalance = 10,
+    /// Coinbase-specific methods
+    ///
+    /// Coinbase: CRYPTO_ACCOUNT
+    #[serde(rename = "FIAT_ON_RAMP_PAYMENT_METHOD_CRYPTO_ACCOUNT")]
+    CryptoAccount = 11,
+    /// Coinbase: FIAT_WALLET
+    #[serde(rename = "FIAT_ON_RAMP_PAYMENT_METHOD_FIAT_WALLET")]
+    FiatWallet = 12,
+    /// Coinbase: ACH_BANK_ACCOUNT
+    #[serde(rename = "FIAT_ON_RAMP_PAYMENT_METHOD_ACH_BANK_ACCOUNT")]
+    AchBankAccount = 13,
+}
+impl FiatOnRampPaymentMethod {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "FIAT_ON_RAMP_PAYMENT_METHOD_UNSPECIFIED",
+            Self::CreditDebitCard => "FIAT_ON_RAMP_PAYMENT_METHOD_CREDIT_DEBIT_CARD",
+            Self::ApplePay => "FIAT_ON_RAMP_PAYMENT_METHOD_APPLE_PAY",
+            Self::GbpBankTransfer => "FIAT_ON_RAMP_PAYMENT_METHOD_GBP_BANK_TRANSFER",
+            Self::GbpOpenBankingPayment => {
+                "FIAT_ON_RAMP_PAYMENT_METHOD_GBP_OPEN_BANKING_PAYMENT"
+            }
+            Self::GooglePay => "FIAT_ON_RAMP_PAYMENT_METHOD_GOOGLE_PAY",
+            Self::SepaBankTransfer => "FIAT_ON_RAMP_PAYMENT_METHOD_SEPA_BANK_TRANSFER",
+            Self::PixInstantPayment => "FIAT_ON_RAMP_PAYMENT_METHOD_PIX_INSTANT_PAYMENT",
+            Self::Paypal => "FIAT_ON_RAMP_PAYMENT_METHOD_PAYPAL",
+            Self::Venmo => "FIAT_ON_RAMP_PAYMENT_METHOD_VENMO",
+            Self::MoonpayBalance => "FIAT_ON_RAMP_PAYMENT_METHOD_MOONPAY_BALANCE",
+            Self::CryptoAccount => "FIAT_ON_RAMP_PAYMENT_METHOD_CRYPTO_ACCOUNT",
+            Self::FiatWallet => "FIAT_ON_RAMP_PAYMENT_METHOD_FIAT_WALLET",
+            Self::AchBankAccount => "FIAT_ON_RAMP_PAYMENT_METHOD_ACH_BANK_ACCOUNT",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "FIAT_ON_RAMP_PAYMENT_METHOD_UNSPECIFIED" => Some(Self::Unspecified),
+            "FIAT_ON_RAMP_PAYMENT_METHOD_CREDIT_DEBIT_CARD" => {
+                Some(Self::CreditDebitCard)
+            }
+            "FIAT_ON_RAMP_PAYMENT_METHOD_APPLE_PAY" => Some(Self::ApplePay),
+            "FIAT_ON_RAMP_PAYMENT_METHOD_GBP_BANK_TRANSFER" => {
+                Some(Self::GbpBankTransfer)
+            }
+            "FIAT_ON_RAMP_PAYMENT_METHOD_GBP_OPEN_BANKING_PAYMENT" => {
+                Some(Self::GbpOpenBankingPayment)
+            }
+            "FIAT_ON_RAMP_PAYMENT_METHOD_GOOGLE_PAY" => Some(Self::GooglePay),
+            "FIAT_ON_RAMP_PAYMENT_METHOD_SEPA_BANK_TRANSFER" => {
+                Some(Self::SepaBankTransfer)
+            }
+            "FIAT_ON_RAMP_PAYMENT_METHOD_PIX_INSTANT_PAYMENT" => {
+                Some(Self::PixInstantPayment)
+            }
+            "FIAT_ON_RAMP_PAYMENT_METHOD_PAYPAL" => Some(Self::Paypal),
+            "FIAT_ON_RAMP_PAYMENT_METHOD_VENMO" => Some(Self::Venmo),
+            "FIAT_ON_RAMP_PAYMENT_METHOD_MOONPAY_BALANCE" => Some(Self::MoonpayBalance),
+            "FIAT_ON_RAMP_PAYMENT_METHOD_CRYPTO_ACCOUNT" => Some(Self::CryptoAccount),
+            "FIAT_ON_RAMP_PAYMENT_METHOD_FIAT_WALLET" => Some(Self::FiatWallet),
+            "FIAT_ON_RAMP_PAYMENT_METHOD_ACH_BANK_ACCOUNT" => Some(Self::AchBankAccount),
             _ => None,
         }
     }
@@ -602,6 +1054,9 @@ pub enum TransactionType {
     /// Unsigned Solana transaction in hex bytes
     #[serde(rename = "TRANSACTION_TYPE_SOLANA")]
     Solana = 2,
+    /// Unsigned Tron transaction, protobuf encoded and hex encoded
+    #[serde(rename = "TRANSACTION_TYPE_TRON")]
+    Tron = 3,
 }
 impl TransactionType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -613,6 +1068,7 @@ impl TransactionType {
             Self::Unspecified => "TRANSACTION_TYPE_UNSPECIFIED",
             Self::Ethereum => "TRANSACTION_TYPE_ETHEREUM",
             Self::Solana => "TRANSACTION_TYPE_SOLANA",
+            Self::Tron => "TRANSACTION_TYPE_TRON",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -621,6 +1077,39 @@ impl TransactionType {
             "TRANSACTION_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
             "TRANSACTION_TYPE_ETHEREUM" => Some(Self::Ethereum),
             "TRANSACTION_TYPE_SOLANA" => Some(Self::Solana),
+            "TRANSACTION_TYPE_TRON" => Some(Self::Tron),
+            _ => None,
+        }
+    }
+}
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum SmartContractInterfaceType {
+    #[serde(rename = "SMART_CONTRACT_INTERFACE_TYPE_UNSPECIFIED")]
+    Unspecified = 0,
+    #[serde(rename = "SMART_CONTRACT_INTERFACE_TYPE_ETHEREUM")]
+    Ethereum = 1,
+    #[serde(rename = "SMART_CONTRACT_INTERFACE_TYPE_SOLANA")]
+    Solana = 2,
+}
+impl SmartContractInterfaceType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "SMART_CONTRACT_INTERFACE_TYPE_UNSPECIFIED",
+            Self::Ethereum => "SMART_CONTRACT_INTERFACE_TYPE_ETHEREUM",
+            Self::Solana => "SMART_CONTRACT_INTERFACE_TYPE_SOLANA",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "SMART_CONTRACT_INTERFACE_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+            "SMART_CONTRACT_INTERFACE_TYPE_ETHEREUM" => Some(Self::Ethereum),
+            "SMART_CONTRACT_INTERFACE_TYPE_SOLANA" => Some(Self::Solana),
             _ => None,
         }
     }
@@ -737,6 +1226,39 @@ impl Operator {
             "OPERATOR_NOT_IN" => Some(Self::NotIn),
             "OPERATOR_CONTAINS_ONE" => Some(Self::ContainsOne),
             "OPERATOR_CONTAINS_ALL" => Some(Self::ContainsAll),
+            _ => None,
+        }
+    }
+}
+/// A list of OAuth 2.0 providers that are supported
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Oauth2Provider {
+    #[serde(rename = "OAUTH2_PROVIDER_UNSPECIFIED")]
+    Unspecified = 0,
+    #[serde(rename = "OAUTH2_PROVIDER_X")]
+    X = 1,
+    #[serde(rename = "OAUTH2_PROVIDER_DISCORD")]
+    Discord = 2,
+}
+impl Oauth2Provider {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "OAUTH2_PROVIDER_UNSPECIFIED",
+            Self::X => "OAUTH2_PROVIDER_X",
+            Self::Discord => "OAUTH2_PROVIDER_DISCORD",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "OAUTH2_PROVIDER_UNSPECIFIED" => Some(Self::Unspecified),
+            "OAUTH2_PROVIDER_X" => Some(Self::X),
+            "OAUTH2_PROVIDER_DISCORD" => Some(Self::Discord),
             _ => None,
         }
     }

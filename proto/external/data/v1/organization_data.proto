@@ -5,6 +5,7 @@ package external.data.v1;
 import "external/data/v1/common.proto";
 import "immutable/common/v1/common.proto";
 import "immutable/data/v1/common.proto";
+import "immutable/data/v1/smart_contract_interface_reference.proto";
 import "immutable/webauthn/v1/webauthn.proto";
 import "vendor/google/api/field_behavior.proto";
 import "vendor/protoc-gen-openapiv2/options/annotations.proto";
@@ -24,6 +25,7 @@ message OrganizationData {
   Quorum root_quorum = 16;
   repeated immutable.data.v1.Feature features = 18;
   repeated Wallet wallets = 19;
+  repeated immutable.data.v1.SmartContractInterfaceReference smart_contract_interface_references = 20;
 }
 
 message OauthProvider {
@@ -331,4 +333,29 @@ message Wallet {
 message Config {
   repeated immutable.data.v1.Feature features = 1;
   Quorum quorum = 2;
+}
+
+message Oauth2Credential {
+  string oauth2_credential_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given OAuth 2.0 Credential."}
+  ];
+  string organization_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for an Organization."}
+  ];
+  immutable.common.v1.Oauth2Provider provider = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The provider for a given OAuth 2.0 Credential."}
+  ];
+  string client_id = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The client id for a given OAuth 2.0 Credential."}
+  ];
+  string encrypted_client_secret = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The encrypted client secret for a given OAuth 2.0 Credential encrypted to the TLS Fetcher quorum key."}
+  ];
+  Timestamp created_at = 6 [(google.api.field_behavior) = REQUIRED];
+  Timestamp updated_at = 7 [(google.api.field_behavior) = REQUIRED];
 }

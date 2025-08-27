@@ -1,0 +1,234 @@
+syntax = "proto3";
+
+package private.data.v1;
+
+import "immutable/common/v1/common.proto";
+import "immutable/data/v1/common.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/private/data/v1";
+
+// This proto definition is used in internal RPCs
+// This is the canonical shape of our organization data.
+// To serialize / deserialize organization data (for signatures or data storage),
+// applications should use immutable.OrganizationDataV1/V2/etc instead.
+message OrganizationData {
+  string uuid = 2;
+  string name = 3;
+  repeated User users = 4;
+  repeated Policy policies = 5;
+  repeated PrivateKey private_keys = 6;
+  repeated Invitation invitations = 7;
+  repeated Tag tags = 8;
+  Quorum root_quorum = 16;
+  optional string parent_organization_uuid = 17;
+  repeated immutable.data.v1.Feature features = 19;
+  repeated Wallet wallets = 20;
+  repeated SmartContractInterfaceReference smart_contract_interface_references = 21;
+}
+
+message OauthProvider {
+  string uuid = 1;
+  string provider_name = 2;
+  string issuer = 3;
+  string audience = 4;
+  string subject = 5;
+  Timestamp created_at = 6;
+  Timestamp updated_at = 7;
+}
+
+message User {
+  string uuid = 1;
+  string alias = 2;
+  // some users do not have emails (programmatic users)
+  optional string email = 3;
+  optional string phone_number = 4;
+  repeated Authenticator authenticators = 5;
+  repeated ApiKey api_keys = 6;
+  repeated string tags = 7;
+  Timestamp created_at = 8;
+  Timestamp updated_at = 9;
+  repeated EncryptionKey encryption_keys = 10;
+  repeated OauthProvider oauth_providers = 11;
+}
+
+message Timestamp {
+  string seconds = 1; /* Stringified int */
+  string nanos = 2; /* Stringified int */
+}
+
+message Authenticator {
+  repeated AuthenticatorTransport transports = 1;
+  string attestation_type = 2;
+  string aaguid = 3;
+  string credential_id = 5;
+  string model = 6;
+  Credential credential = 7;
+  string uuid = 8;
+  string label = 9;
+  Timestamp created_at = 10;
+  Timestamp updated_at = 11;
+}
+
+enum AuthenticatorTransport {
+  AUTHENTICATOR_TRANSPORT_UNSPECIFIED = 0;
+  AUTHENTICATOR_TRANSPORT_BLE = 1;
+  AUTHENTICATOR_TRANSPORT_INTERNAL = 2;
+  AUTHENTICATOR_TRANSPORT_NFC = 3;
+  AUTHENTICATOR_TRANSPORT_USB = 4;
+  AUTHENTICATOR_TRANSPORT_HYBRID = 5;
+}
+
+message Credential {
+  string public_key = 1;
+  // To distinguish the credential type (webauthn, API key)
+  CredentialType type = 2;
+}
+
+enum CredentialType {
+  CREDENTIAL_TYPE_UNSPECIFIED = 0;
+  CREDENTIAL_TYPE_WEBAUTHN_AUTHENTICATOR = 1;
+  CREDENTIAL_TYPE_API_KEY_P256 = 2;
+  CREDENTIAL_TYPE_RECOVER_USER_KEY_P256 = 3;
+  CREDENTIAL_TYPE_API_KEY_SECP256K1 = 4;
+  CREDENTIAL_TYPE_EMAIL_AUTH_KEY_P256 = 5;
+  CREDENTIAL_TYPE_API_KEY_ED25519 = 6;
+  CREDENTIAL_TYPE_OTP_AUTH_KEY_P256 = 7;
+  CREDENTIAL_TYPE_READ_WRITE_SESSION_KEY_P256 = 8;
+  CREDENTIAL_TYPE_OAUTH_KEY_P256 = 9;
+  CREDENTIAL_TYPE_LOGIN = 10;
+}
+
+message ApiKey {
+  Credential credential = 1;
+  string uuid = 3;
+  string label = 4;
+  Timestamp created_at = 5;
+  Timestamp updated_at = 6;
+  optional uint64 expiration_seconds = 7;
+}
+
+message Policy {
+  string uuid = 1;
+  string label = 2;
+  Effect effect = 3;
+  Timestamp created_at = 5;
+  Timestamp updated_at = 6;
+  string notes = 7;
+  optional string consensus = 8;
+  optional string condition = 9;
+}
+
+enum Effect {
+  EFFECT_UNSPECIFIED = 0;
+  EFFECT_ALLOW = 1;
+  EFFECT_DENY = 2;
+}
+
+message PrivateKey {
+  string uuid = 1;
+  // public key (!= address)
+  string public_key = 2;
+  // encrypted private key
+  string encrypted_private_key = 3;
+  string label = 4;
+  immutable.common.v1.Curve curve = 5;
+  repeated Address addresses = 6;
+  repeated string tags = 7;
+  Timestamp created_at = 8;
+  Timestamp updated_at = 9;
+  // has this private key been exported?
+  bool exported = 10;
+  // has this private key been imported?
+  bool imported = 11;
+}
+
+message Wallet {
+  string uuid = 1;
+  string label = 2;
+  // was this wallet imported?
+  bool imported = 3;
+  // has this wallet been exported?
+  bool exported = 4;
+  repeated string tags = 5;
+  // NOTE: we can't just store the encrypted seed since the seed is created via a hashing function
+  // combining a mnemonic phrase with an optional password. We need to store these inputs so we
+  // have interoperability with other wallet implementations
+  string encrypted_seed_inputs = 6;
+  Timestamp created_at = 7;
+  Timestamp updated_at = 8;
+}
+
+message Address {
+  immutable.common.v1.AddressFormat format = 1;
+  string address = 2;
+}
+
+message Invitation {
+  string uuid = 1;
+  string receiver_alias = 2;
+  string receiver_email = 3;
+  repeated string receiver_tags = 4;
+  AccessType access_type = 5;
+  InvitationStatus status = 6;
+  Timestamp created_at = 7;
+  Timestamp updated_at = 8;
+  string sender_user_id = 9;
+}
+
+enum InvitationStatus {
+  INVITATION_STATUS_UNSPECIFIED = 0;
+  INVITATION_STATUS_CREATED = 1;
+  INVITATION_STATUS_ACCEPTED = 2;
+  reserved 3; // deprecated INVITATION_STATUS_REVOKED
+}
+
+message Tag {
+  string uuid = 1;
+  string label = 2;
+  TagType tag_type = 3;
+  Timestamp created_at = 4;
+  Timestamp updated_at = 5;
+}
+
+enum TagType {
+  TAG_TYPE_UNSPECIFIED = 0;
+  TAG_TYPE_USER = 1;
+  TAG_TYPE_PRIVATE_KEY = 3;
+}
+
+enum AccessType {
+  ACCESS_TYPE_UNSPECIFIED = 0;
+  ACCESS_TYPE_WEB = 1;
+  ACCESS_TYPE_API = 2;
+  ACCESS_TYPE_ALL = 3;
+}
+
+message Quorum {
+  int32 threshold = 1;
+  repeated string user_ids = 2;
+}
+
+message EncryptionKey {
+  string uuid = 1;
+  // public key of the target (e.g. signer enclave)
+  string target_public_key = 2;
+  // encrypted enclave target keypair
+  string encrypted_target_key = 3;
+  Timestamp created_at = 4;
+}
+
+// A reference to a Smart Contract Interface (ABI or IDL), to be stored within Org Data.
+// We intentionally store a reference, and not the entire smart contract interface, as
+// ABIs/IDLs are JSON objects and can be up to several hundred kb in size.
+message SmartContractInterfaceReference {
+  string smart_contract_interface_id = 1;
+  string smart_contract_address = 2;
+  string digest = 3; // digest pertaining to a SmartContractInterfacePayload (containing all its details), originally generated by evm parser
+}
+
+// A list of OAuth 2.0 providers that are supported
+enum Oauth2Provider {
+  OAUTH2_PROVIDER_UNSPECIFIED = 0;
+  OAUTH2_PROVIDER_X = 1;
+  OAUTH2_PROVIDER_DISCORD = 2;
+}

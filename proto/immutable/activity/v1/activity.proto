@@ -108,6 +108,24 @@ enum ActivityType {
   ACTIVITY_TYPE_UPDATE_POLICY_V2 = 81;
   ACTIVITY_TYPE_CREATE_USERS_V3 = 82;
   ACTIVITY_TYPE_INIT_OTP_AUTH_V2 = 83;
+  ACTIVITY_TYPE_INIT_OTP = 84;
+  ACTIVITY_TYPE_VERIFY_OTP = 85;
+  ACTIVITY_TYPE_OTP_LOGIN = 86;
+  ACTIVITY_TYPE_STAMP_LOGIN = 87;
+  ACTIVITY_TYPE_OAUTH_LOGIN = 88;
+  ACTIVITY_TYPE_UPDATE_USER_NAME = 89;
+  ACTIVITY_TYPE_UPDATE_USER_EMAIL = 90;
+  ACTIVITY_TYPE_UPDATE_USER_PHONE_NUMBER = 91;
+  ACTIVITY_TYPE_INIT_FIAT_ON_RAMP = 92;
+  ACTIVITY_TYPE_CREATE_SMART_CONTRACT_INTERFACE = 93;
+  ACTIVITY_TYPE_DELETE_SMART_CONTRACT_INTERFACE = 94;
+  ACTIVITY_TYPE_ENABLE_AUTH_PROXY = 95;
+  ACTIVITY_TYPE_DISABLE_AUTH_PROXY = 96;
+  ACTIVITY_TYPE_UPDATE_AUTH_PROXY_CONFIG = 97;
+  ACTIVITY_TYPE_CREATE_OAUTH2_CREDENTIAL = 98;
+  ACTIVITY_TYPE_UPDATE_OAUTH2_CREDENTIAL = 99;
+  ACTIVITY_TYPE_DELETE_OAUTH2_CREDENTIAL = 100;
+  ACTIVITY_TYPE_OAUTH2_AUTHENTICATE = 101;
 }
 
 // The current processing status of an Activity.
@@ -119,6 +137,19 @@ enum ActivityStatus {
   ACTIVITY_STATUS_FAILED = 4;
   ACTIVITY_STATUS_CONSENSUS_NEEDED = 5;
   ACTIVITY_STATUS_REJECTED = 6;
+}
+
+enum UsageVariant {
+  USAGE_VARIANT_UNSPECIFIED = 0;
+  USAGE_VARIANT_ON_RAMP_COINBASE = 1;
+  USAGE_VARIANT_ON_RAMP_MOONPAY = 2;
+}
+
+enum ActivityProtectedCategory {
+  ACTIVITY_PROTECTED_CATEGORY_UNSPECIFIED = 0;
+  ACTIVITY_PROTECTED_CATEGORY_SIGN = 2;
+  ACTIVITY_PROTECTED_CATEGORY_SMS = 3;
+  ACTIVITY_PROTECTED_CATEGORY_FIAT_ON_RAMP = 4;
 }
 
 // Intent object crafted by Turnkey based on the user request, used to assess the permissibility of an action.
@@ -207,8 +238,145 @@ message Intent {
     UpdatePolicyIntentV2 update_policy_intent_v2 = 82;
     CreateUsersIntentV3 create_users_intent_v3 = 83;
     InitOtpAuthIntentV2 init_otp_auth_intent_v2 = 84;
+    InitOtpIntent init_otp_intent = 85;
+    VerifyOtpIntent verify_otp_intent = 86;
+    OtpLoginIntent otp_login_intent = 87;
+    StampLoginIntent stamp_login_intent = 88;
+    OauthLoginIntent oauth_login_intent = 89;
+    UpdateUserNameIntent update_user_name_intent = 90;
+    UpdateUserEmailIntent update_user_email_intent = 91;
+    UpdateUserPhoneNumberIntent update_user_phone_number_intent = 92;
+    InitFiatOnRampIntent init_fiat_on_ramp_intent = 93;
+    CreateSmartContractInterfaceIntent create_smart_contract_interface_intent = 94;
+    DeleteSmartContractInterfaceIntent delete_smart_contract_interface_intent = 95;
+    EnableAuthProxyIntent enable_auth_proxy_intent = 96;
+    DisableAuthProxyIntent disable_auth_proxy_intent = 97;
+    UpdateAuthProxyConfigIntent update_auth_proxy_config_intent = 98;
+    CreateOauth2CredentialIntent create_oauth2_credential_intent = 99;
+    UpdateOauth2CredentialIntent update_oauth2_credential_intent = 100;
+    DeleteOauth2CredentialIntent delete_oauth2_credential_intent = 101;
+    Oauth2AuthenticateIntent oauth2_authenticate_intent = 102;
   }
 }
+
+message UpdateAuthProxyConfigIntent {
+  // @inject_tag: validate:"omitempty,dive"
+  repeated string allowed_origins = 1 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Updated list of allowed origins for CORS."
+      title: ""
+    }
+  ];
+
+  // @inject_tag: validate:"omitempty,dive"
+  repeated string allowed_auth_methods = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Updated list of allowed proxy authentication methods."}
+  ];
+
+  // @inject_tag: validate:"omitempty,email,tk_email"
+  optional string send_from_email_address = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Custom 'from' address for auth-related emails."
+      title: ""
+    }
+  ];
+
+  // @inject_tag: validate:"omitempty,email,tk_email"
+  optional string reply_to_email_address = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Custom reply-to address for auth-related emails."
+      title: ""
+    }
+  ];
+
+  // @inject_tag: validate:"omitempty"
+  optional string email_auth_template_id = 5 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Template ID for email-auth messages."
+      title: ""
+    }
+  ];
+
+  // @inject_tag: validate:"omitempty,uuid"
+  optional string otp_template_id = 6 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Template ID for OTP SMS messages."
+      title: ""
+    }
+  ];
+
+  optional EmailCustomizationParams email_customization_params = 7 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Overrides for auth-related email content."}
+  ];
+
+  optional SmsCustomizationParams sms_customization_params = 8 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Overrides for auth-related SMS content."}
+  ];
+
+  optional WalletKitSettingsParams wallet_kit_settings = 9 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Overrides for react wallet kit related settings."}
+  ];
+
+  // @inject_tag: validate:"omitempty,numeric"
+  optional int32 otp_expiration_seconds = 10 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "OTP code lifetime in seconds."}
+  ];
+
+  // @inject_tag: validate:"omitempty,numeric"
+  optional int32 verification_token_expiration_seconds = 11 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Verification-token lifetime in seconds."}
+  ];
+
+  // @inject_tag: validate:"omitempty,numeric"
+  optional int32 session_expiration_seconds = 12 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Session lifetime in seconds."}
+  ];
+
+  // @inject_tag: validate:"omitempty"
+  optional bool otp_alphanumeric = 16 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Enable alphanumeric OTP codes."}
+  ];
+
+  // @inject_tag: validate:"omitempty,numeric,min=6,max=9"
+  optional int32 otp_length = 17 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Desired OTP code length (6–9)."}
+  ];
+
+  // @inject_tag: validate:"omitempty,dive"
+  map<string, string> oauth2_provider_credential_ids = 18 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A map of OAuth 2.0 provider and their respective credential ID to use for the OAuth 2.0 authentication flow."}
+  ];
+}
+
+message UpdateAuthProxyConfigResult {
+  // @inject_tag: validate:"required,uuid"
+  string config_id = 1 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Unique identifier for a given User. (representing the turnkey signer user id)"
+      title: ""
+    }
+  ];
+}
+
+message EnableAuthProxyIntent {} // This intent is used to enable auth proxied authentication for business org
+
+message DisableAuthProxyIntent {} // This intent is used to disable auth proxied authentication for business org
 
 message CreateOrganizationIntent {
   // @inject_tag: validate:"required,tk_label_length"
@@ -413,6 +581,77 @@ message UpdateUserIntent {
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
       description: "The user's phone number in E.164 format e.g. +13214567890"
+      title: ""
+    }
+  ];
+}
+
+message UpdateUserNameIntent {
+  // @inject_tag: validate:"uuid"
+  string user_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Unique identifier for a given User."
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"required,tk_label,tk_label_length"
+  string user_name = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Human-readable name for a User."
+      title: ""
+    }
+  ];
+}
+
+message UpdateUserEmailIntent {
+  // @inject_tag: validate:"uuid"
+  string user_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Unique identifier for a given User."
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"omitempty,email,tk_email"
+  string user_email = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The user's email address. Setting this to an empty string will remove the user's email."
+      title: ""
+    }
+  ];
+  optional string verification_token = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Signed JWT containing a unique id, expiry, verification type, contact"
+      title: ""
+    }
+  ];
+}
+
+message UpdateUserPhoneNumberIntent {
+  // @inject_tag: validate:"uuid"
+  string user_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Unique identifier for a given User."
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"omitempty,e164"
+  string user_phone_number = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The user's phone number in E.164 format e.g. +13214567890. Setting this to an empty string will remove the user's phone number."
+      title: ""
+    }
+  ];
+  optional string verification_token = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Signed JWT containing a unique id, expiry, verification type, contact"
       title: ""
     }
   ];
@@ -809,7 +1048,7 @@ message CreateReadWriteSessionIntent {
   ];
   optional string expiration_seconds = 4 [
     (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Expiration window (in seconds) indicating how long the API key is valid. If not provided, a default of 15 minutes will be used."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Expiration window (in seconds) indicating how long the API key is valid for. If not provided, a default of 15 minutes will be used."}
   ];
 }
 
@@ -839,7 +1078,7 @@ message CreateReadWriteSessionIntentV2 {
   ];
   optional string expiration_seconds = 4 [
     (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Expiration window (in seconds) indicating how long the API key is valid. If not provided, a default of 15 minutes will be used."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Expiration window (in seconds) indicating how long the API key is valid for. If not provided, a default of 15 minutes will be used."}
   ];
 
   optional bool invalidate_existing = 5 [
@@ -1183,6 +1422,56 @@ message UpdateAllowedOriginsIntent {
   ];
 }
 
+message CreateSmartContractInterfaceIntent {
+  // @inject_tag: validate:"required"
+  string smart_contract_address = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Corresponding contract address or program ID"
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"required,tk_max_length=200000"
+  string smart_contract_interface = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "ABI/IDL as a JSON string"
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"required"
+  immutable.common.v1.SmartContractInterfaceType type = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {title: ""}
+  ];
+  // @inject_tag: validate:"required,tk_label,tk_label_length"
+  string label = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Human-readable name for a Smart Contract Interface."
+      title: ""
+    }
+  ];
+  string notes = 5 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Notes for a Smart Contract Interface."
+      title: ""
+    }
+  ];
+}
+
+message DeleteSmartContractInterfaceIntent {
+  // @inject_tag: validate:"required"
+  string smart_contract_interface_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The ID of a Smart Contract Interface intended for deletion."
+      title: ""
+    }
+  ];
+}
+
 message CreateSubOrganizationIntent {
   // @inject_tag: validate:"omitempty,tk_label,tk_label_length"
   string name = 1 [
@@ -1439,6 +1728,10 @@ message CreateSubOrganizationIntentV7 {
     description: "Disable OTP email auth for the sub-organization"
     title: ""
   }];
+  optional string verification_token = 9 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Signed JWT containing a unique id, expiry, verification type, contact"}
+  ];
 }
 
 message UpdatePolicyIntent {
@@ -1857,6 +2150,16 @@ message SmsCustomizationParams {
   ];
 }
 
+message WalletKitSettingsParams {
+  repeated string enabled_social_providers = 1 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "List of enabled social login providers (e.g., 'apple', 'google', 'facebook')"
+      title: "Enabled Social Providers"
+    }
+  ];
+}
+
 message InitUserEmailRecoveryIntent {
   // @inject_tag: validate:"email,tk_email"
   string email = 2 [
@@ -1876,11 +2179,83 @@ message InitUserEmailRecoveryIntent {
   ];
   optional string expiration_seconds = 4 [
     (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Expiration window (in seconds) indicating how long the recovery credential is valid. If not provided, a default of 15 minutes will be used."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Expiration window (in seconds) indicating how long the recovery credential is valid for. If not provided, a default of 15 minutes will be used."}
   ];
   optional EmailCustomizationParams email_customization = 5 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional parameters for customizing emails. If not provided, the default email will be used."}
+  ];
+}
+
+message OauthLoginIntent {
+  // @inject_tag: validate:"required"
+  string oidc_token = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Base64 encoded OIDC token"
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"omitempty,hexadecimal"
+  string public_key = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Client-side public key generated by the user, which will be conditionally added to org data based on the validity of the oidc token associated with this request"
+      title: ""
+    }
+  ];
+  optional string expiration_seconds = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Expiration window (in seconds) indicating how long the Session is valid for. If not provided, a default of 15 minutes will be used."}
+  ];
+  optional bool invalidate_existing = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Invalidate all other previously generated Login API keys"}
+  ];
+}
+
+message StampLoginIntent {
+  // @inject_tag: validate:"omitempty,hexadecimal"
+  string public_key = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Client-side public key generated by the user, which will be conditionally added to org data based on the passkey stamp associated with this request"
+      title: ""
+    }
+  ];
+  optional string expiration_seconds = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Expiration window (in seconds) indicating how long the Session is valid for. If not provided, a default of 15 minutes will be used."}
+  ];
+  optional bool invalidate_existing = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Invalidate all other previously generated Login API keys"}
+  ];
+}
+
+message OtpLoginIntent {
+  string verification_token = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Signed JWT containing a unique id, expiry, verification type, contact"
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"omitempty,hexadecimal"
+  string public_key = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Client-side public key generated by the user, which will be conditionally added to org data based on the validity of the verification token"
+      title: ""
+    }
+  ];
+  optional string expiration_seconds = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Expiration window (in seconds) indicating how long the Session is valid for. If not provided, a default of 15 minutes will be used."}
+  ];
+  optional bool invalidate_existing = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Invalidate all other previously generated Login API keys"}
   ];
 }
 
@@ -1928,6 +2303,93 @@ message InitOtpAuthIntent {
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
       description: "Optional custom sender name for use with sendFromEmailAddress; if left empty, will default to 'Notifications'"
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"omitempty,email,tk_email"
+  optional string reply_to_email_address = 8 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Optional custom email address to use as reply-to"
+      title: ""
+    }
+  ];
+}
+
+message InitOtpIntent {
+  // @inject_tag: validate:"required,oneof=OTP_TYPE_SMS OTP_TYPE_EMAIL"
+  string otp_type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Whether to send OTP via SMS or email. Possible values: OTP_TYPE_SMS, OTP_TYPE_EMAIL"
+      title: ""
+    }
+  ];
+  string contact = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Email or phone number to send the OTP code to"
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"omitempty,min=6,max=9"
+  optional int32 otp_length = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Optional length of the OTP code. Default = 9"
+      title: ""
+    }
+  ];
+  optional EmailCustomizationParams email_customization = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional parameters for customizing emails. If not provided, the default email will be used."}
+  ];
+  optional SmsCustomizationParams sms_customization = 5 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional parameters for customizing SMS message. If not provided, the default sms message will be used."}
+  ];
+  optional string user_identifier = 6 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Optional client-generated user identifier to enable per-user rate limiting for SMS auth. We recommend using a hash of the client-side IP address."
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"omitempty,email,tk_email"
+  optional string send_from_email_address = 7 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Optional custom email address from which to send the OTP email"
+      title: ""
+    }
+  ];
+
+  optional bool alphanumeric = 8 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Optional flag to specify if the OTP code should be alphanumeric (Crockford’s Base32). Default = true"
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"omitempty,tk_label_length,tk_label"
+  optional string send_from_email_sender_name = 9 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Optional custom sender name for use with sendFromEmailAddress; if left empty, will default to 'Notifications'"
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"omitempty,numeric,max=600"
+  optional string expiration_seconds = 10 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Expiration window (in seconds) indicating how long the OTP is valid for. If not provided, a default of 5 minutes will be used. Maximum value is 600 seconds (10 minutes)"}
+  ];
+
+  // @inject_tag: validate:"omitempty,email,tk_email"
+  optional string reply_to_email_address = 11 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Optional custom email address to use as reply-to"
       title: ""
     }
   ];
@@ -1996,6 +2458,38 @@ message InitOtpAuthIntentV2 {
       title: ""
     }
   ];
+  // @inject_tag: validate:"omitempty,email,tk_email"
+  optional string reply_to_email_address = 10 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Optional custom email address to use as reply-to"
+      title: ""
+    }
+  ];
+}
+
+message VerifyOtpIntent {
+  // @inject_tag: validate:"required"
+  string otp_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "ID representing the result of an init OTP activity."
+      title: ""
+    }
+  ];
+
+  string otp_code = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "OTP sent out to a user's contact (email or SMS)"
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"omitempty,numeric,max=86400"
+  optional string expiration_seconds = 5 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Expiration window (in seconds) indicating how long the verification token is valid for. If not provided, a default of 1 hour will be used. Maximum value is 86400 seconds (24 hours)"}
+  ];
 }
 
 message OtpAuthIntent {
@@ -2034,7 +2528,7 @@ message OtpAuthIntent {
   ];
   optional string expiration_seconds = 5 [
     (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Expiration window (in seconds) indicating how long the API key is valid. If not provided, a default of 15 minutes will be used."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Expiration window (in seconds) indicating how long the API key is valid for. If not provided, a default of 15 minutes will be used."}
   ];
   optional bool invalidate_existing = 6 [
     (google.api.field_behavior) = OPTIONAL,
@@ -2069,7 +2563,7 @@ message OauthIntent {
   ];
   optional string expiration_seconds = 4 [
     (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Expiration window (in seconds) indicating how long the API key is valid. If not provided, a default of 15 minutes will be used."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Expiration window (in seconds) indicating how long the API key is valid for. If not provided, a default of 15 minutes will be used."}
   ];
   optional bool invalidate_existing = 5 [
     (google.api.field_behavior) = OPTIONAL,
@@ -2104,7 +2598,7 @@ message EmailAuthIntent {
   ];
   optional string expiration_seconds = 4 [
     (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Expiration window (in seconds) indicating how long the API key is valid. If not provided, a default of 15 minutes will be used."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Expiration window (in seconds) indicating how long the API key is valid for. If not provided, a default of 15 minutes will be used."}
   ];
   optional EmailCustomizationParams email_customization = 5 [
     (google.api.field_behavior) = OPTIONAL,
@@ -2127,6 +2621,14 @@ message EmailAuthIntent {
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
       description: "Optional custom sender name for use with sendFromEmailAddress; if left empty, will default to 'Notifications'"
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"omitempty,email,tk_email"
+  optional string reply_to_email_address = 9 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Optional custom email address to use as reply-to"
       title: ""
     }
   ];
@@ -2159,7 +2661,7 @@ message EmailAuthIntentV2 {
   ];
   optional string expiration_seconds = 4 [
     (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Expiration window (in seconds) indicating how long the API key is valid. If not provided, a default of 15 minutes will be used."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Expiration window (in seconds) indicating how long the API key is valid for. If not provided, a default of 15 minutes will be used."}
   ];
   optional EmailCustomizationParams email_customization = 5 [
     (google.api.field_behavior) = OPTIONAL,
@@ -2182,6 +2684,88 @@ message EmailAuthIntentV2 {
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
       description: "Optional custom sender name for use with sendFromEmailAddress; if left empty, will default to 'Notifications'"
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"omitempty,email,tk_email"
+  optional string reply_to_email_address = 9 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Optional custom email address to use as reply-to"
+      title: ""
+    }
+  ];
+}
+
+message InitFiatOnRampIntent {
+  // @inject_tag: validate:"required"
+  immutable.common.v1.FiatOnRampProvider onramp_provider = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Enum to specifiy which on-ramp provider to use"
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"required"
+  string wallet_address = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Destination wallet address for the buy transaction."
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"required"
+  immutable.common.v1.FiatOnRampBlockchainNetwork network = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Blockchain network to be used for the transaction, e.g., bitcoin, ethereum. Maps to MoonPay's network or Coinbase's defaultNetwork."
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"required"
+  immutable.common.v1.FiatOnRampCryptoCurrency crypto_currency_code = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Code for the cryptocurrency to be purchased, e.g., btc, eth. Maps to MoonPay's currencyCode or Coinbase's defaultAsset."
+      title: ""
+    }
+  ];
+  optional immutable.common.v1.FiatOnRampCurrency fiat_currency_code = 5 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Code for the fiat currency to be used in the transaction, e.g., USD, EUR."
+      title: ""
+    }
+  ];
+  optional string fiat_currency_amount = 6 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Specifies a preset fiat amount for the transaction, e.g., '100'. Must be greater than '20'. If not provided, the user will be prompted to enter an amount."
+      title: ""
+    }
+  ];
+  optional immutable.common.v1.FiatOnRampPaymentMethod payment_method = 7 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Pre-selected payment method, e.g., CREDIT_DEBIT_CARD, APPLE_PAY. Validated against the chosen provider."}
+  ];
+  optional string country_code = 8 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "ISO 3166-1 two-digit country code for Coinbase representing the purchasing user’s country of residence, e.g., US, GB."
+      title: ""
+    }
+  ];
+  optional string country_subdivision_code = 9 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "ISO 3166-2 two-digit country subdivision code for Coinbase representing the purchasing user’s subdivision of residence within their country, e.g. NY. Required if country_code=US."
+      title: ""
+    }
+  ];
+  optional bool sandbox_mode = 10 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Optional flag to indicate whether to use the sandbox mode to simulate transactions for the on-ramp provider. Default is false."
       title: ""
     }
   ];
@@ -2322,6 +2906,82 @@ message DeleteSubOrganizationIntent {
   ];
 }
 
+message CreateOauth2CredentialIntent {
+  // @inject_tag: validate:"required"
+  immutable.common.v1.Oauth2Provider provider = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The OAuth 2.0 provider"}
+  ];
+  // @inject_tag: validate:"required"
+  string client_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The Client ID issued by the OAuth 2.0 provider"}
+  ];
+  // @inject_tag: validate:"required"
+  string encrypted_client_secret = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The client secret issued by the OAuth 2.0 provider encrypted to the TLS Fetcher quorum key"}
+  ];
+}
+
+message UpdateOauth2CredentialIntent {
+  // @inject_tag: validate:"required"
+  string oauth2_credential_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The ID of the OAuth 2.0 credential to update"}
+  ];
+  // @inject_tag: validate:"required"
+  immutable.common.v1.Oauth2Provider provider = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The OAuth 2.0 provider"}
+  ];
+  // @inject_tag: validate:"required"
+  string client_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The Client ID issued by the OAuth 2.0 provider"}
+  ];
+  // @inject_tag: validate:"required"
+  string encrypted_client_secret = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The client secret issued by the OAuth 2.0 provider encrypted to the TLS Fetcher quorum key"}
+  ];
+}
+
+message DeleteOauth2CredentialIntent {
+  // @inject_tag: validate:"required"
+  string oauth2_credential_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The ID of the OAuth 2.0 credential to delete"}
+  ];
+}
+
+message Oauth2AuthenticateIntent {
+  // @inject_tag: validate:"required"
+  string oauth2_credential_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The OAuth 2.0 credential id whose client_id and client_secret will be used in the OAuth 2.0 flow"}
+  ];
+  // @inject_tag: validate:"required"
+  string auth_code = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The auth_code provided by the OAuth 2.0 provider to the end user to be exchanged for a Bearer token in the OAuth 2.0 flow"}
+  ];
+  // @inject_tag: validate:"required"
+  string redirect_uri = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The URI the user is redirected to after they have authenticated with the OAuth 2.0 provider"}
+  ];
+  // @inject_tag: validate:"required"
+  string code_verifier = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The code verifier used by OAuth 2.0 PKCE providers"}
+  ];
+  optional string nonce = 5 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "An optional nonce used by the client to prevent replay/substitution of an ID token"}
+  ];
+}
+
 // Result of the intended action.
 message Result {
   oneof inner {
@@ -2393,8 +3053,34 @@ message Result {
     UpdateWalletResult update_wallet_result = 67;
     UpdatePolicyResultV2 update_policy_result_v2 = 68;
     InitOtpAuthResultV2 init_otp_auth_result_v2 = 69;
+    InitOtpResult init_otp_result = 70;
+    VerifyOtpResult verify_otp_result = 71;
+    OtpLoginResult otp_login_result = 72;
+    StampLoginResult stamp_login_result = 73;
+    OauthLoginResult oauth_login_result = 74;
+    UpdateUserNameResult update_user_name_result = 75;
+    UpdateUserEmailResult update_user_email_result = 76;
+    UpdateUserPhoneNumberResult update_user_phone_number_result = 77;
+    InitFiatOnRampResult init_fiat_on_ramp_result = 78;
+    CreateSmartContractInterfaceResult create_smart_contract_interface_result = 79;
+    DeleteSmartContractInterfaceResult delete_smart_contract_interface_result = 80;
+    EnableAuthProxyResult enable_auth_proxy_result = 81;
+    DisableAuthProxyResult disable_auth_proxy_result = 82;
+    UpdateAuthProxyConfigResult update_auth_proxy_config_result = 83;
+    CreateOauth2CredentialResult create_oauth2_credential_result = 84;
+    UpdateOauth2CredentialResult update_oauth2_credential_result = 85;
+    DeleteOauth2CredentialResult delete_oauth2_credential_result = 86;
+    Oauth2AuthenticateResult oauth2_authenticate_result = 87;
   }
 }
+
+message EnableAuthProxyResult {
+  string user_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A User ID with permission to initiate authentication."}
+  ];
+}
+message DisableAuthProxyResult {}
 
 message CreateOrganizationResult {
   string organization_id = 1 [
@@ -2428,6 +3114,27 @@ message UpdateUserResult {
   string user_id = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A User ID."}
+  ];
+}
+
+message UpdateUserNameResult {
+  string user_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier of the User whose name was updated."}
+  ];
+}
+
+message UpdateUserEmailResult {
+  string user_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier of the User whose email was updated."}
+  ];
+}
+
+message UpdateUserPhoneNumberResult {
+  string user_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier of the User whose phone number was updated."}
   ];
 }
 
@@ -2530,6 +3237,42 @@ message InitUserEmailRecoveryResult {
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for the user being recovered."}
   ];
 }
+message OauthLoginResult {
+  string session = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Signed JWT containing an expiry, public key, session type, user id, and organization id"}
+  ];
+}
+message InitFiatOnRampResult {
+  string on_ramp_url = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique URL for a given fiat on-ramp flow."}
+  ];
+  string on_ramp_transaction_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier used to retrieve transaction statuses for a given fiat on-ramp flow."}
+  ];
+}
+message StampLoginResult {
+  string session = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Signed JWT containing an expiry, public key, session type, user id, and organization id"}
+  ];
+}
+
+message OtpLoginResult {
+  string session = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Signed JWT containing an expiry, public key, session type, user id, and organization id"}
+  ];
+}
+
+message InitOtpResult {
+  string otp_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for an OTP authentication"}
+  ];
+}
 
 message InitOtpAuthResult {
   string otp_id = 1 [
@@ -2557,6 +3300,13 @@ message OtpAuthResult {
   string credential_bundle = 3 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "HPKE encrypted credential bundle"}
+  ];
+}
+
+message VerifyOtpResult {
+  string verification_token = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Signed JWT containing a unique id, expiry, verification type, contact. Verification status of a user is updated when the token is consumed (in OTP_LOGIN requests)"}
   ];
 }
 
@@ -2803,6 +3553,20 @@ message SignTransactionResult {
   string signed_transaction = 1 [(google.api.field_behavior) = REQUIRED];
 }
 
+message CreateSmartContractInterfaceResult {
+  string smart_contract_interface_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The ID of the created Smart Contract Interface."}
+  ];
+}
+
+message DeleteSmartContractInterfaceResult {
+  string smart_contract_interface_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The ID of the deleted Smart Contract Interface."}
+  ];
+}
+
 // TODO: this should include the new root quorum
 message UpdateRootQuorumResult {}
 
@@ -3013,6 +3777,27 @@ message DeleteSubOrganizationResult {
   string sub_organization_uuid = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier of the sub organization that was removed"}
+  ];
+}
+
+message CreateOauth2CredentialResult {
+  string oauth2_credential_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier of the OAuth 2.0 credential that was created"}
+  ];
+}
+
+message UpdateOauth2CredentialResult {
+  string oauth2_credential_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier of the OAuth 2.0 credential that was updated"}
+  ];
+}
+
+message DeleteOauth2CredentialResult {
+  string oauth2_credential_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier of the OAuth 2.0 credential that was deleted"}
   ];
 }
 
@@ -3478,5 +4263,13 @@ message DeleteWalletsParams {
   optional bool delete_without_export = 2 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional parameter for deleting the wallets, even if any have not been previously exported. If they have been exported, this field is ignored."}
+  ];
+}
+
+message Oauth2AuthenticateResult {
+  // @inject_tag: validate:"required"
+  string oidc_token = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Base64 encoded OIDC token issued by Turnkey to be used with the LoginWithOAuth activity"}
   ];
 }

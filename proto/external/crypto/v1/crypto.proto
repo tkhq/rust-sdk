@@ -47,6 +47,14 @@ enum PayloadEncoding {
   // Payload is encoded as utf-8 text
   // Will be converted to bytes for signature with Rust's standard String.as_bytes()
   PAYLOAD_ENCODING_TEXT_UTF8 = 2;
+  // Payload is encoded as EIP-712 typed data
+  // See JSON schema definition in EIP-712 documentation here: https://eips.ethereum.org/EIPS/eip-712#parameters
+  // Will be converted to bytes for signing using serde_json::from_str
+  PAYLOAD_ENCODING_EIP712 = 3;
+  // Payload is encoded as an EIP-7702 Authorization
+  // See spec here: https://eips.ethereum.org/EIPS/eip-7702#behavior
+  // Will be converted to bytes for signing using serde_json::from_str
+  PAYLOAD_ENCODING_EIP7702_AUTHORIZATION = 4;
 }
 
 enum Curve {

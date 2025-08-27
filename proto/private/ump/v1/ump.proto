@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package private.ump.v1;
+
+import "immutable/activity/v1/activity.proto";
+import "immutable/common/v1/common.proto";
+import "immutable/models/v1/models.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/private/ump/v1";
+
+message RulingPayload {
+  // Organization data version used for serialization
+  string organization_data_version = 2;
+  // The intent of the update
+  immutable.activity.v1.Intent intent = 3;
+  // Decision from Ump
+  immutable.common.v1.Outcome outcome = 4;
+  // Used to verifiy recency requirements
+  // This timestamp is in ms, in UTC. It comes directly from the NSM.
+  uint64 timestamp = 5;
+  // Hash of the organization data
+  string organization_digest = 6;
+  // The UUID of the organization
+  string organization_id = 7;
+  // UUID for new suborg if created
+  optional string new_suborg_id = 8;
+}
+
+message Ruling {
+  RulingPayload payload = 6;
+  // Ump signature over hash(payload)
+  immutable.models.v1.Signature signature = 7;
+}
+
+message PolicyEvaluation {
+  string policy_id = 1;
+  immutable.common.v1.Outcome outcome = 3;
+}

@@ -92,6 +92,32 @@ pub struct SetPaymentMethodRequest {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct EnableAuthProxyRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::EnableAuthProxyIntent,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DisableAuthProxyRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::DisableAuthProxyIntent,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct CreatePolicyRequest {
     pub r#type: ::prost::alloc::string::String,
     pub timestamp_ms: ::prost::alloc::string::String,
@@ -287,6 +313,45 @@ pub struct UpdateUserRequest {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct UpdateUserNameRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::UpdateUserNameIntent,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct UpdateUserEmailRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::UpdateUserEmailIntent,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct UpdateUserPhoneNumberRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::UpdateUserPhoneNumberIntent,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct DeleteUsersRequest {
     pub r#type: ::prost::alloc::string::String,
     pub timestamp_ms: ::prost::alloc::string::String,
@@ -417,6 +482,19 @@ pub struct UpdatePrivateKeyTagRequest {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct UpdateAuthProxyConfigRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::UpdateAuthProxyConfigIntent,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct DeletePrivateKeyTagsRequest {
     pub r#type: ::prost::alloc::string::String,
     pub timestamp_ms: ::prost::alloc::string::String,
@@ -463,6 +541,32 @@ pub struct SignTransactionRequest {
     #[serde(default)]
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::SignTransactionIntentV2,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateSmartContractInterfaceRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::CreateSmartContractInterfaceIntent,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeleteSmartContractInterfaceRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::DeleteSmartContractInterfaceIntent,
     >,
 }
 #[derive(Debug)]
@@ -664,6 +768,84 @@ pub struct OauthRequest {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct OauthLoginRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::OauthLoginIntent,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct StampLoginRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::StampLoginIntent,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct OtpLoginRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::OtpLoginIntent,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct InitOtpRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::InitOtpIntent,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct InitFiatOnRampRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::InitFiatOnRampIntent,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct VerifyOtpRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::VerifyOtpIntent,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct InitOtpAuthRequest {
     pub r#type: ::prost::alloc::string::String,
     pub timestamp_ms: ::prost::alloc::string::String,
@@ -827,5 +1009,79 @@ pub struct UpdateWalletRequest {
     #[serde(default)]
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::UpdateWalletIntent,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateOauth2CredentialRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::CreateOauth2CredentialIntent,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct UpdateOauth2CredentialRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::UpdateOauth2CredentialIntent,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeleteOauth2CredentialRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::DeleteOauth2CredentialIntent,
+    >,
+}
+#[derive(Debug)]
+/// Represents a PolicyEvaluation which contains a set of policy evaluations for a given activity.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct PolicyEvaluation {
+    pub id: ::prost::alloc::string::String,
+    /// The Activity this evaluation belongs to.
+    pub activity_id: ::prost::alloc::string::String,
+    /// The Organization this evaluation belongs to.
+    pub organization_id: ::prost::alloc::string::String,
+    /// The Vote associated with this evaluation.
+    pub vote_id: ::prost::alloc::string::String,
+    /// Individual policy evaluations (one entry per policy).
+    #[serde(default)]
+    pub policy_evaluations: ::prost::alloc::vec::Vec<
+        super::super::super::private::ump::v1::PolicyEvaluation,
+    >,
+    /// Time at which this evaluation was recorded.
+    #[serde(default)]
+    pub created_at: ::core::option::Option<super::super::data::v1::Timestamp>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct Oauth2AuthenticateRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::Oauth2AuthenticateIntent,
     >,
 }
