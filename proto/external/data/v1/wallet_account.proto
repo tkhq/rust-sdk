@@ -3,6 +3,7 @@ syntax = "proto3";
 package external.data.v1;
 
 import "external/data/v1/common.proto";
+import "external/data/v1/organization_data.proto";
 import "immutable/common/v1/common.proto";
 import "vendor/google/api/field_behavior.proto";
 import "vendor/protoc-gen-openapiv2/options/annotations.proto";
@@ -38,7 +39,7 @@ message WalletAccount {
   immutable.common.v1.AddressFormat address_format = 7 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      description: "Address format used to generate the Acccount."
+      description: "Address format used to generate the Account."
       title: ""
     }
   ];
@@ -48,8 +49,16 @@ message WalletAccount {
   ];
   external.data.v1.Timestamp created_at = 9 [(google.api.field_behavior) = REQUIRED];
   external.data.v1.Timestamp updated_at = 10 [(google.api.field_behavior) = REQUIRED];
+  optional string public_key = 11 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The public component of this wallet account's underlying cryptographic key pair."}
+  ];
+  optional external.data.v1.Wallet wallet_details = 12 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Wallet details for this account. This is only present when include_wallet_details=true."}
+  ];
   // TODO(tim): temporarily removing this since it's always "false"
-  //bool exported = 10 [
+  //bool exported = 12 [
   //  (google.api.field_behavior) = REQUIRED,
   //  (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "True when a given Account is exported, false otherwise."}
   //];

@@ -56,7 +56,22 @@ message MerkleLeafNotarization {
   Notarization notarization = 2;
 }
 
-message AccountPayload {
+// The original version of AccountPayload used for signature verification.
+// This version did not contain the `exported` or `public_key` fields.
+// All signatures created using this version must continue to verify using only these fields.
+message AccountPayloadV0 {
+  string organization_id = 1;
+  string wallet_id = 2;
+  immutable.common.v1.Curve curve = 3;
+  immutable.common.v1.PathFormat path_format = 4;
+  string path = 5;
+  immutable.common.v1.AddressFormat address_format = 6;
+  string address = 7;
+}
+
+// Introduced the `exported` field to indicate whether the account was externally exported.
+// This broke compatibility with signatures generated using V0, so we retain both versions.
+message AccountPayloadV1 {
   string organization_id = 1;
   string wallet_id = 2;
   immutable.common.v1.Curve curve = 3;
@@ -67,8 +82,26 @@ message AccountPayload {
   bool exported = 8;
 }
 
+// Introduced `public_key` (optional) field to support embedding the public key.
+// This is the canonical and current version for new signatures.
+// Older versions (V0, V1) are still supported for signature verification fallback.
+message AccountPayloadV2 {
+  string organization_id = 1;
+  string wallet_id = 2;
+  immutable.common.v1.Curve curve = 3;
+  immutable.common.v1.PathFormat path_format = 4;
+  string path = 5;
+  immutable.common.v1.AddressFormat address_format = 6;
+  string address = 7;
+  bool exported = 8;
+  optional string public_key = 9;
+}
+
+// The signed wrapper containing a payload (currently AccountPayloadV2)
+// and its corresponding cryptographic signature.
+// Signature is created over the digest of the payload message.
 message Account {
-  AccountPayload payload = 1;
+  AccountPayloadV2 payload = 1;
   // Signer signature over hash(payload)
   Signature signature = 2;
 }
@@ -122,4 +155,20 @@ message Signature {
   string public_key = 2;
   string message = 3;
   string signature = 4;
+}
+
+message SmartContractInterfacePayload {
+  string smart_contract_interface_id = 1;
+  string organization_id = 2;
+  string smart_contract_address = 3; // for smart contract addresses and program IDs
+  string smart_contract_interface = 4; // JSON string for an ABI or IDL
+  immutable.common.v1.SmartContractInterfaceType type = 5;
+  string label = 6;
+  string notes = 7;
+}
+
+message SmartContractInterface {
+  SmartContractInterfacePayload payload = 1;
+  // Signer signature over hash(payload)
+  Signature signature = 2;
 }

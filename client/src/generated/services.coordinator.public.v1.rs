@@ -242,6 +242,41 @@ pub struct GetPolicyResponse {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct GetSmartContractInterfacesRequest {
+    pub organization_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetSmartContractInterfacesResponse {
+    #[serde(default)]
+    pub smart_contract_interfaces: ::prost::alloc::vec::Vec<
+        super::super::super::super::external::data::v1::SmartContractInterface,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetSmartContractInterfaceRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub smart_contract_interface_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetSmartContractInterfaceResponse {
+    #[serde(default)]
+    pub smart_contract_interface: ::core::option::Option<
+        super::super::super::super::external::data::v1::SmartContractInterface,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct GetAuthenticatorRequest {
     pub organization_id: ::prost::alloc::string::String,
     pub authenticator_id: ::prost::alloc::string::String,
@@ -406,7 +441,10 @@ pub struct GetWalletResponse {
 #[derive(Clone, PartialEq)]
 pub struct GetWalletAccountsRequest {
     pub organization_id: ::prost::alloc::string::String,
-    pub wallet_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub wallet_id: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub include_wallet_details: ::core::option::Option<bool>,
     #[serde(default)]
     pub pagination_options: ::core::option::Option<
         super::super::super::super::external::options::v1::Pagination,
@@ -493,5 +531,58 @@ pub struct GetOrganizationConfigsResponse {
     #[serde(default)]
     pub configs: ::core::option::Option<
         super::super::super::super::external::data::v1::Config,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetPolicyEvaluationsRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub activity_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetPolicyEvaluationsResponse {
+    #[serde(default)]
+    pub policy_evaluations: ::prost::alloc::vec::Vec<
+        super::super::super::super::external::activity::v1::PolicyEvaluation,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct ListOauth2CredentialsRequest {
+    pub organization_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct ListOauth2CredentialsResponse {
+    #[serde(default)]
+    pub oauth2_credentials: ::prost::alloc::vec::Vec<
+        super::super::super::super::external::data::v1::Oauth2Credential,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetOauth2CredentialRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub oauth2_credential_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetOauth2CredentialResponse {
+    #[serde(default)]
+    pub oauth2_credential: ::core::option::Option<
+        super::super::super::super::external::data::v1::Oauth2Credential,
     >,
 }

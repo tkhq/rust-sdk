@@ -35,6 +35,10 @@ pub struct OrganizationData {
     >,
     #[serde(default)]
     pub wallets: ::prost::alloc::vec::Vec<Wallet>,
+    #[serde(default)]
+    pub smart_contract_interface_references: ::prost::alloc::vec::Vec<
+        super::super::super::immutable::data::v1::SmartContractInterfaceReference,
+    >,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -242,6 +246,21 @@ pub struct Config {
     #[serde(default)]
     pub quorum: ::core::option::Option<Quorum>,
 }
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct Oauth2Credential {
+    pub oauth2_credential_id: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    pub provider: super::super::super::immutable::common::v1::Oauth2Provider,
+    pub client_id: ::prost::alloc::string::String,
+    pub encrypted_client_secret: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub created_at: ::core::option::Option<Timestamp>,
+    #[serde(default)]
+    pub updated_at: ::core::option::Option<Timestamp>,
+}
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum InvitationStatus {
@@ -311,6 +330,23 @@ impl TagType {
     }
 }
 #[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SmartContractInterface {
+    pub organization_id: ::prost::alloc::string::String,
+    pub smart_contract_interface_id: ::prost::alloc::string::String,
+    pub smart_contract_address: ::prost::alloc::string::String,
+    pub smart_contract_interface: ::prost::alloc::string::String,
+    pub r#type: ::prost::alloc::string::String,
+    pub label: ::prost::alloc::string::String,
+    pub notes: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub created_at: ::core::option::Option<Timestamp>,
+    #[serde(default)]
+    pub updated_at: ::core::option::Option<Timestamp>,
+}
+#[derive(Debug)]
 /// An account derived from a Wallet
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -326,11 +362,15 @@ pub struct WalletAccount {
     pub address: ::prost::alloc::string::String,
     #[serde(default)]
     pub created_at: ::core::option::Option<Timestamp>,
+    #[serde(default)]
+    pub updated_at: ::core::option::Option<Timestamp>,
+    #[serde(default)]
+    pub public_key: ::core::option::Option<::prost::alloc::string::String>,
     /// TODO(tim): temporarily removing this since it's always "false"
-    /// bool exported = 10 [
+    /// bool exported = 12 [
     ///   (google.api.field_behavior) = REQUIRED,
     ///   (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "True when a given Account is exported, false otherwise."}
     /// ];
     #[serde(default)]
-    pub updated_at: ::core::option::Option<Timestamp>,
+    pub wallet_details: ::core::option::Option<Wallet>,
 }

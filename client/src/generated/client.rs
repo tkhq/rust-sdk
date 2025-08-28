@@ -7,7 +7,7 @@ use crate::{Stamp, TurnkeyClient, TurnkeyClientError};
 impl<S: Stamp> TurnkeyClient<S> {
     /// Who am I?
     ///
-    /// Get basic information about your current API or WebAuthN user and their organization. Affords Sub-Organization look ups via Parent Organization for WebAuthN or API key users.
+    /// Get basic information about your current API or WebAuthN user and their organization. Affords sub-organization look ups via parent organization for WebAuthN or API key users.
     pub async fn get_whoami(
         &self,
         request: coordinator::GetWhoamiRequest,
@@ -15,7 +15,7 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/whoami".to_string())
             .await
     }
-    /// Get Suborgs
+    /// Get sub-organizations
     ///
     /// Get all suborg IDs associated given a parent org ID and an optional filter.
     pub async fn get_sub_org_ids(
@@ -25,7 +25,7 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/list_suborgs".to_string())
             .await
     }
-    /// Get Verified Suborgs
+    /// Get verified sub-organizations
     ///
     /// Get all email or phone verified suborg IDs associated given a parent org ID.
     pub async fn get_verified_sub_org_ids(
@@ -38,9 +38,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         )
         .await
     }
-    /// Get Activity
+    /// Get activity
     ///
-    /// Get details about an Activity
+    /// Get details about an activity.
     pub async fn get_activity(
         &self,
         request: coordinator::GetActivityRequest,
@@ -48,9 +48,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/get_activity".to_string())
             .await
     }
-    /// List Activities
+    /// List activities
     ///
-    /// List all Activities within an Organization
+    /// List all activities within an organization.
     pub async fn get_activities(
         &self,
         request: coordinator::GetActivitiesRequest,
@@ -58,9 +58,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/list_activities".to_string())
             .await
     }
-    /// Approve Activity
+    /// Approve activity
     ///
-    /// Approve an Activity
+    /// Approve an activity.
     pub async fn approve_activity(
         &self,
         organization_id: String,
@@ -76,9 +76,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_activity(&request, "/public/v1/submit/approve_activity".to_string())
             .await
     }
-    /// Reject Activity
+    /// Reject activity
     ///
-    /// Reject an Activity
+    /// Reject an activity.
     pub async fn reject_activity(
         &self,
         organization_id: String,
@@ -94,9 +94,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_activity(&request, "/public/v1/submit/reject_activity".to_string())
             .await
     }
-    /// Get User
+    /// Get user
     ///
-    /// Get details about a User
+    /// Get details about a user.
     pub async fn get_user(
         &self,
         request: coordinator::GetUserRequest,
@@ -104,9 +104,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/get_user".to_string())
             .await
     }
-    /// List Users
+    /// List users
     ///
-    /// List all Users within an Organization
+    /// List all users within an organization.
     pub async fn get_users(
         &self,
         request: coordinator::GetUsersRequest,
@@ -114,9 +114,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/list_users".to_string())
             .await
     }
-    /// Delete Users
+    /// Delete users
     ///
-    /// Delete Users within an Organization
+    /// Delete users within an organization.
     pub async fn delete_users(
         &self,
         organization_id: String,
@@ -144,9 +144,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Create Policy
+    /// Create policy
     ///
-    /// Create a new Policy
+    /// Create a new policy.
     pub async fn create_policy(
         &self,
         organization_id: String,
@@ -174,9 +174,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Create Policies
+    /// Create policies
     ///
-    /// Create new Policies
+    /// Create new policies.
     pub async fn create_policies(
         &self,
         organization_id: String,
@@ -204,9 +204,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Update Policy
+    /// Update policy
     ///
-    /// Update an existing Policy
+    /// Update an existing policy.
     pub async fn update_policy(
         &self,
         organization_id: String,
@@ -234,9 +234,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Delete Policy
+    /// Delete policy
     ///
-    /// Delete an existing Policy
+    /// Delete an existing policy.
     pub async fn delete_policy(
         &self,
         organization_id: String,
@@ -264,9 +264,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// List Policies
+    /// List policies
     ///
-    /// List all Policies within an Organization
+    /// List all policies within an organization.
     pub async fn get_policies(
         &self,
         request: coordinator::GetPoliciesRequest,
@@ -274,9 +274,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/list_policies".to_string())
             .await
     }
-    /// Get Policy
+    /// Get policy
     ///
-    /// Get details about a Policy
+    /// Get details about a policy.
     pub async fn get_policy(
         &self,
         request: coordinator::GetPolicyRequest,
@@ -284,9 +284,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/get_policy".to_string())
             .await
     }
-    /// Create Read Only Session
+    /// Create read only session
     ///
-    /// Create a read only session for a user (valid for 1 hour)
+    /// Create a read only session for a user (valid for 1 hour).
     pub async fn create_read_only_session(
         &self,
         organization_id: String,
@@ -317,9 +317,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Create Read Write Session
+    /// Create read write session
     ///
-    /// Create a read write session for a user
+    /// Create a read write session for a user.
     pub async fn create_read_write_session(
         &self,
         organization_id: String,
@@ -350,9 +350,99 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Create Private Keys
+    /// Login with Oauth
     ///
-    /// Create new Private Keys
+    /// Create an Oauth session for a user.
+    pub async fn oauth_login(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::OauthLoginIntent,
+    ) -> Result<immutable_activity::OauthLoginResult, TurnkeyClientError> {
+        let request = external_activity::OauthLoginRequest {
+            r#type: "ACTIVITY_TYPE_OAUTH_LOGIN".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(&request, "/public/v1/submit/oauth_login".to_string())
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        match inner {
+            immutable_activity::result::Inner::OauthLoginResult(res) => Ok(res),
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
+        }
+    }
+    /// Login with a stamp
+    ///
+    /// Create a session for a user through stamping client side (API key, wallet client, or passkey client).
+    pub async fn stamp_login(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::StampLoginIntent,
+    ) -> Result<immutable_activity::StampLoginResult, TurnkeyClientError> {
+        let request = external_activity::StampLoginRequest {
+            r#type: "ACTIVITY_TYPE_STAMP_LOGIN".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(&request, "/public/v1/submit/stamp_login".to_string())
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        match inner {
+            immutable_activity::result::Inner::StampLoginResult(res) => Ok(res),
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
+        }
+    }
+    /// Login with OTP
+    ///
+    /// Create an OTP session for a user.
+    pub async fn otp_login(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::OtpLoginIntent,
+    ) -> Result<immutable_activity::OtpLoginResult, TurnkeyClientError> {
+        let request = external_activity::OtpLoginRequest {
+            r#type: "ACTIVITY_TYPE_OTP_LOGIN".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(&request, "/public/v1/submit/otp_login".to_string())
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        match inner {
+            immutable_activity::result::Inner::OtpLoginResult(res) => Ok(res),
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
+        }
+    }
+    /// Create private keys
+    ///
+    /// Create new private keys.
     pub async fn create_private_keys(
         &self,
         organization_id: String,
@@ -383,9 +473,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Get Private Key
+    /// Get private key
     ///
-    /// Get details about a Private Key
+    /// Get details about a private key.
     pub async fn get_private_key(
         &self,
         request: coordinator::GetPrivateKeyRequest,
@@ -393,9 +483,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/get_private_key".to_string())
             .await
     }
-    /// List Private Keys
+    /// List private keys
     ///
-    /// List all Private Keys within an Organization
+    /// List all private keys within an organization.
     pub async fn get_private_keys(
         &self,
         request: coordinator::GetPrivateKeysRequest,
@@ -403,9 +493,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/list_private_keys".to_string())
             .await
     }
-    /// Create API Keys
+    /// Create API keys
     ///
-    /// Add api keys to an existing User
+    /// Add API keys to an existing user.
     pub async fn create_api_keys(
         &self,
         organization_id: String,
@@ -433,9 +523,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Delete API Keys
+    /// Delete API keys
     ///
-    /// Remove api keys from a User
+    /// Remove api keys from a user.
     pub async fn delete_api_keys(
         &self,
         organization_id: String,
@@ -465,7 +555,7 @@ impl<S: Stamp> TurnkeyClient<S> {
     }
     /// Get Oauth providers
     ///
-    /// Get details about Oauth providers for a user
+    /// Get details about Oauth providers for a user.
     pub async fn get_oauth_providers(
         &self,
         request: coordinator::GetOauthProvidersRequest,
@@ -473,9 +563,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/get_oauth_providers".to_string())
             .await
     }
-    /// Get API key
+    /// Get API keys
     ///
-    /// Get details about API keys for a user
+    /// Get details about API keys for a user.
     pub async fn get_api_keys(
         &self,
         request: coordinator::GetApiKeysRequest,
@@ -485,7 +575,7 @@ impl<S: Stamp> TurnkeyClient<S> {
     }
     /// Get API key
     ///
-    /// Get details about an API key
+    /// Get details about an API key.
     pub async fn get_api_key(
         &self,
         request: coordinator::GetApiKeyRequest,
@@ -493,9 +583,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/get_api_key".to_string())
             .await
     }
-    /// Create Authenticators
+    /// Create authenticators
     ///
-    /// Create Authenticators to authenticate requests to Turnkey
+    /// Create authenticators to authenticate requests to Turnkey.
     pub async fn create_authenticators(
         &self,
         organization_id: String,
@@ -526,9 +616,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Delete Authenticators
+    /// Delete authenticators
     ///
-    /// Remove authenticators from a User
+    /// Remove authenticators from a user.
     pub async fn delete_authenticators(
         &self,
         organization_id: String,
@@ -559,9 +649,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Get Authenticators
+    /// Get authenticators
     ///
-    /// Get details about authenticators for a user
+    /// Get details about authenticators for a user.
     pub async fn get_authenticators(
         &self,
         request: coordinator::GetAuthenticatorsRequest,
@@ -569,9 +659,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/get_authenticators".to_string())
             .await
     }
-    /// Get Authenticator
+    /// Get authenticator
     ///
-    /// Get details about an authenticator
+    /// Get details about an authenticator.
     pub async fn get_authenticator(
         &self,
         request: coordinator::GetAuthenticatorRequest,
@@ -579,9 +669,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/get_authenticator".to_string())
             .await
     }
-    /// Create Invitations
+    /// Create invitations
     ///
-    /// Create Invitations to join an existing Organization
+    /// Create invitations to join an existing organization.
     pub async fn create_invitations(
         &self,
         organization_id: String,
@@ -609,9 +699,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Delete Invitation
+    /// Delete invitation
     ///
-    /// Delete an existing Invitation
+    /// Delete an existing invitation.
     pub async fn delete_invitation(
         &self,
         organization_id: String,
@@ -639,9 +729,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Create Users
+    /// Create users
     ///
-    /// Create Users in an existing Organization
+    /// Create users in an existing organization.
     pub async fn create_users(
         &self,
         organization_id: String,
@@ -669,9 +759,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Update User
+    /// Update user
     ///
-    /// Update a User in an existing Organization
+    /// Update a user in an existing organization.
     pub async fn update_user(
         &self,
         organization_id: String,
@@ -699,7 +789,100 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Create User Tag
+    /// Update user's name
+    ///
+    /// Update a user's name in an existing organization.
+    pub async fn update_user_name(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::UpdateUserNameIntent,
+    ) -> Result<immutable_activity::UpdateUserNameResult, TurnkeyClientError> {
+        let request = external_activity::UpdateUserNameRequest {
+            r#type: "ACTIVITY_TYPE_UPDATE_USER_NAME".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(&request, "/public/v1/submit/update_user_name".to_string())
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        match inner {
+            immutable_activity::result::Inner::UpdateUserNameResult(res) => Ok(res),
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
+        }
+    }
+    /// Update user's email
+    ///
+    /// Update a user's email in an existing organization.
+    pub async fn update_user_email(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::UpdateUserEmailIntent,
+    ) -> Result<immutable_activity::UpdateUserEmailResult, TurnkeyClientError> {
+        let request = external_activity::UpdateUserEmailRequest {
+            r#type: "ACTIVITY_TYPE_UPDATE_USER_EMAIL".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(&request, "/public/v1/submit/update_user_email".to_string())
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        match inner {
+            immutable_activity::result::Inner::UpdateUserEmailResult(res) => Ok(res),
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
+        }
+    }
+    /// Update user's phone number
+    ///
+    /// Update a user's phone number in an existing organization.
+    pub async fn update_user_phone_number(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::UpdateUserPhoneNumberIntent,
+    ) -> Result<immutable_activity::UpdateUserPhoneNumberResult, TurnkeyClientError> {
+        let request = external_activity::UpdateUserPhoneNumberRequest {
+            r#type: "ACTIVITY_TYPE_UPDATE_USER_PHONE_NUMBER".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/update_user_phone_number".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        match inner {
+            immutable_activity::result::Inner::UpdateUserPhoneNumberResult(res) => Ok(res),
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
+        }
+    }
+    /// Create user tag
     ///
     /// Create a user tag and add it to users.
     pub async fn create_user_tag(
@@ -729,7 +912,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Create Private Key Tag
+    /// Create private key tag
     ///
     /// Create a private key tag and add it to private keys.
     pub async fn create_private_key_tag(
@@ -762,7 +945,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Update User Tag
+    /// Update user tag
     ///
     /// Update human-readable name or associated users. Note that this activity is atomic: all of the updates will succeed at once, or all of them will fail.
     pub async fn update_user_tag(
@@ -792,9 +975,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// List User Tags
+    /// List user tags
     ///
-    /// List all User Tags within an Organization
+    /// List all user tags within an organization.
     pub async fn list_user_tags(
         &self,
         request: coordinator::ListUserTagsRequest,
@@ -802,9 +985,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/list_user_tags".to_string())
             .await
     }
-    /// Delete User Tags
+    /// Delete user tags
     ///
-    /// Delete User Tags within an Organization
+    /// Delete user tags within an organization.
     pub async fn delete_user_tags(
         &self,
         organization_id: String,
@@ -832,7 +1015,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Update Private Key Tag
+    /// Update private key tag
     ///
     /// Update human-readable name or associated private keys. Note that this activity is atomic: all of the updates will succeed at once, or all of them will fail.
     pub async fn update_private_key_tag(
@@ -865,9 +1048,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// List Private Key Tags
+    /// List private key tags
     ///
-    /// List all Private Key Tags within an Organization
+    /// List all private key tags within an organization.
     pub async fn list_private_key_tags(
         &self,
         request: coordinator::ListPrivateKeyTagsRequest,
@@ -878,9 +1061,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         )
         .await
     }
-    /// Delete Private Key Tags
+    /// Delete private key tags
     ///
-    /// Delete Private Key Tags within an Organization
+    /// Delete private key tags within an organization.
     pub async fn delete_private_key_tags(
         &self,
         organization_id: String,
@@ -911,9 +1094,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Sign Raw Payload
+    /// Sign raw payload
     ///
-    /// Sign a raw payload
+    /// Sign a raw payload.
     pub async fn sign_raw_payload(
         &self,
         organization_id: String,
@@ -941,9 +1124,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Sign Raw Payloads
+    /// Sign raw payloads
     ///
-    /// Sign multiple raw payloads with the same signing parameters
+    /// Sign multiple raw payloads with the same signing parameters.
     pub async fn sign_raw_payloads(
         &self,
         organization_id: String,
@@ -971,9 +1154,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Sign Transaction
+    /// Sign transaction
     ///
-    /// Sign a transaction
+    /// Sign a transaction.
     pub async fn sign_transaction(
         &self,
         organization_id: String,
@@ -1001,7 +1184,99 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Update Root Quorum
+    /// Create smart contract interface
+    ///
+    /// Create an ABI/IDL in JSON.
+    pub async fn create_smart_contract_interface(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::CreateSmartContractInterfaceIntent,
+    ) -> Result<immutable_activity::CreateSmartContractInterfaceResult, TurnkeyClientError> {
+        let request = external_activity::CreateSmartContractInterfaceRequest {
+            r#type: "ACTIVITY_TYPE_CREATE_SMART_CONTRACT_INTERFACE".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/create_smart_contract_interface".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        match inner {
+            immutable_activity::result::Inner::CreateSmartContractInterfaceResult(res) => Ok(res),
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
+        }
+    }
+    /// Delete smart contract interface
+    ///
+    /// Delete a smart contract interface.
+    pub async fn delete_smart_contract_interface(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::DeleteSmartContractInterfaceIntent,
+    ) -> Result<immutable_activity::DeleteSmartContractInterfaceResult, TurnkeyClientError> {
+        let request = external_activity::DeleteSmartContractInterfaceRequest {
+            r#type: "ACTIVITY_TYPE_DELETE_SMART_CONTRACT_INTERFACE".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/delete_smart_contract_interface".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        match inner {
+            immutable_activity::result::Inner::DeleteSmartContractInterfaceResult(res) => Ok(res),
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
+        }
+    }
+    /// List smart contract interfaces
+    ///
+    /// List all smart contract interfaces within an organization.
+    pub async fn get_smart_contract_interfaces(
+        &self,
+        request: coordinator::GetSmartContractInterfacesRequest,
+    ) -> Result<coordinator::GetSmartContractInterfacesResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/list_smart_contract_interfaces".to_string(),
+        )
+        .await
+    }
+    /// Get smart contract interface
+    ///
+    /// Get details about a smart contract interface.
+    pub async fn get_smart_contract_interface(
+        &self,
+        request: coordinator::GetSmartContractInterfaceRequest,
+    ) -> Result<coordinator::GetSmartContractInterfaceResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/get_smart_contract_interface".to_string(),
+        )
+        .await
+    }
+    /// Update root quorum
     ///
     /// Set the threshold and members of the root quorum. This activity must be approved by the current root quorum.
     pub async fn update_root_quorum(
@@ -1031,9 +1306,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Create Wallet
+    /// Create wallet
     ///
-    /// Create a Wallet and derive addresses
+    /// Create a wallet and derive addresses.
     pub async fn create_wallet(
         &self,
         organization_id: String,
@@ -1061,9 +1336,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// List Wallets
+    /// List wallets
     ///
-    /// List all Wallets within an Organization
+    /// List all wallets within an organization.
     pub async fn get_wallets(
         &self,
         request: coordinator::GetWalletsRequest,
@@ -1071,9 +1346,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/list_wallets".to_string())
             .await
     }
-    /// Get Wallet
+    /// Get wallet
     ///
-    /// Get details about a Wallet
+    /// Get details about a wallet.
     pub async fn get_wallet(
         &self,
         request: coordinator::GetWalletRequest,
@@ -1081,9 +1356,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/get_wallet".to_string())
             .await
     }
-    /// Create Wallet Accounts
+    /// Create wallet accounts
     ///
-    /// Derive additional addresses using an existing wallet
+    /// Derive additional addresses using an existing wallet.
     pub async fn create_wallet_accounts(
         &self,
         organization_id: String,
@@ -1114,9 +1389,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// List Wallets Accounts
+    /// List wallets accounts
     ///
-    /// List all Accounts within a Wallet
+    /// List all accounts within a wallet.
     pub async fn get_wallet_accounts(
         &self,
         request: coordinator::GetWalletAccountsRequest,
@@ -1127,9 +1402,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         )
         .await
     }
-    /// Get Wallet Account
+    /// Get wallet account
     ///
-    /// Get a single wallet account
+    /// Get a single wallet account.
     pub async fn get_wallet_account(
         &self,
         request: coordinator::GetWalletAccountRequest,
@@ -1137,9 +1412,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/get_wallet_account".to_string())
             .await
     }
-    /// Create Sub-Organization
+    /// Create sub-organization
     ///
-    /// Create a new Sub-Organization
+    /// Create a new sub-organization.
     pub async fn create_sub_organization(
         &self,
         organization_id: String,
@@ -1170,9 +1445,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Init Email Recovery
+    /// Init email recovery
     ///
-    /// Initializes a new email recovery
+    /// Initialize a new email recovery.
     pub async fn init_user_email_recovery(
         &self,
         organization_id: String,
@@ -1205,7 +1480,7 @@ impl<S: Stamp> TurnkeyClient<S> {
     }
     /// Recover a user
     ///
-    /// Completes the process of recovering a user by adding an authenticator
+    /// Complete the process of recovering a user by adding an authenticator.
     pub async fn recover_user(
         &self,
         organization_id: String,
@@ -1233,9 +1508,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Set Organization Feature
+    /// Set organization feature
     ///
-    /// Sets an organization feature. This activity must be approved by the current root quorum.
+    /// Set an organization feature. This activity must be approved by the current root quorum.
     pub async fn set_organization_feature(
         &self,
         organization_id: String,
@@ -1266,9 +1541,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Remove Organization Feature
+    /// Remove organization feature
     ///
-    /// Removes an organization feature. This activity must be approved by the current root quorum.
+    /// Remove an organization feature. This activity must be approved by the current root quorum.
     pub async fn remove_organization_feature(
         &self,
         organization_id: String,
@@ -1299,9 +1574,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Export Private Key
+    /// Export private key
     ///
-    /// Exports a Private Key
+    /// Export a private key.
     pub async fn export_private_key(
         &self,
         organization_id: String,
@@ -1329,9 +1604,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Export Wallet
+    /// Export wallet
     ///
-    /// Exports a Wallet
+    /// Export a wallet.
     pub async fn export_wallet(
         &self,
         organization_id: String,
@@ -1359,9 +1634,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Perform Email Auth
+    /// Perform email auth
     ///
-    /// Authenticate a user via Email
+    /// Authenticate a user via email.
     pub async fn email_auth(
         &self,
         organization_id: String,
@@ -1389,9 +1664,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Export Wallet Account
+    /// Export wallet account
     ///
-    /// Exports a Wallet Account
+    /// Export a wallet account.
     pub async fn export_wallet_account(
         &self,
         organization_id: String,
@@ -1422,9 +1697,39 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Init Import Wallet
+    /// Init fiat on ramp
     ///
-    /// Initializes a new wallet import
+    /// Initiate a fiat on ramp flow.
+    pub async fn init_fiat_on_ramp(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::InitFiatOnRampIntent,
+    ) -> Result<immutable_activity::InitFiatOnRampResult, TurnkeyClientError> {
+        let request = external_activity::InitFiatOnRampRequest {
+            r#type: "ACTIVITY_TYPE_INIT_FIAT_ON_RAMP".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(&request, "/public/v1/submit/init_fiat_on_ramp".to_string())
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        match inner {
+            immutable_activity::result::Inner::InitFiatOnRampResult(res) => Ok(res),
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
+        }
+    }
+    /// Init import wallet
+    ///
+    /// Initialize a new wallet import.
     pub async fn init_import_wallet(
         &self,
         organization_id: String,
@@ -1452,9 +1757,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Import Wallet
+    /// Import wallet
     ///
-    /// Imports a wallet
+    /// Import a wallet.
     pub async fn import_wallet(
         &self,
         organization_id: String,
@@ -1482,9 +1787,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Init Import Private Key
+    /// Init import private key
     ///
-    /// Initializes a new private key import
+    /// Initialize a new private key import.
     pub async fn init_import_private_key(
         &self,
         organization_id: String,
@@ -1515,9 +1820,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Import Private Key
+    /// Import private key
     ///
-    /// Imports a private key
+    /// Import a private key.
     pub async fn import_private_key(
         &self,
         organization_id: String,
@@ -1547,7 +1852,7 @@ impl<S: Stamp> TurnkeyClient<S> {
     }
     /// Oauth
     ///
-    /// Authenticate a user with an Oidc token (Oauth) - BETA
+    /// Authenticate a user with an OIDC token (Oauth).
     pub async fn oauth(
         &self,
         organization_id: String,
@@ -1575,9 +1880,69 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
+    /// Init generic OTP
+    ///
+    /// Initiate a generic OTP activity.
+    pub async fn init_otp(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::InitOtpIntent,
+    ) -> Result<immutable_activity::InitOtpResult, TurnkeyClientError> {
+        let request = external_activity::InitOtpRequest {
+            r#type: "ACTIVITY_TYPE_INIT_OTP".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(&request, "/public/v1/submit/init_otp".to_string())
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        match inner {
+            immutable_activity::result::Inner::InitOtpResult(res) => Ok(res),
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
+        }
+    }
+    /// Verify generic OTP
+    ///
+    /// Verify a generic OTP.
+    pub async fn verify_otp(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::VerifyOtpIntent,
+    ) -> Result<immutable_activity::VerifyOtpResult, TurnkeyClientError> {
+        let request = external_activity::VerifyOtpRequest {
+            r#type: "ACTIVITY_TYPE_VERIFY_OTP".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(&request, "/public/v1/submit/verify_otp".to_string())
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        match inner {
+            immutable_activity::result::Inner::VerifyOtpResult(res) => Ok(res),
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
+        }
+    }
     /// Init OTP auth
     ///
-    /// Initiate an OTP auth activity
+    /// Initiate an OTP auth activity.
     pub async fn init_otp_auth(
         &self,
         organization_id: String,
@@ -1607,7 +1972,7 @@ impl<S: Stamp> TurnkeyClient<S> {
     }
     /// OTP auth
     ///
-    /// Authenticate a user with an OTP code sent via email or SMS
+    /// Authenticate a user with an OTP code sent via email or SMS.
     pub async fn otp_auth(
         &self,
         organization_id: String,
@@ -1635,9 +2000,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Create Oauth Providers
+    /// Create Oauth providers
     ///
-    /// Creates Oauth providers for a specified user - BETA
+    /// Create Oauth providers for a specified user.
     pub async fn create_oauth_providers(
         &self,
         organization_id: String,
@@ -1668,9 +2033,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Delete Oauth Providers
+    /// Delete Oauth providers
     ///
-    /// Removes Oauth providers for a specified user - BETA
+    /// Remove Oauth providers for a specified user.
     pub async fn delete_oauth_providers(
         &self,
         organization_id: String,
@@ -1701,9 +2066,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Get Configs
+    /// Get configs
     ///
-    /// Get quorum settings and features for an organization
+    /// Get quorum settings and features for an organization.
     pub async fn get_organization_configs(
         &self,
         request: coordinator::GetOrganizationConfigsRequest,
@@ -1714,9 +2079,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         )
         .await
     }
-    /// Delete Private Keys
+    /// Delete private keys
     ///
-    /// Deletes private keys for an organization
+    /// Delete private keys for an organization.
     pub async fn delete_private_keys(
         &self,
         organization_id: String,
@@ -1747,9 +2112,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Update Wallet
+    /// Update wallet
     ///
-    /// Update a wallet for an organization
+    /// Update a wallet for an organization.
     pub async fn update_wallet(
         &self,
         organization_id: String,
@@ -1777,9 +2142,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Delete Wallets
+    /// Delete wallets
     ///
-    /// Deletes wallets for an organization
+    /// Delete wallets for an organization.
     pub async fn delete_wallets(
         &self,
         organization_id: String,
@@ -1807,9 +2172,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
-    /// Delete Sub Organization
+    /// Delete sub-organization
     ///
-    /// Deletes a sub organization
+    /// Delete a sub-organization.
     pub async fn delete_sub_organization(
         &self,
         organization_id: String,
@@ -1835,6 +2200,177 @@ impl<S: Stamp> TurnkeyClient<S> {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         match inner {
             immutable_activity::result::Inner::DeleteSubOrganizationResult(res) => Ok(res),
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
+        }
+    }
+    /// Get policy evaluations
+    ///
+    /// Get the policy evaluations for an activity.
+    pub async fn get_policy_evaluations(
+        &self,
+        request: coordinator::GetPolicyEvaluationsRequest,
+    ) -> Result<coordinator::GetPolicyEvaluationsResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/get_policy_evaluations".to_string(),
+        )
+        .await
+    }
+    /// Create an OAuth 2.0 Credential
+    ///
+    /// Enable authentication for end users with an OAuth 2.0 provider
+    pub async fn create_oauth2_credential(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::CreateOauth2CredentialIntent,
+    ) -> Result<immutable_activity::CreateOauth2CredentialResult, TurnkeyClientError> {
+        let request = external_activity::CreateOauth2CredentialRequest {
+            r#type: "ACTIVITY_TYPE_CREATE_OAUTH2_CREDENTIAL".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/create_oauth2_credential".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        match inner {
+            immutable_activity::result::Inner::CreateOauth2CredentialResult(res) => Ok(res),
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
+        }
+    }
+    /// Update an OAuth 2.0 Credential
+    ///
+    /// Update an OAuth 2.0 provider credential
+    pub async fn update_oauth2_credential(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::UpdateOauth2CredentialIntent,
+    ) -> Result<immutable_activity::UpdateOauth2CredentialResult, TurnkeyClientError> {
+        let request = external_activity::UpdateOauth2CredentialRequest {
+            r#type: "ACTIVITY_TYPE_UPDATE_OAUTH2_CREDENTIAL".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/update_oauth2_credential".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        match inner {
+            immutable_activity::result::Inner::UpdateOauth2CredentialResult(res) => Ok(res),
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
+        }
+    }
+    /// Delete an OAuth 2.0 Credential
+    ///
+    /// Disable authentication for end users with an OAuth 2.0 provider
+    pub async fn delete_oauth2_credential(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::DeleteOauth2CredentialIntent,
+    ) -> Result<immutable_activity::DeleteOauth2CredentialResult, TurnkeyClientError> {
+        let request = external_activity::DeleteOauth2CredentialRequest {
+            r#type: "ACTIVITY_TYPE_DELETE_OAUTH2_CREDENTIAL".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/delete_oauth2_credential".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        match inner {
+            immutable_activity::result::Inner::DeleteOauth2CredentialResult(res) => Ok(res),
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
+        }
+    }
+    /// List OAuth 2.0 Credentials
+    ///
+    /// List all OAuth 2.0 credentials within an organization.
+    pub async fn list_oauth2_credentials(
+        &self,
+        request: coordinator::ListOauth2CredentialsRequest,
+    ) -> Result<coordinator::ListOauth2CredentialsResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/list_oauth2_credentials".to_string(),
+        )
+        .await
+    }
+    /// Get OAuth 2.0 credential
+    ///
+    /// Get details about an OAuth 2.0 credential.
+    pub async fn get_oauth2_credential(
+        &self,
+        request: coordinator::GetOauth2CredentialRequest,
+    ) -> Result<coordinator::GetOauth2CredentialResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/get_oauth2_credential".to_string(),
+        )
+        .await
+    }
+    /// OAuth 2.0 authentication
+    ///
+    /// Authenticate a user with an OAuth 2.0 provider and receive an OIDC token to use with the LoginWithOAuth or CreateSubOrganization activities
+    pub async fn oauth2_authenticate(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::Oauth2AuthenticateIntent,
+    ) -> Result<immutable_activity::Oauth2AuthenticateResult, TurnkeyClientError> {
+        let request = external_activity::Oauth2AuthenticateRequest {
+            r#type: "ACTIVITY_TYPE_OAUTH2_AUTHENTICATE".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/oauth2_authenticate".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        match inner {
+            immutable_activity::result::Inner::Oauth2AuthenticateResult(res) => Ok(res),
             other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
                 serde_json::to_string(&other)?,
             )),

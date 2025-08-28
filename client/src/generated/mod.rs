@@ -60,9 +60,21 @@ pub mod immutable {
             include!("immutable.data.v1.rs");
         }
     }
+    pub mod models {
+        pub mod v1 {
+            include!("immutable.models.v1.rs");
+        }
+    }
     pub mod webauthn {
         pub mod v1 {
             include!("immutable.webauthn.v1.rs");
+        }
+    }
+}
+pub mod private {
+    pub mod ump {
+        pub mod v1 {
+            include!("private.ump.v1.rs");
         }
     }
 }
