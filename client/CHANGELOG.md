@@ -9,11 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.3.0](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.2.0...turnkey_client-v0.3.0) - 2025-08-28
 
-### Other
+### Added
 
-- Remove unused immutable.models protos
-- Fix codegen and delete most of the private protos
-- Sync rust sdk
+- https://github.com/tkhq/rust-sdk/pull/50: Sync proto folder with latest. New client functions:
+  - `oauth_login`, `stamp_login`, `otp_login`: authentication methods to resolve sub-organization ID and establish a session.
+  - `init_otp`, `verify_otp`: new generic OTP endpoints to init and verify an email or phone number. The result is a verification token that can be used with login endpoints above.
+  - `update_user_name`, `update_user_email`, `update_user_phone_number`: user management utilities
+  - `create_smart_contract_interface`, `delete_smart_contract_interface`, `get_smart_contract_interface`, `get_smart_contract_interfaces`: management of Ethereum ABI and Solana IDLs (see https://docs.turnkey.com/concepts/policies/smart-contract-interfaces#using-abis-and-idls-to-control-transaction-signing)
+  - `init_fiat_on_ramp`: related to on-ramp APIs (https://docs.turnkey.com/products/embedded-wallets/features/fiat-on-ramp)
+  - `get_policy_evaluations`: get evaluation traces for activities
+  - `create_oauth2_credential`, `update_oauth2_credential`, `delete_oauth2_credential`, `list_oauth2_credentials`, `get_oauth2_credential`, `oauth2_authenticate`: related to the upcoming OAuth2.0 support
 
 ## [0.2.0](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.1.1...turnkey_client-v0.2.0) - 2025-08-15
 
