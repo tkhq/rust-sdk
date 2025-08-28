@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.3.0](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.2.0...turnkey_client-v0.3.0) - 2025-08-28
+
+### Other
+
+- Remove unused immutable.models protos
+- Fix codegen and delete most of the private protos
+- Sync rust sdk
+
 ## [0.2.0](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.1.1...turnkey_client-v0.2.0) - 2025-08-15
 
 ### Added
