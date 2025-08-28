@@ -4,6 +4,7 @@ package services.coordinator.public.v1;
 
 import "external/activity/v1/activity.proto";
 import "external/data/v1/organization_data.proto";
+import "external/data/v1/smart_contract_interface.proto";
 import "external/data/v1/wallet_account.proto";
 import "external/options/v1/options.proto";
 import "external/webauthn/v1/webauthn.proto";
@@ -259,7 +260,7 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Get basic information about your current API or WebAuthN user and their organization. Affords Sub-Organization look ups via Parent Organization for WebAuthN or API key users."
+      description: "Get basic information about your current API or WebAuthN user and their organization. Affords sub-organization look ups via parent organization for WebAuthN or API key users."
       summary: "Who am I?"
       tags: "Sessions"
     };
@@ -272,8 +273,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Set a rate local rate limit just on the current endpoint, for purposes of testing with Vivosuite"
-      summary: "Test Rate Limit"
+      description: "Set a rate local rate limit just on the current endpoint, for purposes of testing with Vivosuite."
+      summary: "Test rate limit"
       tags: "RateLimit"
     };
   }
@@ -298,7 +299,7 @@ service PublicApiService {
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Get all suborg IDs associated given a parent org ID and an optional filter."
-      summary: "Get Suborgs"
+      summary: "Get sub-organizations"
       tags: "Organizations"
     };
   }
@@ -310,7 +311,7 @@ service PublicApiService {
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Get all email or phone verified suborg IDs associated given a parent org ID."
-      summary: "Get Verified Suborgs"
+      summary: "Get verified sub-organizations"
       tags: "Organizations"
     };
   }
@@ -322,8 +323,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Get details about an Organization"
-      summary: "Get Organization"
+      description: "Get details about an organization."
+      summary: "Get organization"
       tags: "Organizations"
     };
   }
@@ -334,8 +335,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Get details about an Activity"
-      summary: "Get Activity"
+      description: "Get details about an activity."
+      summary: "Get activity"
       tags: "Activities"
     };
   }
@@ -346,8 +347,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "List all Activities within an Organization"
-      summary: "List Activities"
+      description: "List all activities within an organization."
+      summary: "List activities"
       tags: "Activities"
     };
   }
@@ -358,8 +359,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Approve an Activity"
-      summary: "Approve Activity"
+      description: "Approve an activity."
+      summary: "Approve activity"
       tags: "Consensus"
     };
   }
@@ -370,8 +371,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Reject an Activity"
-      summary: "Reject Activity"
+      description: "Reject an activity."
+      summary: "Reject activity"
       tags: "Consensus"
     };
   }
@@ -382,8 +383,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Get details about a User"
-      summary: "Get User"
+      description: "Get details about a user."
+      summary: "Get user"
       tags: "Users"
     };
   }
@@ -394,8 +395,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "List all Users within an Organization"
-      summary: "List Users"
+      description: "List all users within an organization."
+      summary: "List users"
       tags: "Users"
     };
   }
@@ -406,8 +407,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Delete Users within an Organization"
-      summary: "Delete Users"
+      description: "Delete users within an organization."
+      summary: "Delete users"
       tags: "Users"
     };
   }
@@ -418,8 +419,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Create a new Policy"
-      summary: "Create Policy"
+      description: "Create a new policy."
+      summary: "Create policy"
       tags: "Policies"
     };
   }
@@ -430,19 +431,20 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Create new Policies"
-      summary: "Create Policies"
+      description: "Create new policies."
+      summary: "Create policies"
       tags: "Policies"
     };
   }
+
   rpc UpdatePolicy(external.activity.v1.UpdatePolicyRequest) returns (ActivityResponse) {
     option (google.api.http) = {
       post: "/public/v1/submit/update_policy"
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Update an existing Policy"
-      summary: "Update Policy"
+      description: "Update an existing policy."
+      summary: "Update policy"
       tags: "Policies"
     };
   }
@@ -453,8 +455,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Delete an existing Policy"
-      summary: "Delete Policy"
+      description: "Delete an existing policy."
+      summary: "Delete policy"
       tags: "Policies"
     };
   }
@@ -465,8 +467,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "List all Policies within an Organization"
-      summary: "List Policies"
+      description: "List all policies within an organization."
+      summary: "List policies"
       tags: "Policies"
     };
   }
@@ -477,8 +479,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Get details about a Policy"
-      summary: "Get Policy"
+      description: "Get details about a policy."
+      summary: "Get policy"
       tags: "Policies"
     };
   }
@@ -489,8 +491,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Create a read only session for a user (valid for 1 hour)"
-      summary: "Create Read Only Session"
+      description: "Create a read only session for a user (valid for 1 hour)."
+      summary: "Create read only session"
       tags: "Sessions"
     };
   }
@@ -501,8 +503,44 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Create a read write session for a user"
-      summary: "Create Read Write Session"
+      description: "Create a read write session for a user."
+      summary: "Create read write session"
+      tags: "Sessions"
+    };
+  }
+
+  rpc OauthLogin(external.activity.v1.OauthLoginRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/oauth_login"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Create an Oauth session for a user."
+      summary: "Login with Oauth"
+      tags: "Sessions"
+    };
+  }
+
+  rpc StampLogin(external.activity.v1.StampLoginRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/stamp_login"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Create a session for a user through stamping client side (API key, wallet client, or passkey client)."
+      summary: "Login with a stamp"
+      tags: "Sessions"
+    };
+  }
+
+  rpc OtpLogin(external.activity.v1.OtpLoginRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/otp_login"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Create an OTP session for a user."
+      summary: "Login with OTP"
       tags: "Sessions"
     };
   }
@@ -513,8 +551,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Create new Private Keys"
-      summary: "Create Private Keys"
+      description: "Create new private keys."
+      summary: "Create private keys"
       tags: "Private Keys"
     };
   }
@@ -525,8 +563,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Get details about a Private Key"
-      summary: "Get Private Key"
+      description: "Get details about a private key."
+      summary: "Get private key"
       tags: "Private Keys"
     };
   }
@@ -537,8 +575,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "List all Private Keys within an Organization"
-      summary: "List Private Keys"
+      description: "List all private keys within an organization."
+      summary: "List private keys"
       tags: "Private Keys"
     };
   }
@@ -549,8 +587,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Add api keys to an existing User"
-      summary: "Create API Keys"
+      description: "Add API keys to an existing user."
+      summary: "Create API keys"
       tags: "API Keys"
     };
   }
@@ -561,8 +599,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Remove api keys from a User"
-      summary: "Delete API Keys"
+      description: "Remove api keys from a user."
+      summary: "Delete API keys"
       tags: "API Keys"
     };
   }
@@ -573,7 +611,7 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Get details about Oauth providers for a user"
+      description: "Get details about Oauth providers for a user."
       summary: "Get Oauth providers"
       tags: "User Auth"
     };
@@ -585,8 +623,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Get details about API keys for a user"
-      summary: "Get API key"
+      description: "Get details about API keys for a user."
+      summary: "Get API keys"
       tags: "API keys"
     };
   }
@@ -597,7 +635,7 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Get details about an API key"
+      description: "Get details about an API key."
       summary: "Get API key"
       tags: "API keys"
     };
@@ -609,8 +647,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Create Authenticators to authenticate requests to Turnkey"
-      summary: "Create Authenticators"
+      description: "Create authenticators to authenticate requests to Turnkey."
+      summary: "Create authenticators"
       tags: "Authenticators"
     };
   }
@@ -621,8 +659,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Remove authenticators from a User"
-      summary: "Delete Authenticators"
+      description: "Remove authenticators from a user."
+      summary: "Delete authenticators"
       tags: "Authenticators"
     };
   }
@@ -633,8 +671,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Get details about authenticators for a user"
-      summary: "Get Authenticators"
+      description: "Get details about authenticators for a user."
+      summary: "Get authenticators"
       tags: "Authenticators"
     };
   }
@@ -645,8 +683,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Get details about an authenticator"
-      summary: "Get Authenticator"
+      description: "Get details about an authenticator."
+      summary: "Get authenticator"
       tags: "Authenticators"
     };
   }
@@ -657,8 +695,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Create Invitations to join an existing Organization"
-      summary: "Create Invitations"
+      description: "Create invitations to join an existing organization."
+      summary: "Create invitations"
       tags: "Invitations"
     };
   }
@@ -669,8 +707,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Delete an existing Invitation"
-      summary: "Delete Invitation"
+      description: "Delete an existing invitation."
+      summary: "Delete invitation"
       tags: "Invitations"
     };
   }
@@ -681,8 +719,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Create Users in an existing Organization"
-      summary: "Create Users"
+      description: "Create users in an existing organization."
+      summary: "Create users"
       tags: "Users"
     };
   }
@@ -694,8 +732,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Create API-only Users in an existing Organization"
-      summary: "Create API-only Users"
+      description: "Create API-only users in an existing organization."
+      summary: "Create API-only users"
       tags: "Users"
     };
   }
@@ -706,8 +744,44 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Update a User in an existing Organization"
-      summary: "Update User"
+      description: "Update a user in an existing organization."
+      summary: "Update user"
+      tags: "Users"
+    };
+  }
+
+  rpc UpdateUserName(external.activity.v1.UpdateUserNameRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/update_user_name"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Update a user's name in an existing organization."
+      summary: "Update user's name"
+      tags: "Users"
+    };
+  }
+
+  rpc UpdateUserEmail(external.activity.v1.UpdateUserEmailRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/update_user_email"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Update a user's email in an existing organization."
+      summary: "Update user's email"
+      tags: "Users"
+    };
+  }
+
+  rpc UpdateUserPhoneNumber(external.activity.v1.UpdateUserPhoneNumberRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/update_user_phone_number"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Update a user's phone number in an existing organization."
+      summary: "Update user's phone number"
       tags: "Users"
     };
   }
@@ -719,7 +793,7 @@ service PublicApiService {
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Create a user tag and add it to users."
-      summary: "Create User Tag"
+      summary: "Create user tag"
       tags: "User Tags"
     };
   }
@@ -731,7 +805,7 @@ service PublicApiService {
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Create a private key tag and add it to private keys."
-      summary: "Create Private Key Tag"
+      summary: "Create private key tag"
       tags: "Private Key Tags"
     };
   }
@@ -743,7 +817,7 @@ service PublicApiService {
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Update human-readable name or associated users. Note that this activity is atomic: all of the updates will succeed at once, or all of them will fail."
-      summary: "Update User Tag"
+      summary: "Update user tag"
       tags: "User Tags"
     };
   }
@@ -754,8 +828,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "List all User Tags within an Organization"
-      summary: "List User Tags"
+      description: "List all user tags within an organization."
+      summary: "List user tags"
       tags: "User Tags"
     };
   }
@@ -766,8 +840,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Delete User Tags within an Organization"
-      summary: "Delete User Tags"
+      description: "Delete user tags within an organization."
+      summary: "Delete user tags"
       tags: "User Tags"
     };
   }
@@ -779,7 +853,7 @@ service PublicApiService {
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Update human-readable name or associated private keys. Note that this activity is atomic: all of the updates will succeed at once, or all of them will fail."
-      summary: "Update Private Key Tag"
+      summary: "Update private key tag"
       tags: "Private Key Tags"
     };
   }
@@ -790,8 +864,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "List all Private Key Tags within an Organization"
-      summary: "List Private Key Tags"
+      description: "List all private key tags within an organization."
+      summary: "List private key tags"
       tags: "Private Key Tags"
     };
   }
@@ -802,8 +876,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Delete Private Key Tags within an Organization"
-      summary: "Delete Private Key Tags"
+      description: "Delete private key tags within an organization."
+      summary: "Delete private key tags"
       tags: "Private Key Tags"
     };
   }
@@ -814,8 +888,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Sign a raw payload"
-      summary: "Sign Raw Payload"
+      description: "Sign a raw payload."
+      summary: "Sign raw payload"
       tags: "Signing"
     };
   }
@@ -826,8 +900,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Sign multiple raw payloads with the same signing parameters"
-      summary: "Sign Raw Payloads"
+      description: "Sign multiple raw payloads with the same signing parameters."
+      summary: "Sign raw payloads"
       tags: "Signing"
     };
   }
@@ -838,9 +912,57 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Sign a transaction"
-      summary: "Sign Transaction"
+      description: "Sign a transaction."
+      summary: "Sign transaction"
       tags: "Signing"
+    };
+  }
+
+  rpc CreateSmartContractInterface(external.activity.v1.CreateSmartContractInterfaceRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/create_smart_contract_interface"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Create an ABI/IDL in JSON."
+      summary: "Create smart contract interface"
+      tags: "Policies"
+    };
+  }
+
+  rpc DeleteSmartContractInterface(external.activity.v1.DeleteSmartContractInterfaceRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/delete_smart_contract_interface"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Delete a smart contract interface."
+      summary: "Delete smart contract interface"
+      tags: "Policies"
+    };
+  }
+
+  rpc GetSmartContractInterfaces(GetSmartContractInterfacesRequest) returns (GetSmartContractInterfacesResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/list_smart_contract_interfaces"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "List all smart contract interfaces within an organization."
+      summary: "List smart contract interfaces"
+      tags: "Policies"
+    };
+  }
+
+  rpc GetSmartContractInterface(GetSmartContractInterfaceRequest) returns (GetSmartContractInterfaceResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_smart_contract_interface"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get details about a smart contract interface."
+      summary: "Get smart contract interface"
+      tags: "Policies"
     };
   }
 
@@ -851,7 +973,7 @@ service PublicApiService {
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Set the threshold and members of the root quorum. This activity must be approved by the current root quorum."
-      summary: "Update Root Quorum"
+      summary: "Update root quorum"
       tags: "Organizations"
     };
   }
@@ -862,8 +984,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Create a Wallet and derive addresses"
-      summary: "Create Wallet"
+      description: "Create a wallet and derive addresses."
+      summary: "Create wallet"
       tags: "Wallets"
     };
   }
@@ -874,8 +996,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "List all Wallets within an Organization"
-      summary: "List Wallets"
+      description: "List all wallets within an organization."
+      summary: "List wallets"
       tags: "Wallets"
     };
   }
@@ -886,8 +1008,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Get details about a Wallet"
-      summary: "Get Wallet"
+      description: "Get details about a wallet."
+      summary: "Get wallet"
       tags: "Wallets"
     };
   }
@@ -898,8 +1020,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Derive additional addresses using an existing wallet"
-      summary: "Create Wallet Accounts"
+      description: "Derive additional addresses using an existing wallet."
+      summary: "Create wallet accounts"
       tags: "Wallets"
     };
   }
@@ -910,8 +1032,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "List all Accounts within a Wallet"
-      summary: "List Wallets Accounts"
+      description: "List all accounts within a wallet."
+      summary: "List wallets accounts"
       tags: "Wallets"
     };
   }
@@ -922,8 +1044,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Get a single wallet account"
-      summary: "Get Wallet Account"
+      description: "Get a single wallet account."
+      summary: "Get wallet account"
       tags: "Wallets"
     };
   }
@@ -934,8 +1056,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Create a new Sub-Organization"
-      summary: "Create Sub-Organization"
+      description: "Create a new sub-organization."
+      summary: "Create sub-organization"
       tags: "Organizations"
     };
   }
@@ -946,8 +1068,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Initializes a new email recovery"
-      summary: "Init Email Recovery"
+      description: "Initialize a new email recovery."
+      summary: "Init email recovery"
       tags: "User Recovery"
     };
   }
@@ -958,7 +1080,7 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Completes the process of recovering a user by adding an authenticator"
+      description: "Complete the process of recovering a user by adding an authenticator."
       summary: "Recover a user"
       tags: "User Recovery"
     };
@@ -970,8 +1092,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Sets an organization feature. This activity must be approved by the current root quorum."
-      summary: "Set Organization Feature"
+      description: "Set an organization feature. This activity must be approved by the current root quorum."
+      summary: "Set organization feature"
       tags: "Features"
     };
   }
@@ -982,8 +1104,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Removes an organization feature. This activity must be approved by the current root quorum."
-      summary: "Remove Organization Feature"
+      description: "Remove an organization feature. This activity must be approved by the current root quorum."
+      summary: "Remove organization feature"
       tags: "Features"
     };
   }
@@ -994,8 +1116,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Exports a Private Key"
-      summary: "Export Private Key"
+      description: "Export a private key."
+      summary: "Export private key"
       tags: "Private Keys"
     };
   }
@@ -1006,8 +1128,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Exports a Wallet"
-      summary: "Export Wallet"
+      description: "Export a wallet."
+      summary: "Export wallet"
       tags: "Wallets"
     };
   }
@@ -1018,8 +1140,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Authenticate a user via Email"
-      summary: "Perform Email Auth"
+      description: "Authenticate a user via email."
+      summary: "Perform email auth"
       tags: "User Auth"
     };
   }
@@ -1030,9 +1152,21 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Exports a Wallet Account"
-      summary: "Export Wallet Account"
+      description: "Export a wallet account."
+      summary: "Export wallet account"
       tags: "Wallets"
+    };
+  }
+
+  rpc InitFiatOnRamp(external.activity.v1.InitFiatOnRampRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/init_fiat_on_ramp"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Initiate a fiat on ramp flow."
+      summary: "Init fiat on ramp"
+      tags: "On Ramp"
     };
   }
 
@@ -1042,8 +1176,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Initializes a new wallet import"
-      summary: "Init Import Wallet"
+      description: "Initialize a new wallet import."
+      summary: "Init import wallet"
       tags: "Wallets"
     };
   }
@@ -1054,8 +1188,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Imports a wallet"
-      summary: "Import Wallet"
+      description: "Import a wallet."
+      summary: "Import wallet"
       tags: "Wallets"
     };
   }
@@ -1066,8 +1200,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Initializes a new private key import"
-      summary: "Init Import Private Key"
+      description: "Initialize a new private key import."
+      summary: "Init import private key"
       tags: "Private Keys"
     };
   }
@@ -1078,8 +1212,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Imports a private key"
-      summary: "Import Private Key"
+      description: "Import a private key."
+      summary: "Import private key"
       tags: "Private Keys"
     };
   }
@@ -1090,9 +1224,33 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Authenticate a user with an Oidc token (Oauth) - BETA"
+      description: "Authenticate a user with an OIDC token (Oauth)."
       summary: "Oauth"
       tags: "User Auth"
+    };
+  }
+
+  rpc InitOtp(external.activity.v1.InitOtpRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/init_otp"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Initiate a generic OTP activity."
+      summary: "Init generic OTP"
+      tags: "User Verification"
+    };
+  }
+
+  rpc VerifyOtp(external.activity.v1.VerifyOtpRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/verify_otp"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Verify a generic OTP."
+      summary: "Verify generic OTP"
+      tags: "User Verification"
     };
   }
 
@@ -1102,7 +1260,7 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Initiate an OTP auth activity"
+      description: "Initiate an OTP auth activity."
       summary: "Init OTP auth"
       tags: "User Auth"
     };
@@ -1114,7 +1272,7 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Authenticate a user with an OTP code sent via email or SMS"
+      description: "Authenticate a user with an OTP code sent via email or SMS."
       summary: "OTP auth"
       tags: "User Auth"
     };
@@ -1126,8 +1284,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Creates Oauth providers for a specified user - BETA"
-      summary: "Create Oauth Providers"
+      description: "Create Oauth providers for a specified user."
+      summary: "Create Oauth providers"
       tags: "User Auth"
     };
   }
@@ -1138,8 +1296,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Removes Oauth providers for a specified user - BETA"
-      summary: "Delete Oauth Providers"
+      description: "Remove Oauth providers for a specified user."
+      summary: "Delete Oauth providers"
       tags: "User Auth"
     };
   }
@@ -1150,8 +1308,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Get quorum settings and features for an organization"
-      summary: "Get Configs"
+      description: "Get quorum settings and features for an organization."
+      summary: "Get configs"
       tags: "Organizations"
     };
   }
@@ -1162,8 +1320,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Deletes private keys for an organization"
-      summary: "Delete Private Keys"
+      description: "Delete private keys for an organization."
+      summary: "Delete private keys"
       tags: "Private Keys"
     };
   }
@@ -1174,8 +1332,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Update a wallet for an organization"
-      summary: "Update Wallet"
+      description: "Update a wallet for an organization."
+      summary: "Update wallet"
       tags: "Wallets"
     };
   }
@@ -1186,8 +1344,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Deletes wallets for an organization"
-      summary: "Delete Wallets"
+      description: "Delete wallets for an organization."
+      summary: "Delete wallets"
       tags: "Wallets"
     };
   }
@@ -1198,9 +1356,93 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Deletes a sub organization"
-      summary: "Delete Sub Organization"
+      description: "Delete a sub-organization."
+      summary: "Delete sub-organization"
       tags: "Organizations"
+    };
+  }
+
+  rpc GetPolicyEvaluations(GetPolicyEvaluationsRequest) returns (GetPolicyEvaluationsResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_policy_evaluations"
+      body: "*"
+    };
+
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get the policy evaluations for an activity."
+      summary: "Get policy evaluations"
+      tags: "Activities"
+    };
+  }
+
+  rpc CreateOauth2Credential(external.activity.v1.CreateOauth2CredentialRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/create_oauth2_credential"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Enable authentication for end users with an OAuth 2.0 provider"
+      summary: "Create an OAuth 2.0 Credential"
+      tags: "User Auth"
+    };
+  }
+
+  rpc UpdateOauth2Credential(external.activity.v1.UpdateOauth2CredentialRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/update_oauth2_credential"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Update an OAuth 2.0 provider credential"
+      summary: "Update an OAuth 2.0 Credential"
+      tags: "User Auth"
+    };
+  }
+
+  rpc DeleteOauth2Credential(external.activity.v1.DeleteOauth2CredentialRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/delete_oauth2_credential"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Disable authentication for end users with an OAuth 2.0 provider"
+      summary: "Delete an OAuth 2.0 Credential"
+      tags: "User Auth"
+    };
+  }
+
+  rpc ListOauth2Credentials(ListOauth2CredentialsRequest) returns (ListOauth2CredentialsResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/list_oauth2_credentials"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "List all OAuth 2.0 credentials within an organization."
+      summary: "List OAuth 2.0 Credentials"
+      tags: "User Auth"
+    };
+  }
+
+  rpc GetOauth2Credential(GetOauth2CredentialRequest) returns (GetOauth2CredentialResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_oauth2_credential"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get details about an OAuth 2.0 credential."
+      summary: "Get OAuth 2.0 credential"
+    };
+  }
+
+  rpc Oauth2Authenticate(external.activity.v1.Oauth2AuthenticateRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/oauth2_authenticate"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Authenticate a user with an OAuth 2.0 provider and receive an OIDC token to use with the LoginWithOAuth or CreateSubOrganization activities"
+      summary: "OAuth 2.0 authentication"
+      tags: "User Auth"
     };
   }
 
@@ -1222,7 +1464,7 @@ message NOOPCodegenAnchorResponse {
 message TestRateLimitsRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization. If the request is being made by a WebAuthN user and their Sub-Organization ID is unknown, this can be the Parent Organization ID; using the Sub-Organization ID when possible is preferred due to performance reasons."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization. If the request is being made by a WebAuthN user and their sub-organization ID is unknown, this can be the parent organization ID; using the sub-organization ID when possible is preferred due to performance reasons."}
   ];
   bool is_set_limit = 2 [
     (google.api.field_behavior) = REQUIRED,
@@ -1230,7 +1472,7 @@ message TestRateLimitsRequest {
   ];
   uint32 limit = 3 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Rate limit to set for org, if is_set_limit is set to true"}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Rate limit to set for org, if is_set_limit is set to true."}
   ];
 }
 
@@ -1239,55 +1481,55 @@ message TestRateLimitsResponse {}
 message GetWhoamiRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization. If the request is being made by a WebAuthN user and their Sub-Organization ID is unknown, this can be the Parent Organization ID; using the Sub-Organization ID when possible is preferred due to performance reasons."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization. If the request is being made by a WebAuthN user and their sub-organization ID is unknown, this can be the parent organization ID; using the sub-organization ID when possible is preferred due to performance reasons."}
   ];
 }
 
 message GetWhoamiResponse {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
   ];
   string organization_name = 2 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable name for an Organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable name for an organization."}
   ];
   string user_id = 3 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given User."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given user."}
   ];
   string username = 4 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable name for a User."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable name for a user."}
   ];
 }
 
 message GetAttestationDocumentRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
   ];
   string enclave_type = 2 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The enclave type, one of: ump, notarizer, signer, evm-parser"}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The enclave type, one of: ump, notarizer, signer, evm-parser."}
   ];
 }
 
 message GetAttestationDocumentResponse {
   bytes attestation_document = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Raw (CBOR-encoded) attestation document"}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Raw (CBOR-encoded) attestation document."}
   ];
 }
 
 message GetSubOrgIdsRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for the parent Organization. This is used to find sub-organizations within it."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for the parent organization. This is used to find sub-organizations within it."}
   ];
   string filter_type = 2 [
     (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Specifies the type of filter to apply, i.e 'CREDENTIAL_ID', 'NAME', 'USERNAME', 'EMAIL', 'PHONE_NUMBER', 'OIDC_TOKEN' or 'PUBLIC_KEY'"}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Specifies the type of filter to apply, i.e 'CREDENTIAL_ID', 'NAME', 'USERNAME', 'EMAIL', 'PHONE_NUMBER', 'OIDC_TOKEN', 'WALLET_ACCOUNT_ADDRESS' or 'PUBLIC_KEY'"}
   ];
   string filter_value = 3 [
     (google.api.field_behavior) = OPTIONAL,
@@ -1302,11 +1544,11 @@ message GetSubOrgIdsRequest {
 message GetVerifiedSubOrgIdsRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for the parent Organization. This is used to find sub-organizations within it."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for the parent organization. This is used to find sub-organizations within it."}
   ];
   string filter_type = 2 [
     (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Specifies the type of filter to apply, i.e 'EMAIL', 'PHONE_NUMBER'"}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Specifies the type of filter to apply, i.e 'EMAIL', 'PHONE_NUMBER'."}
   ];
   string filter_value = 3 [
     (google.api.field_behavior) = OPTIONAL,
@@ -1335,36 +1577,36 @@ message GetVerifiedSubOrgIdsResponse {
 message GetOrganizationRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
   ];
 }
 
 message GetOrganizationResponse {
   external.data.v1.OrganizationData organization_data = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Object representing the full current and deleted / disabled collection of Users, Policies, Private Keys, and Invitations attributable to a particular Organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Object representing the full current and deleted / disabled collection of users, policies, private keys, and invitations attributable to a particular organization."}
   ];
 }
 
 message GetActivityRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
   ];
   string activity_id = 2 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Activity object."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given activity object."}
   ];
 }
 
 message GetActivitiesRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
   ];
   repeated immutable.activity.v1.ActivityStatus filter_by_status = 2 [
     (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Array of Activity Statuses filtering which Activities will be listed in the response."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Array of activity statuses filtering which activities will be listed in the response."}
   ];
   external.options.v1.Pagination pagination_options = 3 [
     (google.api.field_behavior) = OPTIONAL,
@@ -1372,39 +1614,39 @@ message GetActivitiesRequest {
   ];
   repeated immutable.activity.v1.ActivityType filter_by_type = 4 [
     (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Array of Activity Types filtering which Activities will be listed in the response."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Array of activity types filtering which activities will be listed in the response."}
   ];
 }
 
 message GetActivitiesResponse {
   repeated external.activity.v1.Activity activities = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of Activities."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of activities."}
   ];
 }
 
 message GetUserRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
   ];
   string user_id = 2 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given User."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given user."}
   ];
 }
 
 message GetUserResponse {
   external.data.v1.User user = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Web and/or API user within your Organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Web and/or API user within your organization."}
   ];
 }
 
 message GetUsersRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
   ];
 }
 
@@ -1412,7 +1654,7 @@ message GetUsersResponse {
   repeated external.data.v1.User users = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      description: "A list of Users."
+      description: "A list of users."
       title: ""
     }
   ];
@@ -1421,50 +1663,82 @@ message GetUsersResponse {
 message ActivityResponse {
   external.activity.v1.Activity activity = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "An action that can that can be taken within the Turnkey infrastructure."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "An action that can be taken within the Turnkey infrastructure."}
   ];
 }
 
 message GetPoliciesRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
   ];
 }
 
 message GetPoliciesResponse {
   repeated external.data.v1.Policy policies = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of Policies."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of policies."}
   ];
 }
 
 message GetPolicyRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
   ];
   string policy_id = 2 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Policy."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given policy."}
   ];
 }
 
 message GetPolicyResponse {
   external.data.v1.Policy policy = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Object that codifies rules defining the actions that are permissible within an Organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Object that codifies rules defining the actions that are permissible within an organization."}
+  ];
+}
+
+message GetSmartContractInterfacesRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+  ];
+}
+
+message GetSmartContractInterfacesResponse {
+  repeated external.data.v1.SmartContractInterface smart_contract_interfaces = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of smart contract interfaces."}
+  ];
+}
+
+message GetSmartContractInterfaceRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+  ];
+  string smart_contract_interface_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given smart contract interface."}
+  ];
+}
+
+message GetSmartContractInterfaceResponse {
+  external.data.v1.SmartContractInterface smart_contract_interface = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Object to be used in conjunction with policies to guard transaction signing."}
   ];
 }
 
 message GetAuthenticatorRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
   ];
   string authenticator_id = 2 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Authenticator."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given authenticator."}
   ];
 }
 
@@ -1478,11 +1752,11 @@ message GetAuthenticatorResponse {
 message GetAuthenticatorsRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
   ];
   string user_id = 2 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given User."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given user."}
   ];
 }
 
@@ -1496,25 +1770,25 @@ message GetAuthenticatorsResponse {
 message GetOauthProvidersRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
   ];
   optional string user_id = 2 [
     (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given User."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given user."}
   ];
 }
 
 message GetOauthProvidersResponse {
   repeated external.data.v1.OauthProvider oauth_providers = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of Oauth Providers"}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of Oauth providers."}
   ];
 }
 
 message GetApiKeyRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
   ];
   string api_key_id = 2 [
     (google.api.field_behavior) = REQUIRED,
@@ -1532,11 +1806,11 @@ message GetApiKeyResponse {
 message GetApiKeysRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
   ];
   optional string user_id = 2 [
     (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given User."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given user."}
   ];
 }
 
@@ -1550,25 +1824,25 @@ message GetApiKeysResponse {
 message GetPrivateKeysRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
   ];
 }
 
 message GetPrivateKeysResponse {
   repeated external.data.v1.PrivateKey private_keys = 2 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of Private Keys."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of private keys."}
   ];
 }
 
 message GetPrivateKeyRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
   ];
   string private_key_id = 2 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Private Key."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given private key."}
   ];
 }
 
@@ -1582,43 +1856,47 @@ message GetPrivateKeyResponse {
 message GetWalletsRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
   ];
 }
 
 message GetWalletsResponse {
   repeated external.data.v1.Wallet wallets = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of Wallets."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of wallets."}
   ];
 }
 
 message GetWalletRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
   ];
   string wallet_id = 2 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Wallet."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given wallet."}
   ];
 }
 
 message GetWalletResponse {
   external.data.v1.Wallet wallet = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A collection of deterministically generated cryptographic public / private key pairs that share a common seed"}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A collection of deterministically generated cryptographic public / private key pairs that share a common seed."}
   ];
 }
 
 message GetWalletAccountsRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
   ];
-  string wallet_id = 2 [
-    (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Wallet."}
+  optional string wallet_id = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given wallet. If not provided, all accounts for the organization will be returned."}
+  ];
+  optional bool include_wallet_details = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional flag to specify if the wallet details should be included in the response. Default = false."}
   ];
   external.options.v1.Pagination pagination_options = 4 [
     (google.api.field_behavior) = OPTIONAL,
@@ -1629,74 +1907,116 @@ message GetWalletAccountsRequest {
 message GetWalletAccountsResponse {
   repeated external.data.v1.WalletAccount accounts = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of Accounts generated from a Wallet that share a common seed."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of accounts generated from a wallet that share a common seed."}
   ];
 }
 
 message GetWalletAccountRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
   ];
   string wallet_id = 2 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Wallet."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given wallet."}
   ];
   optional string address = 3 [
     (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address corresponding to a Wallet Account."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address corresponding to a wallet account."}
   ];
   optional string path = 4 [
     (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Path corresponding to a Wallet Account."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Path corresponding to a wallet account."}
   ];
 }
 
 message GetWalletAccountResponse {
   external.data.v1.WalletAccount account = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The resulting Wallet Account."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The resulting wallet account."}
   ];
 }
 
 message ListUserTagsRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
   ];
 }
 
 message ListUserTagsResponse {
   repeated external.data.v1.Tag user_tags = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of User Tags"}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of user tags."}
   ];
 }
 
 message ListPrivateKeyTagsRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
   ];
 }
 
 message ListPrivateKeyTagsResponse {
   repeated external.data.v1.Tag private_key_tags = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of Private Key Tags"}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of private key tags."}
   ];
 }
 
 message GetOrganizationConfigsRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
   ];
 }
 
 message GetOrganizationConfigsResponse {
   external.data.v1.Config configs = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Organization configs including quorum settings and organization features"}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Organization configs including quorum settings and organization features."}
   ];
+}
+
+message GetPolicyEvaluationsRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+  ];
+
+  string activity_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given activity."}
+  ];
+}
+
+message GetPolicyEvaluationsResponse {
+  repeated external.activity.v1.PolicyEvaluation policy_evaluations = 1 [(google.api.field_behavior) = REQUIRED];
+}
+
+message ListOauth2CredentialsRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+}
+
+message ListOauth2CredentialsResponse {
+  repeated external.data.v1.Oauth2Credential oauth2_credentials = 1 [(google.api.field_behavior) = REQUIRED];
+}
+
+message GetOauth2CredentialRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string oauth2_credential_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given OAuth 2.0 Credential."}
+  ];
+}
+
+message GetOauth2CredentialResponse {
+  external.data.v1.Oauth2Credential oauth2_credential = 1 [(google.api.field_behavior) = REQUIRED];
 }

@@ -13,7 +13,6 @@ syntax = "proto3";
 package immutable.common.v1;
 
 option go_package = "github.com/tkhq/mono/src/go/gen/pkg/immutable/common/v1";
-
 enum PathFormat {
   PATH_FORMAT_UNSPECIFIED = 0;
   PATH_FORMAT_BIP32 = 1;
@@ -84,6 +83,7 @@ enum AddressFormat {
   // TON Addresses
   ADDRESS_FORMAT_TON_V3R2 = 33;
   ADDRESS_FORMAT_TON_V4R2 = 34;
+  ADDRESS_FORMAT_TON_V5R1 = 36;
 
   ADDRESS_FORMAT_XRP = 35;
 }
@@ -106,6 +106,14 @@ enum PayloadEncoding {
   // Payload is encoded as utf-8 text
   // Will be converted to bytes for signature with Rust's standard String.as_bytes()
   PAYLOAD_ENCODING_TEXT_UTF8 = 2;
+  // Payload is encoded as EIP-712 typed data
+  // See JSON schema definition in EIP-712 documentation here: https://eips.ethereum.org/EIPS/eip-712#parameters
+  // Will be converted to bytes for signing using serde_json::from_str
+  PAYLOAD_ENCODING_EIP712 = 3;
+  // Payload is encoded as an EIP-7702 Authorization
+  // See spec here: https://eips.ethereum.org/EIPS/eip-7702#behavior
+  // Will be converted to bytes for signing using serde_json::from_str
+  PAYLOAD_ENCODING_EIP7702_AUTHORIZATION = 4;
 }
 
 enum MnemonicLanguage {
@@ -145,6 +153,7 @@ enum CredentialType {
   CREDENTIAL_TYPE_OTP_AUTH_KEY_P256 = 7;
   CREDENTIAL_TYPE_READ_WRITE_SESSION_KEY_P256 = 8;
   CREDENTIAL_TYPE_OAUTH_KEY_P256 = 9;
+  CREDENTIAL_TYPE_LOGIN = 10;
 }
 
 enum FeatureName {
@@ -156,6 +165,88 @@ enum FeatureName {
   FEATURE_NAME_WEBHOOK = 5;
   FEATURE_NAME_SMS_AUTH = 6;
   FEATURE_NAME_OTP_EMAIL_AUTH = 7;
+  FEATURE_NAME_AUTH_PROXY = 8;
+}
+
+// The supported Fiat On Ramp Providers.
+enum FiatOnRampProvider {
+  FIAT_ON_RAMP_PROVIDER_UNSPECIFIED = 0;
+  FIAT_ON_RAMP_PROVIDER_COINBASE = 1;
+  FIAT_ON_RAMP_PROVIDER_MOONPAY = 2;
+}
+
+enum FiatOnRampCryptoCurrency {
+  FIAT_ON_RAMP_CRYPTO_CURRENCY_UNSPECIFIED = 0; // Unspecified
+  FIAT_ON_RAMP_CRYPTO_CURRENCY_BTC = 1; // Bitcoin
+  FIAT_ON_RAMP_CRYPTO_CURRENCY_ETH = 2; // Ethereum
+  FIAT_ON_RAMP_CRYPTO_CURRENCY_SOL = 3; // Solana
+  FIAT_ON_RAMP_CRYPTO_CURRENCY_USDC = 4; // USDC
+}
+
+enum FiatOnRampCurrency {
+  FIAT_ON_RAMP_CURRENCY_UNSPECIFIED = 0; // Unspecified
+  FIAT_ON_RAMP_CURRENCY_AUD = 1; // Australian Dollar
+  FIAT_ON_RAMP_CURRENCY_BGN = 2; // Bulgarian Lev
+  FIAT_ON_RAMP_CURRENCY_BRL = 3; // Brazilian Real
+  FIAT_ON_RAMP_CURRENCY_CAD = 4; // Canadian Dollar
+  FIAT_ON_RAMP_CURRENCY_CHF = 5; // Swiss Franc
+  FIAT_ON_RAMP_CURRENCY_COP = 6; // Colombian Peso
+  FIAT_ON_RAMP_CURRENCY_CZK = 7; // Czech Koruna
+  FIAT_ON_RAMP_CURRENCY_DKK = 8; // Danish Krone
+  FIAT_ON_RAMP_CURRENCY_DOP = 9; // Dominican Peso
+  FIAT_ON_RAMP_CURRENCY_EGP = 10; // Egyptian Pound
+  FIAT_ON_RAMP_CURRENCY_EUR = 11; // Euro
+  FIAT_ON_RAMP_CURRENCY_GBP = 12; // Pound Sterling
+  FIAT_ON_RAMP_CURRENCY_HKD = 13; // Hong Kong Dollar
+  FIAT_ON_RAMP_CURRENCY_IDR = 14; // Indonesian Rupiah
+  FIAT_ON_RAMP_CURRENCY_ILS = 15; // Israeli New Shekel
+  FIAT_ON_RAMP_CURRENCY_JOD = 16; // Jordanian Dinar
+  FIAT_ON_RAMP_CURRENCY_KES = 17; // Kenyan Shilling
+  FIAT_ON_RAMP_CURRENCY_KWD = 18; // Kuwaiti Dinar
+  FIAT_ON_RAMP_CURRENCY_LKR = 19; // Sri Lankan Rupee
+  FIAT_ON_RAMP_CURRENCY_MXN = 20; // Mexican Peso
+  FIAT_ON_RAMP_CURRENCY_NGN = 21; // Nigerian Naira
+  FIAT_ON_RAMP_CURRENCY_NOK = 22; // Norwegian Krone
+  FIAT_ON_RAMP_CURRENCY_NZD = 23; // New Zealand Dollar
+  FIAT_ON_RAMP_CURRENCY_OMR = 24; // Omani Rial
+  FIAT_ON_RAMP_CURRENCY_PEN = 25; // Peruvian Sol
+  FIAT_ON_RAMP_CURRENCY_PLN = 26; // Polish Złoty
+  FIAT_ON_RAMP_CURRENCY_RON = 27; // Romanian Leu
+  FIAT_ON_RAMP_CURRENCY_SEK = 28; // Swedish Krona
+  FIAT_ON_RAMP_CURRENCY_THB = 29; // Thai Baht
+  FIAT_ON_RAMP_CURRENCY_TRY = 30; // Turkish Lira
+  FIAT_ON_RAMP_CURRENCY_TWD = 31; // Taiwan Dollar
+  FIAT_ON_RAMP_CURRENCY_USD = 32; // US Dollar
+  FIAT_ON_RAMP_CURRENCY_VND = 33; // Vietnamese Dong
+  FIAT_ON_RAMP_CURRENCY_ZAR = 34; // South African Rand
+}
+
+enum FiatOnRampBlockchainNetwork {
+  FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_UNSPECIFIED = 0; // Unspecified
+  FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_BITCOIN = 1; // bitcoin
+  FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_ETHEREUM = 2; // ethereum
+  FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_SOLANA = 3; // solana
+  FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_BASE = 4; // base
+}
+
+enum FiatOnRampPaymentMethod {
+  FIAT_ON_RAMP_PAYMENT_METHOD_UNSPECIFIED = 0; // Unspecified
+  // Shared methods (supported by both MoonPay and Coinbase)
+  FIAT_ON_RAMP_PAYMENT_METHOD_CREDIT_DEBIT_CARD = 1; // MoonPay: CREDIT_DEBIT_CARD, Coinbase: CARD
+  FIAT_ON_RAMP_PAYMENT_METHOD_APPLE_PAY = 2; // MoonPay: APPLE_PAY, Coinbase: APPLE_PAY
+  // MoonPay-specific methods
+  FIAT_ON_RAMP_PAYMENT_METHOD_GBP_BANK_TRANSFER = 3; // MoonPay: GBP_BANK_TRANSFER
+  FIAT_ON_RAMP_PAYMENT_METHOD_GBP_OPEN_BANKING_PAYMENT = 4; // MoonPay: GBP_OPEN_BANKING_PAYMENT
+  FIAT_ON_RAMP_PAYMENT_METHOD_GOOGLE_PAY = 5; // MoonPay: GOOGLE_PAY
+  FIAT_ON_RAMP_PAYMENT_METHOD_SEPA_BANK_TRANSFER = 6; // MoonPay: SEPA_BANK_TRANSFER
+  FIAT_ON_RAMP_PAYMENT_METHOD_PIX_INSTANT_PAYMENT = 7; // MoonPay: PIX_INSTANT_PAYMENT
+  FIAT_ON_RAMP_PAYMENT_METHOD_PAYPAL = 8; // MoonPay: PAYPAL
+  FIAT_ON_RAMP_PAYMENT_METHOD_VENMO = 9; // MoonPay: VENMO
+  FIAT_ON_RAMP_PAYMENT_METHOD_MOONPAY_BALANCE = 10; // MoonPay: MOONPAY_BALANCE
+  // Coinbase-specific methods
+  FIAT_ON_RAMP_PAYMENT_METHOD_CRYPTO_ACCOUNT = 11; // Coinbase: CRYPTO_ACCOUNT
+  FIAT_ON_RAMP_PAYMENT_METHOD_FIAT_WALLET = 12; // Coinbase: FIAT_WALLET
+  FIAT_ON_RAMP_PAYMENT_METHOD_ACH_BANK_ACCOUNT = 13; // Coinbase: ACH_BANK_ACCOUNT
 }
 
 enum TransactionType {
@@ -164,6 +255,14 @@ enum TransactionType {
   TRANSACTION_TYPE_ETHEREUM = 1;
   // Unsigned Solana transaction in hex bytes
   TRANSACTION_TYPE_SOLANA = 2;
+  // Unsigned Tron transaction, protobuf encoded and hex encoded
+  TRANSACTION_TYPE_TRON = 3;
+}
+
+enum SmartContractInterfaceType {
+  SMART_CONTRACT_INTERFACE_TYPE_UNSPECIFIED = 0;
+  SMART_CONTRACT_INTERFACE_TYPE_ETHEREUM = 1;
+  SMART_CONTRACT_INTERFACE_TYPE_SOLANA = 2;
 }
 
 enum Outcome {
@@ -189,4 +288,11 @@ enum Operator {
   OPERATOR_NOT_IN = 9;
   OPERATOR_CONTAINS_ONE = 10;
   OPERATOR_CONTAINS_ALL = 11;
+}
+
+// A list of OAuth 2.0 providers that are supported
+enum Oauth2Provider {
+  OAUTH2_PROVIDER_UNSPECIFIED = 0;
+  OAUTH2_PROVIDER_X = 1;
+  OAUTH2_PROVIDER_DISCORD = 2;
 }

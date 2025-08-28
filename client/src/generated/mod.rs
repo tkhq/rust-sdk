@@ -66,6 +66,13 @@ pub mod immutable {
         }
     }
 }
+pub mod private {
+    pub mod ump {
+        pub mod v1 {
+            include!("private.ump.v1.rs");
+        }
+    }
+}
 pub mod services {
     pub mod coordinator {
         pub mod public {

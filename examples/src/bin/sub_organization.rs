@@ -30,18 +30,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
         root_users: vec![RootUserParamsV4 {
             user_name: "Root User".to_string(),
             api_keys: vec![
-              ApiKeyParamsV2 {
-                  api_key_name: "Test API Key".to_string(),
-                  public_key: hex::encode(sub_organization_p256_api_key.compressed_public_key()),
-                  curve_type: ApiKeyCurve::P256,
-                  expiration_seconds: None,
-              },
-              ApiKeyParamsV2 {
-                  api_key_name: "Root API Key (secp256k1)".to_string(),
-                  public_key: hex::encode(sub_organization_secp256k1_api_key.compressed_public_key()),
-                  curve_type: ApiKeyCurve::Secp256k1,
-                  expiration_seconds: None,
-              },
+                ApiKeyParamsV2 {
+                    api_key_name: "Test API Key".to_string(),
+                    public_key: hex::encode(sub_organization_p256_api_key.compressed_public_key()),
+                    curve_type: ApiKeyCurve::P256,
+                    expiration_seconds: None,
+                },
+                ApiKeyParamsV2 {
+                    api_key_name: "Root API Key (secp256k1)".to_string(),
+                    public_key: hex::encode(
+                        sub_organization_secp256k1_api_key.compressed_public_key(),
+                    ),
+                    curve_type: ApiKeyCurve::Secp256k1,
+                    expiration_seconds: None,
+                },
             ],
             user_email: None,
             user_phone_number: None,
@@ -64,6 +66,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         disable_email_auth: None,
         disable_sms_auth: None,
         disable_otp_email_auth: None,
+        verification_token: None,
     };
 
     let create_res = client

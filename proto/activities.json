@@ -1,269 +1,344 @@
 {
-    "activities": {
-        "/public/v1/submit/approve_activity": {
-            "type": "ACTIVITY_TYPE_APPROVE_ACTIVITY",
-            "intentType": "ApproveActivityIntent",
-            "resultType": "*"
-        },
-        "/public/v1/submit/reject_activity": {
-            "type": "ACTIVITY_TYPE_REJECT_ACTIVITY",
-            "intentType": "RejectActivityIntent",
-            "resultType": "*"
-        },
-        "/public/v1/submit/delete_users": {
-            "type": "ACTIVITY_TYPE_DELETE_USERS",
-            "intentType": "DeleteUsersIntent",
-            "resultType": "DeleteUsersResult"
-        },
-        "/public/v1/submit/create_policy": {
-            "type": "ACTIVITY_TYPE_CREATE_POLICY_V3",
-            "intentType": "CreatePolicyIntentV3",
-            "resultType": "CreatePolicyResult"
-        },
-        "/public/v1/submit/create_policies": {
-            "type": "ACTIVITY_TYPE_CREATE_POLICIES",
-            "intentType": "CreatePoliciesIntent",
-            "resultType": "CreatePoliciesResult"
-        },
-        "/public/v1/submit/update_policy": {
-            "type": "ACTIVITY_TYPE_UPDATE_POLICY_V2",
-            "intentType": "UpdatePolicyIntentV2",
-            "resultType": "UpdatePolicyResultV2"
-        },
-        "/public/v1/submit/delete_policy": {
-            "type": "ACTIVITY_TYPE_DELETE_POLICY",
-            "intentType": "DeletePolicyIntent",
-            "resultType": "DeletePolicyResult"
-        },
-        "/public/v1/submit/create_read_only_session": {
-            "type": "ACTIVITY_TYPE_CREATE_READ_ONLY_SESSION",
-            "intentType": "CreateReadOnlySessionIntent",
-            "resultType": "CreateReadOnlySessionResult"
-        },
-        "/public/v1/submit/create_read_write_session": {
-            "type": "ACTIVITY_TYPE_CREATE_READ_WRITE_SESSION_V2",
-            "intentType": "CreateReadWriteSessionIntentV2",
-            "resultType": "CreateReadWriteSessionResultV2"
-        },
-        "/public/v1/submit/create_private_keys": {
-            "type": "ACTIVITY_TYPE_CREATE_PRIVATE_KEYS_V2",
-            "intentType": "CreatePrivateKeysIntentV2",
-            "resultType": "CreatePrivateKeysResultV2"
-        },
-        "/public/v1/submit/create_api_keys": {
-            "type": "ACTIVITY_TYPE_CREATE_API_KEYS_V2",
-            "intentType": "CreateApiKeysIntentV2",
-            "resultType": "CreateApiKeysResult"
-        },
-        "/public/v1/submit/delete_api_keys": {
-            "type": "ACTIVITY_TYPE_DELETE_API_KEYS",
-            "intentType": "DeleteApiKeysIntent",
-            "resultType": "DeleteApiKeysResult"
-        },
-        "/public/v1/submit/create_authenticators": {
-            "type": "ACTIVITY_TYPE_CREATE_AUTHENTICATORS_V2",
-            "intentType": "CreateAuthenticatorsIntentV2",
-            "resultType": "CreateAuthenticatorsResult"
-        },
-        "/public/v1/submit/delete_authenticators": {
-            "type": "ACTIVITY_TYPE_DELETE_AUTHENTICATORS",
-            "intentType": "DeleteAuthenticatorsIntent",
-            "resultType": "DeleteAuthenticatorsResult"
-        },
-        "/public/v1/submit/create_invitations": {
-            "type": "ACTIVITY_TYPE_CREATE_INVITATIONS",
-            "intentType": "CreateInvitationsIntent",
-            "resultType": "CreateInvitationsResult"
-        },
-        "/public/v1/submit/delete_invitation": {
-            "type": "ACTIVITY_TYPE_DELETE_INVITATION",
-            "intentType": "DeleteInvitationIntent",
-            "resultType": "DeleteInvitationResult"
-        },
-        "/public/v1/submit/create_users": {
-            "type": "ACTIVITY_TYPE_CREATE_USERS_V3",
-            "intentType": "CreateUsersIntentV3",
-            "resultType": "CreateUsersResult"
-        },
-        "/public/v1/submit/create_api_only_users": {
-            "type": "ACTIVITY_TYPE_CREATE_API_ONLY_USERS",
-            "intentType": "CreateApiOnlyUsersIntent",
-            "resultType": "CreateApiOnlyUsersResult"
-        },
-        "/public/v1/submit/update_user": {
-            "type": "ACTIVITY_TYPE_UPDATE_USER",
-            "intentType": "UpdateUserIntent",
-            "resultType": "UpdateUserResult"
-        },
-        "/public/v1/submit/create_user_tag": {
-            "type": "ACTIVITY_TYPE_CREATE_USER_TAG",
-            "intentType": "CreateUserTagIntent",
-            "resultType": "CreateUserTagResult"
-        },
-        "/public/v1/submit/create_private_key_tag": {
-            "type": "ACTIVITY_TYPE_CREATE_PRIVATE_KEY_TAG",
-            "intentType": "CreatePrivateKeyTagIntent",
-            "resultType": "CreatePrivateKeyTagResult"
-        },
-        "/public/v1/submit/update_user_tag": {
-            "type": "ACTIVITY_TYPE_UPDATE_USER_TAG",
-            "intentType": "UpdateUserTagIntent",
-            "resultType": "UpdateUserTagResult"
-        },
-        "/public/v1/submit/delete_user_tags": {
-            "type": "ACTIVITY_TYPE_DELETE_USER_TAGS",
-            "intentType": "DeleteUserTagsIntent",
-            "resultType": "DeleteUserTagsResult"
-        },
-        "/public/v1/submit/update_private_key_tag": {
-            "type": "ACTIVITY_TYPE_UPDATE_PRIVATE_KEY_TAG",
-            "intentType": "UpdatePrivateKeyTagIntent",
-            "resultType": "UpdatePrivateKeyTagResult"
-        },
-        "/public/v1/submit/delete_private_key_tags": {
-            "type": "ACTIVITY_TYPE_DELETE_PRIVATE_KEY_TAGS",
-            "intentType": "DeletePrivateKeyTagsIntent",
-            "resultType": "DeletePrivateKeyTagsResult"
-        },
-        "/public/v1/submit/sign_raw_payload": {
-            "type": "ACTIVITY_TYPE_SIGN_RAW_PAYLOAD_V2",
-            "intentType": "SignRawPayloadIntentV2",
-            "resultType": "SignRawPayloadResult"
-        },
-        "/public/v1/submit/sign_raw_payloads": {
-            "type": "ACTIVITY_TYPE_SIGN_RAW_PAYLOADS",
-            "intentType": "SignRawPayloadsIntent",
-            "resultType": "SignRawPayloadsResult"
-        },
-        "/public/v1/submit/sign_transaction": {
-            "type": "ACTIVITY_TYPE_SIGN_TRANSACTION_V2",
-            "intentType": "SignTransactionIntentV2",
-            "resultType": "SignTransactionResult"
-        },
-        "/public/v1/submit/update_root_quorum": {
-            "type": "ACTIVITY_TYPE_UPDATE_ROOT_QUORUM",
-            "intentType": "UpdateRootQuorumIntent",
-            "resultType": "UpdateRootQuorumResult"
-        },
-        "/public/v1/submit/create_wallet": {
-            "type": "ACTIVITY_TYPE_CREATE_WALLET",
-            "intentType": "CreateWalletIntent",
-            "resultType": "CreateWalletResult"
-        },
-        "/public/v1/submit/create_wallet_accounts": {
-            "type": "ACTIVITY_TYPE_CREATE_WALLET_ACCOUNTS",
-            "intentType": "CreateWalletAccountsIntent",
-            "resultType": "CreateWalletAccountsResult"
-        },
-        "/public/v1/submit/create_sub_organization": {
-            "type": "ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V7",
-            "intentType": "CreateSubOrganizationIntentV7",
-            "resultType": "CreateSubOrganizationResultV7"
-        },
-        "/public/v1/submit/init_user_email_recovery": {
-            "type": "ACTIVITY_TYPE_INIT_USER_EMAIL_RECOVERY",
-            "intentType": "InitUserEmailRecoveryIntent",
-            "resultType": "InitUserEmailRecoveryResult"
-        },
-        "/public/v1/submit/recover_user": {
-            "type": "ACTIVITY_TYPE_RECOVER_USER",
-            "intentType": "RecoverUserIntent",
-            "resultType": "RecoverUserResult"
-        },
-        "/public/v1/submit/set_organization_feature": {
-            "type": "ACTIVITY_TYPE_SET_ORGANIZATION_FEATURE",
-            "intentType": "SetOrganizationFeatureIntent",
-            "resultType": "SetOrganizationFeatureResult"
-        },
-        "/public/v1/submit/remove_organization_feature": {
-            "type": "ACTIVITY_TYPE_REMOVE_ORGANIZATION_FEATURE",
-            "intentType": "RemoveOrganizationFeatureIntent",
-            "resultType": "RemoveOrganizationFeatureResult"
-        },
-        "/public/v1/submit/export_private_key": {
-            "type": "ACTIVITY_TYPE_EXPORT_PRIVATE_KEY",
-            "intentType": "ExportPrivateKeyIntent",
-            "resultType": "ExportPrivateKeyResult"
-        },
-        "/public/v1/submit/export_wallet": {
-            "type": "ACTIVITY_TYPE_EXPORT_WALLET",
-            "intentType": "ExportWalletIntent",
-            "resultType": "ExportWalletResult"
-        },
-        "/public/v1/submit/email_auth": {
-            "type": "ACTIVITY_TYPE_EMAIL_AUTH_V2",
-            "intentType": "EmailAuthIntentV2",
-            "resultType": "EmailAuthResult"
-        },
-        "/public/v1/submit/export_wallet_account": {
-            "type": "ACTIVITY_TYPE_EXPORT_WALLET_ACCOUNT",
-            "intentType": "ExportWalletAccountIntent",
-            "resultType": "ExportWalletAccountResult"
-        },
-        "/public/v1/submit/init_import_wallet": {
-            "type": "ACTIVITY_TYPE_INIT_IMPORT_WALLET",
-            "intentType": "InitImportWalletIntent",
-            "resultType": "InitImportWalletResult"
-        },
-        "/public/v1/submit/import_wallet": {
-            "type": "ACTIVITY_TYPE_IMPORT_WALLET",
-            "intentType": "ImportWalletIntent",
-            "resultType": "ImportWalletResult"
-        },
-        "/public/v1/submit/init_import_private_key": {
-            "type": "ACTIVITY_TYPE_INIT_IMPORT_PRIVATE_KEY",
-            "intentType": "InitImportPrivateKeyIntent",
-            "resultType": "InitImportPrivateKeyResult"
-        },
-        "/public/v1/submit/import_private_key": {
-            "type": "ACTIVITY_TYPE_IMPORT_PRIVATE_KEY",
-            "intentType": "ImportPrivateKeyIntent",
-            "resultType": "ImportPrivateKeyResult"
-        },
-        "/public/v1/submit/oauth": {
-            "type": "ACTIVITY_TYPE_OAUTH",
-            "intentType": "OauthIntent",
-            "resultType": "OauthResult"
-        },
-        "/public/v1/submit/init_otp_auth": {
-            "type": "ACTIVITY_TYPE_INIT_OTP_AUTH_V2",
-            "intentType": "InitOtpAuthIntentV2",
-            "resultType": "InitOtpAuthResultV2"
-        },
-        "/public/v1/submit/otp_auth": {
-            "type": "ACTIVITY_TYPE_OTP_AUTH",
-            "intentType": "OtpAuthIntent",
-            "resultType": "OtpAuthResult"
-        },
-        "/public/v1/submit/create_oauth_providers": {
-            "type": "ACTIVITY_TYPE_CREATE_OAUTH_PROVIDERS",
-            "intentType": "CreateOauthProvidersIntent",
-            "resultType": "CreateOauthProvidersResult"
-        },
-        "/public/v1/submit/delete_oauth_providers": {
-            "type": "ACTIVITY_TYPE_DELETE_OAUTH_PROVIDERS",
-            "intentType": "DeleteOauthProvidersIntent",
-            "resultType": "DeleteOauthProvidersResult"
-        },
-        "/public/v1/submit/delete_private_keys": {
-            "type": "ACTIVITY_TYPE_DELETE_PRIVATE_KEYS",
-            "intentType": "DeletePrivateKeysIntent",
-            "resultType": "DeletePrivateKeysResult"
-        },
-        "/public/v1/submit/update_wallet": {
-            "type": "ACTIVITY_TYPE_UPDATE_WALLET",
-            "intentType": "UpdateWalletIntent",
-            "resultType": "UpdateWalletResult"
-        },
-        "/public/v1/submit/delete_wallets": {
-            "type": "ACTIVITY_TYPE_DELETE_WALLETS",
-            "intentType": "DeleteWalletsIntent",
-            "resultType": "DeleteWalletsResult"
-        },
-        "/public/v1/submit/delete_sub_organization": {
-            "type": "ACTIVITY_TYPE_DELETE_SUB_ORGANIZATION",
-            "intentType": "DeleteSubOrganizationIntent",
-            "resultType": "DeleteSubOrganizationResult"
-        }
+  "activities": {
+    "/public/v1/submit/approve_activity": {
+      "type": "ACTIVITY_TYPE_APPROVE_ACTIVITY",
+      "intentType": "ApproveActivityIntent",
+      "resultType": "*"
+    },
+    "/public/v1/submit/reject_activity": {
+      "type": "ACTIVITY_TYPE_REJECT_ACTIVITY",
+      "intentType": "RejectActivityIntent",
+      "resultType": "*"
+    },
+    "/public/v1/submit/delete_users": {
+      "type": "ACTIVITY_TYPE_DELETE_USERS",
+      "intentType": "DeleteUsersIntent",
+      "resultType": "DeleteUsersResult"
+    },
+    "/public/v1/submit/create_policy": {
+      "type": "ACTIVITY_TYPE_CREATE_POLICY_V3",
+      "intentType": "CreatePolicyIntentV3",
+      "resultType": "CreatePolicyResult"
+    },
+    "/public/v1/submit/create_smart_contract_interface": {
+      "type": "ACTIVITY_TYPE_CREATE_SMART_CONTRACT_INTERFACE",
+      "intentType": "CreateSmartContractInterfaceIntent",
+      "resultType": "CreateSmartContractInterfaceResult"
+    },
+    "/public/v1/submit/delete_smart_contract_interface": {
+      "type": "ACTIVITY_TYPE_DELETE_SMART_CONTRACT_INTERFACE",
+      "intentType": "DeleteSmartContractInterfaceIntent",
+      "resultType": "DeleteSmartContractInterfaceResult"
+    },
+    "/public/v1/submit/create_policies": {
+      "type": "ACTIVITY_TYPE_CREATE_POLICIES",
+      "intentType": "CreatePoliciesIntent",
+      "resultType": "CreatePoliciesResult"
+    },
+    "/public/v1/submit/update_policy": {
+      "type": "ACTIVITY_TYPE_UPDATE_POLICY_V2",
+      "intentType": "UpdatePolicyIntentV2",
+      "resultType": "UpdatePolicyResultV2"
+    },
+    "/public/v1/submit/delete_policy": {
+      "type": "ACTIVITY_TYPE_DELETE_POLICY",
+      "intentType": "DeletePolicyIntent",
+      "resultType": "DeletePolicyResult"
+    },
+    "/public/v1/submit/create_read_only_session": {
+      "type": "ACTIVITY_TYPE_CREATE_READ_ONLY_SESSION",
+      "intentType": "CreateReadOnlySessionIntent",
+      "resultType": "CreateReadOnlySessionResult"
+    },
+    "/public/v1/submit/create_read_write_session": {
+      "type": "ACTIVITY_TYPE_CREATE_READ_WRITE_SESSION_V2",
+      "intentType": "CreateReadWriteSessionIntentV2",
+      "resultType": "CreateReadWriteSessionResultV2"
+    },
+    "/public/v1/submit/create_private_keys": {
+      "type": "ACTIVITY_TYPE_CREATE_PRIVATE_KEYS_V2",
+      "intentType": "CreatePrivateKeysIntentV2",
+      "resultType": "CreatePrivateKeysResultV2"
+    },
+    "/public/v1/submit/create_api_keys": {
+      "type": "ACTIVITY_TYPE_CREATE_API_KEYS_V2",
+      "intentType": "CreateApiKeysIntentV2",
+      "resultType": "CreateApiKeysResult"
+    },
+    "/public/v1/submit/delete_api_keys": {
+      "type": "ACTIVITY_TYPE_DELETE_API_KEYS",
+      "intentType": "DeleteApiKeysIntent",
+      "resultType": "DeleteApiKeysResult"
+    },
+    "/public/v1/submit/create_authenticators": {
+      "type": "ACTIVITY_TYPE_CREATE_AUTHENTICATORS_V2",
+      "intentType": "CreateAuthenticatorsIntentV2",
+      "resultType": "CreateAuthenticatorsResult"
+    },
+    "/public/v1/submit/delete_authenticators": {
+      "type": "ACTIVITY_TYPE_DELETE_AUTHENTICATORS",
+      "intentType": "DeleteAuthenticatorsIntent",
+      "resultType": "DeleteAuthenticatorsResult"
+    },
+    "/public/v1/submit/create_invitations": {
+      "type": "ACTIVITY_TYPE_CREATE_INVITATIONS",
+      "intentType": "CreateInvitationsIntent",
+      "resultType": "CreateInvitationsResult"
+    },
+    "/public/v1/submit/delete_invitation": {
+      "type": "ACTIVITY_TYPE_DELETE_INVITATION",
+      "intentType": "DeleteInvitationIntent",
+      "resultType": "DeleteInvitationResult"
+    },
+    "/public/v1/submit/create_users": {
+      "type": "ACTIVITY_TYPE_CREATE_USERS_V3",
+      "intentType": "CreateUsersIntentV3",
+      "resultType": "CreateUsersResult"
+    },
+    "/public/v1/submit/create_api_only_users": {
+      "type": "ACTIVITY_TYPE_CREATE_API_ONLY_USERS",
+      "intentType": "CreateApiOnlyUsersIntent",
+      "resultType": "CreateApiOnlyUsersResult"
+    },
+    "/public/v1/submit/update_user": {
+      "type": "ACTIVITY_TYPE_UPDATE_USER",
+      "intentType": "UpdateUserIntent",
+      "resultType": "UpdateUserResult"
+    },
+    "/public/v1/submit/update_user_email": {
+      "type": "ACTIVITY_TYPE_UPDATE_USER_EMAIL",
+      "intentType": "UpdateUserEmailIntent",
+      "resultType": "UpdateUserEmailResult"
+    },
+    "/public/v1/submit/update_user_name": {
+      "type": "ACTIVITY_TYPE_UPDATE_USER_NAME",
+      "intentType": "UpdateUserNameIntent",
+      "resultType": "UpdateUserNameResult"
+    },
+    "/public/v1/submit/update_user_phone_number": {
+      "type": "ACTIVITY_TYPE_UPDATE_USER_PHONE_NUMBER",
+      "intentType": "UpdateUserPhoneNumberIntent",
+      "resultType": "UpdateUserPhoneNumberResult"
+    },
+    "/public/v1/submit/create_user_tag": {
+      "type": "ACTIVITY_TYPE_CREATE_USER_TAG",
+      "intentType": "CreateUserTagIntent",
+      "resultType": "CreateUserTagResult"
+    },
+    "/public/v1/submit/create_private_key_tag": {
+      "type": "ACTIVITY_TYPE_CREATE_PRIVATE_KEY_TAG",
+      "intentType": "CreatePrivateKeyTagIntent",
+      "resultType": "CreatePrivateKeyTagResult"
+    },
+    "/public/v1/submit/update_user_tag": {
+      "type": "ACTIVITY_TYPE_UPDATE_USER_TAG",
+      "intentType": "UpdateUserTagIntent",
+      "resultType": "UpdateUserTagResult"
+    },
+    "/public/v1/submit/delete_user_tags": {
+      "type": "ACTIVITY_TYPE_DELETE_USER_TAGS",
+      "intentType": "DeleteUserTagsIntent",
+      "resultType": "DeleteUserTagsResult"
+    },
+    "/public/v1/submit/update_private_key_tag": {
+      "type": "ACTIVITY_TYPE_UPDATE_PRIVATE_KEY_TAG",
+      "intentType": "UpdatePrivateKeyTagIntent",
+      "resultType": "UpdatePrivateKeyTagResult"
+    },
+    "/public/v1/submit/delete_private_key_tags": {
+      "type": "ACTIVITY_TYPE_DELETE_PRIVATE_KEY_TAGS",
+      "intentType": "DeletePrivateKeyTagsIntent",
+      "resultType": "DeletePrivateKeyTagsResult"
+    },
+    "/public/v1/submit/sign_raw_payload": {
+      "type": "ACTIVITY_TYPE_SIGN_RAW_PAYLOAD_V2",
+      "intentType": "SignRawPayloadIntentV2",
+      "resultType": "SignRawPayloadResult"
+    },
+    "/public/v1/submit/sign_raw_payloads": {
+      "type": "ACTIVITY_TYPE_SIGN_RAW_PAYLOADS",
+      "intentType": "SignRawPayloadsIntent",
+      "resultType": "SignRawPayloadsResult"
+    },
+    "/public/v1/submit/sign_transaction": {
+      "type": "ACTIVITY_TYPE_SIGN_TRANSACTION_V2",
+      "intentType": "SignTransactionIntentV2",
+      "resultType": "SignTransactionResult"
+    },
+    "/public/v1/submit/update_root_quorum": {
+      "type": "ACTIVITY_TYPE_UPDATE_ROOT_QUORUM",
+      "intentType": "UpdateRootQuorumIntent",
+      "resultType": "UpdateRootQuorumResult"
+    },
+    "/public/v1/submit/create_wallet": {
+      "type": "ACTIVITY_TYPE_CREATE_WALLET",
+      "intentType": "CreateWalletIntent",
+      "resultType": "CreateWalletResult"
+    },
+    "/public/v1/submit/create_wallet_accounts": {
+      "type": "ACTIVITY_TYPE_CREATE_WALLET_ACCOUNTS",
+      "intentType": "CreateWalletAccountsIntent",
+      "resultType": "CreateWalletAccountsResult"
+    },
+    "/public/v1/submit/create_sub_organization": {
+      "type": "ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V7",
+      "intentType": "CreateSubOrganizationIntentV7",
+      "resultType": "CreateSubOrganizationResultV7"
+    },
+    "/public/v1/submit/init_user_email_recovery": {
+      "type": "ACTIVITY_TYPE_INIT_USER_EMAIL_RECOVERY",
+      "intentType": "InitUserEmailRecoveryIntent",
+      "resultType": "InitUserEmailRecoveryResult"
+    },
+    "/public/v1/submit/recover_user": {
+      "type": "ACTIVITY_TYPE_RECOVER_USER",
+      "intentType": "RecoverUserIntent",
+      "resultType": "RecoverUserResult"
+    },
+    "/public/v1/submit/set_organization_feature": {
+      "type": "ACTIVITY_TYPE_SET_ORGANIZATION_FEATURE",
+      "intentType": "SetOrganizationFeatureIntent",
+      "resultType": "SetOrganizationFeatureResult"
+    },
+    "/public/v1/submit/remove_organization_feature": {
+      "type": "ACTIVITY_TYPE_REMOVE_ORGANIZATION_FEATURE",
+      "intentType": "RemoveOrganizationFeatureIntent",
+      "resultType": "RemoveOrganizationFeatureResult"
+    },
+    "/public/v1/submit/export_private_key": {
+      "type": "ACTIVITY_TYPE_EXPORT_PRIVATE_KEY",
+      "intentType": "ExportPrivateKeyIntent",
+      "resultType": "ExportPrivateKeyResult"
+    },
+    "/public/v1/submit/export_wallet": {
+      "type": "ACTIVITY_TYPE_EXPORT_WALLET",
+      "intentType": "ExportWalletIntent",
+      "resultType": "ExportWalletResult"
+    },
+    "/public/v1/submit/email_auth": {
+      "type": "ACTIVITY_TYPE_EMAIL_AUTH_V2",
+      "intentType": "EmailAuthIntentV2",
+      "resultType": "EmailAuthResult"
+    },
+    "/public/v1/submit/export_wallet_account": {
+      "type": "ACTIVITY_TYPE_EXPORT_WALLET_ACCOUNT",
+      "intentType": "ExportWalletAccountIntent",
+      "resultType": "ExportWalletAccountResult"
+    },
+    "/public/v1/submit/init_fiat_on_ramp": {
+      "type": "ACTIVITY_TYPE_INIT_FIAT_ON_RAMP",
+      "intentType": "InitFiatOnRampIntent",
+      "resultType": "InitFiatOnRampResult"
+    },
+    "/public/v1/submit/init_import_wallet": {
+      "type": "ACTIVITY_TYPE_INIT_IMPORT_WALLET",
+      "intentType": "InitImportWalletIntent",
+      "resultType": "InitImportWalletResult"
+    },
+    "/public/v1/submit/import_wallet": {
+      "type": "ACTIVITY_TYPE_IMPORT_WALLET",
+      "intentType": "ImportWalletIntent",
+      "resultType": "ImportWalletResult"
+    },
+    "/public/v1/submit/init_import_private_key": {
+      "type": "ACTIVITY_TYPE_INIT_IMPORT_PRIVATE_KEY",
+      "intentType": "InitImportPrivateKeyIntent",
+      "resultType": "InitImportPrivateKeyResult"
+    },
+    "/public/v1/submit/import_private_key": {
+      "type": "ACTIVITY_TYPE_IMPORT_PRIVATE_KEY",
+      "intentType": "ImportPrivateKeyIntent",
+      "resultType": "ImportPrivateKeyResult"
+    },
+    "/public/v1/submit/oauth": {
+      "type": "ACTIVITY_TYPE_OAUTH",
+      "intentType": "OauthIntent",
+      "resultType": "OauthResult"
+    },
+    "/public/v1/submit/init_otp": {
+      "type": "ACTIVITY_TYPE_INIT_OTP",
+      "intentType": "InitOtpIntent",
+      "resultType": "InitOtpResult"
+    },
+    "/public/v1/submit/init_otp_auth": {
+      "type": "ACTIVITY_TYPE_INIT_OTP_AUTH_V2",
+      "intentType": "InitOtpAuthIntentV2",
+      "resultType": "InitOtpAuthResultV2"
+    },
+    "/public/v1/submit/otp_auth": {
+      "type": "ACTIVITY_TYPE_OTP_AUTH",
+      "intentType": "OtpAuthIntent",
+      "resultType": "OtpAuthResult"
+    },
+    "/public/v1/submit/oauth_login": {
+      "type": "ACTIVITY_TYPE_OAUTH_LOGIN",
+      "intentType": "OauthLoginIntent",
+      "resultType": "OauthLoginResult"
+    },
+    "/public/v1/submit/otp_login": {
+      "type": "ACTIVITY_TYPE_OTP_LOGIN",
+      "intentType": "OtpLoginIntent",
+      "resultType": "OtpLoginResult"
+    },
+    "/public/v1/submit/stamp_login": {
+      "type": "ACTIVITY_TYPE_STAMP_LOGIN",
+      "intentType": "StampLoginIntent",
+      "resultType": "StampLoginResult"
+    },
+    "/public/v1/submit/verify_otp": {
+      "type": "ACTIVITY_TYPE_VERIFY_OTP",
+      "intentType": "VerifyOtpIntent",
+      "resultType": "VerifyOtpResult"
+    },
+    "/public/v1/submit/create_oauth_providers": {
+      "type": "ACTIVITY_TYPE_CREATE_OAUTH_PROVIDERS",
+      "intentType": "CreateOauthProvidersIntent",
+      "resultType": "CreateOauthProvidersResult"
+    },
+    "/public/v1/submit/delete_oauth_providers": {
+      "type": "ACTIVITY_TYPE_DELETE_OAUTH_PROVIDERS",
+      "intentType": "DeleteOauthProvidersIntent",
+      "resultType": "DeleteOauthProvidersResult"
+    },
+    "/public/v1/submit/delete_private_keys": {
+      "type": "ACTIVITY_TYPE_DELETE_PRIVATE_KEYS",
+      "intentType": "DeletePrivateKeysIntent",
+      "resultType": "DeletePrivateKeysResult"
+    },
+    "/public/v1/submit/update_wallet": {
+      "type": "ACTIVITY_TYPE_UPDATE_WALLET",
+      "intentType": "UpdateWalletIntent",
+      "resultType": "UpdateWalletResult"
+    },
+    "/public/v1/submit/delete_wallets": {
+      "type": "ACTIVITY_TYPE_DELETE_WALLETS",
+      "intentType": "DeleteWalletsIntent",
+      "resultType": "DeleteWalletsResult"
+    },
+    "/public/v1/submit/delete_sub_organization": {
+      "type": "ACTIVITY_TYPE_DELETE_SUB_ORGANIZATION",
+      "intentType": "DeleteSubOrganizationIntent",
+      "resultType": "DeleteSubOrganizationResult"
+    },
+    "/public/v1/submit/create_oauth2_credential": {
+      "type": "ACTIVITY_TYPE_CREATE_OAUTH2_CREDENTIAL",
+      "intentType": "CreateOauth2CredentialIntent",
+      "resultType": "CreateOauth2CredentialResult"
+    },
+    "/public/v1/submit/update_oauth2_credential": {
+      "type": "ACTIVITY_TYPE_UPDATE_OAUTH2_CREDENTIAL",
+      "intentType": "UpdateOauth2CredentialIntent",
+      "resultType": "UpdateOauth2CredentialResult"
+    },
+    "/public/v1/submit/delete_oauth2_credential": {
+      "type": "ACTIVITY_TYPE_DELETE_OAUTH2_CREDENTIAL",
+      "intentType": "DeleteOauth2CredentialIntent",
+      "resultType": "DeleteOauth2CredentialResult"
+    },
+    "/public/v1/submit/oauth2_authenticate": {
+      "type": "ACTIVITY_TYPE_OAUTH2_AUTHENTICATE",
+      "intentType": "Oauth2AuthenticateIntent",
+      "resultType": "Oauth2AuthenticateResult"
     }
+  }
 }

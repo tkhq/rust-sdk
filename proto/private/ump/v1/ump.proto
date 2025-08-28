@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package private.ump.v1;
+
+import "immutable/common/v1/common.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/private/ump/v1";
+
+// TODO: we should move this out of the "private" namespace. It's NOT private because it's now used in a public interface.
+message PolicyEvaluation {
+  string policy_id = 1;
+  immutable.common.v1.Outcome outcome = 3;
+}
