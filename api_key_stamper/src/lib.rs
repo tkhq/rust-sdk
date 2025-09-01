@@ -546,6 +546,20 @@ mod tests {
     }
 
     #[test]
+    fn test_p256apikey_conversion_malformed_input_does_not_panic() {
+        // test the conversion functions with empty input
+
+        // observed panic in generic-array-0.14.7/src/lib.rs:572:9:
+        //
+        // assertion `left == right` failed
+        // left: 0
+        // right: 32
+
+        let _ = TurnkeyP256ApiKey::from_bytes([], None);
+        let _ = TurnkeyP256ApiKey::from_strings("", None);
+    }
+
+    #[test]
     fn test_load_from_files() {
         let mut priv_file = NamedTempFile::new().unwrap();
         priv_file

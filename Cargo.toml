@@ -2,6 +2,8 @@
 members = [
   # Crate to produce stamps with an API key
   "api_key_stamper",
+  # Automated testing for the crate above
+  "api_key_stamper/fuzz",
   # Main API client (generated)
   "client",
   # Contains tools and script to generate client code from proto

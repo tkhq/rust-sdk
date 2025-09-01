@@ -1,0 +1,38 @@
+[package]
+name = "turnkey_api_key_stamper_fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+
+# parent target crate
+[dependencies.turnkey_api_key_stamper]
+path = ".."
+
+[[bin]]
+name = "1_p256apikey_from_bytes"
+path = "fuzz_targets/1_p256apikey_from_bytes.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "2_p256apikey_from_string"
+path = "fuzz_targets/2_p256apikey_from_string.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "3_secp256k1apikey_from_bytes"
+path = "fuzz_targets/3_secp256k1apikey_from_bytes.rs"
+test = false
+doc = false
+bench = false
+
