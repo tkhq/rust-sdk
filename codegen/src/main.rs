@@ -44,9 +44,6 @@ fn main() {
         .type_attribute(".external", SERDE_CAMEL_CASE)
         .type_attribute(".immutable", SERDE_DERIVE)
         .type_attribute(".immutable", SERDE_CAMEL_CASE)
-        // TODO remove me once PolicyEvaluation moves to external namespace.
-        .type_attribute(".private", SERDE_DERIVE)
-        .type_attribute(".private", SERDE_CAMEL_CASE)
         .type_attribute(".google.rpc", SERDE_DERIVE)
         .field_attribute("google.rpc.Status.details", "#[serde(skip)]")
         .type_attribute("google.rpc", SERDE_CAMEL_CASE)
