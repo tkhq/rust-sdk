@@ -1066,7 +1066,7 @@ pub struct PolicyEvaluation {
     /// Individual policy evaluations (one entry per policy).
     #[serde(default)]
     pub policy_evaluations: ::prost::alloc::vec::Vec<
-        super::super::super::private::ump::v1::PolicyEvaluation,
+        super::super::super::immutable::common::v1::PolicyEvaluation,
     >,
     /// Time at which this evaluation was recorded.
     #[serde(default)]

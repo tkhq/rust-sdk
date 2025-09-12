@@ -1,3 +1,11 @@
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct PolicyEvaluation {
+    pub policy_id: ::prost::alloc::string::String,
+    pub outcome: Outcome,
+}
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum PathFormat {

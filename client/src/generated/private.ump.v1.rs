@@ -1,4 +1,6 @@
 #[derive(Debug)]
+#[derive(Debug)]
+#[derive(Debug)]
 /// TODO: we should move this out of the "private" namespace. It's NOT private because it's now used in a public interface.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]

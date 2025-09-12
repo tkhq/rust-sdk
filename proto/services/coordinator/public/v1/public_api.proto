@@ -4,6 +4,7 @@ package services.coordinator.public.v1;
 
 import "external/activity/v1/activity.proto";
 import "external/data/v1/organization_data.proto";
+import "external/data/v1/proofs.proto";
 import "external/data/v1/smart_contract_interface.proto";
 import "external/data/v1/wallet_account.proto";
 import "external/options/v1/options.proto";
@@ -1411,6 +1412,30 @@ service PublicApiService {
     };
   }
 
+  rpc GetBootProof(GetBootProofRequest) returns (BootProofResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_boot_proof"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get the boot proof for a given ephemeral key."
+      summary: "Get a specific boot proof"
+      tags: "Boot Proof"
+    };
+  }
+
+  rpc GetLatestBootProof(GetLatestBootProofRequest) returns (BootProofResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_latest_boot_proof"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get the latest boot proof for a given enclave app name."
+      summary: "Get the latest boot proof for an app"
+      tags: "Boot Proof"
+    };
+  }
+
   rpc ListOauth2Credentials(ListOauth2CredentialsRequest) returns (ListOauth2CredentialsResponse) {
     option (google.api.http) = {
       post: "/public/v1/query/list_oauth2_credentials"
@@ -2019,4 +2044,30 @@ message GetOauth2CredentialRequest {
 
 message GetOauth2CredentialResponse {
   external.data.v1.Oauth2Credential oauth2_credential = 1 [(google.api.field_behavior) = REQUIRED];
+}
+
+message GetBootProofRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string ephemeral_key = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Hex encoded ephemeral public key."}
+  ];
+}
+
+message GetLatestBootProofRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string app_name = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Name of enclave app."}
+  ];
+}
+
+message BootProofResponse {
+  external.data.v1.BootProof boot_proof = 1 [(google.api.field_behavior) = REQUIRED];
 }
