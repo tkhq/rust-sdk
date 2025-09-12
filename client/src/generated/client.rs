@@ -2317,6 +2317,29 @@ impl<S: Stamp> TurnkeyClient<S> {
             )),
         }
     }
+    /// Get a specific boot proof
+    ///
+    /// Get the boot proof for a given ephemeral key.
+    pub async fn get_boot_proof(
+        &self,
+        request: coordinator::GetBootProofRequest,
+    ) -> Result<coordinator::BootProofResponse, TurnkeyClientError> {
+        self.process_request(&request, "/public/v1/query/get_boot_proof".to_string())
+            .await
+    }
+    /// Get the latest boot proof for an app
+    ///
+    /// Get the latest boot proof for a given enclave app name.
+    pub async fn get_latest_boot_proof(
+        &self,
+        request: coordinator::GetLatestBootProofRequest,
+    ) -> Result<coordinator::BootProofResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/get_latest_boot_proof".to_string(),
+        )
+        .await
+    }
     /// List OAuth 2.0 Credentials
     ///
     /// List all OAuth 2.0 credentials within an organization.

@@ -8,7 +8,7 @@ import "immutable/activity/billing/activate_billing_tier.proto";
 import "immutable/activity/billing/delete_payment_method.proto";
 import "immutable/activity/billing/set_payment_method.proto";
 import "immutable/activity/v1/activity.proto";
-import "private/ump/v1/ump.proto";
+import "immutable/common/v1/common.proto";
 import "vendor/google/api/field_behavior.proto";
 import "vendor/google/rpc/status.proto";
 import "vendor/protoc-gen-openapiv2/options/annotations.proto";
@@ -1514,7 +1514,7 @@ message PolicyEvaluation {
   ];
 
   // Individual policy evaluations (one entry per policy).
-  repeated private.ump.v1.PolicyEvaluation policy_evaluations = 5 [
+  repeated immutable.common.v1.PolicyEvaluation policy_evaluations = 5 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Detailed evaluation result for each Policy that was run."}
   ];

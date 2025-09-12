@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package external.data.v1;
+
+import "external/data/v1/common.proto";
+import "vendor/google/api/field_behavior.proto";
+import "vendor/protoc-gen-openapiv2/options/annotations.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/external/data/v1";
+
+message BootProof {
+  string ephemeral_public_key_hex = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The hex encoded Ephemeral Public Key."}
+  ];
+  string aws_attestation_doc_b64 = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The DER encoded COSE Sign1 struct Attestation doc."}
+  ];
+  string qos_manifest_b64 = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The borsch serialized base64 encoded Manifest."}
+  ];
+  string qos_manifest_envelope_b64 = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The borsch serialized base64 encoded Manifest Envelope."}
+  ];
+  string deployment_label = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The label under which the enclave app was deployed."}
+  ];
+  string enclave_app = 6 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Name of the enclave app"}
+  ];
+  string owner = 7 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Owner of the app i.e. 'tkhq'"}
+  ];
+  Timestamp created_at = 8 [(google.api.field_behavior) = REQUIRED];
+}

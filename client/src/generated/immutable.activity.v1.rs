@@ -162,12 +162,6 @@ pub struct UpdateAuthProxyConfigIntent {
     /// @inject_tag: validate:"omitempty,numeric,min=6,max=9"
     #[serde(default)]
     pub otp_length: ::core::option::Option<i32>,
-    /// @inject_tag: validate:"omitempty,dive"
-    #[serde(default)]
-    pub oauth2_provider_credential_ids: ::std::collections::HashMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -1171,6 +1165,7 @@ pub struct SmsCustomizationParams {
     pub template: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
+/// The Wallet Kit pulls from these settings automatically. They can be overwritten locally by passing them into the TurnkeyProvider
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1179,6 +1174,15 @@ pub struct WalletKitSettingsParams {
     pub enabled_social_providers: ::prost::alloc::vec::Vec<
         ::prost::alloc::string::String,
     >,
+    /// Map of social login providers to their OAuth client IDs.
+    /// Example: { "google": "123.apps.googleusercontent.com", "apple": "com.example.app" }
+    #[serde(default)]
+    pub oauth_client_ids: ::std::collections::HashMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
+    /// Global OAuth redirect URL used for social logins.
+    pub oauth_redirect_url: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -1456,6 +1460,8 @@ pub struct InitFiatOnRampIntent {
     pub country_subdivision_code: ::core::option::Option<::prost::alloc::string::String>,
     #[serde(default)]
     pub sandbox_mode: ::core::option::Option<bool>,
+    #[serde(default)]
+    pub url_for_signature: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -1886,6 +1892,7 @@ pub struct OauthLoginResult {
 pub struct InitFiatOnRampResult {
     pub on_ramp_url: ::prost::alloc::string::String,
     pub on_ramp_transaction_id: ::prost::alloc::string::String,
+    pub on_ramp_url_signature: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]

@@ -586,3 +586,29 @@ pub struct GetOauth2CredentialResponse {
         super::super::super::super::external::data::v1::Oauth2Credential,
     >,
 }
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetBootProofRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub ephemeral_key: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetLatestBootProofRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub app_name: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct BootProofResponse {
+    #[serde(default)]
+    pub boot_proof: ::core::option::Option<
+        super::super::super::super::external::data::v1::BootProof,
+    >,
+}

@@ -13,6 +13,7 @@ syntax = "proto3";
 package immutable.common.v1;
 
 option go_package = "github.com/tkhq/mono/src/go/gen/pkg/immutable/common/v1";
+
 enum PathFormat {
   PATH_FORMAT_UNSPECIFIED = 0;
   PATH_FORMAT_BIP32 = 1;
@@ -263,6 +264,11 @@ enum SmartContractInterfaceType {
   SMART_CONTRACT_INTERFACE_TYPE_UNSPECIFIED = 0;
   SMART_CONTRACT_INTERFACE_TYPE_ETHEREUM = 1;
   SMART_CONTRACT_INTERFACE_TYPE_SOLANA = 2;
+}
+
+message PolicyEvaluation {
+  string policy_id = 1;
+  Outcome outcome = 3;
 }
 
 enum Outcome {

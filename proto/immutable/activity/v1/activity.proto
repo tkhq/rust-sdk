@@ -355,12 +355,6 @@ message UpdateAuthProxyConfigIntent {
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Desired OTP code length (6–9)."}
   ];
-
-  // @inject_tag: validate:"omitempty,dive"
-  map<string, string> oauth2_provider_credential_ids = 18 [
-    (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A map of OAuth 2.0 provider and their respective credential ID to use for the OAuth 2.0 authentication flow."}
-  ];
 }
 
 message UpdateAuthProxyConfigResult {
@@ -2150,12 +2144,32 @@ message SmsCustomizationParams {
   ];
 }
 
+// The Wallet Kit pulls from these settings automatically. They can be overwritten locally by passing them into the TurnkeyProvider
 message WalletKitSettingsParams {
   repeated string enabled_social_providers = 1 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
       description: "List of enabled social login providers (e.g., 'apple', 'google', 'facebook')"
       title: "Enabled Social Providers"
+    }
+  ];
+
+  // Map of social login providers to their OAuth client IDs.
+  // Example: { "google": "123.apps.googleusercontent.com", "apple": "com.example.app" }
+  map<string, string> oauth_client_ids = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Mapping of social login providers to their Oauth client IDs."
+      title: "Oauth Client IDs"
+    }
+  ];
+
+  // Global OAuth redirect URL used for social logins.
+  string oauth_redirect_url = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Oauth redirect URL to be used for social login flows."
+      title: "Oauth Redirect URL"
     }
   ];
 }
@@ -2769,6 +2783,13 @@ message InitFiatOnRampIntent {
       title: ""
     }
   ];
+  optional string url_for_signature = 11 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Optional MoonPay Widget URL to sign when using MoonPay client SDKs with URL Signing enabled."
+      title: ""
+    }
+  ];
 }
 
 message ImportWalletIntent {
@@ -3251,6 +3272,10 @@ message InitFiatOnRampResult {
   string on_ramp_transaction_id = 2 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier used to retrieve transaction statuses for a given fiat on-ramp flow."}
+  ];
+  string on_ramp_url_signature = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional signature of the MoonPay Widget URL. The signature is generated if the Init Fiat On Ramp intent includes the urlForSignature field. The signature can be used to initialize the MoonPay SDKs when URL signing is enabled for your project."}
   ];
 }
 message StampLoginResult {

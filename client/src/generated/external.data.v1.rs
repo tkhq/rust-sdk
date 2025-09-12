@@ -333,6 +333,21 @@ impl TagType {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct BootProof {
+    pub ephemeral_public_key_hex: ::prost::alloc::string::String,
+    pub aws_attestation_doc_b64: ::prost::alloc::string::String,
+    pub qos_manifest_b64: ::prost::alloc::string::String,
+    pub qos_manifest_envelope_b64: ::prost::alloc::string::String,
+    pub deployment_label: ::prost::alloc::string::String,
+    pub enclave_app: ::prost::alloc::string::String,
+    pub owner: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub created_at: ::core::option::Option<Timestamp>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct SmartContractInterface {
     pub organization_id: ::prost::alloc::string::String,
     pub smart_contract_interface_id: ::prost::alloc::string::String,
