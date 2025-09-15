@@ -1,6 +1,6 @@
 [package]
 name = "turnkey_api_key_stamper"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Generate signatures over Turnkey API requests using a P-256 key."
