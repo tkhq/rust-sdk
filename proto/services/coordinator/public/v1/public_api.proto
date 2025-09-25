@@ -1436,6 +1436,18 @@ service PublicApiService {
     };
   }
 
+  rpc GetAppProofs(GetAppProofsRequest) returns (GetAppProofsResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/list_app_proofs"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "List the app proofs for the given activity."
+      summary: "List app proofs for an activity"
+      tags: "App Proof"
+    };
+  }
+
   rpc ListOauth2Credentials(ListOauth2CredentialsRequest) returns (ListOauth2CredentialsResponse) {
     option (google.api.http) = {
       post: "/public/v1/query/list_oauth2_credentials"
@@ -2070,4 +2082,19 @@ message GetLatestBootProofRequest {
 
 message BootProofResponse {
   external.data.v1.BootProof boot_proof = 1 [(google.api.field_behavior) = REQUIRED];
+}
+
+message GetAppProofsRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string activity_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given activity."}
+  ];
+}
+
+message GetAppProofsResponse {
+  repeated external.data.v1.AppProof app_proofs = 1 [(google.api.field_behavior) = REQUIRED];
 }

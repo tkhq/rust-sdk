@@ -114,6 +114,17 @@ fn mutate_enum(enum_item: &syn::ItemEnum) -> TokenStream {
         });
     }
 
+    // Add Debug derive to enums that don't already have it to ensure compatibility with structs that derive Debug
+    let has_debug = attrs
+        .iter()
+        .any(|attr| attr.to_string().contains("derive") && attr.to_string().contains("Debug"));
+
+    if !has_debug {
+        attrs.push(quote! {
+            #[derive(Debug)]
+        });
+    }
+
     quote! {
         #(#attrs)*
         #vis enum #ident #generics {
