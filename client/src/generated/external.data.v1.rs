@@ -348,6 +348,105 @@ pub struct BootProof {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct AppProof {
+    pub scheme: SignatureScheme,
+    pub public_key: ::prost::alloc::string::String,
+    pub proof_payload: ::prost::alloc::string::String,
+    pub signature: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct AppProofPayload {
+    pub r#type: AppProofType,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub proof_payload: ::core::option::Option<app_proof_payload::ProofPayload>,
+}
+/// Nested message and enum types in `AppProofPayload`.
+pub mod app_proof_payload {
+    #[derive(::serde::Serialize, ::serde::Deserialize)]
+    #[derive(Clone, PartialEq)]
+    #[derive(Debug)]
+    pub enum ProofPayload {
+        #[serde(rename = "PROOF_PAYLOAD_ADDRESS_DERIVATION_PROOF")]
+        AddressDerivationProof(super::AddressDerivationProofPayload),
+    }
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct AddressDerivationProofPayload {
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub wallet_id: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub derivation_path: ::core::option::Option<::prost::alloc::string::String>,
+    pub address: ::prost::alloc::string::String,
+}
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum SignatureScheme {
+    #[serde(rename = "SIGNATURE_SCHEME_UNSPECIFIED")]
+    Unspecified = 0,
+    /// Scheme used by our enclave applications
+    #[serde(rename = "SIGNATURE_SCHEME_EPHEMERAL_KEY_P256")]
+    EphemeralKeyP256 = 1,
+}
+impl SignatureScheme {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "SIGNATURE_SCHEME_UNSPECIFIED",
+            Self::EphemeralKeyP256 => "SIGNATURE_SCHEME_EPHEMERAL_KEY_P256",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "SIGNATURE_SCHEME_UNSPECIFIED" => Some(Self::Unspecified),
+            "SIGNATURE_SCHEME_EPHEMERAL_KEY_P256" => Some(Self::EphemeralKeyP256),
+            _ => None,
+        }
+    }
+}
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum AppProofType {
+    #[serde(rename = "APP_PROOF_TYPE_UNSPECIFIED")]
+    Unspecified = 0,
+    #[serde(rename = "APP_PROOF_TYPE_ADDRESS_DERIVATION")]
+    AddressDerivation = 1,
+}
+impl AppProofType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "APP_PROOF_TYPE_UNSPECIFIED",
+            Self::AddressDerivation => "APP_PROOF_TYPE_ADDRESS_DERIVATION",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "APP_PROOF_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+            "APP_PROOF_TYPE_ADDRESS_DERIVATION" => Some(Self::AddressDerivation),
+            _ => None,
+        }
+    }
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct SmartContractInterface {
     pub organization_id: ::prost::alloc::string::String,
     pub smart_contract_interface_id: ::prost::alloc::string::String,

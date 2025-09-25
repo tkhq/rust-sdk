@@ -1,0 +1,92 @@
+// Pulled from https://github.com/anchorageoss/visualsign-parser/blob/main/proto/parser/parser.proto
+// Modifications from original:
+// - import path for health proto (adapted to match local mono directory)
+// - added `option go_package` to generate code in the right spot
+syntax = "proto3";
+
+package parser;
+
+import "services/health_check/v1/health_check.proto";
+import "vendor/google/rpc/status.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/services/visualsign_parser";
+
+service ParserService {
+  rpc Parse(ParseRequest) returns (ParseResponse);
+}
+
+// Chain represents supported blockchain networks
+enum Chain {
+  CHAIN_UNSPECIFIED = 0;
+  CHAIN_BITCOIN = 1;
+  CHAIN_ETHEREUM = 2;
+  CHAIN_SOLANA = 3;
+  CHAIN_SUI = 4;
+
+  // Reserve space for future chains
+  reserved 5 to 998;
+
+  // Custom for extensibility
+  CHAIN_CUSTOM = 999;
+}
+
+// This is a bit odd, but needed for the QOS host.
+// (the QOS host receives messages which can be either parser responses or QOS-level responses)
+// TODO: can we remove the need for these?
+message QOSParserRequest {
+  oneof input {
+    ParseRequest parse_request = 1;
+    services.health_check.v1.AppHealthRequest health_request = 2;
+  }
+}
+
+message QOSParserResponse {
+  oneof output {
+    ParseResponse parse_response = 1;
+    services.health_check.v1.AppHealthResponse health_response = 3;
+    google.rpc.Status status = 4;
+  }
+}
+
+message ParseRequest {
+  string unsigned_payload = 1;
+  Chain chain = 2;
+  oneof chainMetadata {
+    EthereumMetadata ethereum = 3;
+    SolanaMetadata solana = 4;
+  }
+}
+
+message ParseResponse {
+  ParsedTransaction parsed_transaction = 1;
+}
+
+message Metadata {
+  string key = 1;
+  string value = 2;
+}
+
+message ParsedTransactionPayload {
+  string signable_payload = 4;
+}
+
+message ParsedTransaction {
+  ParsedTransactionPayload payload = 1;
+  Signature signature = 2;
+}
+
+enum SignatureScheme {
+  SIGNATURE_SCHEME_UNSPECIFIED = 0;
+  // Scheme used for Turnkey app proofs
+  SIGNATURE_SCHEME_TURNKEY_P256_EPHEMERAL_KEY = 1;
+}
+
+message Signature {
+  SignatureScheme scheme = 1;
+  string public_key = 2;
+  string message = 3;
+  string signature = 4;
+}
+
+message EthereumMetadata {}
+message SolanaMetadata {}

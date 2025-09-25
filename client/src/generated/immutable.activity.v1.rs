@@ -1236,6 +1236,8 @@ pub struct OtpLoginIntent {
     pub expiration_seconds: ::core::option::Option<::prost::alloc::string::String>,
     #[serde(default)]
     pub invalidate_existing: ::core::option::Option<bool>,
+    #[serde(default)]
+    pub client_signature: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -1339,6 +1341,9 @@ pub struct VerifyOtpIntent {
     /// @inject_tag: validate:"omitempty,numeric,max=86400"
     #[serde(default)]
     pub expiration_seconds: ::core::option::Option<::prost::alloc::string::String>,
+    /// @inject_tag: validate:"omitempty,hexadecimal"
+    #[serde(default)]
+    pub public_key: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]

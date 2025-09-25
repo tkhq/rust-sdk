@@ -39,3 +39,60 @@ message BootProof {
   ];
   Timestamp created_at = 8 [(google.api.field_behavior) = REQUIRED];
 }
+
+message AppProof {
+  SignatureScheme scheme = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Scheme of signing key."}
+  ];
+  string public_key = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Ephemeral public key."}
+  ];
+  string proof_payload = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "JSON serialized AppProofPayload."}
+  ];
+  string signature = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Signature over hashed proof_payload."}
+  ];
+}
+
+enum SignatureScheme {
+  SIGNATURE_SCHEME_UNSPECIFIED = 0;
+  // Scheme used by our enclave applications
+  SIGNATURE_SCHEME_EPHEMERAL_KEY_P256 = 1;
+}
+
+message AppProofPayload {
+  AppProofType type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Type of app proof"}
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp of app proof creation. Comes directly from the NSM (Nitro Secure Module)."}
+  ];
+  oneof proof_payload {
+    AddressDerivationProofPayload address_derivation_proof = 3;
+  }
+}
+
+enum AppProofType {
+  APP_PROOF_TYPE_UNSPECIFIED = 0;
+  APP_PROOF_TYPE_ADDRESS_DERIVATION = 1;
+}
+
+message AddressDerivationProofPayload {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  optional string wallet_id = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Wallet."}];
+  optional string derivation_path = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Path corresponding to a wallet Account."}];
+  string address = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Derived cryptocurrency address."}
+  ];
+}
