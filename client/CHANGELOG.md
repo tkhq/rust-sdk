@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.4.0](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.3.0...turnkey_client-v0.4.0) - 2025-09-25
+
+### Other
+
+- sync sdk protos with internal mono repo
+- Remove generated private.ump.v1.rs
+- Update protos and run gen script
+
 ## [0.3.0](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.2.0...turnkey_client-v0.3.0) - 2025-08-28
 
 ### Added
