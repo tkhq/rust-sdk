@@ -612,3 +612,21 @@ pub struct BootProofResponse {
         super::super::super::super::external::data::v1::BootProof,
     >,
 }
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetAppProofsRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub activity_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetAppProofsResponse {
+    #[serde(default)]
+    pub app_proofs: ::prost::alloc::vec::Vec<
+        super::super::super::super::external::data::v1::AppProof,
+    >,
+}

@@ -18,6 +18,8 @@ pub struct Activity {
     >,
     #[serde(default)]
     pub votes: ::prost::alloc::vec::Vec<Vote>,
+    #[serde(default)]
+    pub app_proofs: ::prost::alloc::vec::Vec<super::super::data::v1::AppProof>,
     pub fingerprint: ::prost::alloc::string::String,
     #[serde(default)]
     pub can_approve: bool,

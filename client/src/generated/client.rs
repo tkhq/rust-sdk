@@ -2340,6 +2340,16 @@ impl<S: Stamp> TurnkeyClient<S> {
         )
         .await
     }
+    /// List app proofs for an activity
+    ///
+    /// List the app proofs for the given activity.
+    pub async fn get_app_proofs(
+        &self,
+        request: coordinator::GetAppProofsRequest,
+    ) -> Result<coordinator::GetAppProofsResponse, TurnkeyClientError> {
+        self.process_request(&request, "/public/v1/query/list_app_proofs".to_string())
+            .await
+    }
     /// List OAuth 2.0 Credentials
     ///
     /// List all OAuth 2.0 credentials within an organization.
