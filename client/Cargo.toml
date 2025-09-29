@@ -12,16 +12,16 @@ keywords = ["turnkey", "api", "client", "cryptography"]
 categories = ["api-bindings"]
 
 [dependencies]
-mime = { version = "0.3.17", default-features = false }
-prost = { version = "0.12", default-features = false, features = ["std"] }
-prost-types = { version = "0.12", default-features = false }
-reqwest = { version = "0.12", features = ["json", "rustls-tls", "http2"] }
-serde = { version = "1.0.219", default-features = false, features = ["std", "derive"] }
-serde_json = { version = "1.0.140", default-features = false, features = ["std"] }
-serde_with = { version = "3.14.0", default-features = false, features = ["macros"] }
-thiserror = { version = "2.0.12", default-features = false }
-tokio = { version = "1.44.2", default-features = false }
-turnkey_api_key_stamper = { path = "../api_key_stamper", version = "0.3.0" }
+mime.workspace = true
+prost.workspace = true
+prost-types.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_with.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+turnkey_api_key_stamper.workspace = true
 
 [features]
 reqwest_native_tls = ["reqwest/native-tls-vendored", "reqwest/native-tls-alpn"]
@@ -30,6 +30,6 @@ reqwest_zstd = ["reqwest/zstd"]
 reqwest_hickory_dns = ["reqwest/hickory-dns"]
 
 [dev-dependencies]
-wiremock = { version = "0.6", default-features = false }
-http = { version = "0.2", default-features = false }
-base64 = { version = "0.22", default-features = false, features = ["std"] }
+wiremock.workspace = true
+http.workspace = true
+base64.workspace = true

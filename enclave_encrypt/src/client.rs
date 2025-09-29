@@ -556,7 +556,7 @@ mod test {
 
     // Sample Quorum private key which we use to simulate enclave signatures on bundles for tests below
     fn test_quorum_private_key() -> SigningKey {
-        SigningKey::from_bytes(
+        SigningKey::from_slice(
             &hex::decode("28ebf311b27f34cdf078489584d336423e09c522342f5b067dea36823c2cc5ed")
                 .unwrap(),
         )

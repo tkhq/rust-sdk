@@ -14,3 +14,81 @@ members = [
   "proofs",
 ]
 resolver = "2"
+
+[workspace.dependencies]
+# Encoding and serialization
+base64 = { version = "0.22.0", default-features = false, features = ["std"] }
+bs58 = { version = "0.5.0", features = ["std", "check"], default-features = false }
+hex = { version = "0.4.3", default-features = false, features = ["std"] }
+serde = { version = "1.0.219", default-features = false, features = ["std", "derive"] }
+serde_json = { version = "1.0.140", default-features = false, features = ["std"] }
+serde_bytes = { version = "0.11", default-features = false }
+serde_cbor = { version = "0.11", default-features = false }
+serde_with = { version = "3.14.0", default-features = false, features = ["macros"] }
+
+# Cryptography
+hpke = { version = "0.10", features = ["alloc", "p256", "serde_impls"], default-features = false }
+k256 = { version = "0.13", default-features = false, features = ["ecdsa", "pkcs8"] }
+p256 = { version = "0.13.2", default-features = false, features = ["ecdsa"] }
+p384 = { version = "0.13", features = ["sha384", "ecdsa", "ecdsa-core", "std"], default-features = false }
+rand_core = { version = "0.6.4", default-features = false, features = ["getrandom"] }
+sha2 = { version = "0.10", default-features = false }
+
+# Error handling
+thiserror = { version = "2.0.12", default-features = false }
+
+# Web/HTTP
+mime = { version = "0.3.17", default-features = false }
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "http2"] }
+
+# Async runtime
+tokio = { version = "1.44.2", default-features = false }
+
+# Protocol buffers
+prost = { version = "0.12", default-features = false, features = ["std"] }
+prost-types = { version = "0.12", default-features = false }
+prost-build = { version = "0.12.6", default-features = false }
+
+# AWS Nitro enclaves
+attestation-doc-validation = { version = "0.8.0", default-features = false }
+aws-nitro-enclaves-nsm-api = { version = "0.3", features = ["nix"], default-features = false }
+aws-nitro-enclaves-cose = { version = "0.5", default-features = false }
+
+# CBOR and COSE
+ciborium = { version = "0.2", default-features = false }
+coset = { version = "0.3.7", default-features = false }
+
+# Certificate handling
+webpki = { version = "0.22.4", default-features = false }
+x509-cert = { version = "=0.1.0", features = ["pem"], default-features = false }
+x509-parser = { version = "0.14.0", default-features = false }
+
+# Serialization formats
+borsh = { version = "1.0", features = ["std", "derive"], default-features = false }
+
+# Code generation and parsing
+heck = { version = "0.5.0", default-features = false }
+prettyplease = { version = "0.2", default-features = false }
+proc-macro2 = { version = "1.0.95", default-features = false }
+quote = { version = "1.0", default-features = false }
+regex = { version = "1", default-features = false, features = ["unicode-perl"] }
+syn = { version = "2.0", features = ["full", "extra-traits"], default-features = false }
+tonic-build = { version = "0.13", default-features = false, features = ["prost"] }
+walkdir = { version = "2.5", default-features = false }
+
+# Environment and configuration
+dotenvy = { version = "0.15.0", default-features = false }
+
+# Development dependencies
+tempfile = { version = "3.19.1", default-features = false }
+signature = "2"
+wiremock = { version = "0.6", default-features = false }
+http = { version = "0.2", default-features = false }
+hex-literal = { version = "0.4", default-features = false }
+rand = { version = "0.8", default-features = false }
+
+# Workspace crates
+turnkey_api_key_stamper = { path = "api_key_stamper", version = "0.3.0" }
+turnkey_client = { path = "client", version = "0.3.0" }
+turnkey_enclave_encrypt = { path = "enclave_encrypt", version = "0.3.0" }
+turnkey_proofs = { path = "proofs", version = "0.3.0" }
