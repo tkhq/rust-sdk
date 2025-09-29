@@ -11,8 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Other
 
-- Use workspace defined dependencies
-- update codegen for debug derive and sync
+- https://github.com/tkhq/rust-sdk/pull/59: bump Rust Crypto dependencies
+- Update codegen for debug derive and sync
 - Remove generated private.ump.v1.rs
 - Update protos and run gen script
 
