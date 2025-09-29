@@ -12,9 +12,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Other
 
 - https://github.com/tkhq/rust-sdk/pull/59: bump Rust Crypto dependencies
+
+### Changed
+
 - Update codegen for debug derive and sync
-- Remove generated private.ump.v1.rs
 - Update protos and run gen script
+
+### Remove
+
+- Remove generated private.ump.v1.rs
 
 ## [0.3.0](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.2.0...turnkey_client-v0.3.0) - 2025-08-28
 
