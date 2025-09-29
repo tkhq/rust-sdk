@@ -283,11 +283,11 @@ mod tests {
     const FAKE_SEED: &[u8] = &[42; 32];
 
     fn quorum_pub() -> VerifyingKey {
-        *SigningKey::from_bytes(FAKE_SEED).unwrap().verifying_key()
+        *SigningKey::from_slice(FAKE_SEED).unwrap().verifying_key()
     }
 
     fn quorum_priv() -> SigningKey {
-        SigningKey::from_bytes(FAKE_SEED).unwrap()
+        SigningKey::from_slice(FAKE_SEED).unwrap()
     }
     fn random_signature() -> P256Signature {
         let key = quorum_priv();
