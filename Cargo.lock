@@ -194,7 +194,7 @@ dependencies = [
  "ecdsa 0.15.1",
  "hex",
  "p256 0.12.0",
- "p384",
+ "p384 0.12.0",
  "rand 0.8.5",
  "serde",
  "serde_bytes",
@@ -1986,6 +1986,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "p384"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe42f1670a52a47d448f14b6a5c61dd78fce51856e68edaa38f7ae3a46b8d6b6"
+dependencies = [
+ "ecdsa 0.16.9",
+ "elliptic-curve 0.13.8",
+ "primeorder 0.13.6",
+ "sha2",
+]
+
+[[package]]
 name = "parking_lot"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3447,7 +3459,7 @@ dependencies = [
  "coset",
  "hex",
  "hex-literal",
- "p384",
+ "p384 0.13.1",
  "rand 0.8.5",
  "serde",
  "serde_bytes",

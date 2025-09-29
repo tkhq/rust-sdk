@@ -30,7 +30,7 @@ serde_with = { version = "3.14.0", default-features = false, features = ["macros
 hpke = { version = "0.10", features = ["alloc", "p256", "serde_impls"], default-features = false }
 k256 = { version = "0.13", default-features = false, features = ["ecdsa", "pkcs8"] }
 p256 = { version = "0.13.2", default-features = false, features = ["ecdsa"] }
-p384 = { version = "0.12", features = ["sha384", "ecdsa", "ecdsa-core", "std"], default-features = false }
+p384 = { version = "0.13", features = ["sha384", "ecdsa", "ecdsa-core", "std"], default-features = false }
 rand_core = { version = "0.6.4", default-features = false, features = ["getrandom"] }
 sha2 = { version = "0.10", default-features = false }
 
