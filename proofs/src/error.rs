@@ -72,6 +72,51 @@ pub enum AttestError {
     DifferentPcr3,
 }
 
+/// `AppProof` error.
+#[derive(Debug)]
+pub enum AppProofError {
+    /// Invalid signature scheme
+    InvalidSignatureScheme,
+    /// Invalid public key.
+    InvalidPublicKey(String),
+    /// Invalid signing public key.
+    InvalidSigningPublicKeyBytes(String),
+    /// Failed signature verification.
+    FailedSignatureVerification(String),
+    /// Invalid signature.
+    InvalidSignature(String),
+    /// Invalid proof payload.
+    InvalidProofPayload(String),
+    /// Missing timestamp.
+    MissingTimestamp,
+    /// Invalid timestamp.
+    InvalidTimestamp(String),
+}
+
+/// `BootProofError`
+#[derive(Debug)]
+pub enum BootProofError {
+    /// Invalid timestamp.
+    InvalidTimestamp(String),
+    /// Missing timestamp.
+    MissingTimestamp,
+}
+
+/// Verify error.
+#[derive(Debug)]
+pub enum VerifyError {
+    /// Invalid app proof.
+    InvalidAppProof(String),
+    /// Invalid attestation doc.
+    InvalidAttestation(String),
+    /// Invalid boot proof.
+    InvalidBootProof(String),
+    /// Ephemeral keys did not match.
+    DifferentEphemeralKey(String),
+    /// Manifest digests did not match.
+    DifferentManifest(String),
+}
+
 impl From<webpki::Error> for AttestError {
     fn from(e: webpki::Error) -> Self {
         Self::WebPki(e)
@@ -81,5 +126,29 @@ impl From<webpki::Error> for AttestError {
 impl From<aws_nitro_enclaves_nsm_api::api::Error> for AttestError {
     fn from(e: aws_nitro_enclaves_nsm_api::api::Error) -> Self {
         Self::Nsm(e)
+    }
+}
+
+impl std::fmt::Display for AttestError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl std::fmt::Display for AppProofError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl std::fmt::Display for VerifyError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl std::fmt::Display for BootProofError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
     }
 }
