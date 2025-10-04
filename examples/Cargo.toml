@@ -13,6 +13,7 @@ reqwest.workspace = true
 serde_json.workspace = true
 serde = { workspace = true, features = ["derive"] }
 tokio = { workspace = true, features = ["full"] }
+turnkey_api_key_stamper.workspace = true
 turnkey_enclave_encrypt.workspace = true
 turnkey_client.workspace = true
 turnkey_proofs.workspace = true
