@@ -20,13 +20,18 @@ borsh.workspace = true
 ciborium.workspace = true
 coset.workspace = true
 p384.workspace = true
+p256.workspace = true
 serde.workspace = true
 serde_bytes.workspace = true
 serde_cbor.workspace = true
+serde_json.workspace = true
 sha2.workspace = true
 webpki.workspace = true
 x509-cert.workspace = true
 x509-parser.workspace = true
+hex.workspace = true
+turnkey_client.workspace = true
+turnkey_api_key_stamper.workspace = true
 
 [dev-dependencies]
 hex.workspace = true
