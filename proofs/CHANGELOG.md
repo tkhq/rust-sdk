@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.5.0](https://github.com/tkhq/rust-sdk/compare/turnkey_proofs-v0.4.0...turnkey_proofs-v0.5.0) - 2025-10-17
+
+### Other
+
+- Add app proof / boot proof verification logic to proofs crate
+
 ## [0.4.0](https://github.com/tkhq/rust-sdk/compare/turnkey_proofs-v0.3.0...turnkey_proofs-v0.4.0) - 2025-09-29
 
 ### Other
