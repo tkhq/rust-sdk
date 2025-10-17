@@ -7,11 +7,13 @@ use base64::Engine;
 use k256::ecdsa::{
     Signature as K256Signature, SigningKey as K256SigningKey, VerifyingKey as K256VerifyingKey,
 };
-use p256::ecdsa::signature::Signer as _;
-use p256::ecdsa::{
-    Signature as P256Signature, SigningKey as P256SigningKey, VerifyingKey as P256VerifyingKey,
+use p256::{
+    ecdsa::{
+        signature::Signer as _, Signature as P256Signature, SigningKey as P256SigningKey,
+        VerifyingKey as P256VerifyingKey,
+    },
+    SecretKey,
 };
-use p256::SecretKey;
 use rand_core::OsRng;
 use serde::Serialize;
 use thiserror::Error;
