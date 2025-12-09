@@ -205,7 +205,7 @@ fn main() {
                             /// {summary}
                             ///
                             /// {description}
-                            pub async fn {fn_name}(&self, organization_id: String, timestamp_ms: u128, params: immutable_activity::{activity_intent}) -> Result<immutable_activity::{activity_result}, TurnkeyClientError> {{
+                            pub async fn {fn_name}(&self, organization_id: String, timestamp_ms: u128, params: immutable_activity::{activity_intent}) -> Result<ActivityResult<immutable_activity::{activity_result}>, TurnkeyClientError> {{
                                 let request = external_activity::{short_req_type} {{
                                     r#type: "{activity_type}".to_string(),
                                     timestamp_ms: timestamp_ms.to_string(),
@@ -221,12 +221,19 @@ fn main() {
                                     .ok_or_else(|| TurnkeyClientError::MissingResult)?
                                     .inner
                                     .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
-                                match inner {{
-                                    immutable_activity::result::Inner::{activity_result}(res) => Ok(res),
-                                    other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                                let result = match inner {{
+                                    immutable_activity::result::Inner::{activity_result}(res) => res,
+                                    other => return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
                                         serde_json::to_string(&other)?,
                                     )),
-                                }}
+                                }};
+
+                                Ok(ActivityResult {{
+                                    result,
+                                    activity_id: activity.id,
+                                    status: activity.status,
+                                    app_proofs: activity.app_proofs,
+                                }})
                             }}
                         "#
                         )
