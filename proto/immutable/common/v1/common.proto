@@ -27,6 +27,11 @@ enum ApiKeyCurve {
   API_KEY_CURVE_ED25519 = 4;
 }
 
+enum ClientSignatureScheme {
+  CLIENT_SIGNATURE_SCHEME_UNSPECIFIED = 0;
+  CLIENT_SIGNATURE_SCHEME_API_P256 = 1;
+}
+
 // Cryptographic Curve used to generate a given Private Key.
 enum Curve {
   CURVE_UNSPECIFIED = 0;
@@ -258,6 +263,8 @@ enum TransactionType {
   TRANSACTION_TYPE_SOLANA = 2;
   // Unsigned Tron transaction, protobuf encoded and hex encoded
   TRANSACTION_TYPE_TRON = 3;
+  // Unsigned Bitcoin transaction, hex encoded
+  TRANSACTION_TYPE_BITCOIN = 4;
 }
 
 enum SmartContractInterfaceType {

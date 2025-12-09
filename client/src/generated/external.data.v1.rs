@@ -261,6 +261,34 @@ pub struct Oauth2Credential {
     #[serde(default)]
     pub updated_at: ::core::option::Option<Timestamp>,
 }
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct FiatOnRampCredential {
+    pub fiat_onramp_credential_id: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    pub onramp_provider: super::super::super::immutable::common::v1::FiatOnRampProvider,
+    /// @inject_tag: validate:"omitempty"
+    #[serde(default)]
+    pub project_id: ::core::option::Option<::prost::alloc::string::String>,
+    /// @inject_tag: validate:"required"
+    pub publishable_api_key: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub encrypted_secret_api_key: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"omitempty"
+    #[serde(default)]
+    pub encrypted_private_api_key: ::core::option::Option<
+        ::prost::alloc::string::String,
+    >,
+    /// @inject_tag: validate:"omitempty"
+    #[serde(default)]
+    pub sandbox_mode: bool,
+    #[serde(default)]
+    pub created_at: ::core::option::Option<Timestamp>,
+    #[serde(default)]
+    pub updated_at: ::core::option::Option<Timestamp>,
+}
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum InvitationStatus {
@@ -372,6 +400,8 @@ pub mod app_proof_payload {
     pub enum ProofPayload {
         #[serde(rename = "PROOF_PAYLOAD_ADDRESS_DERIVATION_PROOF")]
         AddressDerivationProof(super::AddressDerivationProofPayload),
+        #[serde(rename = "PROOF_PAYLOAD_POLICY_OUTCOME_PROOF")]
+        PolicyOutcomeProof(super::PolicyOutcomeProofPayload),
     }
 }
 #[derive(Debug)]
@@ -385,6 +415,21 @@ pub struct AddressDerivationProofPayload {
     #[serde(default)]
     pub derivation_path: ::core::option::Option<::prost::alloc::string::String>,
     pub address: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct PolicyOutcomeProofPayload {
+    pub organization_id: ::prost::alloc::string::String,
+    pub outcome: super::super::super::immutable::common::v1::Outcome,
+    pub decision_context_digest: ::prost::alloc::string::String,
+    pub organization_data_digest: ::prost::alloc::string::String,
+    pub parent_organization_data_digest: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub user_request_approvals: ::prost::alloc::vec::Vec<
+        super::super::super::immutable::models::v1::Signature,
+    >,
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -422,6 +467,8 @@ pub enum AppProofType {
     Unspecified = 0,
     #[serde(rename = "APP_PROOF_TYPE_ADDRESS_DERIVATION")]
     AddressDerivation = 1,
+    #[serde(rename = "APP_PROOF_TYPE_POLICY_OUTCOME")]
+    PolicyOutcome = 2,
 }
 impl AppProofType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -432,6 +479,7 @@ impl AppProofType {
         match self {
             Self::Unspecified => "APP_PROOF_TYPE_UNSPECIFIED",
             Self::AddressDerivation => "APP_PROOF_TYPE_ADDRESS_DERIVATION",
+            Self::PolicyOutcome => "APP_PROOF_TYPE_POLICY_OUTCOME",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -439,6 +487,7 @@ impl AppProofType {
         match value {
             "APP_PROOF_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
             "APP_PROOF_TYPE_ADDRESS_DERIVATION" => Some(Self::AddressDerivation),
+            "APP_PROOF_TYPE_POLICY_OUTCOME" => Some(Self::PolicyOutcome),
             _ => None,
         }
     }

@@ -63,6 +63,8 @@ pub struct DeletePaymentMethodRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::billing::DeletePaymentMethodIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -76,6 +78,8 @@ pub struct ActivateBillingTierRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::billing::ActivateBillingTierIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -89,6 +93,8 @@ pub struct SetPaymentMethodRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::billing::SetPaymentMethodIntentV2,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -102,6 +108,8 @@ pub struct EnableAuthProxyRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::EnableAuthProxyIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -115,6 +123,8 @@ pub struct DisableAuthProxyRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::DisableAuthProxyIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -128,6 +138,8 @@ pub struct CreatePolicyRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::CreatePolicyIntentV3,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -141,6 +153,8 @@ pub struct CreatePoliciesRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::CreatePoliciesIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -154,6 +168,8 @@ pub struct UpdatePolicyRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::UpdatePolicyIntentV2,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -167,6 +183,8 @@ pub struct DeletePolicyRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::DeletePolicyIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -180,6 +198,8 @@ pub struct CreateReadOnlySessionRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::CreateReadOnlySessionIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -193,6 +213,8 @@ pub struct CreateReadWriteSessionRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::CreateReadWriteSessionIntentV2,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -206,6 +228,8 @@ pub struct CreateInvitationsRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::CreateInvitationsIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -219,6 +243,8 @@ pub struct DeleteInvitationRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::DeleteInvitationIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -232,6 +258,8 @@ pub struct AcceptInvitationRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::AcceptInvitationIntentV2,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -245,6 +273,8 @@ pub struct CreateApiOnlyUsersRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::CreateApiOnlyUsersIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -258,6 +288,8 @@ pub struct CreatePrivateKeysRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::CreatePrivateKeysIntentV2,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -271,6 +303,8 @@ pub struct SignRawPayloadRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::SignRawPayloadIntentV2,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -284,6 +318,8 @@ pub struct SignRawPayloadsRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::SignRawPayloadsIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -297,6 +333,8 @@ pub struct CreateUsersRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::CreateUsersIntentV3,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -310,6 +348,8 @@ pub struct UpdateUserRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::UpdateUserIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -323,6 +363,8 @@ pub struct UpdateUserNameRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::UpdateUserNameIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -336,6 +378,8 @@ pub struct UpdateUserEmailRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::UpdateUserEmailIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -349,6 +393,8 @@ pub struct UpdateUserPhoneNumberRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::UpdateUserPhoneNumberIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -362,6 +408,8 @@ pub struct DeleteUsersRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::DeleteUsersIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -375,6 +423,8 @@ pub struct CreateAuthenticatorsRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::CreateAuthenticatorsIntentV2,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -388,6 +438,8 @@ pub struct DeleteAuthenticatorsRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::DeleteAuthenticatorsIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -401,6 +453,8 @@ pub struct CreateApiKeysRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::CreateApiKeysIntentV2,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -414,6 +468,8 @@ pub struct DeleteApiKeysRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::DeleteApiKeysIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -427,6 +483,8 @@ pub struct CreateUserTagRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::CreateUserTagIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -440,6 +498,8 @@ pub struct UpdateUserTagRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::UpdateUserTagIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -453,6 +513,8 @@ pub struct DeleteUserTagsRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::DeleteUserTagsIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -466,6 +528,8 @@ pub struct CreatePrivateKeyTagRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::CreatePrivateKeyTagIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -479,6 +543,8 @@ pub struct UpdatePrivateKeyTagRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::UpdatePrivateKeyTagIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -492,6 +558,8 @@ pub struct UpdateAuthProxyConfigRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::UpdateAuthProxyConfigIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -505,6 +573,8 @@ pub struct DeletePrivateKeyTagsRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::DeletePrivateKeyTagsIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -518,6 +588,8 @@ pub struct CreateOrganizationRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::CreateOrganizationIntentV2,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -531,6 +603,8 @@ pub struct DeleteOrganizationRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::DeleteOrganizationIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -544,6 +618,8 @@ pub struct SignTransactionRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::SignTransactionIntentV2,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -557,6 +633,8 @@ pub struct CreateSmartContractInterfaceRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::CreateSmartContractInterfaceIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -570,6 +648,8 @@ pub struct DeleteSmartContractInterfaceRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::DeleteSmartContractInterfaceIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -583,6 +663,8 @@ pub struct ApproveActivityRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::ApproveActivityIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -596,6 +678,8 @@ pub struct RejectActivityRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::RejectActivityIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -609,6 +693,8 @@ pub struct UpdateRootQuorumRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::UpdateRootQuorumIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -622,6 +708,8 @@ pub struct UpdateAllowedOriginsRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::UpdateAllowedOriginsIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -635,6 +723,8 @@ pub struct CreateSubOrganizationRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::CreateSubOrganizationIntentV7,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -646,8 +736,10 @@ pub struct InitUserEmailRecoveryRequest {
     pub organization_id: ::prost::alloc::string::String,
     #[serde(default)]
     pub parameters: ::core::option::Option<
-        super::super::super::immutable::activity::v1::InitUserEmailRecoveryIntent,
+        super::super::super::immutable::activity::v1::InitUserEmailRecoveryIntentV2,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -661,6 +753,8 @@ pub struct RecoverUserRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::RecoverUserIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -674,6 +768,8 @@ pub struct ExportPrivateKeyRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::ExportPrivateKeyIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -687,6 +783,8 @@ pub struct ExportWalletRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::ExportWalletIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -700,6 +798,8 @@ pub struct ExportWalletAccountRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::ExportWalletAccountIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -713,6 +813,8 @@ pub struct SetOrganizationFeatureRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::SetOrganizationFeatureIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -726,6 +828,8 @@ pub struct RemoveOrganizationFeatureRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::RemoveOrganizationFeatureIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -739,6 +843,8 @@ pub struct CreateWalletRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::CreateWalletIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -752,6 +858,8 @@ pub struct CreateWalletAccountsRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::CreateWalletAccountsIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -765,6 +873,8 @@ pub struct OauthRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::OauthIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -778,6 +888,8 @@ pub struct OauthLoginRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::OauthLoginIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -791,6 +903,8 @@ pub struct StampLoginRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::StampLoginIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -804,6 +918,8 @@ pub struct OtpLoginRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::OtpLoginIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -815,8 +931,10 @@ pub struct InitOtpRequest {
     pub organization_id: ::prost::alloc::string::String,
     #[serde(default)]
     pub parameters: ::core::option::Option<
-        super::super::super::immutable::activity::v1::InitOtpIntent,
+        super::super::super::immutable::activity::v1::InitOtpIntentV2,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -830,6 +948,8 @@ pub struct InitFiatOnRampRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::InitFiatOnRampIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -843,6 +963,8 @@ pub struct VerifyOtpRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::VerifyOtpIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -854,8 +976,10 @@ pub struct InitOtpAuthRequest {
     pub organization_id: ::prost::alloc::string::String,
     #[serde(default)]
     pub parameters: ::core::option::Option<
-        super::super::super::immutable::activity::v1::InitOtpAuthIntentV2,
+        super::super::super::immutable::activity::v1::InitOtpAuthIntentV3,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -869,6 +993,8 @@ pub struct OtpAuthRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::OtpAuthIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -880,8 +1006,10 @@ pub struct EmailAuthRequest {
     pub organization_id: ::prost::alloc::string::String,
     #[serde(default)]
     pub parameters: ::core::option::Option<
-        super::super::super::immutable::activity::v1::EmailAuthIntentV2,
+        super::super::super::immutable::activity::v1::EmailAuthIntentV3,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -895,6 +1023,8 @@ pub struct InitImportWalletRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::InitImportWalletIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -908,6 +1038,8 @@ pub struct ImportWalletRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::ImportWalletIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -921,6 +1053,8 @@ pub struct InitImportPrivateKeyRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::InitImportPrivateKeyIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -934,6 +1068,8 @@ pub struct ImportPrivateKeyRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::ImportPrivateKeyIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -947,6 +1083,8 @@ pub struct CreateOauthProvidersRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::CreateOauthProvidersIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -960,6 +1098,8 @@ pub struct DeleteOauthProvidersRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::DeleteOauthProvidersIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -973,6 +1113,8 @@ pub struct DeletePrivateKeysRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::DeletePrivateKeysIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -986,6 +1128,8 @@ pub struct DeleteWalletsRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::DeleteWalletsIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -999,6 +1143,8 @@ pub struct DeleteSubOrganizationRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::DeleteSubOrganizationIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -1012,6 +1158,8 @@ pub struct UpdateWalletRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::UpdateWalletIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -1025,6 +1173,8 @@ pub struct CreateOauth2CredentialRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::CreateOauth2CredentialIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -1038,6 +1188,8 @@ pub struct UpdateOauth2CredentialRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::UpdateOauth2CredentialIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -1051,6 +1203,53 @@ pub struct DeleteOauth2CredentialRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::DeleteOauth2CredentialIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateFiatOnRampCredentialRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::CreateFiatOnRampCredentialIntent,
+    >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct UpdateFiatOnRampCredentialRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::UpdateFiatOnRampCredentialIntent,
+    >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeleteFiatOnRampCredentialRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::DeleteFiatOnRampCredentialIntent,
+    >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 /// Represents a PolicyEvaluation which contains a set of policy evaluations for a given activity.
@@ -1086,4 +1285,66 @@ pub struct Oauth2AuthenticateRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::Oauth2AuthenticateIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeleteWalletAccountsRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::DeleteWalletAccountsIntent,
+    >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeletePoliciesRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::DeletePoliciesIntent,
+    >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct EthSendRawTransactionRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::EthSendRawTransactionIntent,
+    >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct EthSendTransactionRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::EthSendTransactionIntent,
+    >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }

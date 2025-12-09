@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package immutable.sdk_models.v1;
+
+import "immutable/activity/v1/activity.proto";
+import "vendor/google/api/field_behavior.proto";
+import "vendor/protoc-gen-openapiv2/options/annotations.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/immutable/sdk_models/v1";
+
+enum UsageType {
+  USAGE_TYPE_UNSPECIFIED = 0;
+  USAGE_TYPE_SIGNUP = 1;
+  USAGE_TYPE_LOGIN = 2;
+}
+
+message TokenUsage {
+  UsageType type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Type of token usage"}
+  ];
+  string token_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for the verification token"}
+  ];
+  oneof usage {
+    SignupUsage signup = 3;
+    LoginUsage login = 4;
+  }
+}
+
+message SignupUsage {
+  optional string email = 1;
+  optional string phone_number = 2;
+  repeated immutable.activity.v1.ApiKeyParamsV2 api_keys = 3;
+  repeated immutable.activity.v1.AuthenticatorParamsV2 authenticators = 4;
+  repeated immutable.activity.v1.OauthProviderParams oauth_providers = 5;
+}
+
+message LoginUsage {
+  string public_key = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Public key for authentication"}
+  ];
+}
