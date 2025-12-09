@@ -12,6 +12,8 @@ members = [
   "examples",
   # Contains utilities to work with Turnkey proofs (boot proofs, app proofs)
   "proofs",
+  # Crate to simulate stamps with WebAuthn credentials
+  "webauthn_stamper",
 ]
 resolver = "2"
 
@@ -79,6 +81,12 @@ walkdir = { version = "2.5", default-features = false }
 # Environment and configuration
 dotenvy = { version = "0.15.0", default-features = false }
 
+# Webauthn stamper
+passkey-authenticator = "0.4"
+passkey-client = "0.4"
+passkey-types = "0.4"
+url = "2.5.7"
+
 # Development dependencies
 tempfile = { version = "3.19.1", default-features = false }
 signature = "2"
@@ -92,3 +100,4 @@ turnkey_api_key_stamper = { path = "api_key_stamper", version = "0.5.0" }
 turnkey_client = { path = "client", version = "0.5.0" }
 turnkey_enclave_encrypt = { path = "enclave_encrypt", version = "0.5.0" }
 turnkey_proofs = { path = "proofs", version = "0.5.0" }
+turnkey_webauthn_stamper = { path = "webauthn_stamper", version = "0.1.0" }

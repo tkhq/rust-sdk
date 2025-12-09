@@ -7,8 +7,10 @@ description = "Examples using the Turnkey Rust SDK"
 publish = false
 
 [dependencies]
+coset.workspace = true
 dotenvy.workspace = true
 hex.workspace = true
+passkey-types.workspace = true
 reqwest.workspace = true
 serde_json.workspace = true
 serde = { workspace = true, features = ["derive"] }
@@ -17,3 +19,5 @@ turnkey_api_key_stamper.workspace = true
 turnkey_enclave_encrypt.workspace = true
 turnkey_client.workspace = true
 turnkey_proofs.workspace = true
+turnkey_webauthn_stamper.workspace = true
+url.workspace = true
