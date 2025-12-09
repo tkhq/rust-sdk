@@ -72,6 +72,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         self.process_activity(&request, "/public/v1/submit/approve_activity".to_string())
             .await
@@ -90,6 +91,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         self.process_activity(&request, "/public/v1/submit/reject_activity".to_string())
             .await
@@ -128,6 +130,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/delete_users".to_string())
@@ -158,6 +161,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/create_policy".to_string())
@@ -188,6 +192,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/create_policies".to_string())
@@ -218,6 +223,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/update_policy".to_string())
@@ -248,6 +254,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/delete_policy".to_string())
@@ -278,6 +285,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/delete_policies".to_string())
@@ -328,6 +336,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
@@ -361,6 +370,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
@@ -394,6 +404,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/oauth_login".to_string())
@@ -424,6 +435,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/stamp_login".to_string())
@@ -454,6 +466,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/otp_login".to_string())
@@ -484,6 +497,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
@@ -537,6 +551,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/create_api_keys".to_string())
@@ -567,6 +582,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/delete_api_keys".to_string())
@@ -653,6 +669,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
@@ -686,6 +703,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
@@ -739,6 +757,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/create_invitations".to_string())
@@ -769,6 +788,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/delete_invitation".to_string())
@@ -799,6 +819,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/create_users".to_string())
@@ -829,6 +850,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/update_user".to_string())
@@ -859,6 +881,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/update_user_name".to_string())
@@ -889,6 +912,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/update_user_email".to_string())
@@ -919,6 +943,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
@@ -952,6 +977,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/create_user_tag".to_string())
@@ -982,6 +1008,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
@@ -1015,6 +1042,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/update_user_tag".to_string())
@@ -1055,6 +1083,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/delete_user_tags".to_string())
@@ -1085,6 +1114,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
@@ -1131,6 +1161,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
@@ -1164,6 +1195,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/sign_raw_payload".to_string())
@@ -1194,6 +1226,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/sign_raw_payloads".to_string())
@@ -1224,6 +1257,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/sign_transaction".to_string())
@@ -1254,6 +1288,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
@@ -1287,6 +1322,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
@@ -1346,6 +1382,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/update_root_quorum".to_string())
@@ -1376,6 +1413,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/create_wallet".to_string())
@@ -1426,6 +1464,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
@@ -1482,6 +1521,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
@@ -1515,6 +1555,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
@@ -1548,6 +1589,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/recover_user".to_string())
@@ -1578,6 +1620,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
@@ -1611,6 +1654,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
@@ -1644,6 +1688,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/export_private_key".to_string())
@@ -1674,6 +1719,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/export_wallet".to_string())
@@ -1704,6 +1750,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/email_auth".to_string())
@@ -1734,6 +1781,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
@@ -1767,6 +1815,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/init_fiat_on_ramp".to_string())
@@ -1797,6 +1846,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/init_import_wallet".to_string())
@@ -1827,6 +1877,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/import_wallet".to_string())
@@ -1857,6 +1908,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
@@ -1890,6 +1942,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/import_private_key".to_string())
@@ -1920,6 +1973,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/oauth".to_string())
@@ -1950,6 +2004,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/init_otp".to_string())
@@ -1980,6 +2035,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/verify_otp".to_string())
@@ -2010,6 +2066,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/init_otp_auth".to_string())
@@ -2040,6 +2097,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/otp_auth".to_string())
@@ -2070,6 +2128,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
@@ -2103,6 +2162,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
@@ -2149,6 +2209,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
@@ -2182,6 +2243,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/update_wallet".to_string())
@@ -2212,6 +2274,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/delete_wallets".to_string())
@@ -2242,6 +2305,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
@@ -2288,6 +2352,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
@@ -2321,6 +2386,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
@@ -2354,6 +2420,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
@@ -2446,6 +2513,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
@@ -2479,6 +2547,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
@@ -2512,6 +2581,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
@@ -2545,6 +2615,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
@@ -2578,6 +2649,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
@@ -2611,6 +2683,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
@@ -2657,6 +2730,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(

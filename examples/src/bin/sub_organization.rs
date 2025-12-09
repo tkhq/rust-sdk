@@ -67,6 +67,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         disable_sms_auth: None,
         disable_otp_email_auth: None,
         verification_token: None,
+        client_signature: None,
     };
 
     let create_res = client

@@ -192,6 +192,7 @@ fn main() {
                                     timestamp_ms: timestamp_ms.to_string(),
                                     parameters: Some(params),
                                     organization_id,
+                                    generate_app_proofs: self.generate_app_proofs(),
                                 }};
 
                                 self.process_activity(&request, "{route}".to_string()).await
@@ -210,6 +211,7 @@ fn main() {
                                     timestamp_ms: timestamp_ms.to_string(),
                                     parameters: Some(params),
                                     organization_id,
+                                    generate_app_proofs: self.generate_app_proofs(),
                                 }};
 
                                 let activity: external_activity::Activity = self.process_activity(&request, "{route}".to_string()).await?;

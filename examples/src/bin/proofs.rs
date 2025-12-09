@@ -28,6 +28,7 @@ async fn create_wallet(
             mnemonic_length: None,
         }),
         organization_id,
+        generate_app_proofs: client.generate_app_proofs(),
     };
 
     let activity = client
@@ -92,10 +93,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let organization_id =
         env::var("TURNKEY_ORGANIZATION_ID").expect("cannot load TURNKEY_ORGANIZATION_ID");
 
-    // Create our Turnkey client
+    // Create our Turnkey client with app proofs enabled
     let client = turnkey_client::TurnkeyClient::builder()
         .api_key(api_key)
-        .build()?;
+        .build()?
+        .with_app_proofs();
 
     // Step 1: Create a wallet
     println!("Creating wallet...");
@@ -114,8 +116,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     println!("Successfully deleted wallet");
 
-    // Step 3: Get the app proof for this activity. This example creates one wallet account, so there will be one app proof.
-    assert_eq!(activity.app_proofs.len(), 1);
+    // Step 3: Get the app proof for this activity. This example creates one wallet account, so there will be at least one app proof.
+    assert!(!activity.app_proofs.is_empty());
     let app_proof = activity.app_proofs.first().unwrap();
 
     // Step 4: Get boot proof for the app proof
