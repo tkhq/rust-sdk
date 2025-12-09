@@ -95,11 +95,11 @@ impl WebAuthnStamper {
         Ok(Passkey {
             encoded_challenge: BASE64_URL_SAFE_NO_PAD.encode(challenge_bytes),
             attestation: Attestation {
-                credential_id: BASE64_URL_SAFE_NO_PAD.encode(&credential.raw_id.as_slice()),
+                credential_id: BASE64_URL_SAFE_NO_PAD.encode(credential.raw_id.as_slice()),
                 client_data_json: BASE64_URL_SAFE_NO_PAD
-                    .encode(&credential.response.client_data_json.as_slice()),
+                    .encode(credential.response.client_data_json.as_slice()),
                 attestation_object: BASE64_URL_SAFE_NO_PAD
-                    .encode(&credential.response.attestation_object.as_slice()),
+                    .encode(credential.response.attestation_object.as_slice()),
                 transports: credential
                     .response
                     .transports
@@ -129,7 +129,7 @@ impl WebAuthnStamper {
 
     pub async fn stamp(&self, body: &[u8]) -> Result<WebAuthnStamp, WebauthnError> {
         let request_digest = sha256(body);
-        let hex_digest = hex::encode(&request_digest);
+        let hex_digest = hex::encode(request_digest);
         let challenge_bytes = hex_digest.as_bytes().to_vec();
 
         let authenticator = self.get_authenticator();
@@ -153,12 +153,12 @@ impl WebAuthnStamper {
             .await?;
 
         let stamp = WebAuthnStamp {
-            credential_id: BASE64_URL_SAFE_NO_PAD.encode(&auth_cred.raw_id.as_slice()),
+            credential_id: BASE64_URL_SAFE_NO_PAD.encode(auth_cred.raw_id.as_slice()),
             client_data_json: BASE64_URL_SAFE_NO_PAD
-                .encode(&auth_cred.response.client_data_json.as_slice()),
+                .encode(auth_cred.response.client_data_json.as_slice()),
             authenticator_data: BASE64_URL_SAFE_NO_PAD
-                .encode(&auth_cred.response.authenticator_data.as_slice()),
-            signature: BASE64_URL_SAFE_NO_PAD.encode(&auth_cred.response.signature.as_slice()),
+                .encode(auth_cred.response.authenticator_data.as_slice()),
+            signature: BASE64_URL_SAFE_NO_PAD.encode(auth_cred.response.signature.as_slice()),
         };
 
         Ok(stamp)
@@ -167,8 +167,7 @@ impl WebAuthnStamper {
     fn get_authenticator(
         &self,
     ) -> Authenticator<Option<passkey_types::Passkey>, AutoUserValidation> {
-        let authenticator = Authenticator::new(self.aaguid, self.store.clone(), AutoUserValidation);
-        authenticator
+        Authenticator::new(self.aaguid, self.store.clone(), AutoUserValidation)
     }
 }
 

@@ -91,7 +91,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     );
 
     // delete the created sub-organization to clean up
-    let url = format!("https://api.turnkey.com/public/v1/submit/delete_sub_organization");
+    let url = String::from("https://api.turnkey.com/public/v1/submit/delete_sub_organization");
     let request: DeleteSubOrganizationRequest = DeleteSubOrganizationRequest {
         r#type: "ACTIVITY_TYPE_DELETE_SUB_ORGANIZATION".to_string(),
         timestamp_ms: client.current_timestamp().to_string(),
