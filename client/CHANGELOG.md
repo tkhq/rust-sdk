@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.6.0](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.5.0...turnkey_client-v0.6.0) - 2025-12-10
+
+### Added
+
+- [**breaking**] create a wrapper for all activity results
+- add with_app_proofs() method to client to enable App Proof generation
+
+### Other
+
+- sync v.2025.12.2
+
 ## [0.5.0](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.4.0...turnkey_client-v0.5.0) - 2025-10-17
 
 ### Other
