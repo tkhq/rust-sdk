@@ -116,6 +116,17 @@ pub mod intent {
         UpdateOauth2CredentialIntent(super::UpdateOauth2CredentialIntent),
         DeleteOauth2CredentialIntent(super::DeleteOauth2CredentialIntent),
         Oauth2AuthenticateIntent(super::Oauth2AuthenticateIntent),
+        DeleteWalletAccountsIntent(super::DeleteWalletAccountsIntent),
+        DeletePoliciesIntent(super::DeletePoliciesIntent),
+        EthSendRawTransactionIntent(super::EthSendRawTransactionIntent),
+        EthSendTransactionIntent(super::EthSendTransactionIntent),
+        CreateFiatOnRampCredentialIntent(super::CreateFiatOnRampCredentialIntent),
+        UpdateFiatOnRampCredentialIntent(super::UpdateFiatOnRampCredentialIntent),
+        DeleteFiatOnRampCredentialIntent(super::DeleteFiatOnRampCredentialIntent),
+        EmailAuthIntentV3(super::EmailAuthIntentV3),
+        InitUserEmailRecoveryIntentV2(super::InitUserEmailRecoveryIntentV2),
+        InitOtpIntentV2(super::InitOtpIntentV2),
+        InitOtpAuthIntentV3(super::InitOtpAuthIntentV3),
     }
 }
 #[derive(Debug)]
@@ -162,6 +173,13 @@ pub struct UpdateAuthProxyConfigIntent {
     /// @inject_tag: validate:"omitempty,numeric,min=6,max=9"
     #[serde(default)]
     pub otp_length: ::core::option::Option<i32>,
+    #[serde(default)]
+    pub send_from_email_sender_name: ::core::option::Option<
+        ::prost::alloc::string::String,
+    >,
+    /// @inject_tag: validate:"omitempty"
+    #[serde(default)]
+    pub verification_token_required_for_get_account_pii: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -414,6 +432,8 @@ pub struct CreateWalletAccountsIntent {
     /// @inject_tag: validate:"dive,required"
     #[serde(default)]
     pub accounts: ::prost::alloc::vec::Vec<WalletAccountParams>,
+    #[serde(default)]
+    pub persist: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -519,6 +539,7 @@ pub struct CreatePolicyIntentV3 {
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct CreatePoliciesIntent {
+    /// @inject_tag: validate:"dive"
     #[serde(default)]
     pub policies: ::prost::alloc::vec::Vec<CreatePolicyIntentV3>,
 }
@@ -742,6 +763,35 @@ pub struct SignTransactionIntentV2 {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct EthSendTransactionIntent {
+    /// @inject_tag: validate:"required"
+    pub from: ::prost::alloc::string::String,
+    /// If false or unset, constructs a standard EIP-1559 transaction. If true, constructs an EIP-712 meta-transaction for Gas Station.
+    #[serde(default)]
+    pub sponsor: ::core::option::Option<bool>,
+    /// @inject_tag: validate:"required"
+    pub caip2: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub to: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub value: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub data: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub nonce: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub gas_limit: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub max_fee_per_gas: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub max_priority_fee_per_gas: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub gas_station_nonce: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct ApproveActivityIntent {
     /// @inject_tag: validate:"required"
     pub fingerprint: ::prost::alloc::string::String,
@@ -815,7 +865,7 @@ pub struct CreateSubOrganizationIntent {
 pub struct CreateSubOrganizationIntentV2 {
     /// @inject_tag: validate:"omitempty,tk_label,tk_label_length"
     pub sub_organization_name: ::prost::alloc::string::String,
-    /// @inject_tag: validate:"required"
+    /// @inject_tag: validate:"required,dive"
     #[serde(default)]
     pub root_users: ::prost::alloc::vec::Vec<RootUserParams>,
     /// @inject_tag: validate:"required"
@@ -829,7 +879,7 @@ pub struct CreateSubOrganizationIntentV2 {
 pub struct CreateSubOrganizationIntentV3 {
     /// @inject_tag: validate:"omitempty,tk_label,tk_label_length"
     pub sub_organization_name: ::prost::alloc::string::String,
-    /// @inject_tag: validate:"required"
+    /// @inject_tag: validate:"required,dive"
     #[serde(default)]
     pub root_users: ::prost::alloc::vec::Vec<RootUserParams>,
     /// @inject_tag: validate:"required"
@@ -846,7 +896,7 @@ pub struct CreateSubOrganizationIntentV3 {
 pub struct CreateSubOrganizationIntentV4 {
     /// @inject_tag: validate:"omitempty,tk_label,tk_label_length"
     pub sub_organization_name: ::prost::alloc::string::String,
-    /// @inject_tag: validate:"required"
+    /// @inject_tag: validate:"required,dive"
     #[serde(default)]
     pub root_users: ::prost::alloc::vec::Vec<RootUserParams>,
     /// @inject_tag: validate:"required"
@@ -869,7 +919,7 @@ pub struct CreateSubOrganizationIntentV4 {
 pub struct CreateSubOrganizationIntentV5 {
     /// @inject_tag: validate:"omitempty,tk_label,tk_label_length"
     pub sub_organization_name: ::prost::alloc::string::String,
-    /// @inject_tag: validate:"required"
+    /// @inject_tag: validate:"required,dive"
     #[serde(default)]
     pub root_users: ::prost::alloc::vec::Vec<RootUserParamsV2>,
     /// @inject_tag: validate:"required"
@@ -892,7 +942,7 @@ pub struct CreateSubOrganizationIntentV5 {
 pub struct CreateSubOrganizationIntentV6 {
     /// @inject_tag: validate:"omitempty,tk_label,tk_label_length"
     pub sub_organization_name: ::prost::alloc::string::String,
-    /// @inject_tag: validate:"required"
+    /// @inject_tag: validate:"required,dive"
     #[serde(default)]
     pub root_users: ::prost::alloc::vec::Vec<RootUserParamsV3>,
     /// @inject_tag: validate:"required"
@@ -915,7 +965,7 @@ pub struct CreateSubOrganizationIntentV6 {
 pub struct CreateSubOrganizationIntentV7 {
     /// @inject_tag: validate:"omitempty,tk_label,tk_label_length"
     pub sub_organization_name: ::prost::alloc::string::String,
-    /// @inject_tag: validate:"required"
+    /// @inject_tag: validate:"required,dive"
     #[serde(default)]
     pub root_users: ::prost::alloc::vec::Vec<RootUserParamsV4>,
     /// @inject_tag: validate:"required"
@@ -938,6 +988,8 @@ pub struct CreateSubOrganizationIntentV7 {
     pub disable_otp_email_auth: ::core::option::Option<bool>,
     #[serde(default)]
     pub verification_token: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub client_signature: ::core::option::Option<ClientSignature>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -1132,6 +1184,7 @@ pub struct RootUserParamsV4 {
 }
 #[derive(Debug)]
 /// Each of these customization parameters are optional; resort to defaults if any are not provided.
+/// Note that app_name is a top-level required parameter in newer email-related activities, and thus any app name provided here will be ignored.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -1197,6 +1250,44 @@ pub struct InitUserEmailRecoveryIntent {
     pub expiration_seconds: ::core::option::Option<::prost::alloc::string::String>,
     #[serde(default)]
     pub email_customization: ::core::option::Option<EmailCustomizationParams>,
+    /// @inject_tag: validate:"omitempty,email,tk_email"
+    #[serde(default)]
+    pub send_from_email_address: ::core::option::Option<::prost::alloc::string::String>,
+    /// @inject_tag: validate:"omitempty,tk_label_length,tk_label"
+    #[serde(default)]
+    pub send_from_email_sender_name: ::core::option::Option<
+        ::prost::alloc::string::String,
+    >,
+    /// @inject_tag: validate:"omitempty,email,tk_email"
+    #[serde(default)]
+    pub reply_to_email_address: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct InitUserEmailRecoveryIntentV2 {
+    /// @inject_tag: validate:"email,tk_email"
+    pub email: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"hexadecimal"
+    pub target_public_key: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"tk_label_length,tk_label"
+    pub app_name: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub expiration_seconds: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub email_customization: ::core::option::Option<EmailCustomizationParams>,
+    /// @inject_tag: validate:"omitempty,email,tk_email"
+    #[serde(default)]
+    pub send_from_email_address: ::core::option::Option<::prost::alloc::string::String>,
+    /// @inject_tag: validate:"omitempty,tk_label_length,tk_label"
+    #[serde(default)]
+    pub send_from_email_sender_name: ::core::option::Option<
+        ::prost::alloc::string::String,
+    >,
+    /// @inject_tag: validate:"omitempty,email,tk_email"
+    #[serde(default)]
+    pub reply_to_email_address: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -1237,7 +1328,7 @@ pub struct OtpLoginIntent {
     #[serde(default)]
     pub invalidate_existing: ::core::option::Option<bool>,
     #[serde(default)]
-    pub client_signature: ::core::option::Option<::prost::alloc::string::String>,
+    pub client_signature: ::core::option::Option<ClientSignature>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -1303,10 +1394,79 @@ pub struct InitOtpIntent {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct InitOtpIntentV2 {
+    /// @inject_tag: validate:"required,oneof=OTP_TYPE_SMS OTP_TYPE_EMAIL"
+    pub otp_type: ::prost::alloc::string::String,
+    pub contact: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"tk_label_length,tk_label"
+    pub app_name: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"omitempty,min=6,max=9"
+    #[serde(default)]
+    pub otp_length: ::core::option::Option<i32>,
+    #[serde(default)]
+    pub email_customization: ::core::option::Option<EmailCustomizationParams>,
+    #[serde(default)]
+    pub sms_customization: ::core::option::Option<SmsCustomizationParams>,
+    #[serde(default)]
+    pub user_identifier: ::core::option::Option<::prost::alloc::string::String>,
+    /// @inject_tag: validate:"omitempty,email,tk_email"
+    #[serde(default)]
+    pub send_from_email_address: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub alphanumeric: ::core::option::Option<bool>,
+    /// @inject_tag: validate:"omitempty,tk_label_length,tk_label"
+    #[serde(default)]
+    pub send_from_email_sender_name: ::core::option::Option<
+        ::prost::alloc::string::String,
+    >,
+    /// @inject_tag: validate:"omitempty,numeric,max=600"
+    #[serde(default)]
+    pub expiration_seconds: ::core::option::Option<::prost::alloc::string::String>,
+    /// @inject_tag: validate:"omitempty,email,tk_email"
+    #[serde(default)]
+    pub reply_to_email_address: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct InitOtpAuthIntentV2 {
     /// @inject_tag: validate:"required,oneof=OTP_TYPE_SMS OTP_TYPE_EMAIL"
     pub otp_type: ::prost::alloc::string::String,
     pub contact: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"omitempty,min=6,max=9"
+    #[serde(default)]
+    pub otp_length: ::core::option::Option<i32>,
+    #[serde(default)]
+    pub email_customization: ::core::option::Option<EmailCustomizationParams>,
+    #[serde(default)]
+    pub sms_customization: ::core::option::Option<SmsCustomizationParams>,
+    #[serde(default)]
+    pub user_identifier: ::core::option::Option<::prost::alloc::string::String>,
+    /// @inject_tag: validate:"omitempty,email,tk_email"
+    #[serde(default)]
+    pub send_from_email_address: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub alphanumeric: ::core::option::Option<bool>,
+    /// @inject_tag: validate:"omitempty,tk_label_length,tk_label"
+    #[serde(default)]
+    pub send_from_email_sender_name: ::core::option::Option<
+        ::prost::alloc::string::String,
+    >,
+    /// @inject_tag: validate:"omitempty,email,tk_email"
+    #[serde(default)]
+    pub reply_to_email_address: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct InitOtpAuthIntentV3 {
+    /// @inject_tag: validate:"required,oneof=OTP_TYPE_SMS OTP_TYPE_EMAIL"
+    pub otp_type: ::prost::alloc::string::String,
+    pub contact: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"tk_label_length,tk_label"
+    pub app_name: ::prost::alloc::string::String,
     /// @inject_tag: validate:"omitempty,min=6,max=9"
     #[serde(default)]
     pub otp_length: ::core::option::Option<i32>,
@@ -1419,6 +1579,38 @@ pub struct EmailAuthIntentV2 {
     pub email: ::prost::alloc::string::String,
     /// @inject_tag: validate:"hexadecimal"
     pub target_public_key: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"omitempty,tk_label_length,tk_label"
+    #[serde(default)]
+    pub api_key_name: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub expiration_seconds: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub email_customization: ::core::option::Option<EmailCustomizationParams>,
+    #[serde(default)]
+    pub invalidate_existing: ::core::option::Option<bool>,
+    /// @inject_tag: validate:"omitempty,email,tk_email"
+    #[serde(default)]
+    pub send_from_email_address: ::core::option::Option<::prost::alloc::string::String>,
+    /// @inject_tag: validate:"omitempty,tk_label_length,tk_label"
+    #[serde(default)]
+    pub send_from_email_sender_name: ::core::option::Option<
+        ::prost::alloc::string::String,
+    >,
+    /// @inject_tag: validate:"omitempty,email,tk_email"
+    #[serde(default)]
+    pub reply_to_email_address: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct EmailAuthIntentV3 {
+    /// @inject_tag: validate:"email,tk_email"
+    pub email: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"hexadecimal"
+    pub target_public_key: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"tk_label_length,tk_label"
+    pub app_name: ::prost::alloc::string::String,
     /// @inject_tag: validate:"omitempty,tk_label_length,tk_label"
     #[serde(default)]
     pub api_key_name: ::core::option::Option<::prost::alloc::string::String>,
@@ -1607,6 +1799,89 @@ pub struct Oauth2AuthenticateIntent {
     >,
 }
 #[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeleteWalletAccountsIntent {
+    /// @inject_tag: validate:"required,dive,uuid"
+    #[serde(default)]
+    pub wallet_account_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub delete_without_export: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeletePoliciesIntent {
+    /// @inject_tag: validate:"required,dive,uuid"
+    #[serde(default)]
+    pub policy_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct EthSendRawTransactionIntent {
+    /// @inject_tag: validate:"required"
+    pub signed_transaction: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub caip2: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateFiatOnRampCredentialIntent {
+    /// @inject_tag: validate:"required"
+    pub onramp_provider: super::super::common::v1::FiatOnRampProvider,
+    /// @inject_tag: validate:"omitempty"
+    #[serde(default)]
+    pub project_id: ::core::option::Option<::prost::alloc::string::String>,
+    /// @inject_tag: validate:"required"
+    pub publishable_api_key: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub encrypted_secret_api_key: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"omitempty"
+    #[serde(default)]
+    pub encrypted_private_api_key: ::core::option::Option<
+        ::prost::alloc::string::String,
+    >,
+    /// @inject_tag: validate:"omitempty"
+    #[serde(default)]
+    pub sandbox_mode: bool,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct UpdateFiatOnRampCredentialIntent {
+    /// @inject_tag: validate:"required"
+    pub fiat_onramp_credential_id: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub onramp_provider: super::super::common::v1::FiatOnRampProvider,
+    /// @inject_tag: validate:"omitempty"
+    #[serde(default)]
+    pub project_id: ::core::option::Option<::prost::alloc::string::String>,
+    /// @inject_tag: validate:"required"
+    pub publishable_api_key: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub encrypted_secret_api_key: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"omitempty"
+    #[serde(default)]
+    pub encrypted_private_api_key: ::core::option::Option<
+        ::prost::alloc::string::String,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeleteFiatOnRampCredentialIntent {
+    /// @inject_tag: validate:"required"
+    pub fiat_onramp_credential_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
 /// Result of the intended action.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1709,6 +1984,13 @@ pub mod result {
         UpdateOauth2CredentialResult(super::UpdateOauth2CredentialResult),
         DeleteOauth2CredentialResult(super::DeleteOauth2CredentialResult),
         Oauth2AuthenticateResult(super::Oauth2AuthenticateResult),
+        DeleteWalletAccountsResult(super::DeleteWalletAccountsResult),
+        DeletePoliciesResult(super::DeletePoliciesResult),
+        EthSendRawTransactionResult(super::EthSendRawTransactionResult),
+        CreateFiatOnRampCredentialResult(super::CreateFiatOnRampCredentialResult),
+        UpdateFiatOnRampCredentialResult(super::UpdateFiatOnRampCredentialResult),
+        DeleteFiatOnRampCredentialResult(super::DeleteFiatOnRampCredentialResult),
+        EthSendTransactionResult(super::EthSendTransactionResult),
     }
 }
 #[derive(Debug)]
@@ -2395,6 +2677,65 @@ pub struct DeleteOauth2CredentialResult {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct Oauth2AuthenticateResult {
+    /// @inject_tag: validate:"required"
+    pub oidc_token: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeleteWalletAccountsResult {
+    #[serde(default)]
+    pub wallet_account_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeletePoliciesResult {
+    #[serde(default)]
+    pub policy_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct EthSendRawTransactionResult {
+    pub transaction_hash: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateFiatOnRampCredentialResult {
+    pub fiat_on_ramp_credential_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct UpdateFiatOnRampCredentialResult {
+    pub fiat_on_ramp_credential_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeleteFiatOnRampCredentialResult {
+    pub fiat_on_ramp_credential_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct EthSendTransactionResult {
+    pub send_transaction_status_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct OauthProviderParams {
     pub provider_name: ::prost::alloc::string::String,
     pub oidc_token: ::prost::alloc::string::String,
@@ -2406,7 +2747,7 @@ pub struct OauthProviderParams {
 pub struct ApiKeyParamsV2 {
     /// @inject_tag: validate:"required,tk_label_length,tk_label"
     pub api_key_name: ::prost::alloc::string::String,
-    /// @inject_tag: validate:"hexadecimal,tk_varlen=64;66"
+    /// @inject_tag: validate:"hexadecimal,tk_api_key"
     pub public_key: ::prost::alloc::string::String,
     pub curve_type: super::super::common::v1::ApiKeyCurve,
     #[serde(default)]
@@ -2519,6 +2860,7 @@ pub struct Attestation {
     pub client_data_json: ::prost::alloc::string::String,
     /// @inject_tag: validate:"required"
     pub attestation_object: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"dive"
     #[serde(default)]
     pub transports: Vec<super::super::webauthn::v1::AuthenticatorTransport>,
 }
@@ -2626,9 +2968,31 @@ pub struct DeleteWalletsParams {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
-pub struct Oauth2AuthenticateResult {
-    /// @inject_tag: validate:"required"
-    pub oidc_token: ::prost::alloc::string::String,
+pub struct DeleteWalletAccountsParams {
+    /// @inject_tag: validate:"required,dive,uuid"
+    #[serde(default)]
+    pub wallet_account_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub delete_without_export: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeletePoliciesParams {
+    /// @inject_tag: validate:"required,dive,uuid"
+    #[serde(default)]
+    pub policy_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct ClientSignature {
+    pub public_key: ::prost::alloc::string::String,
+    pub scheme: super::super::common::v1::ClientSignatureScheme,
+    pub message: ::prost::alloc::string::String,
+    pub signature: ::prost::alloc::string::String,
 }
 /// Type of Activity, such as Add User, or Sign Transaction.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -2838,6 +3202,28 @@ pub enum ActivityType {
     DeleteOauth2Credential = 100,
     #[serde(rename = "ACTIVITY_TYPE_OAUTH2_AUTHENTICATE")]
     Oauth2Authenticate = 101,
+    #[serde(rename = "ACTIVITY_TYPE_DELETE_WALLET_ACCOUNTS")]
+    DeleteWalletAccounts = 102,
+    #[serde(rename = "ACTIVITY_TYPE_DELETE_POLICIES")]
+    DeletePolicies = 103,
+    #[serde(rename = "ACTIVITY_TYPE_ETH_SEND_RAW_TRANSACTION")]
+    EthSendRawTransaction = 104,
+    #[serde(rename = "ACTIVITY_TYPE_ETH_SEND_TRANSACTION")]
+    EthSendTransaction = 105,
+    #[serde(rename = "ACTIVITY_TYPE_CREATE_FIAT_ON_RAMP_CREDENTIAL")]
+    CreateFiatOnRampCredential = 106,
+    #[serde(rename = "ACTIVITY_TYPE_UPDATE_FIAT_ON_RAMP_CREDENTIAL")]
+    UpdateFiatOnRampCredential = 107,
+    #[serde(rename = "ACTIVITY_TYPE_DELETE_FIAT_ON_RAMP_CREDENTIAL")]
+    DeleteFiatOnRampCredential = 108,
+    #[serde(rename = "ACTIVITY_TYPE_EMAIL_AUTH_V3")]
+    EmailAuthV3 = 109,
+    #[serde(rename = "ACTIVITY_TYPE_INIT_USER_EMAIL_RECOVERY_V2")]
+    InitUserEmailRecoveryV2 = 110,
+    #[serde(rename = "ACTIVITY_TYPE_INIT_OTP_AUTH_V3")]
+    InitOtpAuthV3 = 111,
+    #[serde(rename = "ACTIVITY_TYPE_INIT_OTP_V2")]
+    InitOtpV2 = 112,
 }
 impl ActivityType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -2956,6 +3342,23 @@ impl ActivityType {
             Self::UpdateOauth2Credential => "ACTIVITY_TYPE_UPDATE_OAUTH2_CREDENTIAL",
             Self::DeleteOauth2Credential => "ACTIVITY_TYPE_DELETE_OAUTH2_CREDENTIAL",
             Self::Oauth2Authenticate => "ACTIVITY_TYPE_OAUTH2_AUTHENTICATE",
+            Self::DeleteWalletAccounts => "ACTIVITY_TYPE_DELETE_WALLET_ACCOUNTS",
+            Self::DeletePolicies => "ACTIVITY_TYPE_DELETE_POLICIES",
+            Self::EthSendRawTransaction => "ACTIVITY_TYPE_ETH_SEND_RAW_TRANSACTION",
+            Self::EthSendTransaction => "ACTIVITY_TYPE_ETH_SEND_TRANSACTION",
+            Self::CreateFiatOnRampCredential => {
+                "ACTIVITY_TYPE_CREATE_FIAT_ON_RAMP_CREDENTIAL"
+            }
+            Self::UpdateFiatOnRampCredential => {
+                "ACTIVITY_TYPE_UPDATE_FIAT_ON_RAMP_CREDENTIAL"
+            }
+            Self::DeleteFiatOnRampCredential => {
+                "ACTIVITY_TYPE_DELETE_FIAT_ON_RAMP_CREDENTIAL"
+            }
+            Self::EmailAuthV3 => "ACTIVITY_TYPE_EMAIL_AUTH_V3",
+            Self::InitUserEmailRecoveryV2 => "ACTIVITY_TYPE_INIT_USER_EMAIL_RECOVERY_V2",
+            Self::InitOtpAuthV3 => "ACTIVITY_TYPE_INIT_OTP_AUTH_V3",
+            Self::InitOtpV2 => "ACTIVITY_TYPE_INIT_OTP_V2",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -3095,6 +3498,25 @@ impl ActivityType {
                 Some(Self::DeleteOauth2Credential)
             }
             "ACTIVITY_TYPE_OAUTH2_AUTHENTICATE" => Some(Self::Oauth2Authenticate),
+            "ACTIVITY_TYPE_DELETE_WALLET_ACCOUNTS" => Some(Self::DeleteWalletAccounts),
+            "ACTIVITY_TYPE_DELETE_POLICIES" => Some(Self::DeletePolicies),
+            "ACTIVITY_TYPE_ETH_SEND_RAW_TRANSACTION" => Some(Self::EthSendRawTransaction),
+            "ACTIVITY_TYPE_ETH_SEND_TRANSACTION" => Some(Self::EthSendTransaction),
+            "ACTIVITY_TYPE_CREATE_FIAT_ON_RAMP_CREDENTIAL" => {
+                Some(Self::CreateFiatOnRampCredential)
+            }
+            "ACTIVITY_TYPE_UPDATE_FIAT_ON_RAMP_CREDENTIAL" => {
+                Some(Self::UpdateFiatOnRampCredential)
+            }
+            "ACTIVITY_TYPE_DELETE_FIAT_ON_RAMP_CREDENTIAL" => {
+                Some(Self::DeleteFiatOnRampCredential)
+            }
+            "ACTIVITY_TYPE_EMAIL_AUTH_V3" => Some(Self::EmailAuthV3),
+            "ACTIVITY_TYPE_INIT_USER_EMAIL_RECOVERY_V2" => {
+                Some(Self::InitUserEmailRecoveryV2)
+            }
+            "ACTIVITY_TYPE_INIT_OTP_AUTH_V3" => Some(Self::InitOtpAuthV3),
+            "ACTIVITY_TYPE_INIT_OTP_V2" => Some(Self::InitOtpV2),
             _ => None,
         }
     }
@@ -3157,6 +3579,8 @@ pub enum UsageVariant {
     OnRampCoinbase = 1,
     #[serde(rename = "USAGE_VARIANT_ON_RAMP_MOONPAY")]
     OnRampMoonpay = 2,
+    #[serde(rename = "USAGE_VARIANT_PAYMASTER")]
+    Paymaster = 3,
 }
 impl UsageVariant {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -3168,6 +3592,7 @@ impl UsageVariant {
             Self::Unspecified => "USAGE_VARIANT_UNSPECIFIED",
             Self::OnRampCoinbase => "USAGE_VARIANT_ON_RAMP_COINBASE",
             Self::OnRampMoonpay => "USAGE_VARIANT_ON_RAMP_MOONPAY",
+            Self::Paymaster => "USAGE_VARIANT_PAYMASTER",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -3176,6 +3601,7 @@ impl UsageVariant {
             "USAGE_VARIANT_UNSPECIFIED" => Some(Self::Unspecified),
             "USAGE_VARIANT_ON_RAMP_COINBASE" => Some(Self::OnRampCoinbase),
             "USAGE_VARIANT_ON_RAMP_MOONPAY" => Some(Self::OnRampMoonpay),
+            "USAGE_VARIANT_PAYMASTER" => Some(Self::Paymaster),
             _ => None,
         }
     }

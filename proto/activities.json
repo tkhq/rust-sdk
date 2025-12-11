@@ -186,8 +186,8 @@
       "resultType": "CreateSubOrganizationResultV7"
     },
     "/public/v1/submit/init_user_email_recovery": {
-      "type": "ACTIVITY_TYPE_INIT_USER_EMAIL_RECOVERY",
-      "intentType": "InitUserEmailRecoveryIntent",
+      "type": "ACTIVITY_TYPE_INIT_USER_EMAIL_RECOVERY_V2",
+      "intentType": "InitUserEmailRecoveryIntentV2",
       "resultType": "InitUserEmailRecoveryResult"
     },
     "/public/v1/submit/recover_user": {
@@ -216,8 +216,8 @@
       "resultType": "ExportWalletResult"
     },
     "/public/v1/submit/email_auth": {
-      "type": "ACTIVITY_TYPE_EMAIL_AUTH_V2",
-      "intentType": "EmailAuthIntentV2",
+      "type": "ACTIVITY_TYPE_EMAIL_AUTH_V3",
+      "intentType": "EmailAuthIntentV3",
       "resultType": "EmailAuthResult"
     },
     "/public/v1/submit/export_wallet_account": {
@@ -256,13 +256,13 @@
       "resultType": "OauthResult"
     },
     "/public/v1/submit/init_otp": {
-      "type": "ACTIVITY_TYPE_INIT_OTP",
-      "intentType": "InitOtpIntent",
+      "type": "ACTIVITY_TYPE_INIT_OTP_V2",
+      "intentType": "InitOtpIntentV2",
       "resultType": "InitOtpResult"
     },
     "/public/v1/submit/init_otp_auth": {
-      "type": "ACTIVITY_TYPE_INIT_OTP_AUTH_V2",
-      "intentType": "InitOtpAuthIntentV2",
+      "type": "ACTIVITY_TYPE_INIT_OTP_AUTH_V3",
+      "intentType": "InitOtpAuthIntentV3",
       "resultType": "InitOtpAuthResultV2"
     },
     "/public/v1/submit/otp_auth": {
@@ -339,6 +339,41 @@
       "type": "ACTIVITY_TYPE_OAUTH2_AUTHENTICATE",
       "intentType": "Oauth2AuthenticateIntent",
       "resultType": "Oauth2AuthenticateResult"
+    },
+    "/public/v1/submit/delete_wallet_accounts": {
+      "type": "ACTIVITY_TYPE_DELETE_WALLET_ACCOUNTS",
+      "intentType": "DeleteWalletAccountsIntent",
+      "resultType": "DeleteWalletAccountsResult"
+    },
+    "/public/v1/submit/delete_policies": {
+      "type": "ACTIVITY_TYPE_DELETE_POLICIES",
+      "intentType": "DeletePoliciesIntent",
+      "resultType": "DeletePoliciesResult"
+    },
+    "/public/v1/submit/eth_send_raw_transaction": {
+      "type": "ACTIVITY_TYPE_ETH_SEND_RAW_TRANSACTION",
+      "intentType": "EthSendRawTransactionIntent",
+      "resultType": "EthSendRawTransactionResult"
+    },
+    "/public/v1/submit/create_fiat_on_ramp_credential": {
+      "type": "ACTIVITY_TYPE_CREATE_FIAT_ON_RAMP_CREDENTIAL",
+      "intentType": "CreateFiatOnRampCredentialIntent",
+      "resultType": "CreateFiatOnRampCredentialResult"
+    },
+    "/public/v1/submit/delete_fiat_on_ramp_credential": {
+      "type": "ACTIVITY_TYPE_DELETE_FIAT_ON_RAMP_CREDENTIAL",
+      "intentType": "DeleteFiatOnRampCredentialIntent",
+      "resultType": "DeleteFiatOnRampCredentialResult"
+    },
+    "/public/v1/submit/update_fiat_on_ramp_credential": {
+      "type": "ACTIVITY_TYPE_UPDATE_FIAT_ON_RAMP_CREDENTIAL",
+      "intentType": "UpdateFiatOnRampCredentialIntent",
+      "resultType": "UpdateFiatOnRampCredentialResult"
+    },
+    "/public/v1/submit/eth_send_transaction": {
+      "type": "ACTIVITY_TYPE_ETH_SEND_TRANSACTION",
+      "intentType": "EthSendTransactionIntent",
+      "resultType": "EthSendTransactionResult"
     }
   }
 }

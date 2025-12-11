@@ -6,12 +6,60 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use reqwest::header::CONTENT_TYPE;
 use thiserror::Error;
 
+use generated::external::data::v1::AppProof;
 use generated::google::rpc::Status;
 use generated::Activity;
 use generated::ActivityResponse;
 use generated::ActivityStatus;
 
 use turnkey_api_key_stamper::{Stamp, StampHeader, StamperError};
+
+/// Result of an activity request, containing both the typed result and activity metadata.
+///
+/// All activity methods return this wrapper, which provides access to:
+/// - The typed result specific to each activity (e.g., `CreateWalletResult`)
+/// - The activity ID
+/// - The activity status
+/// - App proofs (if `with_app_proofs()` was called on the client)
+///
+/// # Example
+///
+/// ```rust,ignore
+/// let client = TurnkeyClient::builder()
+///     .api_key(api_key)
+///     .build()?
+///     .with_app_proofs();
+///
+/// let activity_result = client
+///     .create_wallet(org_id, timestamp, params)
+///     .await?;
+///
+/// // Access the typed result
+/// println!("Wallet ID: {}", activity_result.result.wallet_id);
+///
+/// // Access activity metadata
+/// println!("Activity ID: {}", activity_result.activity_id);
+///
+/// // Access app proofs for verification
+/// for app_proof in &activity_result.app_proofs {
+///     verify(&app_proof, &boot_proof)?;
+/// }
+/// ```
+#[derive(Debug, Clone)]
+pub struct ActivityResult<T> {
+    /// The typed result specific to this activity (e.g., `CreateWalletResult`, `SignTransactionResult`)
+    pub result: T,
+
+    /// The unique identifier for this activity
+    pub activity_id: String,
+
+    /// The status of the activity
+    pub status: ActivityStatus,
+
+    /// Proofs that can be used to verify the activity was performed in a secure Turnkey enclave.
+    pub app_proofs: Vec<AppProof>,
+}
+
 // Re-export this for convenience
 pub use turnkey_api_key_stamper::{TurnkeyP256ApiKey, TurnkeySecp256k1ApiKey};
 
@@ -171,6 +219,7 @@ impl<S: Stamp> TurnkeyClientBuilder<S> {
                 .build()
                 .map_err(TurnkeyClientError::ReqwestBuilder)?,
             retry_config: self.retry_config.unwrap_or_default(),
+            generate_app_proofs: None,
         })
     }
 }
@@ -187,6 +236,7 @@ pub struct TurnkeyClient<S: Stamp> {
     base_url: String,
     api_key: S,
     retry_config: RetryConfig,
+    generate_app_proofs: Option<bool>,
 }
 
 impl<S: Stamp> std::fmt::Debug for TurnkeyClient<S> {
@@ -203,6 +253,28 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// The type parameter `S` must implement the [`Stamp`](trait.Stamp.html) trait.
     pub fn builder() -> TurnkeyClientBuilder<S> {
         TurnkeyClientBuilder::new()
+    }
+
+    /// Enable app proof generation for all activity requests.
+    ///
+    /// When enabled, the server will return app proofs with each response
+    /// that can be independently verified.
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let client = TurnkeyClient::builder()
+    ///     .api_key(api_key)
+    ///     .build()?
+    ///     .with_app_proofs();
+    /// ```
+    pub fn with_app_proofs(mut self) -> Self {
+        self.generate_app_proofs = Some(true);
+        self
+    }
+
+    /// Returns the current `generate_app_proofs` setting.
+    pub fn generate_app_proofs(&self) -> Option<bool> {
+        self.generate_app_proofs
     }
 
     /// POSTs an activity and polls until the status is "COMPLETE"

@@ -12,6 +12,10 @@ pub struct NoopCodegenAnchorResponse {
     pub stamp: ::core::option::Option<
         super::super::super::super::external::webauthn::v1::WebAuthnStamp,
     >,
+    #[serde(default)]
+    pub token_usage: ::core::option::Option<
+        super::super::super::super::immutable::sdk_models::v1::TokenUsage,
+    >,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -369,6 +373,62 @@ pub struct GetApiKeysResponse {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct GetSendTransactionStatusRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub send_transaction_status_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct EthSendTransactionStatus {
+    #[serde(default)]
+    pub tx_hash: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetSendTransactionStatusResponse {
+    pub tx_status: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub tx_error: ::core::option::Option<::prost::alloc::string::String>,
+    /// VM-specific transaction details
+    #[serde(default)]
+    pub details: ::core::option::Option<get_send_transaction_status_response::Details>,
+}
+/// Nested message and enum types in `GetSendTransactionStatusResponse`.
+pub mod get_send_transaction_status_response {
+    /// VM-specific transaction details
+    #[derive(::serde::Serialize, ::serde::Deserialize)]
+    #[derive(Clone, PartialEq)]
+    #[derive(Debug)]
+    pub enum Details {
+        #[serde(rename = "DETAILS_ETH")]
+        Eth(super::EthSendTransactionStatus),
+    }
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetOnRampTransactionStatusRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub transaction_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub refresh: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetOnRampTransactionStatusResponse {
+    pub transaction_status: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct GetPrivateKeysRequest {
     pub organization_id: ::prost::alloc::string::String,
 }
@@ -629,4 +689,38 @@ pub struct GetAppProofsResponse {
     pub app_proofs: ::prost::alloc::vec::Vec<
         super::super::super::super::external::data::v1::AppProof,
     >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct ListFiatOnRampCredentialsRequest {
+    pub organization_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct ListFiatOnRampCredentialsResponse {
+    #[serde(default)]
+    pub fiat_on_ramp_credentials: ::prost::alloc::vec::Vec<
+        super::super::super::super::external::data::v1::FiatOnRampCredential,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetGasUsageRequest {
+    pub organization_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetGasUsageResponse {
+    #[serde(default)]
+    pub window_duration_minutes: i32,
+    pub window_limit_usd: ::prost::alloc::string::String,
+    pub usage_usd: ::prost::alloc::string::String,
 }

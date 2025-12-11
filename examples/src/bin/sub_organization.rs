@@ -67,18 +67,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
         disable_sms_auth: None,
         disable_otp_email_auth: None,
         verification_token: None,
+        client_signature: None,
     };
 
     let create_res = client
         .create_sub_organization(organization_id, client.current_timestamp(), intent)
         .await?;
 
-    assert_eq!(create_res.root_user_ids.len(), 1);
+    assert_eq!(create_res.result.root_user_ids.len(), 1);
 
     println!(
         "New sub-organization created: {} (root user ID: {})",
-        create_res.sub_organization_id,
-        create_res.root_user_ids.first().unwrap()
+        create_res.result.sub_organization_id,
+        create_res.result.root_user_ids.first().unwrap()
     );
 
     // Now let's cleanup and delete our sub-organization
@@ -88,7 +89,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .build()?;
     let delete_res = sub_organization_client
         .delete_sub_organization(
-            create_res.sub_organization_id.clone(),
+            create_res.result.sub_organization_id.clone(),
             client.current_timestamp(),
             DeleteSubOrganizationIntent {
                 delete_without_export: Some(true),
@@ -97,8 +98,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .await?;
 
     assert_eq!(
-        delete_res.sub_organization_uuid,
-        create_res.sub_organization_id
+        delete_res.result.sub_organization_uuid,
+        create_res.result.sub_organization_id
     );
 
     println!("Sub-organization cleaned up and deleted",);

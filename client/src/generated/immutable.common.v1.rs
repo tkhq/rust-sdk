@@ -71,6 +71,34 @@ impl ApiKeyCurve {
         }
     }
 }
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum ClientSignatureScheme {
+    #[serde(rename = "CLIENT_SIGNATURE_SCHEME_UNSPECIFIED")]
+    Unspecified = 0,
+    #[serde(rename = "CLIENT_SIGNATURE_SCHEME_API_P256")]
+    ApiP256 = 1,
+}
+impl ClientSignatureScheme {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "CLIENT_SIGNATURE_SCHEME_UNSPECIFIED",
+            Self::ApiP256 => "CLIENT_SIGNATURE_SCHEME_API_P256",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "CLIENT_SIGNATURE_SCHEME_UNSPECIFIED" => Some(Self::Unspecified),
+            "CLIENT_SIGNATURE_SCHEME_API_P256" => Some(Self::ApiP256),
+            _ => None,
+        }
+    }
+}
 /// Cryptographic Curve used to generate a given Private Key.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -1065,6 +1093,9 @@ pub enum TransactionType {
     /// Unsigned Tron transaction, protobuf encoded and hex encoded
     #[serde(rename = "TRANSACTION_TYPE_TRON")]
     Tron = 3,
+    /// Unsigned Bitcoin transaction, hex encoded
+    #[serde(rename = "TRANSACTION_TYPE_BITCOIN")]
+    Bitcoin = 4,
 }
 impl TransactionType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -1077,6 +1108,7 @@ impl TransactionType {
             Self::Ethereum => "TRANSACTION_TYPE_ETHEREUM",
             Self::Solana => "TRANSACTION_TYPE_SOLANA",
             Self::Tron => "TRANSACTION_TYPE_TRON",
+            Self::Bitcoin => "TRANSACTION_TYPE_BITCOIN",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -1086,6 +1118,7 @@ impl TransactionType {
             "TRANSACTION_TYPE_ETHEREUM" => Some(Self::Ethereum),
             "TRANSACTION_TYPE_SOLANA" => Some(Self::Solana),
             "TRANSACTION_TYPE_TRON" => Some(Self::Tron),
+            "TRANSACTION_TYPE_BITCOIN" => Some(Self::Bitcoin),
             _ => None,
         }
     }

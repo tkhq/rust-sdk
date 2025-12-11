@@ -43,9 +43,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         )
         .await?;
 
-    assert_eq!(create_wallet_result.addresses.len(), 1);
-    let eth_address = create_wallet_result.addresses.first().unwrap();
-    let wallet_id = create_wallet_result.wallet_id;
+    assert_eq!(create_wallet_result.result.addresses.len(), 1);
+    let eth_address = create_wallet_result.result.addresses.first().unwrap();
+    let wallet_id = create_wallet_result.result.wallet_id;
 
     println!(
         "New ETH address created: {} (wallet ID: {})",
@@ -68,7 +68,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     println!(
         "Produced a new signature: r={}, s={}, v={}",
-        signature_result.r, signature_result.s, signature_result.v,
+        signature_result.result.r, signature_result.result.s, signature_result.result.v,
     );
 
     // Export our wallet using `ExportClient`
@@ -85,14 +85,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         )
         .await?;
 
-    let export_bundle = export_wallet_result.export_bundle;
+    let export_bundle = export_wallet_result.result.export_bundle;
     let mnemonic_phrase =
         export_client.decrypt_wallet_mnemonic_phrase(export_bundle, organization_id.clone())?;
 
-    assert_eq!(export_wallet_result.wallet_id, wallet_id);
+    assert_eq!(export_wallet_result.result.wallet_id, wallet_id);
     println!(
         "Wallet successfully exported: {} (Mnemonic phrase: {})",
-        export_wallet_result.wallet_id,
+        export_wallet_result.result.wallet_id,
         first_and_last_word(&mnemonic_phrase)
     );
 
@@ -108,7 +108,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         )
         .await;
 
-    let deleted_wallets = delete_wallet_result.unwrap().wallet_ids;
+    let deleted_wallets = delete_wallet_result.unwrap().result.wallet_ids;
     assert_eq!(deleted_wallets.len(), 1);
     assert_eq!(deleted_wallets.first().unwrap().to_string(), wallet_id);
 

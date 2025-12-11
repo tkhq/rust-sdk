@@ -3,6 +3,8 @@ syntax = "proto3";
 package external.data.v1;
 
 import "external/data/v1/common.proto";
+import "immutable/common/v1/common.proto";
+import "immutable/models/v1/models.proto";
 import "vendor/google/api/field_behavior.proto";
 import "vendor/protoc-gen-openapiv2/options/annotations.proto";
 
@@ -68,20 +70,22 @@ enum SignatureScheme {
 message AppProofPayload {
   AppProofType type = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Type of app proof"}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Type of App Proof"}
   ];
   string timestamp_ms = 2 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp of app proof creation. Comes directly from the NSM (Nitro Secure Module)."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp of App Proof creation. Comes directly from the NSM (Nitro Secure Module)."}
   ];
   oneof proof_payload {
     AddressDerivationProofPayload address_derivation_proof = 3;
+    PolicyOutcomeProofPayload policy_outcome_proof = 4;
   }
 }
 
 enum AppProofType {
   APP_PROOF_TYPE_UNSPECIFIED = 0;
   APP_PROOF_TYPE_ADDRESS_DERIVATION = 1;
+  APP_PROOF_TYPE_POLICY_OUTCOME = 2;
 }
 
 message AddressDerivationProofPayload {
@@ -95,4 +99,16 @@ message AddressDerivationProofPayload {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Derived cryptocurrency address."}
   ];
+}
+
+message PolicyOutcomeProofPayload {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.common.v1.Outcome outcome = 2;
+  string decision_context_digest = 3;
+  string organization_data_digest = 4;
+  string parent_organization_data_digest = 5;
+  repeated immutable.models.v1.Signature user_request_approvals = 6;
 }

@@ -10,6 +10,7 @@ import "external/data/v1/wallet_account.proto";
 import "external/options/v1/options.proto";
 import "external/webauthn/v1/webauthn.proto";
 import "immutable/activity/v1/activity.proto";
+import "immutable/sdk_models/v1/models.proto";
 import "vendor/google/api/annotations.proto";
 import "vendor/google/api/field_behavior.proto";
 import "vendor/google/api/visibility.proto";
@@ -462,6 +463,18 @@ service PublicApiService {
     };
   }
 
+  rpc DeletePolicies(external.activity.v1.DeletePoliciesRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/delete_policies"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Delete existing policies."
+      summary: "Delete policies"
+      tags: "Policies"
+    };
+  }
+
   rpc GetPolicies(GetPoliciesRequest) returns (GetPoliciesResponse) {
     option (google.api.http) = {
       post: "/public/v1/query/list_policies"
@@ -627,6 +640,29 @@ service PublicApiService {
       description: "Get details about API keys for a user."
       summary: "Get API keys"
       tags: "API keys"
+    };
+  }
+
+  rpc GetOnRampTransactionStatus(GetOnRampTransactionStatusRequest) returns (GetOnRampTransactionStatusResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_onramp_transaction_status"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get the status of an on ramp transaction."
+      summary: "Get On Ramp transaction status"
+      tags: "On Ramp"
+    };
+  }
+  rpc GetSendTransactionStatus(GetSendTransactionStatusRequest) returns (GetSendTransactionStatusResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_send_transaction_status"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get the status of a send transaction request."
+      summary: "Get send transaction status"
+      tags: "Send Transactions"
     };
   }
 
@@ -1442,8 +1478,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "List the app proofs for the given activity."
-      summary: "List app proofs for an activity"
+      description: "List the App Proofs for the given activity."
+      summary: "List App Proofs for an activity"
       tags: "App Proof"
     };
   }
@@ -1483,6 +1519,101 @@ service PublicApiService {
     };
   }
 
+  rpc DeleteWalletAccounts(external.activity.v1.DeleteWalletAccountsRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/delete_wallet_accounts"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Delete wallet accounts for an organization."
+      summary: "Delete wallet accounts"
+      tags: "Wallets"
+    };
+  }
+
+  rpc EthSendRawTransaction(external.activity.v1.EthSendRawTransactionRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/eth_send_raw_transaction"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Submit a raw transaction (serialized and signed) for broadcasting to the network."
+      summary: "Submit a raw transaction for broadcasting."
+      tags: "Broadcasting"
+    };
+  }
+  rpc CreateFiatOnRampCredential(external.activity.v1.CreateFiatOnRampCredentialRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/create_fiat_on_ramp_credential"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Create a fiat on ramp provider credential"
+      summary: "Create a Fiat On Ramp Credential"
+      tags: "On Ramp"
+    };
+  }
+
+  rpc UpdateFiatOnRampCredential(external.activity.v1.UpdateFiatOnRampCredentialRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/update_fiat_on_ramp_credential"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Update a fiat on ramp provider credential"
+      summary: "Update a Fiat On Ramp Credential"
+      tags: "On Ramp"
+    };
+  }
+
+  rpc DeleteFiatOnRampCredential(external.activity.v1.DeleteFiatOnRampCredentialRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/delete_fiat_on_ramp_credential"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Delete a fiat on ramp provider credential"
+      summary: "Delete a Fiat On Ramp Credential"
+      tags: "On Ramp"
+    };
+  }
+
+  rpc ListFiatOnRampCredentials(ListFiatOnRampCredentialsRequest) returns (ListFiatOnRampCredentialsResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/list_fiat_on_ramp_credentials"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "List all fiat on ramp provider credentials within an organization."
+      summary: "List Fiat On Ramp Credentials"
+      tags: "On Ramp"
+    };
+  }
+
+  rpc EthSendTransaction(external.activity.v1.EthSendTransactionRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/eth_send_transaction"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Submit a transaction intent describing a transaction you would like to broadcast."
+      summary: "Submit a transaction intent for broadcasting."
+      tags: "Broadcasting"
+    };
+  }
+
+  rpc GetGasUsage(GetGasUsageRequest) returns (GetGasUsageResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_gas_usage"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get gas usage and gas limits for either the parent organization or a sub-organization."
+      summary: "Get gas usage and limits."
+      tags: "Broadcasting"
+    };
+  }
+
   // This route does nothing and does not need an implementation, but please don't remove it.
   // It's used at compile time for generating extra OpenAPI/TypeScript types
   // that are not directly referenced in requests.
@@ -1496,6 +1627,8 @@ message NOOPCodegenAnchorRequest {}
 
 message NOOPCodegenAnchorResponse {
   external.webauthn.v1.WebAuthnStamp stamp = 1 [(google.api.field_behavior) = REQUIRED];
+
+  immutable.sdk_models.v1.TokenUsage token_usage = 2;
 }
 
 message TestRateLimitsRequest {
@@ -1690,10 +1823,7 @@ message GetUsersRequest {
 message GetUsersResponse {
   repeated external.data.v1.User users = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      description: "A list of users."
-      title: ""
-    }
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of users."}
   ];
 }
 
@@ -1855,6 +1985,60 @@ message GetApiKeysResponse {
   repeated external.data.v1.ApiKey api_keys = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of API keys."}
+  ];
+}
+
+message GetSendTransactionStatusRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+  ];
+
+  string send_transaction_status_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The unique identifier of a send transaction request."}
+  ];
+}
+
+message EthSendTransactionStatus {
+  optional string tx_hash = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The Ethereum transaction hash, if available."}];
+}
+
+message GetSendTransactionStatusResponse {
+  string tx_status = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The current status of the send transaction."}
+  ];
+
+  // VM-specific transaction details
+  oneof details {
+    EthSendTransactionStatus eth = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Ethereum-specific transaction status."}];
+  }
+
+  optional string tx_error = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The error encountered when broadcasting or confirming the transaction, if any."}];
+}
+
+message GetOnRampTransactionStatusRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+  ];
+
+  string transaction_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The unique identifier for the fiat on ramp transaction."}
+  ];
+
+  optional bool refresh = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional flag to specify if the transaction status should be refreshed from the fiat on ramp provider. Default = false."}
+  ];
+}
+
+message GetOnRampTransactionStatusResponse {
+  string transaction_status = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The status of the fiat on ramp transaction."}
   ];
 }
 
@@ -2097,4 +2281,37 @@ message GetAppProofsRequest {
 
 message GetAppProofsResponse {
   repeated external.data.v1.AppProof app_proofs = 1 [(google.api.field_behavior) = REQUIRED];
+}
+
+message ListFiatOnRampCredentialsRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+}
+
+message ListFiatOnRampCredentialsResponse {
+  repeated external.data.v1.FiatOnRampCredential fiat_on_ramp_credentials = 1 [(google.api.field_behavior) = REQUIRED];
+}
+
+message GetGasUsageRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+}
+
+message GetGasUsageResponse {
+  int32 window_duration_minutes = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The window duration (in minutes) for the organization or sub-organization."}
+  ];
+  string window_limit_usd = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The window limit (in USD) for the organization or sub-organization."}
+  ];
+  string usage_usd = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The total gas usage (in USD) of all sponsored transactions processed over the last `window_duration_minutes`"}
+  ];
 }
