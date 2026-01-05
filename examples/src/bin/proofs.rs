@@ -114,7 +114,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // Verify the app proof and boot proof
         println!("Verifying app proof and boot proof...");
 
-        verify(&app_proof, &boot_proof).map_err(|e| format!("Verification failed: {:?}", e))?;
+        verify(&app_proof, &boot_proof).map_err(|e| format!("Verification failed: {e:?}"))?;
 
         println!(
             "Verification successful! The wallet creation was performed in a secure Turnkey enclave."

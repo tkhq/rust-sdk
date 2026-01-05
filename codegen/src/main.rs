@@ -160,16 +160,16 @@ fn main() {
                 // We expect a description and summary for each endpoint.
                 let summary = &summary_re
                     .captures(http_opts)
-                    .unwrap_or_else(|| panic!("no summary found for {}", route))[1];
+                    .unwrap_or_else(|| panic!("no summary found for {route}"))[1];
                 let description = &description_re
                     .captures(http_opts)
-                    .unwrap_or_else(|| panic!("no description found for {}", route))[1];
+                    .unwrap_or_else(|| panic!("no description found for {route}"))[1];
 
                 if req_type.contains("external.activity.v1") {
                     let activities_details = parsed_activities
                         .activities
                         .get(route)
-                        .unwrap_or_else(|| panic!("route {} not found in activities.json", route));
+                        .unwrap_or_else(|| panic!("route {route} not found in activities.json"));
                     let activity_type = activities_details.r#type.clone();
 
                     // If the request type is "external.activity.v1.DeletePolicyRequest" the sanitized
@@ -239,7 +239,7 @@ fn main() {
                         )
                     };
 
-                    println!("Generating {} (activity)", fn_name);
+                    println!("Generating {fn_name} (activity)");
                     generated_methods.push_str(&activity_func);
                 } else {
                     let func = format!(
@@ -252,7 +252,7 @@ fn main() {
                         }}
                     "#
                     );
-                    println!("Generating {} (query)", fn_name);
+                    println!("Generating {fn_name} (query)");
                     generated_methods.push_str(&func);
                 }
             }

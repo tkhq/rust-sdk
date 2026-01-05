@@ -12,10 +12,15 @@ members = [
   "examples",
   # Contains utilities to work with Turnkey proofs (boot proofs, app proofs)
   "proofs",
+  "tvc"
 ]
 resolver = "2"
 
 [workspace.dependencies]
+# QuorumOS
+qos_core = { git = "https://github.com/tkhq/qos.git", rev = "90dec56fc06926b7fb7439175c58789492ec82c6", default-features = false }
+qos_p256 = { git = "https://github.com/tkhq/qos.git", rev = "90dec56fc06926b7fb7439175c58789492ec82c6", default-features = false }
+
 # Encoding and serialization
 base64 = { version = "0.22.0", default-features = false, features = ["std"] }
 bs58 = { version = "0.5.0", features = ["std", "check"], default-features = false }
@@ -36,6 +41,7 @@ sha2 = { version = "0.10", default-features = false }
 
 # Error handling
 thiserror = { version = "2.0.12", default-features = false }
+anyhow = { version = "1.0", default-features = false }
 
 # Web/HTTP
 mime = { version = "0.3.17", default-features = false }
@@ -78,8 +84,11 @@ walkdir = { version = "2.5", default-features = false }
 
 # Environment and configuration
 dotenvy = { version = "0.15.0", default-features = false }
+clap = { version = "4.5", features = ["std", "derive", "help", "usage", "error-context"], default-features = false }
 
 # Development dependencies
+assert_cmd = { version = "2", default-features = false }
+predicates = { version = "3", default-features = false }
 tempfile = { version = "3.19.1", default-features = false }
 signature = "2"
 wiremock = { version = "0.6", default-features = false }

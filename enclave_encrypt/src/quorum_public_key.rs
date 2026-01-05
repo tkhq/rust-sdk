@@ -72,13 +72,14 @@ impl QuorumPublicKey {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
     #[test]
     fn from_bytes_and_from_str_valid() {
         let prod_pub1 = QuorumPublicKey::from_bytes(
-            &hex::decode(TURNKEY_PRODUCTION_SIGNER_QUORUM_PUBLIC_KEY).unwrap(),
+            hex::decode(TURNKEY_PRODUCTION_SIGNER_QUORUM_PUBLIC_KEY).unwrap(),
         )
         .unwrap();
         let prod_pub2 =
@@ -89,7 +90,7 @@ mod tests {
         assert_eq!(prod_pub2, prod_pub3);
 
         let preprod_pub1 = QuorumPublicKey::from_bytes(
-            &hex::decode(TURNKEY_PREPROD_SIGNER_QUORUM_PUBLIC_KEY).unwrap(),
+            hex::decode(TURNKEY_PREPROD_SIGNER_QUORUM_PUBLIC_KEY).unwrap(),
         )
         .unwrap();
         let preprod_pub2 =
@@ -106,7 +107,7 @@ mod tests {
         assert_eq!(
             QuorumPublicKey::from_bytes(&bytes).unwrap_err(),
             EnclaveEncryptError::IncorrectQuorumPublicKeyBytesLength(64)
-        )
+        );
     }
 
     #[test]

@@ -522,7 +522,7 @@ mod test {
                 assert_eq!(status, 500);
                 assert_eq!(body, "internal server error");
             }
-            other => panic!("unexpected error: {:?}", other),
+            other => panic!("unexpected error: {other:?}"),
         }
     }
 
@@ -545,7 +545,7 @@ mod test {
             TurnkeyClientError::UnexpectedMimeType(mime_type) => {
                 assert_eq!(mime_type, "text/plain");
             }
-            other => panic!("unexpected error: {:?}", other),
+            other => panic!("unexpected error: {other:?}"),
         }
     }
 
@@ -575,7 +575,7 @@ mod test {
                 assert_eq!(status, 401);
                 assert_eq!(body, "{\"code\":2,\"details\":[],\"message\":\"some error\",\"turnkeyErrorCode\":\"SOME_ERROR_CODE\"}");
             }
-            other => panic!("unexpected error: {:?}", other),
+            other => panic!("unexpected error: {other:?}"),
         }
     }
 
@@ -635,7 +635,7 @@ mod test {
                     })
                 );
             }
-            other => panic!("unexpected error: {:?}", other),
+            other => panic!("unexpected error: {other:?}"),
         }
     }
 
@@ -666,7 +666,7 @@ mod test {
             TurnkeyClientError::ActivityRequiresApproval(activity_id) => {
                 assert_eq!(activity_id, "some-activity-id");
             }
-            other => panic!("unexpected error: {:?}", other),
+            other => panic!("unexpected error: {other:?}"),
         }
     }
 
@@ -698,7 +698,7 @@ mod test {
             TurnkeyClientError::UnexpectedActivityStatus(status) => {
                 assert_eq!(status, "ACTIVITY_STATUS_REJECTED");
             }
-            other => panic!("unexpected error: {:?}", other),
+            other => panic!("unexpected error: {other:?}"),
         }
     }
 
@@ -801,7 +801,7 @@ mod test {
         // Build client with a short timeout (e.g. 1s -- intentionally shorter than the server delay of 2s)
         let client = TurnkeyClient::<TurnkeyP256ApiKey>::builder()
             .api_key(TurnkeyP256ApiKey::generate())
-            .base_url(&server.uri())
+            .base_url(server.uri())
             .timeout(Duration::from_secs(1))
             .build()
             .unwrap();
@@ -814,7 +814,7 @@ mod test {
             TurnkeyClientError::Http(err) => {
                 assert!(err.is_timeout());
             }
-            other => panic!("unexpected error: {:?}", other),
+            other => panic!("unexpected error: {other:?}"),
         }
     }
 
@@ -839,7 +839,7 @@ mod test {
 
         let client = TurnkeyClient::builder()
             .api_key(TurnkeyP256ApiKey::generate())
-            .base_url(&server.uri())
+            .base_url(server.uri())
             .build()
             .unwrap();
 
@@ -938,7 +938,7 @@ mod test {
                     // Our retry configuration has 5 retries configured
                     assert_eq!(n, 3);
                 }
-                other => panic!("unexpected error: {:?}", other),
+                other => panic!("unexpected error: {other:?}"),
             }
         }
 
@@ -1057,7 +1057,7 @@ mod test {
                     assert_eq!(status, 500);
                     assert_eq!(body, "internal server error");
                 }
-                other => panic!("unexpected error: {:?}", other),
+                other => panic!("unexpected error: {other:?}"),
             }
         }
     }
