@@ -1,4 +1,4 @@
-# Turnkey Rust SDK &emsp; [![Build Status]][actions] 
+# Turnkey Rust SDK &emsp; [![Build Status]][actions]  
 
 [Build Status]: https://img.shields.io/github/actions/workflow/status/tkhq/rust-sdk/main.yml?branch=main
 [actions]: https://github.com/tkhq/rust-sdk/actions?query=branch%3Amain
