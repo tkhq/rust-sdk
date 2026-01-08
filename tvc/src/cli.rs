@@ -6,7 +6,6 @@ use clap::{Parser, Subcommand};
 /// Global configuration available to all commands.
 #[derive(Debug, Clone)]
 pub struct GlobalConfig {
-    pub organization_id: Option<String>,
     pub api_base_url: String,
 }
 
@@ -14,10 +13,6 @@ pub struct GlobalConfig {
 #[derive(Debug, Parser)]
 #[command(about = "CLI for building with Turnkey Verifiable Cloud", long_about = None)]
 pub struct Cli {
-    /// Turnkey organization ID.
-    #[arg(long, global = true, env = "TVC_ORGANIZATION_ID")]
-    pub organization_id: Option<String>,
-
     /// API base URL.
     #[arg(
         long,
@@ -37,7 +32,6 @@ impl Cli {
         let args = Cli::parse();
 
         let config = GlobalConfig {
-            organization_id: args.organization_id,
             api_base_url: args.api_base_url,
         };
 
@@ -53,12 +47,15 @@ impl Cli {
                 AppCommands::List(args) => commands::app::list::run(args, &config).await,
                 AppCommands::Create(args) => commands::app::create::run(args, &config).await,
             },
+            Commands::Login(args) => commands::login::run(args, &config).await,
         }
     }
 }
 
 #[derive(Debug, Subcommand)]
 enum Commands {
+    /// Authenticate with Turnkey and set up local credentials.
+    Login(commands::login::Args),
     /// Manage deployments.
     Deploy {
         #[command(subcommand)]

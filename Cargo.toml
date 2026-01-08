@@ -71,6 +71,7 @@ x509-parser = { version = "0.14.0", default-features = false }
 
 # Serialization formats
 borsh = { version = "1.0", features = ["std", "derive"], default-features = false }
+toml = { version = "0.8", default-features = false, features = ["parse", "display"] }
 
 # Code generation and parsing
 heck = { version = "0.5.0", default-features = false }

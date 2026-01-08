@@ -153,6 +153,11 @@ impl TurnkeyP256ApiKey {
             .as_bytes()
             .to_vec()
     }
+
+    /// Returns the private key bytes
+    pub fn private_key(&self) -> Vec<u8> {
+        self.signing_key.to_bytes().to_vec()
+    }
 }
 
 impl Stamp for TurnkeyP256ApiKey {
