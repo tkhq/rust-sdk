@@ -1,4 +1,4 @@
-//! Approve manifest command.
+//! Approve deploy command. This is meant to crypto
 
 use crate::pair::LocalPair;
 use crate::util::{read_file_to_string, write_file};
@@ -14,7 +14,7 @@ use std::io::{BufRead, Write};
 use std::path::Path;
 use std::path::PathBuf;
 
-/// Approve a QOS manifest.
+/// Cryptographically approve a QOS manifest for a deployment with your operator's manifest set key.
 #[derive(Debug, ClapArgs)]
 #[command(about, long_about = None)]
 #[command(group(ArgGroup::new("operator").args(["operator_seed", "operator_id"])))]
@@ -71,7 +71,7 @@ pub struct Args {
     pub skip_post: bool,
 }
 
-/// Run the approve manifest command.
+/// Run the approve deploy command.
 pub async fn run(args: Args, _config: &crate::cli::GlobalConfig) -> anyhow::Result<()> {
     let manifest = match (&args.manifest, &args.deploy_id) {
         (Some(path), _) => read_manifest_from_path(path).await?,

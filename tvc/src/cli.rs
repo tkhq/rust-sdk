@@ -42,14 +42,49 @@ impl Cli {
         };
 
         match args.command {
-            Commands::ApproveManifest(cmd_args) => {
-                commands::approve_manifest::run(cmd_args, &config).await
-            }
+            Commands::Deploy { command } => match command {
+                DeployCommands::Approve(args) => {
+                    commands::deploy::approve::run(args, &config).await
+                }
+                DeployCommands::Status(args) => commands::deploy::status::run(args, &config).await,
+                DeployCommands::Create(args) => commands::deploy::create::run(args, &config).await,
+            },
+            Commands::App { command } => match command {
+                AppCommands::List(args) => commands::app::list::run(args, &config).await,
+                AppCommands::Create(args) => commands::app::create::run(args, &config).await,
+            },
         }
     }
 }
 
 #[derive(Debug, Subcommand)]
 enum Commands {
-    ApproveManifest(commands::approve_manifest::Args),
+    /// Manage deployments.
+    Deploy {
+        #[command(subcommand)]
+        command: DeployCommands,
+    },
+    /// Manage applications.
+    App {
+        #[command(subcommand)]
+        command: AppCommands,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum DeployCommands {
+    /// Approve a deployment manifest.
+    Approve(commands::deploy::approve::Args),
+    /// Get the status of a deployment.
+    Status(commands::deploy::status::Args),
+    /// Create a new deployment.
+    Create(commands::deploy::create::Args),
+}
+
+#[derive(Debug, Subcommand)]
+enum AppCommands {
+    /// List applications.
+    List(commands::app::list::Args),
+    /// Create a new application.
+    Create(commands::app::create::Args),
 }

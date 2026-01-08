@@ -2,9 +2,10 @@ use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
 
 #[test]
-fn approve_manifest_requires_source() {
+fn approve_requires_source() {
     cargo_bin_cmd!("tvc")
-        .arg("approve-manifest")
+        .arg("deploy")
+        .arg("approve")
         .arg("--dry-run")
         .arg("--dangerous-skip-interactive")
         .assert()
@@ -13,9 +14,10 @@ fn approve_manifest_requires_source() {
 }
 
 #[test]
-fn dangerous_approve_manifest_with_file() {
+fn dangerous_approve_with_file() {
     cargo_bin_cmd!("tvc")
-        .arg("approve-manifest")
+        .arg("deploy")
+        .arg("approve")
         .arg("--manifest")
         .arg("fixtures/manifest.json")
         .arg("--operator-seed")
@@ -27,13 +29,14 @@ fn dangerous_approve_manifest_with_file() {
 }
 
 #[test]
-fn approve_manifest_interactive_prompts() {
+fn approve_interactive_prompts() {
     // Simulate user typing "yes" or "y" for each of the 5 prompts:
     // namespace, enclave, pivot, manifest set, share set
     let input = "yes\nyes\ny\nyes\ny\n";
 
     cargo_bin_cmd!("tvc")
-        .arg("approve-manifest")
+        .arg("deploy")
+        .arg("approve")
         .arg("--manifest")
         .arg("fixtures/manifest.json")
         .arg("--operator-seed")
@@ -55,12 +58,13 @@ fn approve_manifest_interactive_prompts() {
 }
 
 #[test]
-fn approve_manifest_interactive_reject() {
+fn approve_interactive_reject() {
     // User rejects at first prompt
     let input = "no\n";
 
     cargo_bin_cmd!("tvc")
-        .arg("approve-manifest")
+        .arg("deploy")
+        .arg("approve")
         .arg("--manifest")
         .arg("fixtures/manifest.json")
         .arg("--operator-seed")
@@ -74,7 +78,8 @@ fn approve_manifest_interactive_reject() {
 #[test]
 fn manifest_and_deploy_id_are_mutually_exclusive() {
     cargo_bin_cmd!("tvc")
-        .arg("approve-manifest")
+        .arg("deploy")
+        .arg("approve")
         .arg("--manifest")
         .arg("fixtures/manifest.json")
         .arg("--deploy-id")
@@ -90,7 +95,8 @@ fn manifest_and_deploy_id_are_mutually_exclusive() {
 #[test]
 fn operator_seed_and_operator_id_are_mutually_exclusive() {
     cargo_bin_cmd!("tvc")
-        .arg("approve-manifest")
+        .arg("deploy")
+        .arg("approve")
         .arg("--manifest")
         .arg("fixtures/manifest.json")
         .arg("--operator-seed")
