@@ -137,6 +137,10 @@ enum ActivityType {
   ACTIVITY_TYPE_INIT_USER_EMAIL_RECOVERY_V2 = 110;
   ACTIVITY_TYPE_INIT_OTP_AUTH_V3 = 111;
   ACTIVITY_TYPE_INIT_OTP_V2 = 112;
+  ACTIVITY_TYPE_UPSERT_GAS_USAGE_CONFIG = 113;
+  ACTIVITY_TYPE_CREATE_TVC_APP = 114;
+  ACTIVITY_TYPE_CREATE_TVC_DEPLOYMENT = 115;
+  ACTIVITY_TYPE_CREATE_TVC_MANIFEST_APPROVALS = 116;
 }
 
 // The current processing status of an Activity.
@@ -279,6 +283,10 @@ message Intent {
     InitUserEmailRecoveryIntentV2 init_user_email_recovery_intent_v2 = 111;
     InitOtpIntentV2 init_otp_intent_v2 = 112;
     InitOtpAuthIntentV3 init_otp_auth_intent_v3 = 113;
+    UpsertGasUsageConfigIntent upsert_gas_usage_config_intent = 114;
+    CreateTvcAppIntent create_tvc_app_intent = 115;
+    CreateTvcDeploymentIntent create_tvc_deployment_intent = 116;
+    CreateTvcManifestApprovalsIntent create_tvc_manifest_approvals_intent = 117;
   }
 }
 
@@ -1030,7 +1038,13 @@ message CreatePolicyIntentV3 {
       title: ""
     }
   ];
-  string notes = 5;
+  string notes = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Notes for a Policy."
+      title: ""
+    }
+  ];
 }
 
 message CreatePoliciesIntent {
@@ -1556,11 +1570,11 @@ message CreateSmartContractInterfaceIntent {
       title: ""
     }
   ];
-  // @inject_tag: validate:"required,tk_max_length=200000"
+  // @inject_tag: validate:"required,tk_max_length=400000"
   string smart_contract_interface = 2 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      description: "ABI/IDL as a JSON string"
+      description: "ABI/IDL as a JSON string. Limited to 400kb"
       title: ""
     }
   ];
@@ -2221,12 +2235,105 @@ message RootUserParamsV4 {
 }
 
 // Each of these customization parameters are optional; resort to defaults if any are not provided.
-// Note that app_name is a top-level required parameter in newer email-related activities, and thus any app name provided here will be ignored.
 message EmailCustomizationParams {
   optional string app_name = 1 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
       description: "The name of the application."
+      title: ""
+    }
+  ];
+  optional string logo_url = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "A URL pointing to a logo in PNG format. Note this logo will be resized to fit into 340px x 124px."
+      title: ""
+    }
+  ];
+  optional string magic_link_template = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "A template for the URL to be used in a magic link button, e.g. `https://dapp.xyz/%s`. The auth bundle will be interpolated into the `%s`."
+      title: ""
+    }
+  ];
+  /*
+     We're electing to support user-provided dynamic template variables via JSON string.
+     This is for a subset of customers who want to have custom email templates with Turnkey
+     and the ability to update them on the fly.
+     The procedure: provide a Turnkey eng the new template, and pass their desired variables through this field.
+     These variables will get injected into their template. Since we have no control over the defined variables,
+     we'll opt use a key-value map (JSON string) to set them. Note that we can't use protobuf maps due to serialization issues,
+     which may produce issues with user request signature verification.
+  */
+  optional string template_variables = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "JSON object containing key/value pairs to be used with custom templates."
+      title: ""
+    }
+  ];
+  optional string template_id = 5 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Unique identifier for a given Email Template. If not specified, the default is the most recent Email Template."
+      title: ""
+    }
+  ];
+}
+
+// This proto message is to be used for newer email-related activities (OTP).
+// Note that app_name is no longer a parameter here, as it is required in the top-level intent for these activities.
+// All other fields remain optional and will fall back to defaults.
+message EmailCustomizationParamsV2 {
+  optional string logo_url = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "A URL pointing to a logo in PNG format. Note this logo will be resized to fit into 340px x 124px."
+      title: ""
+    }
+  ];
+  optional string magic_link_template = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "A template for the URL to be used in a magic link button, e.g. `https://dapp.xyz/%s`. The auth bundle will be interpolated into the `%s`."
+      title: ""
+    }
+  ];
+  /*
+     We're electing to support user-provided dynamic template variables via JSON string.
+     This is for a subset of customers who want to have custom email templates with Turnkey
+     and the ability to update them on the fly.
+     The procedure: provide a Turnkey eng the new template, and pass their desired variables through this field.
+     These variables will get injected into their template. Since we have no control over the defined variables,
+     we'll opt use a key-value map (JSON string) to set them. Note that we can't use protobuf maps due to serialization issues,
+     which may produce issues with user request signature verification.
+  */
+  optional string template_variables = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "JSON object containing key/value pairs to be used with custom templates."
+      title: ""
+    }
+  ];
+  optional string template_id = 5 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Unique identifier for a given Email Template. If not specified, the default is the most recent Email Template."
+      title: ""
+    }
+  ];
+}
+
+// A new proto message specifically for "legacy" endpoints: Email Auth and Email Recovery.
+// Note that app_name is now a required parameter for newer versions of these activities.
+// All other fields remain optional and will fall back to defaults.
+message EmailAuthCustomizationParams {
+  // @inject_tag: validate:"tk_label_length,tk_label"
+  string app_name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The name of the application. This field is required and will be used in email notifications if an email template is not provided."
       title: ""
     }
   ];
@@ -2378,21 +2485,13 @@ message InitUserEmailRecoveryIntentV2 {
       title: ""
     }
   ];
-  // @inject_tag: validate:"tk_label_length,tk_label"
-  string app_name = 3 [
-    (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      description: "The name of the application."
-      title: ""
-    }
-  ];
   optional string expiration_seconds = 4 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Expiration window (in seconds) indicating how long the recovery credential is valid for. If not provided, a default of 15 minutes will be used."}
   ];
-  optional EmailCustomizationParams email_customization = 5 [
-    (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional parameters for customizing emails. If not provided, the default email will be used."}
+  EmailAuthCustomizationParams email_customization = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Parameters for customizing emails. If not provided, the default email will be used. Note that `app_name` is required."}
   ];
   // @inject_tag: validate:"omitempty,email,tk_email"
   optional string send_from_email_address = 6 [
@@ -2648,14 +2747,6 @@ message InitOtpIntentV2 {
       title: ""
     }
   ];
-  // @inject_tag: validate:"tk_label_length,tk_label"
-  string app_name = 3 [
-    (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      description: "The name of the application."
-      title: ""
-    }
-  ];
   // @inject_tag: validate:"omitempty,min=6,max=9"
   optional int32 otp_length = 4 [
     (google.api.field_behavior) = OPTIONAL,
@@ -2664,15 +2755,23 @@ message InitOtpIntentV2 {
       title: ""
     }
   ];
-  optional EmailCustomizationParams email_customization = 5 [
+  // @inject_tag: validate:"tk_label_length,tk_label"
+  string app_name = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The name of the application. This field is required and will be used in email notifications if an email template is not provided."
+      title: ""
+    }
+  ];
+  optional EmailCustomizationParamsV2 email_customization = 6 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional parameters for customizing emails. If not provided, the default email will be used."}
   ];
-  optional SmsCustomizationParams sms_customization = 6 [
+  optional SmsCustomizationParams sms_customization = 7 [
     (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional parameters for customizing SMS message. If not provided, the default sms message will be used."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional parameters for customizing SMS message. If not provided, the default SMS message will be used."}
   ];
-  optional string user_identifier = 7 [
+  optional string user_identifier = 8 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
       description: "Optional client-generated user identifier to enable per-user rate limiting for SMS auth. We recommend using a hash of the client-side IP address."
@@ -2680,14 +2779,14 @@ message InitOtpIntentV2 {
     }
   ];
   // @inject_tag: validate:"omitempty,email,tk_email"
-  optional string send_from_email_address = 8 [
+  optional string send_from_email_address = 9 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
       description: "Optional custom email address from which to send the OTP email"
       title: ""
     }
   ];
-  optional bool alphanumeric = 9 [
+  optional bool alphanumeric = 10 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
       description: "Optional flag to specify if the OTP code should be alphanumeric (Crockford’s Base32). Default = true"
@@ -2695,7 +2794,7 @@ message InitOtpIntentV2 {
     }
   ];
   // @inject_tag: validate:"omitempty,tk_label_length,tk_label"
-  optional string send_from_email_sender_name = 10 [
+  optional string send_from_email_sender_name = 11 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
       description: "Optional custom sender name for use with sendFromEmailAddress; if left empty, will default to 'Notifications'"
@@ -2703,13 +2802,12 @@ message InitOtpIntentV2 {
     }
   ];
   // @inject_tag: validate:"omitempty,numeric,max=600"
-  optional string expiration_seconds = 11 [
+  optional string expiration_seconds = 12 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Expiration window (in seconds) indicating how long the OTP is valid for. If not provided, a default of 5 minutes will be used. Maximum value is 600 seconds (10 minutes)"}
   ];
-
   // @inject_tag: validate:"omitempty,email,tk_email"
-  optional string reply_to_email_address = 12 [
+  optional string reply_to_email_address = 13 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
       description: "Optional custom email address to use as reply-to"
@@ -2748,7 +2846,7 @@ message InitOtpAuthIntentV2 {
   ];
   optional SmsCustomizationParams sms_customization = 5 [
     (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional parameters for customizing SMS message. If not provided, the default sms message will be used."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional parameters for customizing SMS message. If not provided, the default SMS message will be used."}
   ];
   optional string user_identifier = 6 [
     (google.api.field_behavior) = OPTIONAL,
@@ -2796,7 +2894,7 @@ message InitOtpAuthIntentV3 {
   string otp_type = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      description: "Enum to specifiy whether to send OTP via SMS or email"
+      description: "Whether to send OTP via SMS or email. Possible values: OTP_TYPE_SMS, OTP_TYPE_EMAIL"
       title: ""
     }
   ];
@@ -2804,14 +2902,6 @@ message InitOtpAuthIntentV3 {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
       description: "Email or phone number to send the OTP code to"
-      title: ""
-    }
-  ];
-  // @inject_tag: validate:"tk_label_length,tk_label"
-  string app_name = 3 [
-    (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      description: "The name of the application."
       title: ""
     }
   ];
@@ -2823,15 +2913,23 @@ message InitOtpAuthIntentV3 {
       title: ""
     }
   ];
-  optional EmailCustomizationParams email_customization = 5 [
+  // @inject_tag: validate:"tk_label_length,tk_label"
+  string app_name = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The name of the application. This field is required and will be used in email notifications if an email template is not provided."
+      title: ""
+    }
+  ];
+  optional EmailCustomizationParamsV2 email_customization = 6 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional parameters for customizing emails. If not provided, the default email will be used."}
   ];
-  optional SmsCustomizationParams sms_customization = 6 [
+  optional SmsCustomizationParams sms_customization = 7 [
     (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional parameters for customizing SMS message. If not provided, the default sms message will be used."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional parameters for customizing SMS message. If not provided, the default SMS message will be used."}
   ];
-  optional string user_identifier = 7 [
+  optional string user_identifier = 8 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
       description: "Optional client-generated user identifier to enable per-user rate limiting for SMS auth. We recommend using a hash of the client-side IP address."
@@ -2839,14 +2937,14 @@ message InitOtpAuthIntentV3 {
     }
   ];
   // @inject_tag: validate:"omitempty,email,tk_email"
-  optional string send_from_email_address = 8 [
+  optional string send_from_email_address = 9 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
       description: "Optional custom email address from which to send the OTP email"
       title: ""
     }
   ];
-  optional bool alphanumeric = 9 [
+  optional bool alphanumeric = 10 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
       description: "Optional flag to specify if the OTP code should be alphanumeric (Crockford’s Base32). Default = true"
@@ -2854,20 +2952,45 @@ message InitOtpAuthIntentV3 {
     }
   ];
   // @inject_tag: validate:"omitempty,tk_label_length,tk_label"
-  optional string send_from_email_sender_name = 10 [
+  optional string send_from_email_sender_name = 11 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
       description: "Optional custom sender name for use with sendFromEmailAddress; if left empty, will default to 'Notifications'"
       title: ""
     }
   ];
+  // @inject_tag: validate:"omitempty,numeric,max=600"
+  optional string expiration_seconds = 12 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Expiration window (in seconds) indicating how long the OTP is valid for. If not provided, a default of 5 minutes will be used. Maximum value is 600 seconds (10 minutes)"}
+  ];
   // @inject_tag: validate:"omitempty,email,tk_email"
-  optional string reply_to_email_address = 11 [
+  optional string reply_to_email_address = 13 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
       description: "Optional custom email address to use as reply-to"
       title: ""
     }
+  ];
+}
+
+message UpsertGasUsageConfigIntent {
+  // @inject_tag: validate:"required,numeric"
+  string org_window_limit_usd = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Gas sponsorship USD limit for the billing organization window."}
+  ];
+
+  // @inject_tag: validate:"required,numeric"
+  string sub_org_window_limit_usd = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Gas sponsorship USD limit for sub-organizations under the billing organization."}
+  ];
+
+  // @inject_tag: validate:"required,numeric"
+  string window_duration_minutes = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Rolling sponsorship window duration, expressed in minutes."}
   ];
 }
 
@@ -3126,14 +3249,6 @@ message EmailAuthIntentV3 {
       title: ""
     }
   ];
-  // @inject_tag: validate:"tk_label_length,tk_label"
-  string app_name = 3 [
-    (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      description: "The name of the application."
-      title: ""
-    }
-  ];
   // @inject_tag: validate:"omitempty,tk_label_length,tk_label"
   optional string api_key_name = 4 [
     (google.api.field_behavior) = OPTIONAL,
@@ -3146,9 +3261,9 @@ message EmailAuthIntentV3 {
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Expiration window (in seconds) indicating how long the API key is valid for. If not provided, a default of 15 minutes will be used."}
   ];
-  optional EmailCustomizationParams email_customization = 6 [
-    (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional parameters for customizing emails. If not provided, the default email will be used."}
+  EmailAuthCustomizationParams email_customization = 6 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Parameters for customizing emails. If not provided, the default email will be used. Note that app_name is required."}
   ];
   optional bool invalidate_existing = 7 [
     (google.api.field_behavior) = OPTIONAL,
@@ -3598,6 +3713,145 @@ message DeleteFiatOnRampCredentialIntent {
   ];
 }
 
+message CreateTvcAppIntent {
+  // @inject_tag: validate:"required"
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The name of the new TVC application"}
+  ];
+  // @inject_tag: validate:"required"
+  string quorum_public_key = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Quorum public key to use for this application"}
+  ];
+  optional string manifest_set_id = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for an existing TVC operator set to use as the Manifest Set for this TVC application. If left empty, a new Manifest Set configuration is required"}
+  ];
+  optional TvcOperatorSetParams manifest_set_params = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Configuration to create a new TVC operator set, used as the Manifest Set for this TVC application. If left empty, a Manifest Set ID is required"}
+  ];
+  optional string share_set_id = 5 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for an existing TVC operator set to use as the Share Set for this TVC application. If left empty, a new Share Set configuration is required"}
+  ];
+  optional TvcOperatorSetParams share_set_params = 6 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Configuration to create a new TVC operator set, used as the Share Set for this TVC application. If left empty, a Share Set ID is required"}
+  ];
+  optional bool external_connectivity = 7 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Enables external connectivity for this TVC app. Default if not provided: false."}
+  ];
+}
+
+message TvcOperatorSetParams {
+  // @inject_tag: validate:"required"
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Short description for this new operator set"}
+  ];
+  repeated TvcOperatorParams new_operators = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Operators to create as part of this new operator set"}
+  ];
+  repeated string existing_operator_ids = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Existing operators to use as part of this new operator set"}
+  ];
+  // @inject_tag: validate:"required"
+  uint32 threshold = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The threshold of operators needed to reach consensus in this new Operator Set"}
+  ];
+}
+
+message TvcOperatorParams {
+  // @inject_tag: validate:"required"
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The name for this new operator"}
+  ];
+  // @inject_tag: validate:"required"
+  string public_key = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Public key for this operator"}
+  ];
+}
+
+message CreateTvcDeploymentIntent {
+  // @inject_tag: validate:"required"
+  string app_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The unique identifier of the to-be-deployed TVC application"}
+  ];
+  // @inject_tag: validate:"required"
+  string qos_version = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The QuorumOS version to use to deploy this application"}
+  ];
+  // @inject_tag: validate:"required"
+  string pivot_container_image_url = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "URL of the container containing the pivot binary"}
+  ];
+  // @inject_tag: validate:"required"
+  string pivot_path = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Location of the binary in the pivot container"}
+  ];
+  repeated string pivot_args = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Arguments to pass to the pivot binary at startup. Encoded as a list of strings, for example [\"--foo\", \"bar\"]"}
+  ];
+  // @inject_tag: validate:"required"
+  string expected_pivot_digest = 6 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Digest of the pivot binary in the pivot container. This value will be inserted in the QOS manifest to ensure application integrity."}
+  ];
+  // @inject_tag: validate:"required"
+  string host_container_image_url = 7 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "URL of the container containing the host binary"}
+  ];
+  // @inject_tag: validate:"required"
+  string host_path = 8 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Location of the binary inside the host container"}
+  ];
+  repeated string host_args = 9 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Arguments to pass to the host binary at startup. Encoded as a list of strings, for example [\"--foo\", \"bar\"]"}
+  ];
+}
+
+message CreateTvcManifestApprovalsIntent {
+  // @inject_tag: validate:"required,uuid"
+  string manifest_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier of the TVC deployment to approve"}
+  ];
+  // @inject_tag: validate:"required"
+  repeated TvcManifestApproval approvals = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "List of manifest approvals"}
+  ];
+}
+
+message TvcManifestApproval {
+  // @inject_tag: validate:"required,uuid"
+  string operator_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier of the operator providing this approval"}
+  ];
+  // @inject_tag: validate:"required"
+  string signature = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Signature from the operator approving the manifest"}
+  ];
+}
+
 // Result of the intended action.
 message Result {
   oneof inner {
@@ -3694,7 +3948,19 @@ message Result {
     UpdateFiatOnRampCredentialResult update_fiat_on_ramp_credential_result = 92;
     DeleteFiatOnRampCredentialResult delete_fiat_on_ramp_credential_result = 93;
     EthSendTransactionResult eth_send_transaction_result = 94;
+    UpsertGasUsageConfigResult upsert_gas_usage_config_result = 95;
+    CreateTvcAppResult create_tvc_app_result = 96;
+    CreateTvcDeploymentResult create_tvc_deployment_result = 98;
+    CreateTvcManifestApprovalsResult create_tvc_manifest_approvals_result = 99;
   }
+}
+
+message UpsertGasUsageConfigResult {
+  // @inject_tag: validate:"required,uuid4"
+  string gas_usage_config_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for the gas usage configuration that was created or updated."}
+  ];
 }
 
 message EnableAuthProxyResult {
@@ -4447,6 +4713,27 @@ message DeletePoliciesResult {
   repeated string policy_ids = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of unique identifiers for the deleted policies."}
+  ];
+}
+
+message CreateTvcAppResult {
+  string app_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The unique identifier for the TVC application"}
+  ];
+}
+
+message CreateTvcDeploymentResult {
+  string deployment_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The unique identifier for the TVC deployment"}
+  ];
+}
+
+message CreateTvcManifestApprovalsResult {
+  repeated string approval_ids = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The unique identifier(s) for the manifest approvals"}
   ];
 }
 

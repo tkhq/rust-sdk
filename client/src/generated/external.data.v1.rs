@@ -510,6 +510,24 @@ pub struct SmartContractInterface {
     pub updated_at: ::core::option::Option<Timestamp>,
 }
 #[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct TvcApp {
+    pub id: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    pub name: ::prost::alloc::string::String,
+    pub quorum_public_key: ::prost::alloc::string::String,
+    pub manifest_set_id: ::prost::alloc::string::String,
+    pub share_set_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub external_connectivity: bool,
+    #[serde(default)]
+    pub created_at: ::core::option::Option<Timestamp>,
+    #[serde(default)]
+    pub updated_at: ::core::option::Option<Timestamp>,
+}
+#[derive(Debug)]
 /// An account derived from a Wallet
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]

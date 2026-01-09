@@ -46,6 +46,7 @@ impl Cli {
             Commands::App { command } => match command {
                 AppCommands::List(args) => commands::app::list::run(args, &config).await,
                 AppCommands::Create(args) => commands::app::create::run(args, &config).await,
+                AppCommands::Init(args) => commands::app::init::run(args, &config).await,
             },
             Commands::Login(args) => commands::login::run(args, &config).await,
         }
@@ -82,6 +83,8 @@ enum DeployCommands {
 enum AppCommands {
     /// List applications.
     List(commands::app::list::Args),
-    /// Create a new application.
+    /// Create a new application from a config file.
     Create(commands::app::create::Args),
+    /// Generate a template app configuration file.
+    Init(commands::app::init::Args),
 }

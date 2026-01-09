@@ -1,6 +1,6 @@
 //! Login command for authenticating with Turnkey.
 
-use crate::config::{ApiKey, Config, OperatorKey, OrgConfig};
+use crate::config::turnkey::{ApiKey, Config, OperatorKey, OrgConfig};
 use anyhow::{anyhow, bail, Context, Result};
 use clap::Args as ClapArgs;
 use qos_p256::P256Pair;
@@ -56,7 +56,7 @@ pub async fn run(args: Args, cli_config: &crate::cli::GlobalConfig) -> anyhow::R
     println!("API Key: {}", api_key.public_key);
     println!("Operator Key: {}", operator_key.public_key);
     println!();
-    println!("Config: {}", crate::config::config_file_path()?.display());
+    println!("Config: {}", crate::config::turnkey::config_file_path()?.display());
     println!("API Key: {}", org_config.api_key_path.display());
     println!("Operator Key: {}", org_config.operator_key_path.display());
 
@@ -185,8 +185,8 @@ async fn get_or_generate_operator_key(org_config: &OrgConfig) -> Result<Operator
     println!();
     println!("Generating operator key...");
 
-    let pair = P256Pair::generate()
-        .map_err(|e| anyhow!("failed to generate operator key: {e:?}"))?;
+    let pair =
+        P256Pair::generate().map_err(|e| anyhow!("failed to generate operator key: {e:?}"))?;
     let public_key = hex::encode(pair.public_key().to_bytes());
     let private_key = hex::encode(pair.to_master_seed());
 

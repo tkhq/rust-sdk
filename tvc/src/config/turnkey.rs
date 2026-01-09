@@ -1,4 +1,4 @@
-//! Configuration management for TVC CLI.
+//! Turnkey CLI configuration management.
 //!
 //! Config files are stored at `~/.config/turnkey/`:
 //! - `tvc.config.toml` - Main config with org registry, active org, and key paths

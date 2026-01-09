@@ -374,6 +374,21 @@
       "type": "ACTIVITY_TYPE_ETH_SEND_TRANSACTION",
       "intentType": "EthSendTransactionIntent",
       "resultType": "EthSendTransactionResult"
+    },
+    "/public/v1/submit/create_tvc_app": {
+      "type": "ACTIVITY_TYPE_CREATE_TVC_APP",
+      "intentType": "CreateTvcAppIntent",
+      "resultType": "CreateTvcAppResult"
+    },
+    "/public/v1/submit/create_tvc_deployment": {
+      "type": "ACTIVITY_TYPE_CREATE_TVC_DEPLOYMENT",
+      "intentType": "CreateTvcDeploymentIntent",
+      "resultType": "CreateTvcDeploymentResult"
+    },
+    "/public/v1/submit/approve_tvc_deployment": {
+      "type": "ACTIVITY_TYPE_APPROVE_TVC_DEPLOYMENT",
+      "intentType": "ApproveTvcDeploymentIntent",
+      "resultType": "ApproveTvcDeploymentResult"
     }
   }
 }

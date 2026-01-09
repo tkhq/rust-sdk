@@ -393,6 +393,8 @@ pub struct GetSendTransactionStatusResponse {
     pub tx_status: ::prost::alloc::string::String,
     #[serde(default)]
     pub tx_error: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub error: ::core::option::Option<TxError>,
     /// VM-specific transaction details
     #[serde(default)]
     pub details: ::core::option::Option<get_send_transaction_status_response::Details>,
@@ -724,3 +726,142 @@ pub struct GetGasUsageResponse {
     pub window_limit_usd: ::prost::alloc::string::String,
     pub usage_usd: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetNoncesRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub address: ::prost::alloc::string::String,
+    pub caip2: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub nonce: bool,
+    #[serde(default)]
+    pub gas_station_nonce: bool,
+}
+#[derive(Debug)]
+#[serde_with::serde_as]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, Copy, PartialEq)]
+pub struct GetNoncesResponse {
+    #[serde(default)]
+    #[serde_as(as = "Option<serde_with::DisplayFromStr>")]
+    pub nonce: ::core::option::Option<u64>,
+    #[serde(default)]
+    #[serde_as(as = "Option<serde_with::DisplayFromStr>")]
+    pub gas_station_nonce: ::core::option::Option<u64>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct TxError {
+    pub message: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub revert_chain: ::prost::alloc::vec::Vec<RevertChainEntry>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct RevertChainEntry {
+    pub address: ::prost::alloc::string::String,
+    pub error_type: ::prost::alloc::string::String,
+    pub display_message: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub error_details: ::core::option::Option<revert_chain_entry::ErrorDetails>,
+}
+/// Nested message and enum types in `RevertChainEntry`.
+pub mod revert_chain_entry {
+    #[derive(::serde::Serialize, ::serde::Deserialize)]
+    #[derive(Clone, PartialEq)]
+    #[derive(Debug)]
+    pub enum ErrorDetails {
+        #[serde(rename = "ERROR_DETAILS_UNKNOWN")]
+        Unknown(super::UnknownRevertError),
+        #[serde(rename = "ERROR_DETAILS_NATIVE")]
+        Native(super::NativeRevertError),
+        #[serde(rename = "ERROR_DETAILS_CUSTOM")]
+        Custom(super::CustomRevertError),
+    }
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct UnknownRevertError {
+    #[serde(default)]
+    pub selector: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub data: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[serde_with::serde_as]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct NativeRevertError {
+    #[serde(default)]
+    pub native_type: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub message: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    #[serde_as(as = "Option<serde_with::DisplayFromStr>")]
+    pub panic_code: ::core::option::Option<u64>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CustomRevertError {
+    #[serde(default)]
+    pub error_name: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub params_json: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetTvcAppsRequest {
+    pub organization_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetTvcAppsResponse {
+    #[serde(default)]
+    pub tvc_apps: ::prost::alloc::vec::Vec<
+        super::super::super::super::external::data::v1::TvcApp,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetTvcAppRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub tvc_app_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetTvcAppResponse {
+    #[serde(default)]
+    pub tvc_app: ::core::option::Option<
+        super::super::super::super::external::data::v1::TvcApp,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, Copy, PartialEq)]
+pub struct RefreshFeatureFlagsRequest {}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, Copy, PartialEq)]
+pub struct RefreshFeatureFlagsResponse {}

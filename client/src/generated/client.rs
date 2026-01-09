@@ -3388,4 +3388,52 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/get_gas_usage".to_string())
             .await
     }
+    /// Get nonces for an address.
+    ///
+    /// Get nonce values for an address on a given network. Can fetch the standard on-chain nonce and/or the gas station nonce used for sponsored transactions.
+    pub async fn get_nonces(
+        &self,
+        request: coordinator::GetNoncesRequest,
+    ) -> Result<coordinator::GetNoncesResponse, TurnkeyClientError> {
+        self.process_request(&request, "/public/v1/query/get_nonces".to_string())
+            .await
+    }
+    /// Create TVC app
+    ///
+    /// Create a new TVC application.
+    pub async fn create_tvc_app(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::CreateTvcAppIntent,
+    ) -> Result<ActivityResult<immutable_activity::CreateTvcAppResult>, TurnkeyClientError> {
+        let request = external_activity::CreateTvcAppRequest {
+            r#type: "ACTIVITY_TYPE_CREATE_TVC_APP".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(&request, "/public/v1/submit/create_tvc_app".to_string())
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::CreateTvcAppResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
 }

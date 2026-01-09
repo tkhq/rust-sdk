@@ -42,4 +42,6 @@ enum TurnkeyErrorCode {
   // INVALID_EMAIL_TLD = 28; use INVALID_FQDN instead, INVALID_EMAIL for more general case email errors
   INVALID_EMAIL = 29;
   INVALID_FQDN = 30;
+  OAUTH_PROVIDER_ALREADY_EXISTS = 31;
+  EMAIL_SENDING_DISABLED = 32;
 }
