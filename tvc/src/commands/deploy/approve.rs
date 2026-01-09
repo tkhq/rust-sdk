@@ -1,9 +1,9 @@
-//! Approve deploy command. This is meant to crypto
+//! Approve deploy command - cryptographically approve a QOS manifest.
 
+use crate::config::turnkey::{Config, OperatorKey};
 use crate::pair::LocalPair;
 use crate::util::{read_file_to_string, write_file};
-use anyhow::anyhow;
-use anyhow::{bail, Context};
+use anyhow::{anyhow, bail, Context};
 use clap::{ArgGroup, Args as ClapArgs};
 use qos_core::protocol::services::boot::Approval;
 use qos_core::protocol::services::boot::{
@@ -13,11 +13,12 @@ use qos_core::protocol::QosHash;
 use std::io::{BufRead, Write};
 use std::path::Path;
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
+use turnkey_client::generated::{CreateTvcManifestApprovalsIntent, TvcManifestApproval};
 
 /// Cryptographically approve a QOS manifest for a deployment with your operator's manifest set key.
 #[derive(Debug, ClapArgs)]
 #[command(about, long_about = None)]
-#[command(group(ArgGroup::new("operator").args(["operator_seed", "operator_id"])))]
 #[command(group(ArgGroup::new("manifest-source").args(["manifest", "deploy_id"])))]
 pub struct Args {
     /// Path to QOS manifest file.
@@ -38,21 +39,20 @@ pub struct Args {
     )]
     pub deploy_id: Option<String>,
 
-    /// Path to the file containing the master seed for the operator key.
-    #[arg(
-        long,
-        help_heading = "Operator to approve with (pick one)",
-        value_name = "PATH"
-    )]
-    pub operator_seed: Option<PathBuf>,
+    /// Turnkey manifest ID (UUID) for the manifest being approved.
+    /// Required when posting approval to the API.
+    #[arg(long, env = "TVC_MANIFEST_ID")]
+    pub manifest_id: Option<String>,
 
-    /// Operator ID to use.
-    #[arg(
-        long,
-        help_heading = "Operator to approve with (pick one)",
-        env = "TVC_OPERATOR_ID"
-    )]
+    /// Turnkey operator ID (UUID) for the approving operator.
+    /// Required when posting approval to the API.
+    #[arg(long, env = "TVC_OPERATOR_ID")]
     pub operator_id: Option<String>,
+
+    /// Path to the file containing the master seed for the operator key.
+    /// If not provided, uses the operator key from the logged-in org config.
+    #[arg(long, help_heading = "Operator signing key", value_name = "PATH")]
+    pub operator_seed: Option<PathBuf>,
 
     /// Walk through manifest approval prompts but do not generate an approval.
     #[arg(long)]
@@ -72,7 +72,7 @@ pub struct Args {
 }
 
 /// Run the approve deploy command.
-pub async fn run(args: Args, _config: &crate::cli::GlobalConfig) -> anyhow::Result<()> {
+pub async fn run(args: Args, config: &crate::cli::GlobalConfig) -> anyhow::Result<()> {
     let manifest = match (&args.manifest, &args.deploy_id) {
         (Some(path), _) => read_manifest_from_path(path).await?,
         (_, Some(deploy_id)) => fetch_manifest_from_deploy(deploy_id).await?,
@@ -83,25 +83,107 @@ pub async fn run(args: Args, _config: &crate::cli::GlobalConfig) -> anyhow::Resu
         interactive_approve(&manifest)?;
     }
 
-    if !args.dry_run {
-        let pair: Box<dyn crate::pair::Pair> = match (&args.operator_seed, &args.operator_id) {
-            (Some(path), _) => Box::new(LocalPair::from_master_seed(path).await?),
-            (_, Some(_id)) => todo!("implement signer from operator id"),
-            (None, None) => bail!("an operator is required"),
-        };
+    if args.dry_run {
+        println!("Dry run complete. No approval generated.");
+        return Ok(());
+    }
 
-        let approval = generate_approval(pair, &manifest).await?;
-        let json = serde_json::to_string_pretty(&approval)?;
+    // Get operator key - from --operator-seed or from logged-in config
+    let pair: Box<dyn crate::pair::Pair> = match &args.operator_seed {
+        Some(path) => Box::new(LocalPair::from_master_seed(path).await?),
+        None => {
+            // Default to operator key from logged-in org config
+            let tvc_config = Config::load().await?;
+            let (alias, org_config) = tvc_config.active_org_config().ok_or_else(|| {
+                anyhow!("No active organization. Run `tvc login` first or provide --operator-seed.")
+            })?;
 
-        if let Some(ref path) = args.output {
-            write_file(path, &json).await?
-        } else {
-            println!("{json}")
-        }
-        if !args.skip_post {
-            println!("posting to api not yet implemented")
+            let operator_key = OperatorKey::load(org_config).await?.ok_or_else(|| {
+                anyhow!(
+                    "No operator key found for org '{alias}'. \
+                     Run `tvc login` first or provide --operator-seed."
+                )
+            })?;
+
+            Box::new(LocalPair::from_hex_seed(&operator_key.private_key)?)
         }
     };
+
+    let approval = generate_approval(pair, &manifest).await?;
+    let json = serde_json::to_string_pretty(&approval)?;
+
+    // Write to file or stdout
+    if let Some(ref path) = args.output {
+        write_file(path, &json).await?;
+        println!("Approval written to: {}", path.display());
+    } else {
+        println!("{json}");
+    }
+
+    // Post to API if not skipped
+    if !args.skip_post {
+        post_approval_to_api(&args, &approval, config).await?;
+    }
+
+    Ok(())
+}
+
+async fn post_approval_to_api(
+    args: &Args,
+    approval: &Approval,
+    config: &crate::cli::GlobalConfig,
+) -> anyhow::Result<()> {
+    // Validate required IDs
+    let manifest_id = args.manifest_id.as_ref().ok_or_else(|| {
+        anyhow!(
+            "--manifest-id is required to post approval to API. \
+             Use --skip-post to only generate the approval locally."
+        )
+    })?;
+
+    let operator_id = args.operator_id.as_ref().ok_or_else(|| {
+        anyhow!(
+            "--operator-id is required to post approval to API. \
+             Use --skip-post to only generate the approval locally."
+        )
+    })?;
+
+    println!();
+    println!("Posting approval to Turnkey...");
+
+    // Build authenticated client
+    let auth = crate::client::build_client(&config.api_base_url).await?;
+
+    // Convert local approval to API format
+    let tvc_approval = TvcManifestApproval {
+        operator_id: operator_id.clone(),
+        signature: hex::encode(&approval.signature),
+    };
+
+    let intent = CreateTvcManifestApprovalsIntent {
+        manifest_id: manifest_id.clone(),
+        approvals: vec![tvc_approval],
+    };
+
+    // Get timestamp
+    let timestamp_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .context("system time before unix epoch")?
+        .as_millis();
+
+    // Post the approval
+    let result = auth
+        .client
+        .create_tvc_manifest_approvals(auth.org_id, timestamp_ms, intent)
+        .await
+        .context("failed to post manifest approval")?;
+
+    println!();
+    println!("Approval posted successfully!");
+    println!();
+    println!("Approval IDs: {:?}", result.result.approval_ids);
+    println!("Manifest ID: {}", manifest_id);
+    println!("Operator ID: {}", operator_id);
 
     Ok(())
 }
@@ -237,5 +319,5 @@ async fn read_manifest_from_path(path: &Path) -> anyhow::Result<Manifest> {
 }
 
 async fn fetch_manifest_from_deploy(_deploy_id: &str) -> anyhow::Result<Manifest> {
-    todo!("fetching manifest with deployment id is not yet implemented")
+    bail!("fetching manifest with deployment id is not yet implemented (requires GetTvcDeployment API)")
 }

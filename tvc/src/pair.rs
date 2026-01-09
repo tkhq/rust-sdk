@@ -25,10 +25,15 @@ pub struct LocalPair {
 }
 
 impl LocalPair {
-    /// Create a local signer from a 32 byte, hex encoded seed.
+    /// Create a local signer from a file containing a 32 byte, hex encoded seed.
     pub async fn from_master_seed(path: &Path) -> anyhow::Result<Self> {
         let hex_seed = read_file_to_string(path).await?;
-        let bytes_seed: [u8; 32] = hex::decode(hex_seed)?
+        Self::from_hex_seed(&hex_seed)
+    }
+
+    /// Create a local signer from a hex-encoded 32 byte seed string.
+    pub fn from_hex_seed(hex_seed: &str) -> anyhow::Result<Self> {
+        let bytes_seed: [u8; 32] = hex::decode(hex_seed.trim())?
             .try_into()
             .map_err(|v: Vec<u8>| anyhow!("seed must be exactly 32 bytes, got {}", v.len()))?;
 
