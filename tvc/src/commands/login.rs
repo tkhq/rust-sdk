@@ -56,7 +56,10 @@ pub async fn run(args: Args, cli_config: &crate::cli::GlobalConfig) -> anyhow::R
     println!("API Key: {}", api_key.public_key);
     println!("Operator Key: {}", operator_key.public_key);
     println!();
-    println!("Config: {}", crate::config::turnkey::config_file_path()?.display());
+    println!(
+        "Config: {}",
+        crate::config::turnkey::config_file_path()?.display()
+    );
     println!("API Key: {}", org_config.api_key_path.display());
     println!("Operator Key: {}", org_config.operator_key_path.display());
 

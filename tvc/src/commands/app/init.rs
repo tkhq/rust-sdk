@@ -23,8 +23,7 @@ pub async fn run(args: Args, _config: &crate::cli::GlobalConfig) -> Result<()> {
 
     // Generate template
     let config = AppConfig::template();
-    let json =
-        serde_json::to_string_pretty(&config).context("failed to serialize config")?;
+    let json = serde_json::to_string_pretty(&config).context("failed to serialize config")?;
 
     // Write to file
     std::fs::write(&args.output, json)

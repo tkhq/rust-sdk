@@ -22,8 +22,12 @@ pub async fn run(args: Args, cli_config: &crate::cli::GlobalConfig) -> Result<()
     let config_content = std::fs::read_to_string(&args.config_file)
         .with_context(|| format!("failed to read config file: {}", args.config_file.display()))?;
 
-    let deploy_config: DeployConfig = serde_json::from_str(&config_content)
-        .with_context(|| format!("failed to parse config file: {}", args.config_file.display()))?;
+    let deploy_config: DeployConfig = serde_json::from_str(&config_content).with_context(|| {
+        format!(
+            "failed to parse config file: {}",
+            args.config_file.display()
+        )
+    })?;
 
     // Validate config
     if deploy_config.has_placeholders() {

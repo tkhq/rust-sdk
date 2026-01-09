@@ -1,14 +1,12 @@
 //! App create command - creates an app from a config file.
 
-use crate::config::app::AppConfig;
 use crate::client::build_client;
+use crate::config::app::AppConfig;
 use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
-use turnkey_client::generated::{
-    CreateTvcAppIntent, TvcOperatorParams, TvcOperatorSetParams,
-};
+use turnkey_client::generated::{CreateTvcAppIntent, TvcOperatorParams, TvcOperatorSetParams};
 
 /// Create a new TVC application from a config file.
 #[derive(Debug, ClapArgs)]
@@ -24,8 +22,12 @@ pub async fn run(args: Args, cli_config: &crate::cli::GlobalConfig) -> Result<()
     let config_content = std::fs::read_to_string(&args.config_file)
         .with_context(|| format!("failed to read config file: {}", args.config_file.display()))?;
 
-    let app_config: AppConfig = serde_json::from_str(&config_content)
-        .with_context(|| format!("failed to parse config file: {}", args.config_file.display()))?;
+    let app_config: AppConfig = serde_json::from_str(&config_content).with_context(|| {
+        format!(
+            "failed to parse config file: {}",
+            args.config_file.display()
+        )
+    })?;
 
     // Validate config
     if app_config.has_placeholders() {
@@ -77,8 +79,10 @@ pub async fn run(args: Args, cli_config: &crate::cli::GlobalConfig) -> Result<()
             }
         }),
         share_set_id: app_config.share_set_id.clone(),
-        share_set_params: app_config.share_set_params.as_ref().map(|p| {
-            TvcOperatorSetParams {
+        share_set_params: app_config
+            .share_set_params
+            .as_ref()
+            .map(|p| TvcOperatorSetParams {
                 name: p.name.clone(),
                 threshold: p.threshold,
                 new_operators: p
@@ -90,8 +94,7 @@ pub async fn run(args: Args, cli_config: &crate::cli::GlobalConfig) -> Result<()
                     })
                     .collect(),
                 existing_operator_ids: p.existing_operator_ids.clone(),
-            }
-        }),
+            }),
     };
 
     // Get timestamp

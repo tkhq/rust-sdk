@@ -24,9 +24,9 @@ pub async fn build_client(api_base_url: &str) -> Result<AuthenticatedClient> {
         .active_org_config()
         .ok_or_else(|| anyhow::anyhow!("No active organization. Run `tvc login` first."))?;
 
-    let api_key = ApiKey::load(org_config)
-        .await?
-        .ok_or_else(|| anyhow::anyhow!("No API key found for org '{alias}'. Run `tvc login` first."))?;
+    let api_key = ApiKey::load(org_config).await?.ok_or_else(|| {
+        anyhow::anyhow!("No API key found for org '{alias}'. Run `tvc login` first.")
+    })?;
 
     let stamper = TurnkeyP256ApiKey::from_strings(&api_key.private_key, Some(&api_key.public_key))
         .context("failed to load API key")?;

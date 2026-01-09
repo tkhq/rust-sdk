@@ -72,13 +72,13 @@ impl AppConfig {
     pub fn has_placeholders(&self) -> bool {
         self.name.starts_with("<FILL_IN")
             || self.quorum_public_key.starts_with("<FILL_IN")
-            || self.manifest_set_params.as_ref().map_or(false, |p| {
+            || self.manifest_set_params.as_ref().is_some_and(|p| {
                 p.name.starts_with("<FILL_IN")
                     || p.new_operators
                         .iter()
                         .any(|o| o.public_key.starts_with("<FILL_IN"))
             })
-            || self.share_set_params.as_ref().map_or(false, |p| {
+            || self.share_set_params.as_ref().is_some_and(|p| {
                 p.name.starts_with("<FILL_IN")
                     || p.new_operators
                         .iter()

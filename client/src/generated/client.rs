@@ -3453,7 +3453,10 @@ impl<S: Stamp> TurnkeyClient<S> {
             organization_id,
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/create_tvc_deployment".to_string())
+            .process_activity(
+                &request,
+                "/public/v1/submit/create_tvc_deployment".to_string(),
+            )
             .await?;
         let inner = activity
             .result
