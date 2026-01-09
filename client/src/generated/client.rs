@@ -3436,4 +3436,43 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
+    /// Create TVC deployment
+    ///
+    /// Create a new TVC deployment.
+    pub async fn create_tvc_deployment(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::CreateTvcDeploymentIntent,
+    ) -> Result<ActivityResult<immutable_activity::CreateTvcDeploymentResult>, TurnkeyClientError>
+    {
+        let request = external_activity::CreateTvcDeploymentRequest {
+            r#type: "ACTIVITY_TYPE_CREATE_TVC_DEPLOYMENT".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(&request, "/public/v1/submit/create_tvc_deployment".to_string())
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::CreateTvcDeploymentResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
 }

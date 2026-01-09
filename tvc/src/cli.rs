@@ -42,6 +42,7 @@ impl Cli {
                 }
                 DeployCommands::Status(args) => commands::deploy::status::run(args, &config).await,
                 DeployCommands::Create(args) => commands::deploy::create::run(args, &config).await,
+                DeployCommands::Init(args) => commands::deploy::init::run(args, &config).await,
             },
             Commands::App { command } => match command {
                 AppCommands::List(args) => commands::app::list::run(args, &config).await,
@@ -75,8 +76,10 @@ enum DeployCommands {
     Approve(commands::deploy::approve::Args),
     /// Get the status of a deployment.
     Status(commands::deploy::status::Args),
-    /// Create a new deployment.
+    /// Create a new deployment from a config file.
     Create(commands::deploy::create::Args),
+    /// Generate a template deployment configuration file.
+    Init(commands::deploy::init::Args),
 }
 
 #[derive(Debug, Subcommand)]
