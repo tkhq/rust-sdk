@@ -3398,9 +3398,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/get_nonces".to_string())
             .await
     }
-    /// Create TVC app
+    /// Create a TVC App
     ///
-    /// Create a new TVC application.
+    /// Create a new TVC application
     pub async fn create_tvc_app(
         &self,
         organization_id: String,
@@ -3436,9 +3436,29 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// Create TVC deployment
+    /// List TVC Apps
     ///
-    /// Create a new TVC deployment.
+    /// List all TVC Apps within an organization.
+    pub async fn get_tvc_apps(
+        &self,
+        request: coordinator::GetTvcAppsRequest,
+    ) -> Result<coordinator::GetTvcAppsResponse, TurnkeyClientError> {
+        self.process_request(&request, "/public/v1/query/list_tvc_apps".to_string())
+            .await
+    }
+    /// Get TVC App
+    ///
+    /// Get details about a single TVC App
+    pub async fn get_tvc_app(
+        &self,
+        request: coordinator::GetTvcAppRequest,
+    ) -> Result<coordinator::GetTvcAppResponse, TurnkeyClientError> {
+        self.process_request(&request, "/public/v1/query/get_tvc_app".to_string())
+            .await
+    }
+    /// Create a TVC Deployment
+    ///
+    /// Create a new TVC Deployment
     pub async fn create_tvc_deployment(
         &self,
         organization_id: String,
@@ -3478,16 +3498,18 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// Create TVC manifest approvals
+    /// Create TVC Manifest Approvals
     ///
-    /// Post manifest approvals to Turnkey.
+    /// Post one or more manifest approvals for a TVC Manifest
     pub async fn create_tvc_manifest_approvals(
         &self,
         organization_id: String,
         timestamp_ms: u128,
         params: immutable_activity::CreateTvcManifestApprovalsIntent,
-    ) -> Result<ActivityResult<immutable_activity::CreateTvcManifestApprovalsResult>, TurnkeyClientError>
-    {
+    ) -> Result<
+        ActivityResult<immutable_activity::CreateTvcManifestApprovalsResult>,
+        TurnkeyClientError,
+    > {
         let request = external_activity::CreateTvcManifestApprovalsRequest {
             r#type: "ACTIVITY_TYPE_CREATE_TVC_MANIFEST_APPROVALS".to_string(),
             timestamp_ms: timestamp_ms.to_string(),

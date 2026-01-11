@@ -92,8 +92,9 @@ fn manifest_and_deploy_id_are_mutually_exclusive() {
         ));
 }
 
+/// Test that --skip-post is required when --manifest-id is not provided
 #[test]
-fn operator_seed_and_operator_id_are_mutually_exclusive() {
+fn approve_requires_manifest_id_or_skip_post() {
     cargo_bin_cmd!("tvc")
         .arg("deploy")
         .arg("approve")
@@ -101,10 +102,10 @@ fn operator_seed_and_operator_id_are_mutually_exclusive() {
         .arg("fixtures/manifest.json")
         .arg("--operator-seed")
         .arg("fixtures/seed.hex")
-        .arg("--operator-id")
-        .arg("some-operator-id")
         .arg("--dangerous-skip-interactive")
         .assert()
         .failure()
-        .stderr(predicate::str::contains("the argument '--operator-seed <PATH>' cannot be used with '--operator-id <OPERATOR_ID>'"));
+        .stderr(predicate::str::contains(
+            "--manifest-id is required to post approval to API",
+        ));
 }

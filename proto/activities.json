@@ -389,6 +389,11 @@
       "type": "ACTIVITY_TYPE_APPROVE_TVC_DEPLOYMENT",
       "intentType": "ApproveTvcDeploymentIntent",
       "resultType": "ApproveTvcDeploymentResult"
+    },
+    "/public/v1/submit/create_tvc_manifest_approvals": {
+      "type": "ACTIVITY_TYPE_CREATE_TVC_MANIFEST_APPROVALS",
+      "intentType": "CreateTvcManifestApprovalsIntent",
+      "resultType": "CreateTvcManifestApprovalsResult"
     }
   }
 }
