@@ -78,7 +78,7 @@ pub async fn run(args: Args, cli_config: &crate::cli::GlobalConfig) -> Result<()
     println!();
     println!("Next steps:");
     println!(
-        "  - Run `tvc deploy status {}` to check deployment status",
+        "  - Run `WIP: tvc deploy status {}` to check deployment status",
         result.result.deployment_id
     );
     println!(
