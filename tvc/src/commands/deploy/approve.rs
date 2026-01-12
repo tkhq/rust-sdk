@@ -73,7 +73,7 @@ pub struct Args {
 }
 
 /// Run the approve deploy command.
-pub async fn run(args: Args, config: &crate::cli::GlobalConfig) -> anyhow::Result<()> {
+pub async fn run(args: Args) -> anyhow::Result<()> {
     let manifest = match (&args.manifest, &args.deploy_id) {
         (Some(path), _) => read_manifest_from_path(path).await?,
         (_, Some(deploy_id)) => fetch_manifest_from_deploy(deploy_id).await?,
@@ -123,17 +123,13 @@ pub async fn run(args: Args, config: &crate::cli::GlobalConfig) -> anyhow::Resul
 
     // Post to API if not skipped
     if !args.skip_post {
-        post_approval_to_api(&args, &approval, config).await?;
+        post_approval_to_api(&args, &approval).await?;
     }
 
     Ok(())
 }
 
-async fn post_approval_to_api(
-    args: &Args,
-    approval: &Approval,
-    config: &crate::cli::GlobalConfig,
-) -> anyhow::Result<()> {
+async fn post_approval_to_api(args: &Args, approval: &Approval) -> anyhow::Result<()> {
     // Validate required IDs
     let manifest_id = args.manifest_id.as_ref().ok_or_else(|| {
         anyhow!(
@@ -153,7 +149,7 @@ async fn post_approval_to_api(
     println!("Posting approval to Turnkey...");
 
     // Build authenticated client
-    let auth = crate::client::build_client(&config.api_base_url).await?;
+    let auth = crate::client::build_client().await?;
 
     // Convert local approval to API format
     let tvc_approval = TvcManifestApproval {

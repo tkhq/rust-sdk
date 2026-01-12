@@ -17,7 +17,7 @@ pub struct AuthenticatedClient {
 ///
 /// Loads the active organization and API key from `~/.config/turnkey/`.
 /// Returns an error if not logged in.
-pub async fn build_client(api_base_url: &str) -> Result<AuthenticatedClient> {
+pub async fn build_client() -> Result<AuthenticatedClient> {
     let config = Config::load().await?;
 
     let (alias, org_config) = config
@@ -33,7 +33,7 @@ pub async fn build_client(api_base_url: &str) -> Result<AuthenticatedClient> {
 
     let client = TurnkeyClient::builder()
         .api_key(stamper)
-        .base_url(api_base_url)
+        .base_url(&org_config.api_base_url)
         .build()
         .context("failed to build Turnkey client")?;
 

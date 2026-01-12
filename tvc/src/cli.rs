@@ -3,25 +3,10 @@
 use crate::commands;
 use clap::{Parser, Subcommand};
 
-/// Global configuration available to all commands.
-#[derive(Debug, Clone)]
-pub struct GlobalConfig {
-    pub api_base_url: String,
-}
-
 /// CLI command parsing and dispatch.
 #[derive(Debug, Parser)]
 #[command(about = "CLI for building with Turnkey Verifiable Cloud", long_about = None)]
 pub struct Cli {
-    /// API base URL.
-    #[arg(
-        long,
-        global = true,
-        env = "TVC_API_BASE_URL",
-        default_value = "https://api.turnkey.com"
-    )]
-    pub api_base_url: String,
-
     #[command(subcommand)]
     command: Commands,
 }
@@ -31,25 +16,19 @@ impl Cli {
     pub async fn run() -> anyhow::Result<()> {
         let args = Cli::parse();
 
-        let config = GlobalConfig {
-            api_base_url: args.api_base_url,
-        };
-
         match args.command {
             Commands::Deploy { command } => match command {
-                DeployCommands::Approve(args) => {
-                    commands::deploy::approve::run(args, &config).await
-                }
-                DeployCommands::Status(args) => commands::deploy::status::run(args, &config).await,
-                DeployCommands::Create(args) => commands::deploy::create::run(args, &config).await,
-                DeployCommands::Init(args) => commands::deploy::init::run(args, &config).await,
+                DeployCommands::Approve(args) => commands::deploy::approve::run(args).await,
+                DeployCommands::Status(args) => commands::deploy::status::run(args).await,
+                DeployCommands::Create(args) => commands::deploy::create::run(args).await,
+                DeployCommands::Init(args) => commands::deploy::init::run(args).await,
             },
             Commands::App { command } => match command {
-                AppCommands::List(args) => commands::app::list::run(args, &config).await,
-                AppCommands::Create(args) => commands::app::create::run(args, &config).await,
-                AppCommands::Init(args) => commands::app::init::run(args, &config).await,
+                AppCommands::List(args) => commands::app::list::run(args).await,
+                AppCommands::Create(args) => commands::app::create::run(args).await,
+                AppCommands::Init(args) => commands::app::init::run(args).await,
             },
-            Commands::Login(args) => commands::login::run(args, &config).await,
+            Commands::Login(args) => commands::login::run(args).await,
         }
     }
 }

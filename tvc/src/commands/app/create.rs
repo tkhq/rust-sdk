@@ -17,7 +17,7 @@ pub struct Args {
 }
 
 /// Run the app create command.
-pub async fn run(args: Args, cli_config: &crate::cli::GlobalConfig) -> Result<()> {
+pub async fn run(args: Args) -> Result<()> {
     // Read and parse config file
     let config_content = std::fs::read_to_string(&args.config_file)
         .with_context(|| format!("failed to read config file: {}", args.config_file.display()))?;
@@ -55,7 +55,7 @@ pub async fn run(args: Args, cli_config: &crate::cli::GlobalConfig) -> Result<()
     println!("Creating app '{}'...", app_config.name);
 
     // Build authenticated client
-    let auth = build_client(&cli_config.api_base_url).await?;
+    let auth = build_client().await?;
 
     // Convert config to API intent
     let intent = CreateTvcAppIntent {

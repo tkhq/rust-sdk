@@ -12,7 +12,7 @@ pub struct Args {
 }
 
 /// Run the deploy status command.
-pub async fn run(args: Args, _config: &crate::cli::GlobalConfig) -> anyhow::Result<()> {
+pub async fn run(args: Args) -> anyhow::Result<()> {
     println!("Getting status for deploy: {}", args.deploy_id);
     todo!("deploy status not yet implemented")
 }

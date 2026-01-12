@@ -12,7 +12,7 @@ pub struct Args {
 }
 
 /// Run the app list command.
-pub async fn run(args: Args, _config: &crate::cli::GlobalConfig) -> anyhow::Result<()> {
+pub async fn run(args: Args) -> anyhow::Result<()> {
     println!("Listing apps with filter: {:?}", args.name);
     todo!("app list not yet implemented")
 }

@@ -28,6 +28,11 @@ pub struct Config {
     pub orgs: HashMap<String, OrgConfig>,
 }
 
+/// Known API base URLs for different environments.
+pub const API_BASE_URL_PROD: &str = "https://api.turnkey.com";
+pub const API_BASE_URL_PREPROD: &str = "https://api.preprod.turnkey.engineering";
+pub const API_BASE_URL_LOCAL: &str = "http://localhost:8081";
+
 /// Configuration for a single organization
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrgConfig {
@@ -37,6 +42,13 @@ pub struct OrgConfig {
     pub api_key_path: PathBuf,
     /// Path to the operator key file
     pub operator_key_path: PathBuf,
+    /// API base URL for this organization
+    #[serde(default = "default_api_base_url")]
+    pub api_base_url: String,
+}
+
+fn default_api_base_url() -> String {
+    API_BASE_URL_PROD.to_string()
 }
 
 /// API key stored in api_key.json
@@ -133,11 +145,12 @@ impl Config {
     }
 
     /// Add or update an organization with default key paths
-    pub fn add_org(&mut self, alias: &str, org_id: String) -> Result<()> {
+    pub fn add_org(&mut self, alias: &str, org_id: String, api_base_url: String) -> Result<()> {
         let org_config = OrgConfig {
             id: org_id,
             api_key_path: default_api_key_path(alias)?,
             operator_key_path: default_operator_key_path(alias)?,
+            api_base_url,
         };
         self.orgs.insert(alias.to_string(), org_config);
         Ok(())

@@ -1,6 +1,9 @@
 //! Login command for authenticating with Turnkey.
 
-use crate::config::turnkey::{ApiKey, Config, OperatorKey, OrgConfig};
+use crate::config::turnkey::{
+    ApiKey, Config, OperatorKey, OrgConfig, API_BASE_URL_LOCAL, API_BASE_URL_PREPROD,
+    API_BASE_URL_PROD,
+};
 use anyhow::{anyhow, bail, Context, Result};
 use clap::Args as ClapArgs;
 use qos_p256::P256Pair;
@@ -19,7 +22,7 @@ pub struct Args {
 }
 
 /// Run the login command.
-pub async fn run(args: Args, cli_config: &crate::cli::GlobalConfig) -> anyhow::Result<()> {
+pub async fn run(args: Args) -> anyhow::Result<()> {
     // Load existing config
     let mut config = Config::load().await?;
 
@@ -39,7 +42,7 @@ pub async fn run(args: Args, cli_config: &crate::cli::GlobalConfig) -> anyhow::R
     println!();
     println!("Verifying credentials...");
 
-    let whoami = verify_credentials(&api_key, &org_config.id, &cli_config.api_base_url).await?;
+    let whoami = verify_credentials(&api_key, &org_config.id, &org_config.api_base_url).await?;
 
     // Get or generate operator key
     let operator_key = get_or_generate_operator_key(&org_config).await?;
@@ -128,9 +131,33 @@ async fn prompt_for_new_org(config: &mut Config) -> Result<(String, OrgConfig)> 
 
     let alias = prompt_with_default("Organization alias", "default")?;
 
-    config.add_org(&alias, org_id)?;
+    // Prompt for API base URL
+    let api_base_url = prompt_for_api_url()?;
+
+    config.add_org(&alias, org_id, api_base_url)?;
     let org_config = config.orgs.get(&alias).unwrap().clone();
     Ok((alias, org_config))
+}
+
+/// Prompt the user to select a Turnkey API URL.
+fn prompt_for_api_url() -> Result<String> {
+    println!();
+    println!("Select Turnkey API URL:");
+    println!("  1. prod (default) - {API_BASE_URL_PROD}");
+    println!("  2. preprod        - {API_BASE_URL_PREPROD}");
+    println!("  3. local          - {API_BASE_URL_LOCAL}");
+    println!();
+
+    let selection = prompt_with_default("API URL [1/2/3]", "1")?;
+
+    let url = match selection.as_str() {
+        "1" | "prod" | "" => API_BASE_URL_PROD,
+        "2" | "preprod" => API_BASE_URL_PREPROD,
+        "3" | "local" => API_BASE_URL_LOCAL,
+        _ => bail!("Invalid selection: {selection}"),
+    };
+
+    Ok(url.to_string())
 }
 
 /// Get an existing API key or generate a new one.
@@ -168,7 +195,7 @@ async fn get_or_generate_api_key(org_config: &OrgConfig) -> Result<ApiKey> {
     println!("Add this API key to your Turnkey dashboard:");
     println!("  1. Go to https://app.turnkey.com/dashboard/users");
     println!("  2. Click your user > Create API Key > Generate API Keys via CLI > Continue");
-    println!("  3. Paste the public key > Name it \"TVC\" > Continue > Approve");
+    println!("  3. Paste the public key > Name it \"TVC CLI\" > Continue > Approve");
     println!();
 
     wait_for_enter("Press Enter when done...")?;
