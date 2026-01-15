@@ -131,6 +131,7 @@ pub mod intent {
         CreateTvcAppIntent(super::CreateTvcAppIntent),
         CreateTvcDeploymentIntent(super::CreateTvcDeploymentIntent),
         CreateTvcManifestApprovalsIntent(super::CreateTvcManifestApprovalsIntent),
+        SolSendTransactionIntent(super::SolSendTransactionIntent),
     }
 }
 #[derive(Debug)]
@@ -762,6 +763,23 @@ pub struct SignTransactionIntentV2 {
     pub unsigned_transaction: ::prost::alloc::string::String,
     /// @inject_tag: validate:"required"
     pub r#type: super::super::common::v1::TransactionType,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SolSendTransactionIntent {
+    /// @inject_tag: validate:"required"
+    pub unsigned_transaction: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub sign_with: ::prost::alloc::string::String,
+    /// If true, Turnkey acts as fee payer and may inject a fresh blockhash
+    #[serde(default)]
+    pub sponsor: ::core::option::Option<bool>,
+    /// @inject_tag: validate:"required"
+    pub caip2: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub recent_blockhash: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -2015,6 +2033,8 @@ pub struct CreateTvcDeploymentIntent {
     pub host_path: ::prost::alloc::string::String,
     #[serde(default)]
     pub host_args: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub nonce: ::core::option::Option<u32>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -2151,6 +2171,7 @@ pub mod result {
         CreateTvcAppResult(super::CreateTvcAppResult),
         CreateTvcDeploymentResult(super::CreateTvcDeploymentResult),
         CreateTvcManifestApprovalsResult(super::CreateTvcManifestApprovalsResult),
+        SolSendTransactionResult(super::SolSendTransactionResult),
     }
 }
 #[derive(Debug)]
@@ -2871,6 +2892,13 @@ pub struct DeletePoliciesResult {
 #[derive(Clone, PartialEq)]
 pub struct CreateTvcAppResult {
     pub app_id: ::prost::alloc::string::String,
+    pub manifest_set_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub manifest_set_operator_ids: ::prost::alloc::vec::Vec<
+        ::prost::alloc::string::String,
+    >,
+    #[serde(default)]
+    pub manifest_set_threshold: u32,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -2878,6 +2906,7 @@ pub struct CreateTvcAppResult {
 #[derive(Clone, PartialEq)]
 pub struct CreateTvcDeploymentResult {
     pub deployment_id: ::prost::alloc::string::String,
+    pub manifest_id: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -2920,6 +2949,13 @@ pub struct DeleteFiatOnRampCredentialResult {
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct EthSendTransactionResult {
+    pub send_transaction_status_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SolSendTransactionResult {
     pub send_transaction_status_id: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
@@ -3422,6 +3458,8 @@ pub enum ActivityType {
     CreateTvcDeployment = 115,
     #[serde(rename = "ACTIVITY_TYPE_CREATE_TVC_MANIFEST_APPROVALS")]
     CreateTvcManifestApprovals = 116,
+    #[serde(rename = "ACTIVITY_TYPE_SOL_SEND_TRANSACTION")]
+    SolSendTransaction = 117,
 }
 impl ActivityType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -3563,6 +3601,7 @@ impl ActivityType {
             Self::CreateTvcManifestApprovals => {
                 "ACTIVITY_TYPE_CREATE_TVC_MANIFEST_APPROVALS"
             }
+            Self::SolSendTransaction => "ACTIVITY_TYPE_SOL_SEND_TRANSACTION",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -3727,6 +3766,7 @@ impl ActivityType {
             "ACTIVITY_TYPE_CREATE_TVC_MANIFEST_APPROVALS" => {
                 Some(Self::CreateTvcManifestApprovals)
             }
+            "ACTIVITY_TYPE_SOL_SEND_TRANSACTION" => Some(Self::SolSendTransaction),
             _ => None,
         }
     }

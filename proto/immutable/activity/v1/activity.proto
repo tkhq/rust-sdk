@@ -141,6 +141,7 @@ enum ActivityType {
   ACTIVITY_TYPE_CREATE_TVC_APP = 114;
   ACTIVITY_TYPE_CREATE_TVC_DEPLOYMENT = 115;
   ACTIVITY_TYPE_CREATE_TVC_MANIFEST_APPROVALS = 116;
+  ACTIVITY_TYPE_SOL_SEND_TRANSACTION = 117;
 }
 
 // The current processing status of an Activity.
@@ -287,6 +288,7 @@ message Intent {
     CreateTvcAppIntent create_tvc_app_intent = 115;
     CreateTvcDeploymentIntent create_tvc_deployment_intent = 116;
     CreateTvcManifestApprovalsIntent create_tvc_manifest_approvals_intent = 117;
+    SolSendTransactionIntent sol_send_transaction_intent = 118;
   }
 }
 
@@ -1405,6 +1407,56 @@ message SignTransactionIntentV2 {
   immutable.common.v1.TransactionType type = 3 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {title: ""}
+  ];
+}
+
+message SolSendTransactionIntent {
+  // @inject_tag: validate:"required"
+  string unsigned_transaction = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Base64-encoded serialized unsigned Solana transaction"
+      title: ""
+    }
+  ];
+
+  // @inject_tag: validate:"required"
+  string sign_with = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "A wallet or private key address to sign with. This does not support private key IDs."
+      title: ""
+    }
+  ];
+
+  // If true, Turnkey acts as fee payer and may inject a fresh blockhash
+  optional bool sponsor = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Whether to sponsor this transaction via Gas Station."
+      title: ""
+    }
+  ];
+
+  // @inject_tag: validate:"required"
+  string caip2 = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "CAIP-2 chain ID (e.g., 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp' for Solana mainnet)."
+      enum: [
+        "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+        "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG",
+        "solana:4uhcVJyU9pJkvQyS88uRDiswHXSCkY3zQawwpjk2NsNY"
+      ]
+    }
+  ];
+
+  optional string recent_blockhash = 5 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "user-provided blockhash for replay protection / deadline control. If omitted and sponsor=true, we fetch a fresh blockhash during execution"
+      title: ""
+    }
   ];
 }
 
@@ -3824,6 +3876,10 @@ message CreateTvcDeploymentIntent {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Arguments to pass to the host binary at startup. Encoded as a list of strings, for example [\"--foo\", \"bar\"]"}
   ];
+  optional uint32 nonce = 10 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional nonce to ensure uniqueness of the deployment manifest. If not provided, it defaults to the current Unix timestamp in seconds."}
+  ];
 }
 
 message CreateTvcManifestApprovalsIntent {
@@ -3952,6 +4008,7 @@ message Result {
     CreateTvcAppResult create_tvc_app_result = 96;
     CreateTvcDeploymentResult create_tvc_deployment_result = 98;
     CreateTvcManifestApprovalsResult create_tvc_manifest_approvals_result = 99;
+    SolSendTransactionResult sol_send_transaction_result = 100;
   }
 }
 
@@ -4721,12 +4778,28 @@ message CreateTvcAppResult {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The unique identifier for the TVC application"}
   ];
+  string manifest_set_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The unique identifier for the TVC manifest set"}
+  ];
+  repeated string manifest_set_operator_ids = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The unique identifier(s) of the manifest set operators"}
+  ];
+  uint32 manifest_set_threshold = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The required number of approvals for the manifest set"}
+  ];
 }
 
 message CreateTvcDeploymentResult {
   string deployment_id = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The unique identifier for the TVC deployment"}
+  ];
+  string manifest_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The unique identifier for the TVC manifest"}
   ];
 }
 
@@ -4767,7 +4840,14 @@ message DeleteFiatOnRampCredentialResult {
 message EthSendTransactionResult {
   string send_transaction_status_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The send_transaction_status ID associated with the transaction submission for sponsored transactions"}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The send_transaction_status ID associated with the transaction submission"}
+  ];
+}
+
+message SolSendTransactionResult {
+  string send_transaction_status_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The send_transaction_status ID associated with the transaction submission"}
   ];
 }
 

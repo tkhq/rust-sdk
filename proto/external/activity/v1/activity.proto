@@ -1772,6 +1772,25 @@ message EthSendTransactionRequest {
   optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
 }
 
+message SolSendTransactionRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_SOL_SEND_TRANSACTION"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.SolSendTransactionIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
+}
+
 message CreateTvcAppRequest {
   string type = 1 [
     (google.api.field_behavior) = REQUIRED,

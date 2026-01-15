@@ -858,6 +858,42 @@ pub struct GetTvcAppResponse {
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetTvcAppDeploymentsRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub app_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetTvcAppDeploymentsResponse {
+    #[serde(default)]
+    pub tvc_deployments: ::prost::alloc::vec::Vec<
+        super::super::super::super::external::data::v1::TvcDeployment,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetTvcDeploymentRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub deployment_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetTvcDeploymentResponse {
+    #[serde(default)]
+    pub tvc_deployment: ::core::option::Option<
+        super::super::super::super::external::data::v1::TvcDeployment,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 #[derive(Clone, Copy, PartialEq)]
 pub struct RefreshFeatureFlagsRequest {}
 #[derive(Debug)]

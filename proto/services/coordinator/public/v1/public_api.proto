@@ -1555,6 +1555,7 @@ service PublicApiService {
       summary: "Submit a raw transaction for broadcasting."
       tags: "Broadcasting"
     };
+    option (google.api.method_visibility).restriction = "INTERNAL";
   }
   rpc CreateFiatOnRampCredential(external.activity.v1.CreateFiatOnRampCredentialRequest) returns (ActivityResponse) {
     option (google.api.http) = {
@@ -1616,6 +1617,17 @@ service PublicApiService {
     };
   }
 
+  rpc SolSendTransaction(external.activity.v1.SolSendTransactionRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/sol_send_transaction"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Submit a transaction intent describing a transaction you would like to broadcast."
+      summary: "Submit a transaction intent for broadcasting."
+      tags: "Broadcasting"
+    };
+  }
   rpc GetGasUsage(GetGasUsageRequest) returns (GetGasUsageResponse) {
     option (google.api.http) = {
       post: "/public/v1/query/get_gas_usage"
@@ -1692,6 +1704,34 @@ service PublicApiService {
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Create a new TVC Deployment"
       summary: "Create a TVC Deployment"
+      tags: "TVC"
+    };
+  }
+
+  rpc GetTvcAppDeployments(GetTvcAppDeploymentsRequest) returns (GetTvcAppDeploymentsResponse) {
+    // TODO: remove me when it's time to unleash TVC
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/query/list_tvc_app_deployments"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "List all deployments for a given TVC App"
+      summary: "List TVC Deployments"
+      tags: "TVC"
+    };
+  }
+
+  rpc GetTvcDeployment(GetTvcDeploymentRequest) returns (GetTvcDeploymentResponse) {
+    // TODO: remove me when it's time to unleash TVC
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/query/get_tvc_deployment"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get details about a single TVC Deployment"
+      summary: "Get TVC Deployment"
       tags: "TVC"
     };
   }
@@ -2498,6 +2538,42 @@ message GetTvcAppResponse {
   external.data.v1.TvcApp tvc_app = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Details about a single TVC App"}
+  ];
+}
+
+message GetTvcAppDeploymentsRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+  ];
+  string app_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given TVC App."}
+  ];
+}
+
+message GetTvcAppDeploymentsResponse {
+  repeated external.data.v1.TvcDeployment tvc_deployments = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "List of deployments for this TVC App"}
+  ];
+}
+
+message GetTvcDeploymentRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+  ];
+  string deployment_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given TVC Deployment."}
+  ];
+}
+
+message GetTvcDeploymentResponse {
+  external.data.v1.TvcDeployment tvc_deployment = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Details about a single TVC Deployment"}
   ];
 }
 

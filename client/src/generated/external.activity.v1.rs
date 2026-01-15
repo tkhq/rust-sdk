@@ -1365,6 +1365,21 @@ pub struct EthSendTransactionRequest {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct SolSendTransactionRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::SolSendTransactionIntent,
+    >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct CreateTvcAppRequest {
     pub r#type: ::prost::alloc::string::String,
     pub timestamp_ms: ::prost::alloc::string::String,

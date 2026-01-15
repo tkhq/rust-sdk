@@ -45,12 +45,15 @@ pub const KNOWN_SHARE_SET_KEYS: [(&str, &str); 2] = [
     ("dev-share-operator-2", "04b58d66efd7c0eee569c74fae47f956b4628d455077eb5a78a24c69c0e67a7d1b743c0fd5d823659c6c75d367455bfe1f83c5a19bc71e2e511fc6b028ea1f536a0485873f2949c66f4a6aa05c9cfcc18e3e6e4585a7967a5408e4f22306547cc0a8128b1bae0b84b52abf29424bd101a52e8d2f552e33e2c3bb304b3d30eeee75c5"),
 ];
 
+/// Well known Quorum Key. This is for applications that do not need secure quorum keys
+pub const KNOWN_QUORUM_KEY: &str = "04451028fc9d42cef6d8f2a3ebe17d65783c470dbc6f04663d500c12009930cf9b209e733f6ac6103cc28f07ecde2dbb55095738b828d6b7a55caf4ddf9d67f2ae047827dcd2325b8d58694c2ea14e8f1e1f8a36c84438d291ff9b1b067debdb3e2ba3822984cde8bed4de2c237bd323526da4961d368bcc63cbd2d37d00e936683e";
+
 impl AppConfig {
     /// Generate a default template config with placeholders.
     pub fn template() -> Self {
         Self {
             name: "<FILL_IN_APP_NAME>".to_string(),
-            quorum_public_key: "<FILL_IN_QUORUM_PUBLIC_KEY>".to_string(),
+            quorum_public_key: KNOWN_QUORUM_KEY.to_string(),
             external_connectivity: Some(false),
             manifest_set_id: None,
             manifest_set_params: Some(OperatorSetParams {
@@ -81,7 +84,6 @@ impl AppConfig {
     /// Check if config contains placeholder values.
     pub fn has_placeholders(&self) -> bool {
         self.name.starts_with("<FILL_IN")
-            || self.quorum_public_key.starts_with("<FILL_IN")
             || self.manifest_set_params.as_ref().is_some_and(|p| {
                 p.name.starts_with("<FILL_IN")
                     || p.new_operators

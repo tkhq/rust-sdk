@@ -528,6 +528,40 @@ pub struct TvcApp {
     pub updated_at: ::core::option::Option<Timestamp>,
 }
 #[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct TvcDeployment {
+    pub id: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    pub app_id: ::prost::alloc::string::String,
+    pub manifest_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub manifest: ::prost::alloc::vec::Vec<u8>,
+    pub qos_version: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub pivot_container: ::core::option::Option<TvcContainerSpec>,
+    #[serde(default)]
+    pub host_container: ::core::option::Option<TvcContainerSpec>,
+    pub stage: super::super::super::immutable::common::v1::TvcDeploymentStage,
+    #[serde(default)]
+    pub created_at: ::core::option::Option<Timestamp>,
+    #[serde(default)]
+    pub updated_at: ::core::option::Option<Timestamp>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct TvcContainerSpec {
+    pub container_url: ::prost::alloc::string::String,
+    pub path: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub args: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub has_pull_secret: bool,
+}
+#[derive(Debug)]
 /// An account derived from a Wallet
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
