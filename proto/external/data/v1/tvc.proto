@@ -1,0 +1,103 @@
+syntax = "proto3";
+
+package external.data.v1;
+
+import "external/data/v1/common.proto";
+import "immutable/common/v1/common.proto";
+import "vendor/google/api/field_behavior.proto";
+import "vendor/protoc-gen-openapiv2/options/annotations.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/external/data/v1";
+
+message TvcApp {
+  string id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique Identifier for this TVC App."}
+  ];
+  string organization_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique Identifier of the Organization for this TVC App"}
+  ];
+  string name = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Name for this TVC App."}
+  ];
+  string quorum_public_key = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Public key for the Quorum Key associated with this TVC App"}
+  ];
+  string manifest_set_id = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique Identifier of the Manifest Set (people who can approve manifests)"}
+  ];
+  string share_set_id = 6 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique Identifier of the Share Set (people who have a share of the Quorum Key)"}
+  ];
+  bool external_connectivity = 7 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether or not this TVC App has external connectivity enabled."}
+  ];
+  Timestamp created_at = 8 [(google.api.field_behavior) = REQUIRED];
+  Timestamp updated_at = 9 [(google.api.field_behavior) = REQUIRED];
+}
+
+message TvcDeployment {
+  string id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique Identifier for this TVC Deployment."}
+  ];
+  string organization_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique Identifier of the Organization for this TVC Deployment"}
+  ];
+  string app_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique Identifier of the TVC App for this deployment"}
+  ];
+  string manifest_id = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique Identifier of the manifest for this deployment"}
+  ];
+  bytes manifest = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The manifest used for this deployment (raw bytes)"}
+  ];
+  string qos_version = 6 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "QOS Version used for this deployment"}
+  ];
+  TvcContainerSpec pivot_container = 7 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The pivot container spec for this deployment"}
+  ];
+  TvcContainerSpec host_container = 8 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The pivot container spec for this deployment"}
+  ];
+  immutable.common.v1.TvcDeploymentStage stage = 9 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Current stage for this deployment"}
+  ];
+  Timestamp created_at = 10 [(google.api.field_behavior) = REQUIRED];
+  Timestamp updated_at = 11 [(google.api.field_behavior) = REQUIRED];
+}
+
+message TvcContainerSpec {
+  string container_url = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The URL for this container image."}
+  ];
+  string path = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The path (in-container) to the executable binary."}
+  ];
+  repeated string args = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The arguments to pass to the executable."}
+  ];
+  bool has_pull_secret = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether or not this container requires a pull secret to access."}
+  ];
+}

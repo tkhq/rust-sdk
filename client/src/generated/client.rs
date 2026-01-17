@@ -3144,49 +3144,6 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// Submit a raw transaction for broadcasting.
-    ///
-    /// Submit a raw transaction (serialized and signed) for broadcasting to the network.
-    pub async fn eth_send_raw_transaction(
-        &self,
-        organization_id: String,
-        timestamp_ms: u128,
-        params: immutable_activity::EthSendRawTransactionIntent,
-    ) -> Result<ActivityResult<immutable_activity::EthSendRawTransactionResult>, TurnkeyClientError>
-    {
-        let request = external_activity::EthSendRawTransactionRequest {
-            r#type: "ACTIVITY_TYPE_ETH_SEND_RAW_TRANSACTION".to_string(),
-            timestamp_ms: timestamp_ms.to_string(),
-            parameters: Some(params),
-            organization_id,
-            generate_app_proofs: self.generate_app_proofs(),
-        };
-        let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/eth_send_raw_transaction".to_string(),
-            )
-            .await?;
-        let inner = activity
-            .result
-            .ok_or_else(|| TurnkeyClientError::MissingResult)?
-            .inner
-            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
-        let result = match inner {
-            immutable_activity::result::Inner::EthSendRawTransactionResult(res) => res,
-            other => {
-                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
-                    serde_json::to_string(&other)?,
-                ));
-            }
-        };
-        Ok(ActivityResult {
-            result,
-            activity_id: activity.id,
-            status: activity.status,
-            app_proofs: activity.app_proofs,
-        })
-    }
     /// Create a Fiat On Ramp Credential
     ///
     /// Create a fiat on ramp provider credential
@@ -3378,6 +3335,49 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
+    /// Submit a transaction intent for broadcasting.
+    ///
+    /// Submit a transaction intent describing a transaction you would like to broadcast.
+    pub async fn sol_send_transaction(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::SolSendTransactionIntent,
+    ) -> Result<ActivityResult<immutable_activity::SolSendTransactionResult>, TurnkeyClientError>
+    {
+        let request = external_activity::SolSendTransactionRequest {
+            r#type: "ACTIVITY_TYPE_SOL_SEND_TRANSACTION".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/sol_send_transaction".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::SolSendTransactionResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
     /// Get gas usage and limits.
     ///
     /// Get gas usage and gas limits for either the parent organization or a sub-organization.
@@ -3387,5 +3387,182 @@ impl<S: Stamp> TurnkeyClient<S> {
     ) -> Result<coordinator::GetGasUsageResponse, TurnkeyClientError> {
         self.process_request(&request, "/public/v1/query/get_gas_usage".to_string())
             .await
+    }
+    /// Get nonces for an address.
+    ///
+    /// Get nonce values for an address on a given network. Can fetch the standard on-chain nonce and/or the gas station nonce used for sponsored transactions.
+    pub async fn get_nonces(
+        &self,
+        request: coordinator::GetNoncesRequest,
+    ) -> Result<coordinator::GetNoncesResponse, TurnkeyClientError> {
+        self.process_request(&request, "/public/v1/query/get_nonces".to_string())
+            .await
+    }
+    /// Create a TVC App
+    ///
+    /// Create a new TVC application
+    pub async fn create_tvc_app(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::CreateTvcAppIntent,
+    ) -> Result<ActivityResult<immutable_activity::CreateTvcAppResult>, TurnkeyClientError> {
+        let request = external_activity::CreateTvcAppRequest {
+            r#type: "ACTIVITY_TYPE_CREATE_TVC_APP".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(&request, "/public/v1/submit/create_tvc_app".to_string())
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::CreateTvcAppResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// List TVC Apps
+    ///
+    /// List all TVC Apps within an organization.
+    pub async fn get_tvc_apps(
+        &self,
+        request: coordinator::GetTvcAppsRequest,
+    ) -> Result<coordinator::GetTvcAppsResponse, TurnkeyClientError> {
+        self.process_request(&request, "/public/v1/query/list_tvc_apps".to_string())
+            .await
+    }
+    /// Get TVC App
+    ///
+    /// Get details about a single TVC App
+    pub async fn get_tvc_app(
+        &self,
+        request: coordinator::GetTvcAppRequest,
+    ) -> Result<coordinator::GetTvcAppResponse, TurnkeyClientError> {
+        self.process_request(&request, "/public/v1/query/get_tvc_app".to_string())
+            .await
+    }
+    /// Create a TVC Deployment
+    ///
+    /// Create a new TVC Deployment
+    pub async fn create_tvc_deployment(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::CreateTvcDeploymentIntent,
+    ) -> Result<ActivityResult<immutable_activity::CreateTvcDeploymentResult>, TurnkeyClientError>
+    {
+        let request = external_activity::CreateTvcDeploymentRequest {
+            r#type: "ACTIVITY_TYPE_CREATE_TVC_DEPLOYMENT".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/create_tvc_deployment".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::CreateTvcDeploymentResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// List TVC Deployments
+    ///
+    /// List all deployments for a given TVC App
+    pub async fn get_tvc_app_deployments(
+        &self,
+        request: coordinator::GetTvcAppDeploymentsRequest,
+    ) -> Result<coordinator::GetTvcAppDeploymentsResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/list_tvc_app_deployments".to_string(),
+        )
+        .await
+    }
+    /// Get TVC Deployment
+    ///
+    /// Get details about a single TVC Deployment
+    pub async fn get_tvc_deployment(
+        &self,
+        request: coordinator::GetTvcDeploymentRequest,
+    ) -> Result<coordinator::GetTvcDeploymentResponse, TurnkeyClientError> {
+        self.process_request(&request, "/public/v1/query/get_tvc_deployment".to_string())
+            .await
+    }
+    /// Create TVC Manifest Approvals
+    ///
+    /// Post one or more manifest approvals for a TVC Manifest
+    pub async fn create_tvc_manifest_approvals(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::CreateTvcManifestApprovalsIntent,
+    ) -> Result<
+        ActivityResult<immutable_activity::CreateTvcManifestApprovalsResult>,
+        TurnkeyClientError,
+    > {
+        let request = external_activity::CreateTvcManifestApprovalsRequest {
+            r#type: "ACTIVITY_TYPE_CREATE_TVC_MANIFEST_APPROVALS".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/create_tvc_manifest_approvals".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::CreateTvcManifestApprovalsResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
     }
 }

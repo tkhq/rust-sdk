@@ -127,6 +127,11 @@ pub mod intent {
         InitUserEmailRecoveryIntentV2(super::InitUserEmailRecoveryIntentV2),
         InitOtpIntentV2(super::InitOtpIntentV2),
         InitOtpAuthIntentV3(super::InitOtpAuthIntentV3),
+        UpsertGasUsageConfigIntent(super::UpsertGasUsageConfigIntent),
+        CreateTvcAppIntent(super::CreateTvcAppIntent),
+        CreateTvcDeploymentIntent(super::CreateTvcDeploymentIntent),
+        CreateTvcManifestApprovalsIntent(super::CreateTvcManifestApprovalsIntent),
+        SolSendTransactionIntent(super::SolSendTransactionIntent),
     }
 }
 #[derive(Debug)]
@@ -763,6 +768,23 @@ pub struct SignTransactionIntentV2 {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct SolSendTransactionIntent {
+    /// @inject_tag: validate:"required"
+    pub unsigned_transaction: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub sign_with: ::prost::alloc::string::String,
+    /// If true, Turnkey acts as fee payer and may inject a fresh blockhash
+    #[serde(default)]
+    pub sponsor: ::core::option::Option<bool>,
+    /// @inject_tag: validate:"required"
+    pub caip2: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub recent_blockhash: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct EthSendTransactionIntent {
     /// @inject_tag: validate:"required"
     pub from: ::prost::alloc::string::String,
@@ -832,7 +854,7 @@ pub struct UpdateAllowedOriginsIntent {
 pub struct CreateSmartContractInterfaceIntent {
     /// @inject_tag: validate:"required"
     pub smart_contract_address: ::prost::alloc::string::String,
-    /// @inject_tag: validate:"required,tk_max_length=200000"
+    /// @inject_tag: validate:"required,tk_max_length=400000"
     pub smart_contract_interface: ::prost::alloc::string::String,
     /// @inject_tag: validate:"required"
     pub r#type: super::super::common::v1::SmartContractInterfaceType,
@@ -1184,13 +1206,64 @@ pub struct RootUserParamsV4 {
 }
 #[derive(Debug)]
 /// Each of these customization parameters are optional; resort to defaults if any are not provided.
-/// Note that app_name is a top-level required parameter in newer email-related activities, and thus any app name provided here will be ignored.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct EmailCustomizationParams {
     #[serde(default)]
     pub app_name: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub logo_url: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub magic_link_template: ::core::option::Option<::prost::alloc::string::String>,
+    ///
+    /// We're electing to support user-provided dynamic template variables via JSON string.
+    /// This is for a subset of customers who want to have custom email templates with Turnkey
+    /// and the ability to update them on the fly.
+    /// The procedure: provide a Turnkey eng the new template, and pass their desired variables through this field.
+    /// These variables will get injected into their template. Since we have no control over the defined variables,
+    /// we'll opt use a key-value map (JSON string) to set them. Note that we can't use protobuf maps due to serialization issues,
+    /// which may produce issues with user request signature verification.
+    #[serde(default)]
+    pub template_variables: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub template_id: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+/// This proto message is to be used for newer email-related activities (OTP).
+/// Note that app_name is no longer a parameter here, as it is required in the top-level intent for these activities.
+/// All other fields remain optional and will fall back to defaults.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct EmailCustomizationParamsV2 {
+    #[serde(default)]
+    pub logo_url: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub magic_link_template: ::core::option::Option<::prost::alloc::string::String>,
+    ///
+    /// We're electing to support user-provided dynamic template variables via JSON string.
+    /// This is for a subset of customers who want to have custom email templates with Turnkey
+    /// and the ability to update them on the fly.
+    /// The procedure: provide a Turnkey eng the new template, and pass their desired variables through this field.
+    /// These variables will get injected into their template. Since we have no control over the defined variables,
+    /// we'll opt use a key-value map (JSON string) to set them. Note that we can't use protobuf maps due to serialization issues,
+    /// which may produce issues with user request signature verification.
+    #[serde(default)]
+    pub template_variables: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub template_id: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+/// A new proto message specifically for "legacy" endpoints: Email Auth and Email Recovery.
+/// Note that app_name is now a required parameter for newer versions of these activities.
+/// All other fields remain optional and will fall back to defaults.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct EmailAuthCustomizationParams {
+    /// @inject_tag: validate:"tk_label_length,tk_label"
+    pub app_name: ::prost::alloc::string::String,
     #[serde(default)]
     pub logo_url: ::core::option::Option<::prost::alloc::string::String>,
     #[serde(default)]
@@ -1271,12 +1344,10 @@ pub struct InitUserEmailRecoveryIntentV2 {
     pub email: ::prost::alloc::string::String,
     /// @inject_tag: validate:"hexadecimal"
     pub target_public_key: ::prost::alloc::string::String,
-    /// @inject_tag: validate:"tk_label_length,tk_label"
-    pub app_name: ::prost::alloc::string::String,
     #[serde(default)]
     pub expiration_seconds: ::core::option::Option<::prost::alloc::string::String>,
     #[serde(default)]
-    pub email_customization: ::core::option::Option<EmailCustomizationParams>,
+    pub email_customization: ::core::option::Option<EmailAuthCustomizationParams>,
     /// @inject_tag: validate:"omitempty,email,tk_email"
     #[serde(default)]
     pub send_from_email_address: ::core::option::Option<::prost::alloc::string::String>,
@@ -1398,13 +1469,13 @@ pub struct InitOtpIntentV2 {
     /// @inject_tag: validate:"required,oneof=OTP_TYPE_SMS OTP_TYPE_EMAIL"
     pub otp_type: ::prost::alloc::string::String,
     pub contact: ::prost::alloc::string::String,
-    /// @inject_tag: validate:"tk_label_length,tk_label"
-    pub app_name: ::prost::alloc::string::String,
     /// @inject_tag: validate:"omitempty,min=6,max=9"
     #[serde(default)]
     pub otp_length: ::core::option::Option<i32>,
+    /// @inject_tag: validate:"tk_label_length,tk_label"
+    pub app_name: ::prost::alloc::string::String,
     #[serde(default)]
-    pub email_customization: ::core::option::Option<EmailCustomizationParams>,
+    pub email_customization: ::core::option::Option<EmailCustomizationParamsV2>,
     #[serde(default)]
     pub sms_customization: ::core::option::Option<SmsCustomizationParams>,
     #[serde(default)]
@@ -1465,13 +1536,13 @@ pub struct InitOtpAuthIntentV3 {
     /// @inject_tag: validate:"required,oneof=OTP_TYPE_SMS OTP_TYPE_EMAIL"
     pub otp_type: ::prost::alloc::string::String,
     pub contact: ::prost::alloc::string::String,
-    /// @inject_tag: validate:"tk_label_length,tk_label"
-    pub app_name: ::prost::alloc::string::String,
     /// @inject_tag: validate:"omitempty,min=6,max=9"
     #[serde(default)]
     pub otp_length: ::core::option::Option<i32>,
+    /// @inject_tag: validate:"tk_label_length,tk_label"
+    pub app_name: ::prost::alloc::string::String,
     #[serde(default)]
-    pub email_customization: ::core::option::Option<EmailCustomizationParams>,
+    pub email_customization: ::core::option::Option<EmailCustomizationParamsV2>,
     #[serde(default)]
     pub sms_customization: ::core::option::Option<SmsCustomizationParams>,
     #[serde(default)]
@@ -1486,9 +1557,24 @@ pub struct InitOtpAuthIntentV3 {
     pub send_from_email_sender_name: ::core::option::Option<
         ::prost::alloc::string::String,
     >,
+    /// @inject_tag: validate:"omitempty,numeric,max=600"
+    #[serde(default)]
+    pub expiration_seconds: ::core::option::Option<::prost::alloc::string::String>,
     /// @inject_tag: validate:"omitempty,email,tk_email"
     #[serde(default)]
     pub reply_to_email_address: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct UpsertGasUsageConfigIntent {
+    /// @inject_tag: validate:"required,numeric"
+    pub org_window_limit_usd: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required,numeric"
+    pub sub_org_window_limit_usd: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required,numeric"
+    pub window_duration_minutes: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -1609,15 +1695,13 @@ pub struct EmailAuthIntentV3 {
     pub email: ::prost::alloc::string::String,
     /// @inject_tag: validate:"hexadecimal"
     pub target_public_key: ::prost::alloc::string::String,
-    /// @inject_tag: validate:"tk_label_length,tk_label"
-    pub app_name: ::prost::alloc::string::String,
     /// @inject_tag: validate:"omitempty,tk_label_length,tk_label"
     #[serde(default)]
     pub api_key_name: ::core::option::Option<::prost::alloc::string::String>,
     #[serde(default)]
     pub expiration_seconds: ::core::option::Option<::prost::alloc::string::String>,
     #[serde(default)]
-    pub email_customization: ::core::option::Option<EmailCustomizationParams>,
+    pub email_customization: ::core::option::Option<EmailAuthCustomizationParams>,
     #[serde(default)]
     pub invalidate_existing: ::core::option::Option<bool>,
     /// @inject_tag: validate:"omitempty,email,tk_email"
@@ -1882,6 +1966,98 @@ pub struct DeleteFiatOnRampCredentialIntent {
     pub fiat_onramp_credential_id: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateTvcAppIntent {
+    /// @inject_tag: validate:"required"
+    pub name: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub quorum_public_key: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub manifest_set_id: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub manifest_set_params: ::core::option::Option<TvcOperatorSetParams>,
+    #[serde(default)]
+    pub share_set_id: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub share_set_params: ::core::option::Option<TvcOperatorSetParams>,
+    #[serde(default)]
+    pub external_connectivity: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct TvcOperatorSetParams {
+    /// @inject_tag: validate:"required"
+    pub name: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub new_operators: ::prost::alloc::vec::Vec<TvcOperatorParams>,
+    #[serde(default)]
+    pub existing_operator_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    /// @inject_tag: validate:"required"
+    #[serde(default)]
+    pub threshold: u32,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct TvcOperatorParams {
+    /// @inject_tag: validate:"required"
+    pub name: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub public_key: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateTvcDeploymentIntent {
+    /// @inject_tag: validate:"required"
+    pub app_id: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub qos_version: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub pivot_container_image_url: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub pivot_path: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub pivot_args: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    /// @inject_tag: validate:"required"
+    pub expected_pivot_digest: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub host_container_image_url: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub host_path: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub host_args: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub nonce: ::core::option::Option<u32>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateTvcManifestApprovalsIntent {
+    /// @inject_tag: validate:"required,uuid"
+    pub manifest_id: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    #[serde(default)]
+    pub approvals: ::prost::alloc::vec::Vec<TvcManifestApproval>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct TvcManifestApproval {
+    /// @inject_tag: validate:"required,uuid"
+    pub operator_id: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub signature: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
 /// Result of the intended action.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1991,7 +2167,20 @@ pub mod result {
         UpdateFiatOnRampCredentialResult(super::UpdateFiatOnRampCredentialResult),
         DeleteFiatOnRampCredentialResult(super::DeleteFiatOnRampCredentialResult),
         EthSendTransactionResult(super::EthSendTransactionResult),
+        UpsertGasUsageConfigResult(super::UpsertGasUsageConfigResult),
+        CreateTvcAppResult(super::CreateTvcAppResult),
+        CreateTvcDeploymentResult(super::CreateTvcDeploymentResult),
+        CreateTvcManifestApprovalsResult(super::CreateTvcManifestApprovalsResult),
+        SolSendTransactionResult(super::SolSendTransactionResult),
     }
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct UpsertGasUsageConfigResult {
+    /// @inject_tag: validate:"required,uuid4"
+    pub gas_usage_config_id: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -2701,6 +2890,36 @@ pub struct DeletePoliciesResult {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct CreateTvcAppResult {
+    pub app_id: ::prost::alloc::string::String,
+    pub manifest_set_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub manifest_set_operator_ids: ::prost::alloc::vec::Vec<
+        ::prost::alloc::string::String,
+    >,
+    #[serde(default)]
+    pub manifest_set_threshold: u32,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateTvcDeploymentResult {
+    pub deployment_id: ::prost::alloc::string::String,
+    pub manifest_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateTvcManifestApprovalsResult {
+    #[serde(default)]
+    pub approval_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct EthSendRawTransactionResult {
     pub transaction_hash: ::prost::alloc::string::String,
 }
@@ -2730,6 +2949,13 @@ pub struct DeleteFiatOnRampCredentialResult {
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct EthSendTransactionResult {
+    pub send_transaction_status_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SolSendTransactionResult {
     pub send_transaction_status_id: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
@@ -3224,6 +3450,16 @@ pub enum ActivityType {
     InitOtpAuthV3 = 111,
     #[serde(rename = "ACTIVITY_TYPE_INIT_OTP_V2")]
     InitOtpV2 = 112,
+    #[serde(rename = "ACTIVITY_TYPE_UPSERT_GAS_USAGE_CONFIG")]
+    UpsertGasUsageConfig = 113,
+    #[serde(rename = "ACTIVITY_TYPE_CREATE_TVC_APP")]
+    CreateTvcApp = 114,
+    #[serde(rename = "ACTIVITY_TYPE_CREATE_TVC_DEPLOYMENT")]
+    CreateTvcDeployment = 115,
+    #[serde(rename = "ACTIVITY_TYPE_CREATE_TVC_MANIFEST_APPROVALS")]
+    CreateTvcManifestApprovals = 116,
+    #[serde(rename = "ACTIVITY_TYPE_SOL_SEND_TRANSACTION")]
+    SolSendTransaction = 117,
 }
 impl ActivityType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -3359,6 +3595,13 @@ impl ActivityType {
             Self::InitUserEmailRecoveryV2 => "ACTIVITY_TYPE_INIT_USER_EMAIL_RECOVERY_V2",
             Self::InitOtpAuthV3 => "ACTIVITY_TYPE_INIT_OTP_AUTH_V3",
             Self::InitOtpV2 => "ACTIVITY_TYPE_INIT_OTP_V2",
+            Self::UpsertGasUsageConfig => "ACTIVITY_TYPE_UPSERT_GAS_USAGE_CONFIG",
+            Self::CreateTvcApp => "ACTIVITY_TYPE_CREATE_TVC_APP",
+            Self::CreateTvcDeployment => "ACTIVITY_TYPE_CREATE_TVC_DEPLOYMENT",
+            Self::CreateTvcManifestApprovals => {
+                "ACTIVITY_TYPE_CREATE_TVC_MANIFEST_APPROVALS"
+            }
+            Self::SolSendTransaction => "ACTIVITY_TYPE_SOL_SEND_TRANSACTION",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -3517,6 +3760,13 @@ impl ActivityType {
             }
             "ACTIVITY_TYPE_INIT_OTP_AUTH_V3" => Some(Self::InitOtpAuthV3),
             "ACTIVITY_TYPE_INIT_OTP_V2" => Some(Self::InitOtpV2),
+            "ACTIVITY_TYPE_UPSERT_GAS_USAGE_CONFIG" => Some(Self::UpsertGasUsageConfig),
+            "ACTIVITY_TYPE_CREATE_TVC_APP" => Some(Self::CreateTvcApp),
+            "ACTIVITY_TYPE_CREATE_TVC_DEPLOYMENT" => Some(Self::CreateTvcDeployment),
+            "ACTIVITY_TYPE_CREATE_TVC_MANIFEST_APPROVALS" => {
+                Some(Self::CreateTvcManifestApprovals)
+            }
+            "ACTIVITY_TYPE_SOL_SEND_TRANSACTION" => Some(Self::SolSendTransaction),
             _ => None,
         }
     }

@@ -146,10 +146,11 @@ fn main() {
             //      tags: "Policies"
             //    };
             let http_opts = &rpc_caps[4];
-            if http_opts
-                .contains("option (google.api.method_visibility).restriction = \"INTERNAL\"")
-            {
-                // Skip internal-only endpoints
+            let is_internal = http_opts
+                .contains("option (google.api.method_visibility).restriction = \"INTERNAL\"");
+            let is_tvc = fn_name.contains("tvc");
+            if is_internal && !is_tvc {
+                // Skip internal-only endpoints (except TVC endpoints)
                 continue;
             }
 
@@ -160,16 +161,16 @@ fn main() {
                 // We expect a description and summary for each endpoint.
                 let summary = &summary_re
                     .captures(http_opts)
-                    .unwrap_or_else(|| panic!("no summary found for {}", route))[1];
+                    .unwrap_or_else(|| panic!("no summary found for {route}"))[1];
                 let description = &description_re
                     .captures(http_opts)
-                    .unwrap_or_else(|| panic!("no description found for {}", route))[1];
+                    .unwrap_or_else(|| panic!("no description found for {route}"))[1];
 
                 if req_type.contains("external.activity.v1") {
                     let activities_details = parsed_activities
                         .activities
                         .get(route)
-                        .unwrap_or_else(|| panic!("route {} not found in activities.json", route));
+                        .unwrap_or_else(|| panic!("route {route} not found in activities.json"));
                     let activity_type = activities_details.r#type.clone();
 
                     // If the request type is "external.activity.v1.DeletePolicyRequest" the sanitized
@@ -177,6 +178,13 @@ fn main() {
                     let short_req_type = req_type.rsplit(".").next().unwrap();
                     let activity_intent = activities_details.intent_type.clone();
                     let activity_result = activities_details.result_type.clone();
+
+                    // TVC requests don't have generate_app_proofs field
+                    let app_proofs_field = if is_tvc {
+                        String::new()
+                    } else {
+                        "generate_app_proofs: self.generate_app_proofs(),".to_string()
+                    };
 
                     // Approve and Reject activity functions are a bit different than the rest
                     // In the mapping they have a resultType set to "*" (because they can indeed reference ANY activity.
@@ -192,7 +200,7 @@ fn main() {
                                     timestamp_ms: timestamp_ms.to_string(),
                                     parameters: Some(params),
                                     organization_id,
-                                    generate_app_proofs: self.generate_app_proofs(),
+                                    {app_proofs_field}
                                 }};
 
                                 self.process_activity(&request, "{route}".to_string()).await
@@ -211,7 +219,7 @@ fn main() {
                                     timestamp_ms: timestamp_ms.to_string(),
                                     parameters: Some(params),
                                     organization_id,
-                                    generate_app_proofs: self.generate_app_proofs(),
+                                    {app_proofs_field}
                                 }};
 
                                 let activity: external_activity::Activity = self.process_activity(&request, "{route}".to_string()).await?;
@@ -239,7 +247,7 @@ fn main() {
                         )
                     };
 
-                    println!("Generating {} (activity)", fn_name);
+                    println!("Generating {fn_name} (activity)");
                     generated_methods.push_str(&activity_func);
                 } else {
                     let func = format!(
@@ -252,7 +260,7 @@ fn main() {
                         }}
                     "#
                     );
-                    println!("Generating {} (query)", fn_name);
+                    println!("Generating {fn_name} (query)");
                     generated_methods.push_str(&func);
                 }
             }

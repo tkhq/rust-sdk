@@ -6,6 +6,7 @@ import "external/activity/v1/activity.proto";
 import "external/data/v1/organization_data.proto";
 import "external/data/v1/proofs.proto";
 import "external/data/v1/smart_contract_interface.proto";
+import "external/data/v1/tvc.proto";
 import "external/data/v1/wallet_account.proto";
 import "external/options/v1/options.proto";
 import "external/webauthn/v1/webauthn.proto";
@@ -114,7 +115,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
     },
     {
       name: "Users"
-      description: "Users are responsible for any action taken within an Organization. They can have ApiKey or Auuthenticator credentials, allowing you to onboard teammates to the Organization, or create API-only Users to run as part of your infrastructure."
+      description: "Users are responsible for any action taken within an Organization. They can have ApiKey or Authenticator credentials, allowing you to onboard teammates to the Organization, or create API-only Users to run as part of your infrastructure."
     },
     {
       name: "User Tags"
@@ -143,7 +144,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
       description:
         "Policies can enforce consensus requirements for Activities. For example, adding a new user requires two admins to approve the request."
         "\n\n"
-        "Activities that have been proposed, but don't yet meet the Consesnsus requirements will have the status: `REQUIRES_CONSENSUS`. Activities in this state can be approved or rejected using the unique fingerprint generated when an Activity is created."
+        "Activities that have been proposed, but don't yet meet the Consensus requirements will have the status: `REQUIRES_CONSENSUS`. Activities in this state can be approved or rejected using the unique fingerprint generated when an Activity is created."
     }
   ]
 
@@ -278,6 +279,19 @@ service PublicApiService {
       description: "Set a rate local rate limit just on the current endpoint, for purposes of testing with Vivosuite."
       summary: "Test rate limit"
       tags: "RateLimit"
+    };
+  }
+
+  rpc RefreshFeatureFlags(RefreshFeatureFlagsRequest) returns (RefreshFeatureFlagsResponse) {
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/tkhq/api/v1/refresh_feature_flags"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Refresh feature flags by triggering a DB read to flush the in-memory cache."
+      summary: "Refresh feature flags"
+      tags: "FeatureFlags"
     };
   }
 
@@ -1541,6 +1555,7 @@ service PublicApiService {
       summary: "Submit a raw transaction for broadcasting."
       tags: "Broadcasting"
     };
+    option (google.api.method_visibility).restriction = "INTERNAL";
   }
   rpc CreateFiatOnRampCredential(external.activity.v1.CreateFiatOnRampCredentialRequest) returns (ActivityResponse) {
     option (google.api.http) = {
@@ -1602,6 +1617,17 @@ service PublicApiService {
     };
   }
 
+  rpc SolSendTransaction(external.activity.v1.SolSendTransactionRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/sol_send_transaction"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Submit a transaction intent describing a transaction you would like to broadcast."
+      summary: "Submit a transaction intent for broadcasting."
+      tags: "Broadcasting"
+    };
+  }
   rpc GetGasUsage(GetGasUsageRequest) returns (GetGasUsageResponse) {
     option (google.api.http) = {
       post: "/public/v1/query/get_gas_usage"
@@ -1611,6 +1637,116 @@ service PublicApiService {
       description: "Get gas usage and gas limits for either the parent organization or a sub-organization."
       summary: "Get gas usage and limits."
       tags: "Broadcasting"
+    };
+  }
+
+  rpc GetNonces(GetNoncesRequest) returns (GetNoncesResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_nonces"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get nonce values for an address on a given network. Can fetch the standard on-chain nonce and/or the gas station nonce used for sponsored transactions."
+      summary: "Get nonces for an address."
+      tags: "Broadcasting"
+    };
+  }
+
+  rpc CreateTvcApp(external.activity.v1.CreateTvcAppRequest) returns (ActivityResponse) {
+    // TODO: remove me when it's time to unleash TVC
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/submit/create_tvc_app"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Create a new TVC application"
+      summary: "Create a TVC App"
+      tags: "TVC"
+    };
+  }
+
+  rpc GetTvcApps(GetTvcAppsRequest) returns (GetTvcAppsResponse) {
+    // TODO: remove me when it's time to unleash TVC
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/query/list_tvc_apps"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "List all TVC Apps within an organization."
+      summary: "List TVC Apps"
+      tags: "TVC"
+    };
+  }
+
+  rpc GetTvcApp(GetTvcAppRequest) returns (GetTvcAppResponse) {
+    // TODO: remove me when it's time to unleash TVC
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/query/get_tvc_app"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get details about a single TVC App"
+      summary: "Get TVC App"
+      tags: "TVC"
+    };
+  }
+
+  rpc CreateTvcDeployment(external.activity.v1.CreateTvcDeploymentRequest) returns (ActivityResponse) {
+    // TODO: remove me when it's time to unleash TVC
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/submit/create_tvc_deployment"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Create a new TVC Deployment"
+      summary: "Create a TVC Deployment"
+      tags: "TVC"
+    };
+  }
+
+  rpc GetTvcAppDeployments(GetTvcAppDeploymentsRequest) returns (GetTvcAppDeploymentsResponse) {
+    // TODO: remove me when it's time to unleash TVC
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/query/list_tvc_app_deployments"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "List all deployments for a given TVC App"
+      summary: "List TVC Deployments"
+      tags: "TVC"
+    };
+  }
+
+  rpc GetTvcDeployment(GetTvcDeploymentRequest) returns (GetTvcDeploymentResponse) {
+    // TODO: remove me when it's time to unleash TVC
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/query/get_tvc_deployment"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get details about a single TVC Deployment"
+      summary: "Get TVC Deployment"
+      tags: "TVC"
+    };
+  }
+
+  rpc CreateTvcManifestApprovals(external.activity.v1.CreateTvcManifestApprovalsRequest) returns (ActivityResponse) {
+    // TODO: remove me when it's time to unleash TVC
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/submit/create_tvc_manifest_approvals"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Post one or more manifest approvals for a TVC Manifest"
+      summary: "Create TVC Manifest Approvals"
+      tags: "TVC"
     };
   }
 
@@ -2016,6 +2152,8 @@ message GetSendTransactionStatusResponse {
   }
 
   optional string tx_error = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The error encountered when broadcasting or confirming the transaction, if any."}];
+
+  optional TxError error = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Structured error information including revert details, if available."}];
 }
 
 message GetOnRampTransactionStatusRequest {
@@ -2315,3 +2453,130 @@ message GetGasUsageResponse {
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The total gas usage (in USD) of all sponsored transactions processed over the last `window_duration_minutes`"}
   ];
 }
+
+message GetNoncesRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string address = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The Ethereum address to query nonces for."}
+  ];
+  string caip2 = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The network identifier in CAIP-2 format (e.g., 'eip155:1' for Ethereum mainnet)."}
+  ];
+  bool nonce = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether to fetch the standard on-chain nonce."}];
+  bool gas_station_nonce = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether to fetch the gas station nonce used for sponsored transactions."}];
+}
+
+message GetNoncesResponse {
+  optional uint64 nonce = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The standard on-chain nonce for the address, if requested."}];
+  optional uint64 gas_station_nonce = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The gas station nonce for sponsored transactions, if requested."}];
+}
+
+message TxError {
+  string message = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable error message describing what went wrong."}];
+  repeated RevertChainEntry revert_chain = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Chain of revert errors from nested contract calls, ordered from outermost to innermost."}];
+}
+
+message RevertChainEntry {
+  string address = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The contract address where the revert occurred."}];
+  string error_type = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Type of error: 'unknown', 'native', or 'custom'."}];
+  string display_message = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable message describing this revert."}];
+
+  oneof error_details {
+    UnknownRevertError unknown = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Details for unknown error types."}];
+    NativeRevertError native = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Details for native Solidity errors (Error, Panic, execution reverted)."}];
+    CustomRevertError custom = 6 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Details for custom contract errors."}];
+  }
+}
+
+message UnknownRevertError {
+  optional string selector = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The 4-byte error selector, if available."}];
+  optional string data = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The raw error data, hex-encoded."}];
+}
+
+message NativeRevertError {
+  optional string native_type = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The type of native error: 'error_string', 'panic', or 'execution_reverted'."}];
+  optional string message = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The error message for Error(string) reverts."}];
+  optional uint64 panic_code = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The panic code for Panic(uint256) reverts."}];
+}
+
+message CustomRevertError {
+  optional string error_name = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The name of the custom error."}];
+  optional string params_json = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The decoded parameters as a JSON object."}];
+}
+
+message GetTvcAppsRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+  ];
+}
+
+message GetTvcAppsResponse {
+  repeated external.data.v1.TvcApp tvc_apps = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of TVC Apps."}
+  ];
+}
+
+message GetTvcAppRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+  ];
+  string tvc_app_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given TVC App."}
+  ];
+}
+
+message GetTvcAppResponse {
+  external.data.v1.TvcApp tvc_app = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Details about a single TVC App"}
+  ];
+}
+
+message GetTvcAppDeploymentsRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+  ];
+  string app_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given TVC App."}
+  ];
+}
+
+message GetTvcAppDeploymentsResponse {
+  repeated external.data.v1.TvcDeployment tvc_deployments = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "List of deployments for this TVC App"}
+  ];
+}
+
+message GetTvcDeploymentRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+  ];
+  string deployment_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given TVC Deployment."}
+  ];
+}
+
+message GetTvcDeploymentResponse {
+  external.data.v1.TvcDeployment tvc_deployment = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Details about a single TVC Deployment"}
+  ];
+}
+
+message RefreshFeatureFlagsRequest {}
+
+message RefreshFeatureFlagsResponse {}
