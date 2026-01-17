@@ -47,10 +47,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let eth_address = create_wallet_result.result.addresses.first().unwrap();
     let wallet_id = create_wallet_result.result.wallet_id;
 
-    println!(
-        "New ETH address created: {} (wallet ID: {})",
-        eth_address, wallet_id
-    );
+    println!("New ETH address created: {eth_address} (wallet ID: {wallet_id})");
 
     // Now we can sign something
     let signature_result = client
@@ -112,7 +109,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     assert_eq!(deleted_wallets.len(), 1);
     assert_eq!(deleted_wallets.first().unwrap().to_string(), wallet_id);
 
-    println!("Deleted wallet {}", wallet_id);
+    println!("Deleted wallet {wallet_id}");
 
     Ok(())
 }

@@ -501,7 +501,7 @@ mod tests {
 
         let payload =
             EnclaveEncryptServer::auth_encrypt(&client_target, &example_credential()).unwrap();
-        println!("{}", payload);
+        println!("{payload}");
         assert_eq!(client.auth_decrypt(&payload).unwrap(), example_credential());
     }
 

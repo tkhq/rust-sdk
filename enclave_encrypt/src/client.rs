@@ -215,7 +215,7 @@ impl ImportClient {
     ///
     /// - `private_key` is the key material (bytes) to import. Must be 32 bytes in length.
     /// - `import_bundle` is the import bundle as a string. Bundles are JSON-encoded strings (e.g ""{\"version\":\"v1.0.0\", ....")
-    ///    bundles contain a signed public key. The signature over this public key is from Turnkey's signer enclave.
+    ///   bundles contain a signed public key. The signature over this public key is from Turnkey's signer enclave.
     /// - `organization_id` is the expected organization ID. This will be checked against the content of the bundle, which contains the organization ID where the import flow started (`INIT_IMPORT` activity)
     /// - `user_id` is the expected user ID. This will be checked against the content of the bundle, which contains the user ID who initiated import (`INIT_IMPORT`)
     ///
@@ -251,7 +251,7 @@ impl ImportClient {
     ///
     /// - `mnemonic_phrase` is the wallet mnemonic phrase to import, as a string.
     /// - `import_bundle` is the import bundle as a string. Bundles are JSON-encoded strings (e.g ""{\"version\":\"v1.0.0\", ....")
-    ///    bundles contain a signed public key. The signature over this public key is from Turnkey's signer enclave.
+    ///   bundles contain a signed public key. The signature over this public key is from Turnkey's signer enclave.
     /// - `organization_id` is the expected organization ID. This will be checked against the content of the bundle, which contains the organization ID where the import flow started (`INIT_IMPORT` activity)
     /// - `user_id` is the expected user ID. This will be checked against the content of the bundle, which contains the user ID who initiated import (`INIT_IMPORT`)
     ///
@@ -545,6 +545,7 @@ impl EnclaveEncryptClient {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod test {
     use crate::server::EnclaveEncryptServer;
 
