@@ -15,7 +15,9 @@ use std::io::{BufRead, Write};
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
-use turnkey_client::generated::{CreateTvcManifestApprovalsIntent, TvcManifestApproval};
+use turnkey_client::generated::{
+    CreateTvcManifestApprovalsIntent, GetTvcDeploymentRequest, TvcManifestApproval,
+};
 
 /// Cryptographically approve a QOS manifest for a deployment with your operator's manifest set key.
 #[derive(Debug, ClapArgs)]
@@ -74,9 +76,13 @@ pub struct Args {
 
 /// Run the approve deploy command.
 pub async fn run(args: Args) -> anyhow::Result<()> {
-    let manifest = match (&args.manifest, &args.deploy_id) {
-        (Some(path), _) => read_manifest_from_path(path).await?,
-        (_, Some(deploy_id)) => fetch_manifest_from_deploy(deploy_id).await?,
+    // Fetch manifest - track manifest_id if fetched from API
+    let (manifest, fetched_manifest_id) = match (&args.manifest, &args.deploy_id) {
+        (Some(path), _) => (read_manifest_from_path(path).await?, None),
+        (_, Some(deploy_id)) => {
+            let (manifest, manifest_id) = fetch_manifest_from_deploy(deploy_id).await?;
+            (manifest, Some(manifest_id))
+        }
         (None, None) => bail!("a manifest source is required"),
     };
 
@@ -123,20 +129,27 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
 
     // Post to API if not skipped
     if !args.skip_post {
-        post_approval_to_api(&args, &approval).await?;
+        post_approval_to_api(&args, &approval, fetched_manifest_id.as_deref()).await?;
     }
 
     Ok(())
 }
 
-async fn post_approval_to_api(args: &Args, approval: &Approval) -> anyhow::Result<()> {
-    // Validate required IDs
-    let manifest_id = args.manifest_id.as_ref().ok_or_else(|| {
-        anyhow!(
-            "--manifest-id is required to post approval to API. \
-             Use --skip-post to only generate the approval locally."
-        )
-    })?;
+async fn post_approval_to_api(
+    args: &Args,
+    approval: &Approval,
+    fetched_manifest_id: Option<&str>,
+) -> anyhow::Result<()> {
+    // Use fetched manifest_id (from --deploy-id) or fall back to --manifest-id arg
+    let manifest_id = fetched_manifest_id
+        .map(|s| s.to_string())
+        .or_else(|| args.manifest_id.clone())
+        .ok_or_else(|| {
+            anyhow!(
+                "--manifest-id is required to post approval to API (or use --deploy-id). \
+                 Use --skip-post to only generate the approval locally."
+            )
+        })?;
 
     let operator_id = args.operator_id.as_ref().ok_or_else(|| {
         anyhow!(
@@ -310,7 +323,7 @@ fn review_share_set(set: &ShareSet) -> anyhow::Result<()> {
     if expected_keys != actual_keys {
         bail!(
             "Share set public keys do not match known keys.\n\
-             Expected keys from tvc/known/*.pub files.\n\
+             Expected keys defined in KNOWN_SHARE_SET_KEYS (config/app.rs).\n\
              Found: {:?}",
             set.members
                 .iter()
@@ -338,6 +351,36 @@ async fn read_manifest_from_path(path: &Path) -> anyhow::Result<Manifest> {
     Ok(manifest)
 }
 
-async fn fetch_manifest_from_deploy(_deploy_id: &str) -> anyhow::Result<Manifest> {
-    bail!("fetching manifest with deployment id is not yet implemented (requires GetTvcDeployment API)")
+/// Fetch manifest from Turnkey using GetTvcDeployment API.
+/// Returns the manifest and its Turnkey manifest_id.
+async fn fetch_manifest_from_deploy(deploy_id: &str) -> anyhow::Result<(Manifest, String)> {
+    println!("Fetching deployment {deploy_id}...");
+
+    let auth = crate::client::build_client().await?;
+
+    let request = GetTvcDeploymentRequest {
+        organization_id: auth.org_id.clone(),
+        deployment_id: deploy_id.to_string(),
+    };
+
+    let response = auth
+        .client
+        .get_tvc_deployment(request)
+        .await
+        .context("failed to fetch deployment")?;
+
+    let deployment = response
+        .tvc_deployment
+        .ok_or_else(|| anyhow!("deployment not found: {deploy_id}"))?;
+
+    // Deserialize manifest from bytes
+    let manifest: Manifest = serde_json::from_slice(&deployment.manifest)
+        .context("failed to parse manifest from deployment")?;
+
+    println!(
+        "✓ Manifest loaded (manifest_id: {})",
+        deployment.manifest_id
+    );
+
+    Ok((manifest, deployment.manifest_id))
 }

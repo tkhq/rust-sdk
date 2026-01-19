@@ -19,8 +19,6 @@ tvc app create my-app.json
 
 ### Create and Approve a Deployment
 
-> **Note**: A `GetTvcDeployment` API endpoint is not yet available, so the manifest file and IDs must be provided manually. Once this endpoint exists, `tvc deploy approve --deploy-id <ID>` will be able to fetch the manifest automatically.
-
 ```bash
 # Generate deployment config template
 tvc deploy init --output my-deploy.json
@@ -30,9 +28,14 @@ tvc deploy init --output my-deploy.json
 # Create the deployment
 tvc deploy create my-deploy.json
 
-# Approve the deployment manifest
+# Recommended: uses GetTvcDeployment to fetch manifest and manifest_id automatically
+tvc deploy approve \
+  --deploy-id <DEPLOYMENT_UUID> \
+  --operator-id <OPERATOR_UUID> # Turnkey's ID for your operator (from app create response)
+
+# Alternative: provide manifest file and IDs manually
 tvc deploy approve \
   --manifest manifest.json \
   --manifest-id <MANIFEST_UUID> \  # Turnkey's ID for the manifest (from deploy create response)
-  --operator-id <OPERATOR_UUID>    # Turnkey's ID for your operator (from dashboard)
+  --operator-id <OPERATOR_UUID>
 ```

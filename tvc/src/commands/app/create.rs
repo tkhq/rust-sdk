@@ -115,7 +115,18 @@ pub async fn run(args: Args) -> Result<()> {
     println!();
     println!("App ID: {}", result.result.app_id);
     println!("Name: {}", app_config.name);
+    println!("Manifest Set ID: {}", result.result.manifest_set_id);
+    if !result.result.manifest_set_operator_ids.is_empty() {
+        println!(
+            "Manifest Set Operator IDs: {}",
+            result.result.manifest_set_operator_ids.join(", ")
+        );
+    }
     println!("Config: {}", args.config_file.display());
+    println!();
+    println!(
+        "Use one of the Manifest Set Operator IDs above with `tvc deploy approve --operator-id`"
+    );
 
     Ok(())
 }
