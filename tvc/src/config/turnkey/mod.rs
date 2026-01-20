@@ -7,6 +7,12 @@
 //!
 //! Key paths are stored in the config so users can customize storage locations.
 
+mod api_key;
+mod qos_operator_key;
+
+pub use api_key::{KeyCurve, StoredApiKey};
+pub use qos_operator_key::StoredQosOperatorKey;
+
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -49,24 +55,6 @@ pub struct OrgConfig {
 
 fn default_api_base_url() -> String {
     API_BASE_URL_PROD.to_string()
-}
-
-/// API key stored in api_key.json
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ApiKey {
-    /// Hex-encoded compressed public key
-    pub public_key: String,
-    /// Hex-encoded private key
-    pub private_key: String,
-}
-
-/// Operator key stored in operator.json
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OperatorKey {
-    /// Hex-encoded compressed public key
-    pub public_key: String,
-    /// Hex-encoded private key
-    pub private_key: String,
 }
 
 /// Returns the base config directory: `~/.config/turnkey/`
@@ -168,84 +156,5 @@ impl Config {
     /// Get list of configured org aliases
     pub fn org_aliases(&self) -> Vec<&String> {
         self.orgs.keys().collect()
-    }
-}
-
-impl ApiKey {
-    /// Load API key from the path specified in org config
-    pub async fn load(org_config: &OrgConfig) -> Result<Option<Self>> {
-        let path = &org_config.api_key_path;
-        if !path.exists() {
-            return Ok(None);
-        }
-
-        let content = tokio::fs::read_to_string(path)
-            .await
-            .with_context(|| format!("failed to read API key: {}", path.display()))?;
-
-        let key: ApiKey = serde_json::from_str(&content)
-            .with_context(|| format!("failed to parse API key: {}", path.display()))?;
-
-        Ok(Some(key))
-    }
-
-    /// Save API key to the path specified in org config
-    pub async fn save(&self, org_config: &OrgConfig) -> Result<()> {
-        let path = &org_config.api_key_path;
-
-        // Ensure parent directory exists
-        if let Some(parent) = path.parent() {
-            tokio::fs::create_dir_all(parent)
-                .await
-                .with_context(|| format!("failed to create directory: {}", parent.display()))?;
-        }
-
-        let content = serde_json::to_string_pretty(self).context("failed to serialize API key")?;
-
-        tokio::fs::write(path, content)
-            .await
-            .with_context(|| format!("failed to write API key: {}", path.display()))?;
-
-        Ok(())
-    }
-}
-
-impl OperatorKey {
-    /// Load operator key from the path specified in org config
-    pub async fn load(org_config: &OrgConfig) -> Result<Option<Self>> {
-        let path = &org_config.operator_key_path;
-        if !path.exists() {
-            return Ok(None);
-        }
-
-        let content = tokio::fs::read_to_string(path)
-            .await
-            .with_context(|| format!("failed to read operator key: {}", path.display()))?;
-
-        let key: OperatorKey = serde_json::from_str(&content)
-            .with_context(|| format!("failed to parse operator key: {}", path.display()))?;
-
-        Ok(Some(key))
-    }
-
-    /// Save operator key to the path specified in org config
-    pub async fn save(&self, org_config: &OrgConfig) -> Result<()> {
-        let path = &org_config.operator_key_path;
-
-        // Ensure parent directory exists
-        if let Some(parent) = path.parent() {
-            tokio::fs::create_dir_all(parent)
-                .await
-                .with_context(|| format!("failed to create directory: {}", parent.display()))?;
-        }
-
-        let content =
-            serde_json::to_string_pretty(self).context("failed to serialize operator key")?;
-
-        tokio::fs::write(path, content)
-            .await
-            .with_context(|| format!("failed to write operator key: {}", path.display()))?;
-
-        Ok(())
     }
 }

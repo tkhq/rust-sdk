@@ -1,7 +1,7 @@
 //! Approve deploy command - cryptographically approve a QOS manifest.
 
 use crate::config::app::KNOWN_SHARE_SET_KEYS;
-use crate::config::turnkey::{Config, OperatorKey};
+use crate::config::turnkey::{Config, StoredQosOperatorKey};
 use crate::pair::LocalPair;
 use crate::util::{read_file_to_string, write_file};
 use anyhow::{anyhow, bail, Context};
@@ -105,12 +105,14 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
                 anyhow!("No active organization. Run `tvc login` first or provide --operator-seed.")
             })?;
 
-            let operator_key = OperatorKey::load(org_config).await?.ok_or_else(|| {
-                anyhow!(
-                    "No operator key found for org '{alias}'. \
+            let operator_key = StoredQosOperatorKey::load(org_config)
+                .await?
+                .ok_or_else(|| {
+                    anyhow!(
+                        "No operator key found for org '{alias}'. \
                      Run `tvc login` first or provide --operator-seed."
-                )
-            })?;
+                    )
+                })?;
 
             Box::new(LocalPair::from_hex_seed(&operator_key.private_key)?)
         }

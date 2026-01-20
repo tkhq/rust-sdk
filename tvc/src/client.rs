@@ -1,6 +1,6 @@
 //! Client utilities for authenticated API calls.
 
-use crate::config::turnkey::{ApiKey, Config};
+use crate::config::turnkey::{Config, StoredApiKey};
 use anyhow::{Context, Result};
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use turnkey_client::TurnkeyClient;
@@ -24,7 +24,7 @@ pub async fn build_client() -> Result<AuthenticatedClient> {
         .active_org_config()
         .ok_or_else(|| anyhow::anyhow!("No active organization. Run `tvc login` first."))?;
 
-    let api_key = ApiKey::load(org_config).await?.ok_or_else(|| {
+    let api_key = StoredApiKey::load(org_config).await?.ok_or_else(|| {
         anyhow::anyhow!("No API key found for org '{alias}'. Run `tvc login` first.")
     })?;
 

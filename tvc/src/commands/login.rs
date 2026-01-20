@@ -1,8 +1,8 @@
 //! Login command for authenticating with Turnkey.
 
 use crate::config::turnkey::{
-    ApiKey, Config, OperatorKey, OrgConfig, API_BASE_URL_LOCAL, API_BASE_URL_PREPROD,
-    API_BASE_URL_PROD,
+    Config, KeyCurve, OrgConfig, StoredApiKey, StoredQosOperatorKey, API_BASE_URL_LOCAL,
+    API_BASE_URL_PREPROD, API_BASE_URL_PROD,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use clap::Args as ClapArgs;
@@ -163,9 +163,9 @@ fn prompt_for_api_url() -> Result<String> {
 /// Get an existing API key or generate a new one.
 /// If an API key exists, it's returned directly.
 /// If not, a new key is generated, saved, and the user is prompted to add it to the dashboard.
-async fn get_or_generate_api_key(org_config: &OrgConfig) -> Result<ApiKey> {
+async fn get_or_generate_api_key(org_config: &OrgConfig) -> Result<StoredApiKey> {
     // Check if API key already exists
-    if let Some(api_key) = ApiKey::load(org_config).await? {
+    if let Some(api_key) = StoredApiKey::load(org_config).await? {
         println!("Using existing API key.");
         return Ok(api_key);
     }
@@ -178,9 +178,10 @@ async fn get_or_generate_api_key(org_config: &OrgConfig) -> Result<ApiKey> {
     let public_key = hex::encode(stamper.compressed_public_key());
     let private_key = hex::encode(stamper.private_key());
 
-    let api_key = ApiKey {
+    let api_key = StoredApiKey {
         public_key: public_key.clone(),
         private_key,
+        curve: KeyCurve::P256,
     };
 
     // Save the key
@@ -204,9 +205,9 @@ async fn get_or_generate_api_key(org_config: &OrgConfig) -> Result<ApiKey> {
 }
 
 /// Get an existing operator key or generate a new one.
-async fn get_or_generate_operator_key(org_config: &OrgConfig) -> Result<OperatorKey> {
+async fn get_or_generate_operator_key(org_config: &OrgConfig) -> Result<StoredQosOperatorKey> {
     // Check if operator key already exists
-    if let Some(operator_key) = OperatorKey::load(org_config).await? {
+    if let Some(operator_key) = StoredQosOperatorKey::load(org_config).await? {
         println!("Using existing operator key.");
         return Ok(operator_key);
     }
@@ -220,7 +221,7 @@ async fn get_or_generate_operator_key(org_config: &OrgConfig) -> Result<Operator
     let public_key = hex::encode(pair.public_key().to_bytes());
     let private_key = hex::encode(pair.to_master_seed());
 
-    let operator_key = OperatorKey {
+    let operator_key = StoredQosOperatorKey {
         public_key: public_key.clone(),
         private_key,
     };
@@ -304,7 +305,7 @@ pub struct WhoamiResult {
 /// Verify credentials by calling the whoami endpoint.
 /// Returns Ok(WhoamiResult) if credentials are valid, Err otherwise.
 async fn verify_credentials(
-    api_key: &ApiKey,
+    api_key: &StoredApiKey,
     org_id: &str,
     api_base_url: &str,
 ) -> Result<WhoamiResult> {
