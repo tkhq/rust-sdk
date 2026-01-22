@@ -33,3 +33,8 @@ release = false
 name = "turnkey_proofs"
 changelog_update = true
 version_group = "rust-sdk"
+
+[[package]]
+name = "tvc"
+publish = false
+release = false
