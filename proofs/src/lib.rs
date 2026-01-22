@@ -443,7 +443,7 @@ pub fn verify(app_proof: &AppProof, boot_proof: &BootProof) -> Result<(), Verify
         .user_data
         .expect("validated attestation doc should have user_data");
     if manifest_digest.as_slice() != user_data.as_slice() {
-        return Err(VerifyError::DifferentManifest(format!("attestation_doc's user_data doesn't match the hash of the manifest. attestation_doc.user_data: {:?}, manifest_digest: {:?}", user_data, manifest_digest)));
+        return Err(VerifyError::DifferentManifest(format!("attestation_doc's user_data doesn't match the hash of the manifest. attestation_doc.user_data: {user_data:?}, manifest_digest: {manifest_digest:?}")));
     }
 
     // 3. Verify that all the ephemeral public keys match: app proof, boot proof structure, actual attestation doc

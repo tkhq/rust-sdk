@@ -159,9 +159,9 @@ fn mutate_struct(struct_value: &syn::ItemStruct) -> TokenStream {
                 let enum_ident = &enum_type.name;
 
                 let rewritten_ty: syn::Type = if enum_type.repeated {
-                    syn::parse_str(&format!("Vec<{}>", enum_ident)).unwrap()
+                    syn::parse_str(&format!("Vec<{enum_ident}>")).unwrap()
                 } else if enum_type.optional {
-                    syn::parse_str(&format!("Option<{}>", enum_ident)).unwrap()
+                    syn::parse_str(&format!("Option<{enum_ident}>")).unwrap()
                 } else {
                     syn::parse_str(enum_ident).unwrap()
                 };

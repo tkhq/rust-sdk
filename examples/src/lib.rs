@@ -11,7 +11,7 @@ pub fn load_api_key_from_env() -> Result<TurnkeyP256ApiKey, Box<dyn Error>> {
     if env_path.exists() {
         dotenvy::from_path(&env_path)?;
     } else {
-        println!("No .env file found at {:?}", env_path);
+        println!("No .env file found at {env_path:?}");
         println!("Continuing because env might already be populated with the right variables");
     }
 

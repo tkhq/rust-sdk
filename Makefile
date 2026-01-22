@@ -27,7 +27,7 @@ lint:
 	# Check formatting
 	cargo fmt -- --check
 	# Run Clippy
-	cargo clippy -- -D warnings
+	cargo clippy --all-targets --all-features -- -D warnings
 
 .PHONY: build
 build:

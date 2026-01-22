@@ -1304,3 +1304,48 @@ impl Oauth2Provider {
         }
     }
 }
+/// The current stage of a TVC deployment
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum TvcDeploymentStage {
+    #[serde(rename = "TVC_DEPLOYMENT_STAGE_UNSPECIFIED")]
+    Unspecified = 0,
+    #[serde(rename = "TVC_DEPLOYMENT_STAGE_CREATE")]
+    Create = 1,
+    #[serde(rename = "TVC_DEPLOYMENT_STAGE_APPROVE")]
+    Approve = 2,
+    #[serde(rename = "TVC_DEPLOYMENT_STAGE_PROVISION")]
+    Provision = 3,
+    #[serde(rename = "TVC_DEPLOYMENT_STAGE_LIVE")]
+    Live = 4,
+    #[serde(rename = "TVC_DEPLOYMENT_STAGE_DELETE")]
+    Delete = 5,
+}
+impl TvcDeploymentStage {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "TVC_DEPLOYMENT_STAGE_UNSPECIFIED",
+            Self::Create => "TVC_DEPLOYMENT_STAGE_CREATE",
+            Self::Approve => "TVC_DEPLOYMENT_STAGE_APPROVE",
+            Self::Provision => "TVC_DEPLOYMENT_STAGE_PROVISION",
+            Self::Live => "TVC_DEPLOYMENT_STAGE_LIVE",
+            Self::Delete => "TVC_DEPLOYMENT_STAGE_DELETE",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "TVC_DEPLOYMENT_STAGE_UNSPECIFIED" => Some(Self::Unspecified),
+            "TVC_DEPLOYMENT_STAGE_CREATE" => Some(Self::Create),
+            "TVC_DEPLOYMENT_STAGE_APPROVE" => Some(Self::Approve),
+            "TVC_DEPLOYMENT_STAGE_PROVISION" => Some(Self::Provision),
+            "TVC_DEPLOYMENT_STAGE_LIVE" => Some(Self::Live),
+            "TVC_DEPLOYMENT_STAGE_DELETE" => Some(Self::Delete),
+            _ => None,
+        }
+    }
+}
