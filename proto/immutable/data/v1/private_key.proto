@@ -25,8 +25,12 @@ message PrivateKey {
 
 enum Curve {
   CURVE_UNSPECIFIED = 0;
+  // Curve SECP256K1 as defined in https://www.secg.org/sec2-v2.pdf
   CURVE_SECP256K1 = 1;
+  // Curve ED25519 as defined in https://www.rfc-editor.org/rfc/rfc8032
   CURVE_ED25519 = 2;
+  // Curve NIST P-256 (secp256r1) as defined in https://csrc.nist.gov/csrc/media/events/workshop-on-elliptic-curve-cryptography-standards/documents/papers/session6-adalier-mehmet.pdf
+  CURVE_P256 = 3;
 }
 
 message Address {

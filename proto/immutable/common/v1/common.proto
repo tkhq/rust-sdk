@@ -35,9 +35,14 @@ enum ClientSignatureScheme {
 // Cryptographic Curve used to generate a given Private Key.
 enum Curve {
   CURVE_UNSPECIFIED = 0;
+  // Curve SECP256K1 as defined in https://www.secg.org/sec2-v2.pdf
   CURVE_SECP256K1 = 1;
+  // Curve ED25519 as defined in https://www.rfc-editor.org/rfc/rfc8032
   CURVE_ED25519 = 2;
+  // Curve NIST P-256 (secp256r1) as defined in https://csrc.nist.gov/csrc/media/events/workshop-on-elliptic-curve-cryptography-standards/documents/papers/session6-adalier-mehmet.pdf
+  CURVE_P256 = 3;
 }
+
 enum AddressFormat {
   ADDRESS_FORMAT_UNSPECIFIED = 0;
   // 04<X_COORDINATE><Y_COORDINATE>
@@ -311,11 +316,11 @@ enum Oauth2Provider {
 }
 
 // The current stage of a TVC deployment
+// (note: leaving some space in the numbering to account for potential future stages)
 enum TvcDeploymentStage {
   TVC_DEPLOYMENT_STAGE_UNSPECIFIED = 0;
-  TVC_DEPLOYMENT_STAGE_CREATE = 1;
-  TVC_DEPLOYMENT_STAGE_APPROVE = 2;
-  TVC_DEPLOYMENT_STAGE_PROVISION = 3;
-  TVC_DEPLOYMENT_STAGE_LIVE = 4;
-  TVC_DEPLOYMENT_STAGE_DELETE = 5;
+  TVC_DEPLOYMENT_STAGE_APPROVE = 10;
+  TVC_DEPLOYMENT_STAGE_PROVISION = 20;
+  TVC_DEPLOYMENT_STAGE_LIVE = 30;
+  TVC_DEPLOYMENT_STAGE_DELETE = 40;
 }

@@ -61,7 +61,7 @@ message TvcDeployment {
   ];
   bytes manifest = 5 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The manifest used for this deployment (raw bytes)"}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The manifest used for this deployment (raw UTF-8 JSON bytes)"}
   ];
   string qos_version = 6 [
     (google.api.field_behavior) = REQUIRED,

@@ -1750,6 +1750,19 @@ service PublicApiService {
     };
   }
 
+  rpc GetWalletAddressBalances(GetWalletAddressBalancesRequest) returns (GetWalletAddressBalancesResponse) {
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/query/get_wallet_address_balances"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get balances for a single wallet account address on the specified network."
+      summary: "Get balances for wallet account address"
+      tags: "Wallets"
+    };
+  }
+
   // This route does nothing and does not need an implementation, but please don't remove it.
   // It's used at compile time for generating extra OpenAPI/TypeScript types
   // that are not directly referenced in requests.
@@ -2580,3 +2593,29 @@ message GetTvcDeploymentResponse {
 message RefreshFeatureFlagsRequest {}
 
 message RefreshFeatureFlagsResponse {}
+
+message GetWalletAddressBalancesRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+  ];
+  string address = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address corresponding to a wallet account."}
+  ];
+  string caip2 = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The network identifier in CAIP-2 format (e.g., 'eip155:1' for Ethereum mainnet)."}
+  ];
+}
+
+message GetWalletAddressBalancesResponse {
+  repeated AssetBalance balances = 1;
+}
+
+message AssetBalance {
+  string caip19 = 1;
+  string symbol = 2;
+  string balance = 3;
+  int32 decimals = 4;
+}
