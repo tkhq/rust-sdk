@@ -29,7 +29,7 @@ serde = { version = "1.0.219", default-features = false, features = ["std", "der
 serde_json = { version = "1.0.140", default-features = false, features = ["std"] }
 serde_bytes = { version = "0.11", default-features = false }
 serde_cbor = { version = "0.11", default-features = false }
-serde_with = { version = "3.14.0", default-features = false, features = ["macros"] }
+serde_with = { version = "3.14.0", default-features = false, features = ["macros", "base64"] }
 
 # Cryptography
 hpke = { version = "0.10", features = ["alloc", "p256", "serde_impls"], default-features = false }

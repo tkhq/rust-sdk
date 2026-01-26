@@ -528,6 +528,7 @@ pub struct TvcApp {
     pub updated_at: ::core::option::Option<Timestamp>,
 }
 #[derive(Debug)]
+#[serde_with::serde_as]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -537,6 +538,7 @@ pub struct TvcDeployment {
     pub app_id: ::prost::alloc::string::String,
     pub manifest_id: ::prost::alloc::string::String,
     #[serde(default)]
+    #[serde_as(as = "serde_with::base64::Base64")]
     pub manifest: ::prost::alloc::vec::Vec<u8>,
     pub qos_version: ::prost::alloc::string::String,
     #[serde(default)]
