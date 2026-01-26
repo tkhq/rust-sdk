@@ -41,8 +41,8 @@ pub struct OperatorParams {
 /// Known share set public keys. This is for known share keys
 /// that encrypt known operator keys. Assume the secrets are well known
 pub const KNOWN_SHARE_SET_KEYS: [(&str, &str); 2] = [
-    ("dev-share-operator-1", "0405c071cb82f6e47e0379a65019a0db27f4f554ddc494b8b24191a737603015a19b7a3668d0a98aa5a08af8ec509bfc26ad3763f33f2b2a1c854beb16898731cc04b39440511740326e9077e720233f22120c387505ce21747c7dc48f1d67e4a0e6424eae6b2396777ffb436f10615d045bd4b46dae1fc925698b50bc642af388f7"),
-    ("dev-share-operator-2", "04b58d66efd7c0eee569c74fae47f956b4628d455077eb5a78a24c69c0e67a7d1b743c0fd5d823659c6c75d367455bfe1f83c5a19bc71e2e511fc6b028ea1f536a0485873f2949c66f4a6aa05c9cfcc18e3e6e4585a7967a5408e4f22306547cc0a8128b1bae0b84b52abf29424bd101a52e8d2f552e33e2c3bb304b3d30eeee75c5"),
+    ("dev-share-operator-1", "044af8b082b9ef41a238037811a188309d8c8b00b6d49c0574538d7746d7383739e67e1107f134bc102a48301b07e7c53280decbe9c16c9fc1f19b9832018e1485048139aa5de49d9505465bcf1a879954c51ba7b258b669f4e42697088cbbca54aeb888d61e65b2602ce92ae945a0160533acc94942511f8e5b1940ed89cc8f141f"),
+    ("dev-share-operator-2", "04c1c4b4eb784505f167affae00e18b1521e7a0bfa3be46e6a6b43ba1f386afce48d964c885480cb197e3538fd30ebe38a07f76b6a286b37ba6d2abddbbd6c9c8304e492ca7bce95912a7b2565c8553e38cf3a4b1f858171900ed81888282db13d41e214dd6def2de2aacb1fcf92e3ae5a83e1b0ffa660fc59b9dd10e277cfd128dc"),
 ];
 
 /// Well known Quorum Key. This is for applications that do not need secure quorum keys
