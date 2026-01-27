@@ -9,7 +9,7 @@ use syn::{
 /// List of (struct_name, field_name) pairs where Vec<u8> fields should be
 /// serialized/deserialized as base64.
 const BASE64_FIELDS: &[(&str, &str)] = &[
-    ("TvcDeployment", "manifest"),
+    ("TvcManifest", "manifest"),
     // Add more fields here as needed
 ];
 

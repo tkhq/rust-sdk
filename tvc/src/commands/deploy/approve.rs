@@ -375,14 +375,15 @@ async fn fetch_manifest_from_deploy(deploy_id: &str) -> anyhow::Result<(Manifest
         .tvc_deployment
         .ok_or_else(|| anyhow!("deployment not found: {deploy_id}"))?;
 
+    let tvc_manifest = deployment
+        .manifest
+        .ok_or_else(|| anyhow!("manifest not found in deployment"))?;
+
     // Deserialize manifest from bytes
-    let manifest: Manifest = serde_json::from_slice(&deployment.manifest)
+    let manifest: Manifest = serde_json::from_slice(&tvc_manifest.manifest)
         .context("failed to parse manifest from deployment")?;
 
-    println!(
-        "✓ Manifest loaded (manifest_id: {})",
-        deployment.manifest_id
-    );
+    println!("✓ Manifest loaded (manifest_id: {})", tvc_manifest.id);
 
-    Ok((manifest, deployment.manifest_id))
+    Ok((manifest, tvc_manifest.id))
 }

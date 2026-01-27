@@ -32,9 +32,13 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         .tvc_deployment
         .ok_or_else(|| anyhow::anyhow!("deployment not found: {}", args.deploy_id))?;
 
+    let manifest = deployment
+        .manifest
+        .ok_or_else(|| anyhow::anyhow!("manifest not found in deployment"))?;
+
     println!("Deployment: {}", deployment.id);
     println!("App ID: {}", deployment.app_id);
-    println!("Manifest ID: {}", deployment.manifest_id);
+    println!("Manifest ID: {}", manifest.id);
     println!("QOS Version: {}", deployment.qos_version);
     println!("Stage: {:?}", deployment.stage);
 

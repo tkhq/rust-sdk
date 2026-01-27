@@ -518,8 +518,10 @@ pub struct TvcApp {
     pub organization_id: ::prost::alloc::string::String,
     pub name: ::prost::alloc::string::String,
     pub quorum_public_key: ::prost::alloc::string::String,
-    pub manifest_set_id: ::prost::alloc::string::String,
-    pub share_set_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub manifest_set: ::core::option::Option<TvcOperatorSet>,
+    #[serde(default)]
+    pub share_set: ::core::option::Option<TvcOperatorSet>,
     #[serde(default)]
     pub external_connectivity: bool,
     #[serde(default)]
@@ -528,7 +530,6 @@ pub struct TvcApp {
     pub updated_at: ::core::option::Option<Timestamp>,
 }
 #[derive(Debug)]
-#[serde_with::serde_as]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -536,10 +537,14 @@ pub struct TvcDeployment {
     pub id: ::prost::alloc::string::String,
     pub organization_id: ::prost::alloc::string::String,
     pub app_id: ::prost::alloc::string::String,
-    pub manifest_id: ::prost::alloc::string::String,
     #[serde(default)]
-    #[serde_as(as = "serde_with::base64::Base64")]
-    pub manifest: ::prost::alloc::vec::Vec<u8>,
+    pub manifest_set: ::core::option::Option<TvcOperatorSet>,
+    #[serde(default)]
+    pub share_set: ::core::option::Option<TvcOperatorSet>,
+    #[serde(default)]
+    pub manifest: ::core::option::Option<TvcManifest>,
+    #[serde(default)]
+    pub manifest_approvals: ::prost::alloc::vec::Vec<TvcOperatorApproval>,
     pub qos_version: ::prost::alloc::string::String,
     #[serde(default)]
     pub pivot_container: ::core::option::Option<TvcContainerSpec>,
@@ -562,6 +567,67 @@ pub struct TvcContainerSpec {
     pub args: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[serde(default)]
     pub has_pull_secret: bool,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct TvcOperatorApproval {
+    pub id: ::prost::alloc::string::String,
+    pub manifest_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub operator: ::core::option::Option<TvcOperator>,
+    #[serde(default)]
+    pub approval: ::prost::alloc::vec::Vec<u8>,
+    #[serde(default)]
+    pub created_at: ::core::option::Option<Timestamp>,
+    #[serde(default)]
+    pub updated_at: ::core::option::Option<Timestamp>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct TvcOperatorSet {
+    pub id: ::prost::alloc::string::String,
+    pub name: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub operators: ::prost::alloc::vec::Vec<TvcOperator>,
+    #[serde(default)]
+    pub threshold: u32,
+    #[serde(default)]
+    pub created_at: ::core::option::Option<Timestamp>,
+    #[serde(default)]
+    pub updated_at: ::core::option::Option<Timestamp>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct TvcOperator {
+    pub id: ::prost::alloc::string::String,
+    pub name: ::prost::alloc::string::String,
+    pub public_key: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub created_at: ::core::option::Option<Timestamp>,
+    #[serde(default)]
+    pub updated_at: ::core::option::Option<Timestamp>,
+}
+#[derive(Debug)]
+#[serde_with::serde_as]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct TvcManifest {
+    pub id: ::prost::alloc::string::String,
+    #[serde(default)]
+    #[serde_as(as = "serde_with::base64::Base64")]
+    pub manifest: ::prost::alloc::vec::Vec<u8>,
+    #[serde(default)]
+    pub created_at: ::core::option::Option<Timestamp>,
+    #[serde(default)]
+    pub updated_at: ::core::option::Option<Timestamp>,
 }
 #[derive(Debug)]
 /// An account derived from a Wallet
