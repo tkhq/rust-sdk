@@ -106,10 +106,12 @@ pub async fn run(args: Args) -> Result<()> {
         .context("failed to create TVC app")?;
 
     let app_id = result.result.app_id.clone();
+    let operator_ids = result.result.manifest_set_operator_ids.clone();
 
-    // save the app ID to config
+    // save the app ID and operator_ids to config
     let mut config = turnkey::Config::load().await?;
     config.set_last_app_id(app_id.clone())?;
+    config.set_last_operator_ids(operator_ids.clone())?;
     config.save().await?;
 
     println!();

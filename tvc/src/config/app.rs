@@ -57,7 +57,8 @@ impl AppConfig {
                 threshold: 1,
                 new_operators: vec![OperatorParams {
                     name: "operator-1".to_string(),
-                    public_key: operator_public_key.unwrap_or_else(|| "<FILL_IN_OPERATOR_PUBLIC_KEY>".to_string()),
+                    public_key: operator_public_key
+                        .unwrap_or_else(|| "<FILL_IN_OPERATOR_PUBLIC_KEY>".to_string()),
                 }],
                 existing_operator_ids: vec![],
             }),
