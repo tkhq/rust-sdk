@@ -1,6 +1,7 @@
 //! App init command - generates a template config file.
 
 use crate::config::app::AppConfig;
+use crate::config::turnkey::{Config, StoredQosOperatorKey};
 use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
 use std::path::PathBuf;
@@ -21,8 +22,11 @@ pub async fn run(args: Args) -> Result<()> {
         anyhow::bail!("File already exists: {}", args.output.display());
     }
 
+    // Try to load operator public key from config
+    let operator_public_key = load_operator_public_key().await;
+
     // Generate template
-    let config = AppConfig::template();
+    let config = AppConfig::template(operator_public_key.clone());
     let json = serde_json::to_string_pretty(&config).context("failed to serialize config")?;
 
     // Write to file
@@ -35,4 +39,15 @@ pub async fn run(args: Args) -> Result<()> {
     println!("  tvc app create {}", args.output.display());
 
     Ok(())
+}
+
+/// Load the operator public key from the active org's config
+async fn load_operator_public_key() -> Option<String> {
+    // Load config (return None on error)
+    let config = Config::load().await.ok()?;
+
+    // Get active org config
+    let (_, org_config) = config.active_org_config()?;
+    let operator_key = StoredQosOperatorKey::load(org_config).await.ok()??;
+    Some(operator_key.public_key)
 }

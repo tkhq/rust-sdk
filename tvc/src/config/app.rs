@@ -46,7 +46,7 @@ pub const KNOWN_QUORUM_KEY: &str = "04451028fc9d42cef6d8f2a3ebe17d65783c470dbc6f
 
 impl AppConfig {
     /// Generate a default template config with placeholders.
-    pub fn template() -> Self {
+    pub fn template(operator_public_key: Option<String>) -> Self {
         Self {
             name: "<FILL_IN_APP_NAME>".to_string(),
             quorum_public_key: KNOWN_QUORUM_KEY.to_string(),
@@ -57,7 +57,7 @@ impl AppConfig {
                 threshold: 1,
                 new_operators: vec![OperatorParams {
                     name: "operator-1".to_string(),
-                    public_key: "<FILL_IN_OPERATOR_PUBLIC_KEY>".to_string(),
+                    public_key: operator_public_key.unwrap_or_else(|| "<FILL_IN_OPERATOR_PUBLIC_KEY>".to_string()),
                 }],
                 existing_operator_ids: vec![],
             }),
