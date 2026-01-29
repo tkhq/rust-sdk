@@ -1,6 +1,7 @@
 //! Deploy init command - generates a template config file.
 
 use crate::config::deploy::DeployConfig;
+use crate::config::turnkey;
 use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
 use std::path::PathBuf;
@@ -21,8 +22,12 @@ pub async fn run(args: Args) -> Result<()> {
         anyhow::bail!("File already exists: {}", args.output.display());
     }
 
+    // Try to get the last created app ID
+    let config = turnkey::Config::load().await?;
+    let last_app_id = config.get_last_app_id();
+
     // Generate template
-    let config = DeployConfig::template();
+    let config = DeployConfig::template(last_app_id);
     let json = serde_json::to_string_pretty(&config).context("failed to serialize config")?;
 
     // Write to file

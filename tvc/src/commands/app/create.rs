@@ -2,6 +2,7 @@
 
 use crate::client::build_client;
 use crate::config::app::AppConfig;
+use crate::config::turnkey;
 use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
 use std::path::PathBuf;
@@ -104,10 +105,17 @@ pub async fn run(args: Args) -> Result<()> {
         .await
         .context("failed to create TVC app")?;
 
+    let app_id = result.result.app_id.clone();
+
+    // save the app ID to config
+    let mut config = turnkey::Config::load().await?;
+    config.set_last_app_id(app_id.clone())?;
+    config.save().await?;
+
     println!();
     println!("App created successfully!");
     println!();
-    println!("App ID: {}", result.result.app_id);
+    println!("App ID: {}", app_id);
     println!("Name: {}", app_config.name);
     println!("Manifest Set ID: {}", result.result.manifest_set_id);
     if !result.result.manifest_set_operator_ids.is_empty() {

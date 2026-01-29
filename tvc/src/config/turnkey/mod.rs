@@ -32,6 +32,9 @@ pub struct Config {
     /// Map of org alias -> org config
     #[serde(default)]
     pub orgs: HashMap<String, OrgConfig>,
+    /// Map of org alias -> last created app ID (for convenience)
+    #[serde(default)]
+    pub last_created_app_id: HashMap<String, String>,
 }
 
 /// Known API base URLs for different environments.
@@ -156,5 +159,24 @@ impl Config {
     /// Get list of configured org aliases
     pub fn org_aliases(&self) -> Vec<&String> {
         self.orgs.keys().collect()
+    }
+
+    /// Store the last created app ID for the active org
+    pub fn set_last_app_id(&mut self, app_id: String) -> Result<()> {
+        let alias = self
+            .active_org
+            .as_ref()
+            .context("no active organization set")?;
+        self.last_created_app_id
+            .insert(alias.clone(), app_id.to_string());
+        Ok(())
+    }
+
+    /// Get the last created app ID for the active org, if any
+    pub fn get_last_app_id(&self) -> Option<String> {
+        let alias = self
+            .active_org
+            .as_ref()?;
+        self.last_created_app_id.get(alias).cloned()
     }
 }
