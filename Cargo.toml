@@ -74,6 +74,7 @@ borsh = { version = "1.0", features = ["std", "derive"], default-features = fals
 toml = { version = "0.8", default-features = false, features = ["parse", "display"] }
 
 # Code generation and parsing
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 heck = { version = "0.5.0", default-features = false }
 prettyplease = { version = "0.2", default-features = false }
 proc-macro2 = { version = "1.0.95", default-features = false }

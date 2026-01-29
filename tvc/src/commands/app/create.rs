@@ -115,7 +115,7 @@ pub async fn run(args: Args) -> Result<()> {
     println!();
     println!("App created successfully!");
     println!();
-    println!("App ID: {}", app_id);
+    println!("App ID: {app_id}");
     println!("Name: {}", app_config.name);
     println!("Manifest Set ID: {}", result.result.manifest_set_id);
     if !result.result.manifest_set_operator_ids.is_empty() {
