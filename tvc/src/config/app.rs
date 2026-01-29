@@ -14,10 +14,6 @@ pub struct AppConfig {
     pub manifest_set_id: Option<String>,
     #[serde(default)]
     pub manifest_set_params: Option<OperatorSetParams>,
-    #[serde(default)]
-    pub share_set_id: Option<String>,
-    #[serde(default)]
-    pub share_set_params: Option<OperatorSetParams>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,8 +37,8 @@ pub struct OperatorParams {
 /// Known share set public keys. This is for known share keys
 /// that encrypt known operator keys. Assume the secrets are well known
 pub const KNOWN_SHARE_SET_KEYS: [(&str, &str); 2] = [
-    ("dev-share-operator-1", "044af8b082b9ef41a238037811a188309d8c8b00b6d49c0574538d7746d7383739e67e1107f134bc102a48301b07e7c53280decbe9c16c9fc1f19b9832018e1485048139aa5de49d9505465bcf1a879954c51ba7b258b669f4e42697088cbbca54aeb888d61e65b2602ce92ae945a0160533acc94942511f8e5b1940ed89cc8f141f"),
-    ("dev-share-operator-2", "04c1c4b4eb784505f167affae00e18b1521e7a0bfa3be46e6a6b43ba1f386afce48d964c885480cb197e3538fd30ebe38a07f76b6a286b37ba6d2abddbbd6c9c8304e492ca7bce95912a7b2565c8553e38cf3a4b1f858171900ed81888282db13d41e214dd6def2de2aacb1fcf92e3ae5a83e1b0ffa660fc59b9dd10e277cfd128dc"),
+    ("1", "044af8b082b9ef41a238037811a188309d8c8b00b6d49c0574538d7746d7383739e67e1107f134bc102a48301b07e7c53280decbe9c16c9fc1f19b9832018e1485048139aa5de49d9505465bcf1a879954c51ba7b258b669f4e42697088cbbca54aeb888d61e65b2602ce92ae945a0160533acc94942511f8e5b1940ed89cc8f141f"),
+    ("2", "04c1c4b4eb784505f167affae00e18b1521e7a0bfa3be46e6a6b43ba1f386afce48d964c885480cb197e3538fd30ebe38a07f76b6a286b37ba6d2abddbbd6c9c8304e492ca7bce95912a7b2565c8553e38cf3a4b1f858171900ed81888282db13d41e214dd6def2de2aacb1fcf92e3ae5a83e1b0ffa660fc59b9dd10e277cfd128dc"),
 ];
 
 /// Well known Quorum Key. This is for applications that do not need secure quorum keys
@@ -65,19 +61,22 @@ impl AppConfig {
                 }],
                 existing_operator_ids: vec![],
             }),
-            share_set_id: None,
-            share_set_params: Some(OperatorSetParams {
-                name: "dev-known-share-set".to_string(),
-                threshold: 2,
-                new_operators: KNOWN_SHARE_SET_KEYS
-                    .iter()
-                    .map(|(name, key)| OperatorParams {
-                        name: name.to_string(),
-                        public_key: key.to_string(),
-                    })
-                    .collect(),
-                existing_operator_ids: vec![],
-            }),
+        }
+    }
+
+    /// Get the hardcoded share set params using known share set keys.
+    pub fn share_set_params() -> OperatorSetParams {
+        OperatorSetParams {
+            name: "dev-known-share-set".to_string(),
+            threshold: 2,
+            new_operators: KNOWN_SHARE_SET_KEYS
+                .iter()
+                .map(|(name, key)| OperatorParams {
+                    name: name.to_string(),
+                    public_key: key.to_string(),
+                })
+                .collect(),
+            existing_operator_ids: vec![],
         }
     }
 
