@@ -1,5 +1,6 @@
 //! App configuration file format for `tvc app create`.
 
+
 use serde::{Deserialize, Serialize};
 
 /// App configuration loaded from JSON file.
