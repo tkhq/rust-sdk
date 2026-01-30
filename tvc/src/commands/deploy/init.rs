@@ -34,7 +34,7 @@ pub async fn run(args: Args) -> Result<()> {
     let last_app_id = config.get_last_app_id();
 
     // Generate template
-    let config = DeployConfig::template(last_app_id);
+    let config = DeployConfig::template(last_app_id.as_deref());
     let json = serde_json::to_string_pretty(&config).context("failed to serialize config")?;
 
     // Write to file

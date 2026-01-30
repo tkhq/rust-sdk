@@ -165,7 +165,7 @@ impl Config {
     }
 
     /// Store the last created app ID for the active org
-    pub fn set_last_app_id(&mut self, app_id: String) -> Result<()> {
+    pub fn set_last_app_id(&mut self, app_id: &str) -> Result<()> {
         let alias = self
             .active_org
             .as_ref()
@@ -182,12 +182,13 @@ impl Config {
     }
 
     /// Store the last manifest set operator IDs for the active org
-    pub fn set_last_operator_ids(&mut self, operator_ids: Vec<String>) -> Result<()> {
+    pub fn set_last_operator_ids(&mut self, operator_ids: &[String]) -> Result<()> {
         let alias = self
             .active_org
             .as_ref()
             .context("no active organization set")?;
-        self.last_operator_ids.insert(alias.clone(), operator_ids);
+        self.last_operator_ids
+            .insert(alias.clone(), operator_ids.to_vec());
         Ok(())
     }
 

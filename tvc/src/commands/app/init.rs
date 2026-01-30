@@ -26,7 +26,7 @@ pub async fn run(args: Args) -> Result<()> {
     let operator_public_key = load_operator_public_key().await;
 
     // Generate template
-    let config = AppConfig::template(operator_public_key.clone());
+    let config = AppConfig::template(operator_public_key.as_deref());
     let json = serde_json::to_string_pretty(&config).context("failed to serialize config")?;
 
     // Write to file

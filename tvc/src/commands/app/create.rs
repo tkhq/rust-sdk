@@ -105,13 +105,13 @@ pub async fn run(args: Args) -> Result<()> {
         .await
         .context("failed to create TVC app")?;
 
-    let app_id = result.result.app_id.clone();
-    let operator_ids = result.result.manifest_set_operator_ids.clone();
+    let app_id = result.result.app_id;
+    let operator_ids = result.result.manifest_set_operator_ids;
 
     // save the app ID and operator_ids to config
     let mut config = turnkey::Config::load().await?;
-    config.set_last_app_id(app_id.clone())?;
-    config.set_last_operator_ids(operator_ids.clone())?;
+    config.set_last_app_id(&app_id)?;
+    config.set_last_operator_ids(&operator_ids)?;
     config.save().await?;
 
     println!();
@@ -120,11 +120,8 @@ pub async fn run(args: Args) -> Result<()> {
     println!("App ID: {app_id}");
     println!("Name: {}", app_config.name);
     println!("Manifest Set ID: {}", result.result.manifest_set_id);
-    if !result.result.manifest_set_operator_ids.is_empty() {
-        println!(
-            "Manifest Set Operator IDs: {}",
-            result.result.manifest_set_operator_ids.join(", ")
-        );
+    if !operator_ids.is_empty() {
+        println!("Manifest Set Operator IDs: {}", operator_ids.join(", "));
     }
     println!("Config: {}", args.config_file.display());
     println!();
