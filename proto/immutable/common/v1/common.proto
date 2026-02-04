@@ -270,6 +270,8 @@ enum TransactionType {
   TRANSACTION_TYPE_TRON = 3;
   // Unsigned Bitcoin transaction, hex encoded
   TRANSACTION_TYPE_BITCOIN = 4;
+  // Unsigned Tempo transaction. Similar to EVM transactions but includes extra fields for Tempo
+  TRANSACTION_TYPE_TEMPO = 5;
 }
 
 enum SmartContractInterfaceType {

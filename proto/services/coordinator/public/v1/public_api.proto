@@ -295,19 +295,6 @@ service PublicApiService {
     };
   }
 
-  rpc GetAttestationDocument(GetAttestationDocumentRequest) returns (GetAttestationDocumentResponse) {
-    option (google.api.method_visibility).restriction = "INTERNAL"; // TODO: remove once fully ready for primetime
-    option (google.api.http) = {
-      post: "/public/v1/query/get_attestation"
-      body: "*"
-    };
-    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Get the attestation document corresponding to an enclave."
-      summary: "Attestation"
-      tags: "Attestation"
-    };
-  }
-
   rpc GetSubOrgIds(GetSubOrgIdsRequest) returns (GetSubOrgIdsResponse) {
     option (google.api.http) = {
       post: "/public/v1/query/list_suborgs"
@@ -1757,8 +1744,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Get balances for a single wallet account address on the specified network."
-      summary: "Get balances for wallet account address"
+      description: "Get non-zero balances of supported assets for a single wallet account address on the specified network."
+      summary: "Get balances of supported assets for wallet account address"
       tags: "Wallets"
     };
   }
@@ -1820,24 +1807,6 @@ message GetWhoamiResponse {
   string username = 4 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable name for a user."}
-  ];
-}
-
-message GetAttestationDocumentRequest {
-  string organization_id = 1 [
-    (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
-  ];
-  string enclave_type = 2 [
-    (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The enclave type, one of: ump, notarizer, signer, evm-parser."}
-  ];
-}
-
-message GetAttestationDocumentResponse {
-  bytes attestation_document = 1 [
-    (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Raw (CBOR-encoded) attestation document."}
   ];
 }
 
@@ -2610,12 +2579,18 @@ message GetWalletAddressBalancesRequest {
 }
 
 message GetWalletAddressBalancesResponse {
-  repeated AssetBalance balances = 1;
+  repeated AssetBalance balances = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "List of asset balances"}];
 }
 
 message AssetBalance {
-  string caip19 = 1;
-  string symbol = 2;
-  string balance = 3;
-  int32 decimals = 4;
+  string caip19 = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The caip-19 asset identifier"}];
+  string symbol = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The asset symbol"}];
+  string balance = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The balance in atomic units"}];
+  int32 decimals = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The number of decimals this asset uses"}];
+  AssetBalanceDisplay display = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Normalized balance values for display purposes only. Do not do any arithmetic or calculations with these, as the results could be imprecise. Use the balance field instead."}];
+}
+
+message AssetBalanceDisplay {
+  string usd = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "USD value for display purposes only. Do not do any arithmetic or calculations with these, as the results could be imprecise."}];
+  string crypto = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Normalized crypto value for display purposes only. Do not do any arithmetic or calculations with these, as the results could be imprecise."}];
 }

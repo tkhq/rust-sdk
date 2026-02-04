@@ -1575,6 +1575,8 @@ pub struct UpsertGasUsageConfigIntent {
     pub sub_org_window_limit_usd: ::prost::alloc::string::String,
     /// @inject_tag: validate:"required,numeric"
     pub window_duration_minutes: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub enabled: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]

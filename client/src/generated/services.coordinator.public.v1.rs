@@ -54,22 +54,6 @@ pub struct GetWhoamiResponse {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
-pub struct GetAttestationDocumentRequest {
-    pub organization_id: ::prost::alloc::string::String,
-    pub enclave_type: ::prost::alloc::string::String,
-}
-#[derive(Debug)]
-#[derive(::serde::Serialize, ::serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[derive(Clone, PartialEq)]
-pub struct GetAttestationDocumentResponse {
-    #[serde(default)]
-    pub attestation_document: ::prost::alloc::vec::Vec<u8>,
-}
-#[derive(Debug)]
-#[derive(::serde::Serialize, ::serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[derive(Clone, PartialEq)]
 pub struct GetSubOrgIdsRequest {
     pub organization_id: ::prost::alloc::string::String,
     pub filter_type: ::prost::alloc::string::String,
@@ -928,4 +912,14 @@ pub struct AssetBalance {
     pub balance: ::prost::alloc::string::String,
     #[serde(default)]
     pub decimals: i32,
+    #[serde(default)]
+    pub display: ::core::option::Option<AssetBalanceDisplay>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct AssetBalanceDisplay {
+    pub usd: ::prost::alloc::string::String,
+    pub crypto: ::prost::alloc::string::String,
 }

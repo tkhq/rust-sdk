@@ -1103,6 +1103,9 @@ pub enum TransactionType {
     /// Unsigned Bitcoin transaction, hex encoded
     #[serde(rename = "TRANSACTION_TYPE_BITCOIN")]
     Bitcoin = 4,
+    /// Unsigned Tempo transaction. Similar to EVM transactions but includes extra fields for Tempo
+    #[serde(rename = "TRANSACTION_TYPE_TEMPO")]
+    Tempo = 5,
 }
 impl TransactionType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -1116,6 +1119,7 @@ impl TransactionType {
             Self::Solana => "TRANSACTION_TYPE_SOLANA",
             Self::Tron => "TRANSACTION_TYPE_TRON",
             Self::Bitcoin => "TRANSACTION_TYPE_BITCOIN",
+            Self::Tempo => "TRANSACTION_TYPE_TEMPO",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -1126,6 +1130,7 @@ impl TransactionType {
             "TRANSACTION_TYPE_SOLANA" => Some(Self::Solana),
             "TRANSACTION_TYPE_TRON" => Some(Self::Tron),
             "TRANSACTION_TYPE_BITCOIN" => Some(Self::Bitcoin),
+            "TRANSACTION_TYPE_TEMPO" => Some(Self::Tempo),
             _ => None,
         }
     }
