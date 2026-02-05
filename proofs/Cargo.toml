@@ -16,7 +16,6 @@ attestation-doc-validation.workspace = true
 aws-nitro-enclaves-nsm-api.workspace = true
 aws-nitro-enclaves-cose.workspace = true
 base64 = { version = "0.13", default-features = false }
-borsh.workspace = true
 ciborium.workspace = true
 coset.workspace = true
 p384.workspace = true
@@ -30,10 +29,10 @@ webpki.workspace = true
 x509-cert.workspace = true
 x509-parser.workspace = true
 hex.workspace = true
+qos_hex.workspace = true
 turnkey_client.workspace = true
 turnkey_api_key_stamper.workspace = true
 
 [dev-dependencies]
-hex.workspace = true
 hex-literal.workspace = true
 rand.workspace = true
