@@ -1,6 +1,6 @@
 //! Types specific to AWS nitro enclave protocol implementation. We have types
 //! that map 1 to 1 with the types we use from `ws_nitro_enclaves_nsm_api::api`
-//! so we can derive borsh, among other things.
+//! so we can derive serde, among other things.
 
 use std::collections::BTreeSet;
 
@@ -8,7 +8,8 @@ use aws_nitro_enclaves_nsm_api as nsm;
 use nsm::api::{Digest, ErrorCode, Request, Response};
 
 /// Possible error codes from the Nitro Secure Module API.
-#[derive(Debug, borsh::BorshSerialize, borsh::BorshDeserialize, PartialEq, Eq, Clone)]
+#[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq, Clone)]
+#[serde(rename_all = "camelCase")]
 pub enum NsmErrorCode {
     /// No errors
     Success,
@@ -66,23 +67,24 @@ impl From<NsmErrorCode> for ErrorCode {
 }
 
 /// Possible hash digest for the Nitro Secure Module API.
-#[derive(Debug, borsh::BorshSerialize, borsh::BorshDeserialize, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, serde::Serialize, serde::Deserialize, Copy, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub enum NsmDigest {
     /// SHA256
-    SHA256,
+    Sha256,
     /// SHA384
-    SHA384,
+    Sha384,
     /// SHA512
-    SHA512,
+    Sha512,
 }
 
 impl From<Digest> for NsmDigest {
     fn from(d: Digest) -> Self {
         use Digest as D;
         match d {
-            D::SHA256 => Self::SHA256,
-            D::SHA384 => Self::SHA384,
-            D::SHA512 => Self::SHA512,
+            D::SHA256 => Self::Sha256,
+            D::SHA384 => Self::Sha384,
+            D::SHA512 => Self::Sha512,
         }
     }
 }
@@ -91,37 +93,39 @@ impl From<NsmDigest> for Digest {
     fn from(d: NsmDigest) -> Self {
         use NsmDigest as D;
         match d {
-            D::SHA256 => Self::SHA256,
-            D::SHA384 => Self::SHA384,
-            D::SHA512 => Self::SHA512,
+            D::Sha256 => Self::SHA256,
+            D::Sha384 => Self::SHA384,
+            D::Sha512 => Self::SHA512,
         }
     }
 }
 
 /// Request type for the Nitro Secure Module API.
-#[derive(Debug, borsh::BorshSerialize, borsh::BorshDeserialize, PartialEq, Eq, Clone)]
+#[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq, Clone)]
+#[serde(rename_all = "camelCase")]
 pub enum NsmRequest {
     /// Read data from PlatformConfigurationRegister at `index`
-    DescribePCR {
+    DescribePcr {
         /// index of the PCR to describe
         index: u16,
     },
     /// Extend PlatformConfigurationRegister at `index` with `data`
-    ExtendPCR {
+    ExtendPcr {
         /// index the PCR to extend
         index: u16,
         /// data to extend it with
+        #[serde(with = "qos_hex::serde")]
         data: Vec<u8>,
     },
     /// Lock PlatformConfigurationRegister at `index` from further
     /// modifications
-    LockPCR {
+    LockPcr {
         /// index to lock
         index: u16,
     },
     /// Lock PlatformConfigurationRegisters at indexes `[0, range)` from
     /// further modifications
-    LockPCRs {
+    LockPcrs {
         /// number of PCRs to lock, starting from index 0
         range: u16,
     },
@@ -129,15 +133,30 @@ pub enum NsmRequest {
     /// Clients are recommended to decode major_version and minor_version
     /// first, and use an appropriate structure to hold this data, or fail
     /// if the version is not supported.
-    DescribeNSM,
+    DescribeNsm,
     /// Requests the NSM to create an AttestationDoc and sign it with it's
     /// private key to ensure authenticity.
     Attestation {
         /// Includes additional user data in the AttestationDoc.
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            with = "qos_hex::serde_opt"
+        )]
         user_data: Option<Vec<u8>>,
         /// Includes an additional nonce in the AttestationDoc.
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            with = "qos_hex::serde_opt"
+        )]
         nonce: Option<Vec<u8>>,
         /// Includes a user provided public key in the AttestationDoc.
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            with = "qos_hex::serde_opt"
+        )]
         public_key: Option<Vec<u8>>,
     },
     /// Requests entropy from the NSM side.
@@ -148,11 +167,11 @@ impl From<Request> for NsmRequest {
     fn from(req: Request) -> Self {
         use Request as R;
         match req {
-            R::DescribePCR { index } => Self::DescribePCR { index },
-            R::ExtendPCR { index, data } => Self::ExtendPCR { index, data },
-            R::LockPCR { index } => Self::LockPCR { index },
-            R::LockPCRs { range } => Self::LockPCRs { range },
-            R::DescribeNSM => Self::DescribeNSM,
+            R::DescribePCR { index } => Self::DescribePcr { index },
+            R::ExtendPCR { index, data } => Self::ExtendPcr { index, data },
+            R::LockPCR { index } => Self::LockPcr { index },
+            R::LockPCRs { range } => Self::LockPcrs { range },
+            R::DescribeNSM => Self::DescribeNsm,
             R::Attestation {
                 user_data,
                 nonce,
@@ -173,11 +192,11 @@ impl From<NsmRequest> for Request {
         use serde_bytes::ByteBuf;
         use NsmRequest as R;
         match req {
-            R::DescribePCR { index } => Self::DescribePCR { index },
-            R::ExtendPCR { index, data } => Self::ExtendPCR { index, data },
-            R::LockPCR { index } => Self::LockPCR { index },
-            R::LockPCRs { range } => Self::LockPCRs { range },
-            R::DescribeNSM => Self::DescribeNSM,
+            R::DescribePcr { index } => Self::DescribePCR { index },
+            R::ExtendPcr { index, data } => Self::ExtendPCR { index, data },
+            R::LockPcr { index } => Self::LockPCR { index },
+            R::LockPcrs { range } => Self::LockPCRs { range },
+            R::DescribeNsm => Self::DescribeNSM,
             R::Attestation {
                 user_data,
                 nonce,
@@ -193,29 +212,32 @@ impl From<NsmRequest> for Request {
 }
 
 /// Response type for the Nitro Secure Module API.
-#[derive(Debug, borsh::BorshSerialize, borsh::BorshDeserialize, PartialEq, Eq, Clone)]
+#[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq, Clone)]
+#[serde(rename_all = "camelCase")]
 pub enum NsmResponse {
     /// returns the current PlatformConfigurationRegister state
-    DescribePCR {
+    DescribePcr {
         /// true if the PCR is read-only, false otherwise
         lock: bool,
         /// the current value of the PCR
+        #[serde(with = "qos_hex::serde")]
         data: Vec<u8>,
     },
     /// returned if PlatformConfigurationRegister has been successfully
     /// extended
-    ExtendPCR {
+    ExtendPcr {
         /// The new value of the PCR after extending the data into the
         /// register.
+        #[serde(with = "qos_hex::serde")]
         data: Vec<u8>,
     },
     /// returned if PlatformConfigurationRegister has been successfully locked
-    LockPCR,
+    LockPcr,
     /// returned if PlatformConfigurationRegisters have been successfully
     /// locked
-    LockPCRs,
+    LockPcrs,
     /// returns the runtime configuration of the NitroSecureModule
-    DescribeNSM {
+    DescribeNsm {
         /// Breaking API changes are denoted by `major_version`
         version_major: u16,
         /// Minor API changes are denoted by `minor_version`. Minor versions
@@ -239,11 +261,13 @@ pub enum NsmResponse {
     Attestation {
         /// A signed COSE structure containing a CBOR-encoded
         /// AttestationDocument as the payload.
+        #[serde(with = "qos_hex::serde")]
         document: Vec<u8>,
     },
     /// A response containing a number of bytes of entropy.
     GetRandom {
         /// The random bytes.
+        #[serde(with = "qos_hex::serde")]
         random: Vec<u8>,
     },
     /// An error has occured, and the NitroSecureModule could not successfully
@@ -255,10 +279,10 @@ impl From<Response> for NsmResponse {
     fn from(req: Response) -> Self {
         use Response as R;
         match req {
-            R::DescribePCR { lock, data } => Self::DescribePCR { lock, data },
-            R::ExtendPCR { data } => Self::ExtendPCR { data },
-            R::LockPCR => Self::LockPCR,
-            R::LockPCRs => Self::LockPCRs,
+            R::DescribePCR { lock, data } => Self::DescribePcr { lock, data },
+            R::ExtendPCR { data } => Self::ExtendPcr { data },
+            R::LockPCR => Self::LockPcr,
+            R::LockPCRs => Self::LockPcrs,
             R::DescribeNSM {
                 version_major,
                 version_minor,
@@ -267,7 +291,7 @@ impl From<Response> for NsmResponse {
                 max_pcrs,
                 locked_pcrs,
                 digest,
-            } => Self::DescribeNSM {
+            } => Self::DescribeNsm {
                 version_major,
                 version_minor,
                 version_patch,
@@ -288,11 +312,11 @@ impl From<NsmResponse> for nsm::api::Response {
     fn from(req: NsmResponse) -> Self {
         use NsmResponse as R;
         match req {
-            R::DescribePCR { lock, data } => Self::DescribePCR { lock, data },
-            R::ExtendPCR { data } => Self::ExtendPCR { data },
-            R::LockPCR => Self::LockPCR,
-            R::LockPCRs => Self::LockPCRs,
-            R::DescribeNSM {
+            R::DescribePcr { lock, data } => Self::DescribePCR { lock, data },
+            R::ExtendPcr { data } => Self::ExtendPCR { data },
+            R::LockPcr => Self::LockPCR,
+            R::LockPcrs => Self::LockPCRs,
+            R::DescribeNsm {
                 version_major,
                 version_minor,
                 version_patch,
@@ -313,5 +337,86 @@ impl From<NsmResponse> for nsm::api::Response {
             R::GetRandom { random } => Self::GetRandom { random },
             R::Error(e) => Self::Error(e.into()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_nsm_digest_json() {
+        assert_eq!(serde_json::to_string(&NsmDigest::Sha256).unwrap(), r#""sha256""#);
+        assert_eq!(serde_json::to_string(&NsmDigest::Sha384).unwrap(), r#""sha384""#);
+        assert_eq!(serde_json::to_string(&NsmDigest::Sha512).unwrap(), r#""sha512""#);
+    }
+
+    #[test]
+    fn test_nsm_error_code_json() {
+        assert_eq!(serde_json::to_string(&NsmErrorCode::Success).unwrap(), r#""success""#);
+        assert_eq!(
+            serde_json::to_string(&NsmErrorCode::InvalidArgument).unwrap(),
+            r#""invalidArgument""#
+        );
+        assert_eq!(
+            serde_json::to_string(&NsmErrorCode::InternalError).unwrap(),
+            r#""internalError""#
+        );
+    }
+
+    #[test]
+    fn test_nsm_request_describe_pcr_json() {
+        let req = NsmRequest::DescribePcr { index: 0 };
+        let json = serde_json::to_string(&req).unwrap();
+        assert_eq!(json, r#"{"describePcr":{"index":0}}"#);
+    }
+
+    #[test]
+    fn test_nsm_request_attestation_json() {
+        let req = NsmRequest::Attestation {
+            user_data: Some(vec![0xde, 0xad, 0xbe, 0xef]),
+            nonce: None,
+            public_key: None,
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        // Should contain hex-encoded user_data and omit None fields
+        assert!(json.contains("deadbeef"));
+        assert!(!json.contains("nonce"));
+        assert!(!json.contains("publicKey"));
+    }
+
+    #[test]
+    fn test_nsm_request_attestation_empty_json() {
+        let req = NsmRequest::Attestation {
+            user_data: None,
+            nonce: None,
+            public_key: None,
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        // Should be empty object inside attestation
+        assert_eq!(json, r#"{"attestation":{}}"#);
+    }
+
+    #[test]
+    fn test_nsm_response_roundtrip() {
+        let resp = NsmResponse::DescribePcr {
+            lock: true,
+            data: vec![1, 2, 3, 4],
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        let roundtrip: NsmResponse = serde_json::from_str(&json).unwrap();
+        assert_eq!(resp, roundtrip);
+    }
+
+    #[test]
+    fn test_nsm_request_roundtrip() {
+        let req = NsmRequest::Attestation {
+            user_data: Some(vec![1, 2, 3]),
+            nonce: Some(vec![4, 5, 6]),
+            public_key: None,
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        let roundtrip: NsmRequest = serde_json::from_str(&json).unwrap();
+        assert_eq!(req, roundtrip);
     }
 }
