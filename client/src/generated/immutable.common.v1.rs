@@ -105,10 +105,15 @@ impl ClientSignatureScheme {
 pub enum Curve {
     #[serde(rename = "CURVE_UNSPECIFIED")]
     Unspecified = 0,
+    /// Curve SECP256K1 as defined in <https://www.secg.org/sec2-v2.pdf>
     #[serde(rename = "CURVE_SECP256K1")]
     Secp256k1 = 1,
+    /// Curve ED25519 as defined in <https://www.rfc-editor.org/rfc/rfc8032>
     #[serde(rename = "CURVE_ED25519")]
     Ed25519 = 2,
+    /// Curve NIST P-256 (secp256r1) as defined in <https://csrc.nist.gov/csrc/media/events/workshop-on-elliptic-curve-cryptography-standards/documents/papers/session6-adalier-mehmet.pdf>
+    #[serde(rename = "CURVE_P256")]
+    P256 = 3,
 }
 impl Curve {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -120,6 +125,7 @@ impl Curve {
             Self::Unspecified => "CURVE_UNSPECIFIED",
             Self::Secp256k1 => "CURVE_SECP256K1",
             Self::Ed25519 => "CURVE_ED25519",
+            Self::P256 => "CURVE_P256",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -128,6 +134,7 @@ impl Curve {
             "CURVE_UNSPECIFIED" => Some(Self::Unspecified),
             "CURVE_SECP256K1" => Some(Self::Secp256k1),
             "CURVE_ED25519" => Some(Self::Ed25519),
+            "CURVE_P256" => Some(Self::P256),
             _ => None,
         }
     }
@@ -1096,6 +1103,9 @@ pub enum TransactionType {
     /// Unsigned Bitcoin transaction, hex encoded
     #[serde(rename = "TRANSACTION_TYPE_BITCOIN")]
     Bitcoin = 4,
+    /// Unsigned Tempo transaction. Similar to EVM transactions but includes extra fields for Tempo
+    #[serde(rename = "TRANSACTION_TYPE_TEMPO")]
+    Tempo = 5,
 }
 impl TransactionType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -1109,6 +1119,7 @@ impl TransactionType {
             Self::Solana => "TRANSACTION_TYPE_SOLANA",
             Self::Tron => "TRANSACTION_TYPE_TRON",
             Self::Bitcoin => "TRANSACTION_TYPE_BITCOIN",
+            Self::Tempo => "TRANSACTION_TYPE_TEMPO",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -1119,6 +1130,7 @@ impl TransactionType {
             "TRANSACTION_TYPE_SOLANA" => Some(Self::Solana),
             "TRANSACTION_TYPE_TRON" => Some(Self::Tron),
             "TRANSACTION_TYPE_BITCOIN" => Some(Self::Bitcoin),
+            "TRANSACTION_TYPE_TEMPO" => Some(Self::Tempo),
             _ => None,
         }
     }
@@ -1305,21 +1317,20 @@ impl Oauth2Provider {
     }
 }
 /// The current stage of a TVC deployment
+/// (note: leaving some space in the numbering to account for potential future stages)
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum TvcDeploymentStage {
     #[serde(rename = "TVC_DEPLOYMENT_STAGE_UNSPECIFIED")]
     Unspecified = 0,
-    #[serde(rename = "TVC_DEPLOYMENT_STAGE_CREATE")]
-    Create = 1,
     #[serde(rename = "TVC_DEPLOYMENT_STAGE_APPROVE")]
-    Approve = 2,
+    Approve = 10,
     #[serde(rename = "TVC_DEPLOYMENT_STAGE_PROVISION")]
-    Provision = 3,
+    Provision = 20,
     #[serde(rename = "TVC_DEPLOYMENT_STAGE_LIVE")]
-    Live = 4,
+    Live = 30,
     #[serde(rename = "TVC_DEPLOYMENT_STAGE_DELETE")]
-    Delete = 5,
+    Delete = 40,
 }
 impl TvcDeploymentStage {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -1329,7 +1340,6 @@ impl TvcDeploymentStage {
     pub fn as_str_name(&self) -> &'static str {
         match self {
             Self::Unspecified => "TVC_DEPLOYMENT_STAGE_UNSPECIFIED",
-            Self::Create => "TVC_DEPLOYMENT_STAGE_CREATE",
             Self::Approve => "TVC_DEPLOYMENT_STAGE_APPROVE",
             Self::Provision => "TVC_DEPLOYMENT_STAGE_PROVISION",
             Self::Live => "TVC_DEPLOYMENT_STAGE_LIVE",
@@ -1340,7 +1350,6 @@ impl TvcDeploymentStage {
     pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
         match value {
             "TVC_DEPLOYMENT_STAGE_UNSPECIFIED" => Some(Self::Unspecified),
-            "TVC_DEPLOYMENT_STAGE_CREATE" => Some(Self::Create),
             "TVC_DEPLOYMENT_STAGE_APPROVE" => Some(Self::Approve),
             "TVC_DEPLOYMENT_STAGE_PROVISION" => Some(Self::Provision),
             "TVC_DEPLOYMENT_STAGE_LIVE" => Some(Self::Live),

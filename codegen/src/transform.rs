@@ -6,6 +6,13 @@ use syn::{
     TypePath,
 };
 
+/// List of (struct_name, field_name) pairs where Vec<u8> fields should be
+/// serialized/deserialized as base64.
+const BASE64_FIELDS: &[(&str, &str)] = &[
+    ("TvcManifest", "manifest"),
+    // Add more fields here as needed
+];
+
 /// Top-level function to apply transformations to generated code.
 /// This function simply parses the content of a single file, applies transformations to each parsed item,
 /// and returns the result. File mutation operations happen in `main.rs`. We only deal with strings here.
@@ -188,9 +195,14 @@ fn mutate_struct(struct_value: &syn::ItemStruct) -> TokenStream {
             }
 
             // Add `serde_with::serde_as` attribute if needed
-            let serde_as_added = add_serde_as_for_large_int(&mut field);
+            let serde_as_added_int = add_serde_as_for_large_int(&mut field);
+            let serde_as_added_base64 =
+                add_serde_as_for_base64(&mut field, &struct_ident.to_string());
 
-            (quote! { #field }, serde_as_added)
+            (
+                quote! { #field },
+                serde_as_added_int || serde_as_added_base64,
+            )
         })
         .collect();
 
@@ -244,6 +256,58 @@ fn strip_prost_derive_from_attr(attr: &syn::Attribute) -> Option<proc_macro2::To
     Some(quote! {
         #[derive(#new_derives)]
     })
+}
+
+/// Adds base64 serialization for Vec<u8> fields listed in BASE64_FIELDS.
+/// Returns true if the field was mutated.
+pub fn add_serde_as_for_base64(field: &mut Field, struct_name: &str) -> bool {
+    let field_name = match &field.ident {
+        Some(ident) => ident.to_string(),
+        None => return false,
+    };
+
+    // Check if this (struct, field) pair is in our base64 list
+    if !BASE64_FIELDS
+        .iter()
+        .any(|(s, f)| *s == struct_name && *f == field_name)
+    {
+        return false;
+    }
+
+    // Verify the field type is Vec<u8>
+    if !is_vec_u8(&field.ty) {
+        return false;
+    }
+
+    field
+        .attrs
+        .push(syn::parse_quote!(#[serde_as(as = "serde_with::base64::Base64")]));
+    true
+}
+
+fn is_vec_u8(ty: &Type) -> bool {
+    match ty {
+        Type::Path(TypePath { qself: None, path }) => {
+            let seg = match path.segments.last() {
+                Some(s) => s,
+                None => return false,
+            };
+
+            if seg.ident == "Vec" {
+                if let PathArguments::AngleBracketed(ab) = &seg.arguments {
+                    if let Some(GenericArgument::Type(Type::Path(TypePath {
+                        qself: None,
+                        path: inner,
+                    }))) = ab.args.first()
+                    {
+                        return inner.segments.len() == 1 && inner.segments[0].ident == "u8";
+                    }
+                }
+            }
+            false
+        }
+        _ => false,
+    }
 }
 
 // This modifies fields which are u64, i64, u128, i128 (or their option variants: Option<u64>, etc)

@@ -3044,6 +3044,11 @@ message UpsertGasUsageConfigIntent {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Rolling sponsorship window duration, expressed in minutes."}
   ];
+
+  optional bool enabled = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether gas sponsorship is enabled for the organization."}
+  ];
 }
 
 message VerifyOtpIntent {

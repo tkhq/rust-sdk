@@ -153,12 +153,26 @@ async fn post_approval_to_api(
             )
         })?;
 
-    let operator_id = args.operator_id.as_ref().ok_or_else(|| {
-        anyhow!(
-            "--operator-id is required to post approval to API. \
-             Use --skip-post to only generate the approval locally."
-        )
-    })?;
+    let operator_id = match &args.operator_id {
+        Some(id) => id.clone(),
+        None => {
+            // Try to load from config
+            let config = Config::load().await?;
+            let saved_ids = config.get_last_operator_ids().ok_or_else(|| {
+                anyhow!(
+                    "--operator-id is required to post approval to API. \
+                     No saved operator IDs found. \
+                     Use --skip-post to only generate the approval locally."
+                )
+            })?;
+
+            // Use the first operator Id from the list
+            saved_ids
+                .first()
+                .ok_or_else(|| anyhow!("No operator IDs available"))?
+                .clone()
+        }
+    };
 
     println!();
     println!("Posting approval to Turnkey...");
@@ -375,14 +389,15 @@ async fn fetch_manifest_from_deploy(deploy_id: &str) -> anyhow::Result<(Manifest
         .tvc_deployment
         .ok_or_else(|| anyhow!("deployment not found: {deploy_id}"))?;
 
+    let tvc_manifest = deployment
+        .manifest
+        .ok_or_else(|| anyhow!("manifest not found in deployment"))?;
+
     // Deserialize manifest from bytes
-    let manifest: Manifest = serde_json::from_slice(&deployment.manifest)
+    let manifest: Manifest = serde_json::from_slice(&tvc_manifest.manifest)
         .context("failed to parse manifest from deployment")?;
 
-    println!(
-        "✓ Manifest loaded (manifest_id: {})",
-        deployment.manifest_id
-    );
+    println!("✓ Manifest loaded (manifest_id: {})", tvc_manifest.id);
 
-    Ok((manifest, deployment.manifest_id))
+    Ok((manifest, tvc_manifest.id))
 }

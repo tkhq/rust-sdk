@@ -22,9 +22,9 @@ pub struct DeployConfig {
 impl DeployConfig {
     /// Generate a default template config with placeholders.
     // Future: Could auto-fill appId if there's only one app in the org
-    pub fn template() -> Self {
+    pub fn template(app_id: Option<&str>) -> Self {
         Self {
-            app_id: "<FILL_IN_APP_ID>".to_string(),
+            app_id: app_id.unwrap_or("<FILL_IN_APP_ID>").to_string(),
             qos_version: "<FILL_IN_QOS_VERSION>".to_string(),
             pivot_container_image_url: "<FILL_IN_PIVOT_CONTAINER_IMAGE_URL>".to_string(),
             pivot_path: "<FILL_IN_PIVOT_PATH>".to_string(),

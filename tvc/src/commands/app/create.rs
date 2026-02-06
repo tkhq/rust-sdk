@@ -2,6 +2,7 @@
 
 use crate::client::build_client;
 use crate::config::app::AppConfig;
+use crate::config::turnkey;
 use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
 use std::path::PathBuf;
@@ -45,12 +46,6 @@ pub async fn run(args: Args) -> Result<()> {
     if app_config.manifest_set_id.is_none() && app_config.manifest_set_params.is_none() {
         anyhow::bail!("Must specify either manifestSetId or manifestSetParams");
     }
-    if app_config.share_set_id.is_some() && app_config.share_set_params.is_some() {
-        anyhow::bail!("Cannot specify both shareSetId and shareSetParams");
-    }
-    if app_config.share_set_id.is_none() && app_config.share_set_params.is_none() {
-        anyhow::bail!("Must specify either shareSetId or shareSetParams");
-    }
 
     println!("Creating app '{}'...", app_config.name);
 
@@ -78,23 +73,23 @@ pub async fn run(args: Args) -> Result<()> {
                 existing_operator_ids: p.existing_operator_ids.clone(),
             }
         }),
-        share_set_id: app_config.share_set_id.clone(),
-        share_set_params: app_config
-            .share_set_params
-            .as_ref()
-            .map(|p| TvcOperatorSetParams {
-                name: p.name.clone(),
+        share_set_id: None,
+        share_set_params: {
+            let p = AppConfig::share_set_params();
+            Some(TvcOperatorSetParams {
+                name: p.name,
                 threshold: p.threshold,
                 new_operators: p
                     .new_operators
-                    .iter()
+                    .into_iter()
                     .map(|o| TvcOperatorParams {
-                        name: o.name.clone(),
-                        public_key: o.public_key.clone(),
+                        name: o.name,
+                        public_key: o.public_key,
                     })
                     .collect(),
-                existing_operator_ids: p.existing_operator_ids.clone(),
-            }),
+                existing_operator_ids: p.existing_operator_ids,
+            })
+        },
     };
 
     // Get timestamp
@@ -110,17 +105,23 @@ pub async fn run(args: Args) -> Result<()> {
         .await
         .context("failed to create TVC app")?;
 
+    let app_id = result.result.app_id;
+    let operator_ids = result.result.manifest_set_operator_ids;
+
+    // save the app ID and operator_ids to config
+    let mut config = turnkey::Config::load().await?;
+    config.set_last_app_id(&app_id)?;
+    config.set_last_operator_ids(&operator_ids)?;
+    config.save().await?;
+
     println!();
     println!("App created successfully!");
     println!();
-    println!("App ID: {}", result.result.app_id);
+    println!("App ID: {app_id}");
     println!("Name: {}", app_config.name);
     println!("Manifest Set ID: {}", result.result.manifest_set_id);
-    if !result.result.manifest_set_operator_ids.is_empty() {
-        println!(
-            "Manifest Set Operator IDs: {}",
-            result.result.manifest_set_operator_ids.join(", ")
-        );
+    if !operator_ids.is_empty() {
+        println!("Manifest Set Operator IDs: {}", operator_ids.join(", "));
     }
     println!("Config: {}", args.config_file.display());
     println!();

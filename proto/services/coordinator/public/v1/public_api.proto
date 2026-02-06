@@ -295,19 +295,6 @@ service PublicApiService {
     };
   }
 
-  rpc GetAttestationDocument(GetAttestationDocumentRequest) returns (GetAttestationDocumentResponse) {
-    option (google.api.method_visibility).restriction = "INTERNAL"; // TODO: remove once fully ready for primetime
-    option (google.api.http) = {
-      post: "/public/v1/query/get_attestation"
-      body: "*"
-    };
-    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Get the attestation document corresponding to an enclave."
-      summary: "Attestation"
-      tags: "Attestation"
-    };
-  }
-
   rpc GetSubOrgIds(GetSubOrgIdsRequest) returns (GetSubOrgIdsResponse) {
     option (google.api.http) = {
       post: "/public/v1/query/list_suborgs"
@@ -1750,6 +1737,19 @@ service PublicApiService {
     };
   }
 
+  rpc GetWalletAddressBalances(GetWalletAddressBalancesRequest) returns (GetWalletAddressBalancesResponse) {
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/query/get_wallet_address_balances"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get non-zero balances of supported assets for a single wallet account address on the specified network."
+      summary: "Get balances of supported assets for wallet account address"
+      tags: "Wallets"
+    };
+  }
+
   // This route does nothing and does not need an implementation, but please don't remove it.
   // It's used at compile time for generating extra OpenAPI/TypeScript types
   // that are not directly referenced in requests.
@@ -1807,24 +1807,6 @@ message GetWhoamiResponse {
   string username = 4 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable name for a user."}
-  ];
-}
-
-message GetAttestationDocumentRequest {
-  string organization_id = 1 [
-    (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
-  ];
-  string enclave_type = 2 [
-    (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The enclave type, one of: ump, notarizer, signer, evm-parser."}
-  ];
-}
-
-message GetAttestationDocumentResponse {
-  bytes attestation_document = 1 [
-    (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Raw (CBOR-encoded) attestation document."}
   ];
 }
 
@@ -2580,3 +2562,35 @@ message GetTvcDeploymentResponse {
 message RefreshFeatureFlagsRequest {}
 
 message RefreshFeatureFlagsResponse {}
+
+message GetWalletAddressBalancesRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+  ];
+  string address = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address corresponding to a wallet account."}
+  ];
+  string caip2 = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The network identifier in CAIP-2 format (e.g., 'eip155:1' for Ethereum mainnet)."}
+  ];
+}
+
+message GetWalletAddressBalancesResponse {
+  repeated AssetBalance balances = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "List of asset balances"}];
+}
+
+message AssetBalance {
+  string caip19 = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The caip-19 asset identifier"}];
+  string symbol = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The asset symbol"}];
+  string balance = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The balance in atomic units"}];
+  int32 decimals = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The number of decimals this asset uses"}];
+  AssetBalanceDisplay display = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Normalized balance values for display purposes only. Do not do any arithmetic or calculations with these, as the results could be imprecise. Use the balance field instead."}];
+}
+
+message AssetBalanceDisplay {
+  string usd = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "USD value for display purposes only. Do not do any arithmetic or calculations with these, as the results could be imprecise."}];
+  string crypto = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Normalized crypto value for display purposes only. Do not do any arithmetic or calculations with these, as the results could be imprecise."}];
+}

@@ -56,11 +56,3 @@ enum PayloadEncoding {
   // Will be converted to bytes for signing using serde_json::from_str
   PAYLOAD_ENCODING_EIP7702_AUTHORIZATION = 4;
 }
-
-enum Curve {
-  CURVE_UNSPECIFIED = 0;
-  // Curve SECP256K1 as defined in https://www.secg.org/sec2-v2.pdf
-  CURVE_SECP256K1 = 1;
-  // Curve ED25519 as defined in https://www.rfc-editor.org/rfc/rfc8032
-  CURVE_ED25519 = 2;
-}
