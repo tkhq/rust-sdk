@@ -1738,7 +1738,6 @@ service PublicApiService {
   }
 
   rpc GetWalletAddressBalances(GetWalletAddressBalancesRequest) returns (GetWalletAddressBalancesResponse) {
-    option (google.api.method_visibility).restriction = "INTERNAL";
     option (google.api.http) = {
       post: "/public/v1/query/get_wallet_address_balances"
       body: "*"
@@ -1746,6 +1745,18 @@ service PublicApiService {
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Get non-zero balances of supported assets for a single wallet account address on the specified network."
       summary: "Get balances of supported assets for wallet account address"
+      tags: "Wallets"
+    };
+  }
+
+  rpc ListSupportedAssets(ListSupportedAssetsRequest) returns (ListSupportedAssetsResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/list_supported_assets"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "List supported assets for the specified network"
+      summary: "List supported assets"
       tags: "Wallets"
     };
   }
@@ -2593,4 +2604,26 @@ message AssetBalance {
 message AssetBalanceDisplay {
   string usd = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "USD value for display purposes only. Do not do any arithmetic or calculations with these, as the results could be imprecise."}];
   string crypto = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Normalized crypto value for display purposes only. Do not do any arithmetic or calculations with these, as the results could be imprecise."}];
+}
+
+message ListSupportedAssetsRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+  ];
+  string caip2 = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The network identifier in CAIP-2 format (e.g., 'eip155:1' for Ethereum mainnet)."}
+  ];
+}
+
+message ListSupportedAssetsResponse {
+  repeated AssetMetadata assets = 1;
+}
+
+message AssetMetadata {
+  string caip19 = 1;
+  string symbol = 2;
+  int32 decimals = 3;
+  string logo_url = 4;
 }
