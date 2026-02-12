@@ -9,11 +9,13 @@ pub struct DeployConfig {
     pub app_id: String,
     pub qos_version: String,
     pub pivot_container_image_url: String,
+    pub pivot_container_encrypted_pull_secret: String,
     pub pivot_path: String,
     #[serde(default)]
     pub pivot_args: Vec<String>,
     pub expected_pivot_digest: String,
     pub host_container_image_url: String,
+    pub host_container_encrypted_pull_secret: String,
     pub host_path: String,
     #[serde(default)]
     pub host_args: Vec<String>,
@@ -27,10 +29,12 @@ impl DeployConfig {
             app_id: app_id.unwrap_or("<FILL_IN_APP_ID>").to_string(),
             qos_version: "<FILL_IN_QOS_VERSION>".to_string(),
             pivot_container_image_url: "<FILL_IN_PIVOT_CONTAINER_IMAGE_URL>".to_string(),
+            pivot_container_encrypted_pull_secret: "<OPTIONAL: FILL_IN_PIVOT_CONTAINER_ENCRYPTED_PULL_SECRET>".to_string(),
             pivot_path: "<FILL_IN_PIVOT_PATH>".to_string(),
             pivot_args: vec![],
             expected_pivot_digest: "<FILL_IN_EXPECTED_PIVOT_DIGEST>".to_string(),
             host_container_image_url: "<FILL_IN_HOST_CONTAINER_IMAGE_URL>".to_string(),
+            host_container_encrypted_pull_secret: "<OPTIONAL: FILL_IN_HOST_CONTAINER_ENCRYPTED_PULL_SECRET>".to_string(),
             host_path: "<FILL_IN_HOST_PATH>".to_string(),
             host_args: vec![],
         }

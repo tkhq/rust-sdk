@@ -3565,4 +3565,30 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
+    /// Get balances of supported assets for wallet account address
+    ///
+    /// Get non-zero balances of supported assets for a single wallet account address on the specified network.
+    pub async fn get_wallet_address_balances(
+        &self,
+        request: coordinator::GetWalletAddressBalancesRequest,
+    ) -> Result<coordinator::GetWalletAddressBalancesResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/get_wallet_address_balances".to_string(),
+        )
+        .await
+    }
+    /// List supported assets
+    ///
+    /// List supported assets for the specified network
+    pub async fn list_supported_assets(
+        &self,
+        request: coordinator::ListSupportedAssetsRequest,
+    ) -> Result<coordinator::ListSupportedAssetsResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/list_supported_assets".to_string(),
+        )
+        .await
+    }
 }

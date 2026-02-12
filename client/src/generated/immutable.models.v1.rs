@@ -232,6 +232,30 @@ pub struct SmartContractInterface {
     #[serde(default)]
     pub signature: ::core::option::Option<Signature>,
 }
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, Copy, PartialEq)]
+pub struct PolicyBudgetOverride {
+    #[serde(default)]
+    pub max_recursion_depth: u32,
+    #[serde(default)]
+    pub max_evaluation_steps: u32,
+    #[serde(default)]
+    pub timeout_ms: u32,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, Copy, PartialEq)]
+pub struct PolicyEvaluationMetrics {
+    #[serde(default)]
+    pub max_recursion_depth_reached: u32,
+    #[serde(default)]
+    pub max_evaluation_steps_used: u32,
+    #[serde(default)]
+    pub max_elapsed_time_ms: u32,
+}
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum SignatureScheme {
