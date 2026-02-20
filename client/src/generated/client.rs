@@ -3292,9 +3292,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         )
         .await
     }
-    /// Submit a transaction intent for broadcasting.
+    /// Broadcast EVM transaction
     ///
-    /// Submit a transaction intent describing a transaction you would like to broadcast.
+    /// Submit a transaction intent describing an EVM transaction you would like to broadcast.
     pub async fn eth_send_transaction(
         &self,
         organization_id: String,
@@ -3335,9 +3335,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// Submit a transaction intent for broadcasting.
+    /// Broadcast SVM transaction
     ///
-    /// Submit a transaction intent describing a transaction you would like to broadcast.
+    /// Submit a transaction intent describing an SVM transaction you would like to broadcast.
     pub async fn sol_send_transaction(
         &self,
         organization_id: String,
@@ -3378,7 +3378,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// Get gas usage and limits.
+    /// Get gas usage
     ///
     /// Get gas usage and gas limits for either the parent organization or a sub-organization.
     pub async fn get_gas_usage(
@@ -3388,7 +3388,7 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/get_gas_usage".to_string())
             .await
     }
-    /// Get nonces for an address.
+    /// Get nonces
     ///
     /// Get nonce values for an address on a given network. Can fetch the standard on-chain nonce and/or the gas station nonce used for sponsored transactions.
     pub async fn get_nonces(
@@ -3564,5 +3564,31 @@ impl<S: Stamp> TurnkeyClient<S> {
             status: activity.status,
             app_proofs: activity.app_proofs,
         })
+    }
+    /// Get balances
+    ///
+    /// Get non-zero balances of supported assets for a single wallet account address on the specified network.
+    pub async fn get_wallet_address_balances(
+        &self,
+        request: coordinator::GetWalletAddressBalancesRequest,
+    ) -> Result<coordinator::GetWalletAddressBalancesResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/get_wallet_address_balances".to_string(),
+        )
+        .await
+    }
+    /// List supported assets
+    ///
+    /// List supported assets for the specified network
+    pub async fn list_supported_assets(
+        &self,
+        request: coordinator::ListSupportedAssetsRequest,
+    ) -> Result<coordinator::ListSupportedAssetsResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/list_supported_assets".to_string(),
+        )
+        .await
     }
 }

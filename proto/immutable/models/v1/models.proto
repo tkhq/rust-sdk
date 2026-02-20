@@ -172,3 +172,15 @@ message SmartContractInterface {
   // Signer signature over hash(payload)
   Signature signature = 2;
 }
+
+message PolicyBudgetOverride {
+  uint32 max_recursion_depth = 1;
+  uint32 max_evaluation_steps = 2;
+  uint32 timeout_ms = 3;
+}
+
+message PolicyEvaluationMetrics {
+  uint32 max_recursion_depth_reached = 1;
+  uint32 max_evaluation_steps_used = 2;
+  uint32 max_elapsed_time_ms = 3;
+}

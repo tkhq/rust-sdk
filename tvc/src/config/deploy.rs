@@ -17,6 +17,8 @@ pub struct DeployConfig {
     pub host_path: String,
     #[serde(default)]
     pub host_args: Vec<String>,
+    pub host_container_encrypted_pull_secret: Option<String>,
+    pub pivot_container_encrypted_pull_secret: Option<String>,
 }
 
 impl DeployConfig {
@@ -33,6 +35,12 @@ impl DeployConfig {
             host_container_image_url: "<FILL_IN_HOST_CONTAINER_IMAGE_URL>".to_string(),
             host_path: "<FILL_IN_HOST_PATH>".to_string(),
             host_args: vec![],
+            pivot_container_encrypted_pull_secret: Some(
+                "<REMOVE_ME_IF_PIVOT_CONTAINER_URL_IS_PUBLIC>".to_string(),
+            ),
+            host_container_encrypted_pull_secret: Some(
+                "<REMOVE_ME_IF_HOST_CONTAINER_URL_IS_PUBLIC>".to_string(),
+            ),
         }
     }
 
