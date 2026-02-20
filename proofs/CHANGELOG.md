@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.6.0](https://github.com/tkhq/rust-sdk/compare/turnkey_proofs-v0.5.0...turnkey_proofs-v0.6.0) - 2026-02-20
+
+### Other
+
+- Revert "update release / changelog"
+- Add known quorum key and share set support for TVC
+- update release / changelog
+
 ## [0.5.0](https://github.com/tkhq/rust-sdk/compare/turnkey_proofs-v0.4.0...turnkey_proofs-v0.5.0) - 2025-10-17
 
 ### Other

@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.6.0](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.5.0...turnkey_client-v0.6.0) - 2026-02-20
+
+### Added
+
+- [**breaking**] create a wrapper for all activity results
+
+### Other
+
+- Revert "update release / changelog"
+- Update mono to v2026.2.5
+- v2026.2.2
+- Sync protos with latest from composite model branch
+- base64 aware codegen
+- Sync protos
+- Add known quorum key and share set support for TVC
+- Update protos and codegen for TVC support
+- update release / changelog
+- add with_app_proofs()  to handle generate app proofs
+- sync
+
 ## [0.5.0](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.4.0...turnkey_client-v0.5.0) - 2025-10-17
 
 ### Other
