@@ -3885,6 +3885,14 @@ message CreateTvcDeploymentIntent {
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional nonce to ensure uniqueness of the deployment manifest. If not provided, it defaults to the current Unix timestamp in seconds."}
   ];
+  optional string pivot_container_encrypted_pull_secret = 11 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional encrypted pull secret to authorize Turnkey to pull the pivot container image. If your image is public, leave this empty."}
+  ];
+  optional string host_container_encrypted_pull_secret = 12 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional encrypted pull secret to authorize Turnkey to pull the host container image. If your image is public, leave this empty."}
+  ];
 }
 
 message CreateTvcManifestApprovalsIntent {

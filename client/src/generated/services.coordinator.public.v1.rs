@@ -923,3 +923,30 @@ pub struct AssetBalanceDisplay {
     pub usd: ::prost::alloc::string::String,
     pub crypto: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct ListSupportedAssetsRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub caip2: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct ListSupportedAssetsResponse {
+    #[serde(default)]
+    pub assets: ::prost::alloc::vec::Vec<AssetMetadata>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct AssetMetadata {
+    pub caip19: ::prost::alloc::string::String,
+    pub symbol: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub decimals: i32,
+    pub logo_url: ::prost::alloc::string::String,
+}

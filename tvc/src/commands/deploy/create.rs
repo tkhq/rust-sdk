@@ -54,6 +54,8 @@ pub async fn run(args: Args) -> Result<()> {
         host_container_image_url: deploy_config.host_container_image_url.clone(),
         host_path: deploy_config.host_path.clone(),
         host_args: deploy_config.host_args.clone(),
+        pivot_container_encrypted_pull_secret: deploy_config.pivot_container_encrypted_pull_secret,
+        host_container_encrypted_pull_secret: deploy_config.host_container_encrypted_pull_secret,
         nonce: None,
     };
 

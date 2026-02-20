@@ -2037,6 +2037,14 @@ pub struct CreateTvcDeploymentIntent {
     pub host_args: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[serde(default)]
     pub nonce: ::core::option::Option<u32>,
+    #[serde(default)]
+    pub pivot_container_encrypted_pull_secret: ::core::option::Option<
+        ::prost::alloc::string::String,
+    >,
+    #[serde(default)]
+    pub host_container_encrypted_pull_secret: ::core::option::Option<
+        ::prost::alloc::string::String,
+    >,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
