@@ -33,7 +33,7 @@ jobs:
           # release from the latest commit of the release PR.
           fetch-depth: 0
       - name: install Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
           components: clippy,rustfmt
@@ -65,7 +65,7 @@ jobs:
           # determine the next version and build the changelog.
           fetch-depth: 0
       - name: install Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
           components: clippy,rustfmt
