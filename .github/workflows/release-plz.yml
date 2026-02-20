@@ -25,6 +25,8 @@ jobs:
       contains(github.event.pull_request.labels.*.name, 'release')
     permissions:
       contents: write
+      # Required for trusted publishing, see https://release-plz.dev/docs/github/quickstart#2-set-the-cargo_registry_token-secret
+      id-token: write
     steps:
       - name: git checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
