@@ -22,7 +22,7 @@ jobs:
         if: github.event_name == 'push'
         uses: actions/checkout@v4
       - name: install Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
           components: clippy,rustfmt
