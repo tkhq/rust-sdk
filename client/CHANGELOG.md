@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.6.0](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.5.0...turnkey_client-v0.6.0) - 2026-02-20
+
+### Added
+
+- https://github.com/tkhq/rust-sdk/pull/66: [**breaking**] Update to mono v2025.12.2, and create create a wrapper for all activity results to accommodate for app proofs.
+- https://github.com/tkhq/rust-sdk/pull/84: Update to mono v2026.2.5
+
+### Other
+
+- https://github.com/tkhq/rust-sdk/pull/62: Use Rustls by default (remove openssl)
+- https://github.com/tkhq/rust-sdk/pull/77: Support bytes as base64 in codegen
+- https://github.com/tkhq/rust-sdk/pull/80: Security patch for `bytes` crate
+
 ## [0.5.0](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.4.0...turnkey_client-v0.5.0) - 2025-10-17
 
 ### Other

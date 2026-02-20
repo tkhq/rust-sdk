@@ -7,11 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.6.0](https://github.com/tkhq/rust-sdk/compare/turnkey_api_key_stamper-v0.5.0...turnkey_api_key_stamper-v0.6.0) - 2026-02-20
+
+### Other
+
+- https://github.com/tkhq/rust-sdk/pull/80: Security patch for `bytes` crate
+
+
 ## [0.5.0](https://github.com/tkhq/rust-sdk/compare/turnkey_api_key_stamper-v0.4.0...turnkey_api_key_stamper-v0.5.0) - 2025-10-17
 
 ### Other
 
-- trivial import formatting update
+- https://github.com/tkhq/rust-sdk/pull/63/: trivial import formatting update
 
 ## [0.4.0](https://github.com/tkhq/rust-sdk/compare/turnkey_api_key_stamper-v0.3.0...turnkey_api_key_stamper-v0.4.0) - 2025-09-29
 

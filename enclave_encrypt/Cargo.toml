@@ -1,6 +1,6 @@
 [package]
 name = "turnkey_enclave_encrypt"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Utilities to encrypt and decrypt data sent to and from Turnkey secure enclaves, using HPKE (RFC 9180). Used in authentication, export, and import flows."
