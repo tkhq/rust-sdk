@@ -51,7 +51,7 @@ Once the PR is merged, the release-plz `release` workflow is triggered and crate
 
 ### Manually re-triggering a release
 
-If something goes wrong during a release and you want to retry, you can open a PR tagged `release` and with a branch named `release-plz-****` to kick of the release workflow again (the `release` tag is necessary to trigger the workflow, and the branch name prefix is how release-plz determines that the PR is a release PR -- see [this](https://release-plz.dev/docs/config#the-pr_branch_prefix-field))
+If something goes wrong during a release and you want to retry, you can open a PR tagged `release` and with a branch named `release-plz-****` to kick off the release workflow again (the `release` tag is necessary to trigger the workflow, and the branch name prefix is how release-plz determines that the PR is a release PR -- see [this](https://release-plz.dev/docs/config#the-release_always-field))
 
 ## Feature requests and support
 
