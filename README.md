@@ -39,6 +39,16 @@ Once you have it installed you can try a release locally, to see what the releas
 release-plz update
 ```
 
+### Release flow
+
+When PRs are merged to main, release-plz automatically opens a Release PR if it doesn't exist yet, or updates the existing one.
+
+The PR is opened by the release-plz bot and tagged `release`. A **human** is expected to double check this PR and manually push any fixes to the release PR if necessary (usually: cosmetic changes to the CHANGELOGs).
+
+Once the PR is merged, the release-plz `release` workflow is triggered and crates are published automatically.
+
+**DO NOT** bump crates manually in standard PRs, let release-plz take care of this for you!
+
 ## Feature requests and support
 
 If you are working on a project in Rust and would benefit from improvements to this SDK, please open an issue or get in touch with us (hello@turnkey.com) and we can discuss prioritizing this.
