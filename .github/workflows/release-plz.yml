@@ -40,7 +40,7 @@ jobs:
           toolchain: stable
           components: clippy,rustfmt
       - name: Run release-plz
-        uses: release-plz/action@dde7b63054529c440305a924e5849c68318bcc9a #v0.5.107
+        uses: release-plz/action@f708778669256143d984cce4b23592637532e040 # v0.5.127
         with:
           command: release
         env:
@@ -71,7 +71,7 @@ jobs:
           toolchain: stable
           components: clippy,rustfmt
       - name: Run release-plz
-        uses: release-plz/action@dde7b63054529c440305a924e5849c68318bcc9a #v0.5.107
+        uses: release-plz/action@f708778669256143d984cce4b23592637532e040 # v0.5.127
         with:
           command: release-pr
         env:
