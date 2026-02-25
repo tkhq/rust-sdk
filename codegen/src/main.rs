@@ -154,6 +154,12 @@ fn main() {
                 continue;
             }
 
+            if fn_name == "n_o_o_p_codegen_anchor" {
+                // Skip the NOOP anchor endpoint — it exists only to anchor extra
+                // OpenAPI/TypeScript types and has no summary/description.
+                continue;
+            }
+
             if let Some(http_caps) = http_re.captures(http_opts) {
                 // This is our URL (e.g. "/public/v1/submit/delete_policy")
                 let route = &http_caps[1];
