@@ -11,6 +11,8 @@ pub struct AuthenticatedClient {
     pub client: TurnkeyClient<TurnkeyP256ApiKey>,
     /// The organization ID for API calls.
     pub org_id: String,
+    /// The API base URL for the active org. Used for environment-specific behavior.
+    pub api_base_url: String,
 }
 
 /// Build an authenticated Turnkey client from the local config.
@@ -40,5 +42,6 @@ pub async fn build_client() -> Result<AuthenticatedClient> {
     Ok(AuthenticatedClient {
         client,
         org_id: org_config.id.clone(),
+        api_base_url: org_config.api_base_url.clone(),
     })
 }
