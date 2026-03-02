@@ -43,6 +43,7 @@ pub struct Config {
 /// Known API base URLs for different environments.
 pub const API_BASE_URL_PROD: &str = "https://api.turnkey.com";
 pub const API_BASE_URL_PREPROD: &str = "https://api.preprod.turnkey.engineering";
+pub const API_BASE_URL_DEV: &str = "https://api.dev.turnkey.engineering";
 pub const API_BASE_URL_LOCAL: &str = "http://localhost:8081";
 
 /// Configuration for a single organization

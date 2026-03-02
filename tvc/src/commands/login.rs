@@ -1,8 +1,8 @@
 //! Login command for authenticating with Turnkey.
 
 use crate::config::turnkey::{
-    Config, KeyCurve, OrgConfig, StoredApiKey, StoredQosOperatorKey, API_BASE_URL_LOCAL,
-    API_BASE_URL_PREPROD, API_BASE_URL_PROD,
+    Config, KeyCurve, OrgConfig, StoredApiKey, StoredQosOperatorKey, API_BASE_URL_DEV,
+    API_BASE_URL_LOCAL, API_BASE_URL_PREPROD, API_BASE_URL_PROD,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use clap::Args as ClapArgs;
@@ -145,15 +145,17 @@ fn prompt_for_api_url() -> Result<String> {
     println!("Select Turnkey API URL:");
     println!("  1. prod (default) - {API_BASE_URL_PROD}");
     println!("  2. preprod        - {API_BASE_URL_PREPROD}");
-    println!("  3. local          - {API_BASE_URL_LOCAL}");
+    println!("  3. dev            - {API_BASE_URL_DEV}");
+    println!("  4. local          - {API_BASE_URL_LOCAL}");
     println!();
 
-    let selection = prompt_with_default("API URL [1/2/3]", "1")?;
+    let selection = prompt_with_default("API URL [1/2/3/4]", "1")?;
 
     let url = match selection.as_str() {
         "1" | "prod" | "" => API_BASE_URL_PROD,
         "2" | "preprod" => API_BASE_URL_PREPROD,
-        "3" | "local" => API_BASE_URL_LOCAL,
+        "3" | "dev" => API_BASE_URL_DEV,
+        "4" | "local" => API_BASE_URL_LOCAL,
         _ => bail!("Invalid selection: {selection}"),
     };
 
