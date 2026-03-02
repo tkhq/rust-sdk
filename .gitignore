@@ -2,3 +2,5 @@ target/
 .env
 .DS_Store
 .claude/
+app.json
+deploy-*.json

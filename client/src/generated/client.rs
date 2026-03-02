@@ -543,10 +543,10 @@ impl<S: Stamp> TurnkeyClient<S> {
         &self,
         organization_id: String,
         timestamp_ms: u128,
-        params: immutable_activity::OtpLoginIntent,
+        params: immutable_activity::OtpLoginIntentV2,
     ) -> Result<ActivityResult<immutable_activity::OtpLoginResult>, TurnkeyClientError> {
         let request = external_activity::OtpLoginRequest {
-            r#type: "ACTIVITY_TYPE_OTP_LOGIN".to_string(),
+            r#type: "ACTIVITY_TYPE_OTP_LOGIN_V2".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
@@ -1867,6 +1867,48 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
+    /// Update organization name
+    ///
+    /// Update the name of an organization.
+    pub async fn update_organization_name(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::UpdateOrganizationNameIntent,
+    ) -> Result<ActivityResult<immutable_activity::UpdateOrganizationNameResult>, TurnkeyClientError>
+    {
+        let request = external_activity::UpdateOrganizationNameRequest {
+            r#type: "ACTIVITY_TYPE_UPDATE_ORGANIZATION_NAME".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/update_organization_name".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::UpdateOrganizationNameResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
     /// Init email recovery
     ///
     /// Initialize a new email recovery.
@@ -2445,10 +2487,10 @@ impl<S: Stamp> TurnkeyClient<S> {
         &self,
         organization_id: String,
         timestamp_ms: u128,
-        params: immutable_activity::InitOtpIntentV2,
+        params: immutable_activity::InitOtpIntentV3,
     ) -> Result<ActivityResult<immutable_activity::InitOtpResult>, TurnkeyClientError> {
         let request = external_activity::InitOtpRequest {
-            r#type: "ACTIVITY_TYPE_INIT_OTP_V2".to_string(),
+            r#type: "ACTIVITY_TYPE_INIT_OTP_V3".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
@@ -2484,10 +2526,10 @@ impl<S: Stamp> TurnkeyClient<S> {
         &self,
         organization_id: String,
         timestamp_ms: u128,
-        params: immutable_activity::VerifyOtpIntent,
+        params: immutable_activity::VerifyOtpIntentV2,
     ) -> Result<ActivityResult<immutable_activity::VerifyOtpResult>, TurnkeyClientError> {
         let request = external_activity::VerifyOtpRequest {
-            r#type: "ACTIVITY_TYPE_VERIFY_OTP".to_string(),
+            r#type: "ACTIVITY_TYPE_VERIFY_OTP_V2".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
@@ -3567,7 +3609,7 @@ impl<S: Stamp> TurnkeyClient<S> {
     }
     /// Get balances
     ///
-    /// Get non-zero balances of supported assets for a single wallet account address on the specified network.
+    /// Get balances of supported assets for an address on the specified network. Only non-zero balances are returned. This feature is in beta - please contact support for access.
     pub async fn get_wallet_address_balances(
         &self,
         request: coordinator::GetWalletAddressBalancesRequest,
@@ -3580,7 +3622,7 @@ impl<S: Stamp> TurnkeyClient<S> {
     }
     /// List supported assets
     ///
-    /// List supported assets for the specified network
+    /// List supported assets for the specified network. This feature is in beta - please contact support for access.
     pub async fn list_supported_assets(
         &self,
         request: coordinator::ListSupportedAssetsRequest,

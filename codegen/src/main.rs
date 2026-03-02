@@ -8,6 +8,7 @@ use walkdir::WalkDir;
 mod transform;
 
 const PUBLIC_API_PROTO_PATH: &str = "proto/services/coordinator/public/v1/public_api.proto";
+const ACTIVITY_PROTO_PATH: &str = "proto/external/activity/v1/activity.proto";
 const INCLUDE_PROTO_PATH: &str = "proto";
 const ACTIVITIES_MAPPING_PATH: &str = "proto/activities.json";
 const GENERATED_CLIENT_DIR: &str = "client/src/generated";
@@ -51,6 +52,20 @@ fn main() {
         .unwrap();
 
     let proto = fs::read_to_string(PUBLIC_API_PROTO_PATH).expect("Failed to read proto file");
+    let activity_proto =
+        fs::read_to_string(ACTIVITY_PROTO_PATH).expect("Failed to read activity proto file");
+
+    // Parse which request messages have a generate_app_proofs field
+    let msg_re = Regex::new(r"(?ms)^message (\w+Request)\s*\{(.*?)\n\}").unwrap();
+    let mut requests_with_app_proofs: std::collections::HashSet<String> =
+        std::collections::HashSet::new();
+    for caps in msg_re.captures_iter(&activity_proto) {
+        let msg_name = &caps[1];
+        let msg_body = &caps[2];
+        if msg_body.contains("generate_app_proofs") {
+            requests_with_app_proofs.insert(msg_name.to_string());
+        }
+    }
 
     // Capture the start of "service... {" until a single "}" is encountered on its own line without indentation.
     // That's just a simple alternative to writing a nesting-aware parser...
@@ -185,11 +200,11 @@ fn main() {
                     let activity_intent = activities_details.intent_type.clone();
                     let activity_result = activities_details.result_type.clone();
 
-                    // TVC requests don't have generate_app_proofs field
-                    let app_proofs_field = if is_tvc {
-                        String::new()
-                    } else {
+                    // Only include generate_app_proofs if the request message has it
+                    let app_proofs_field = if requests_with_app_proofs.contains(short_req_type) {
                         "generate_app_proofs: self.generate_app_proofs(),".to_string()
+                    } else {
+                        String::new()
                     };
 
                     // Approve and Reject activity functions are a bit different than the rest
