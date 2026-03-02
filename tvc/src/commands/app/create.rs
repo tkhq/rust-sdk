@@ -56,7 +56,7 @@ pub async fn run(args: Args) -> Result<()> {
     let intent = CreateTvcAppIntent {
         name: app_config.name.clone(),
         quorum_public_key: app_config.quorum_public_key.clone(),
-        external_connectivity: app_config.external_connectivity,
+        enable_egress: app_config.enable_egress,
         manifest_set_id: app_config.manifest_set_id.clone(),
         manifest_set_params: app_config.manifest_set_params.as_ref().map(|p| {
             TvcOperatorSetParams {

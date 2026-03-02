@@ -523,7 +523,7 @@ pub struct TvcApp {
     #[serde(default)]
     pub share_set: ::core::option::Option<TvcOperatorSet>,
     #[serde(default)]
-    pub external_connectivity: bool,
+    pub enable_egress: bool,
     #[serde(default)]
     pub created_at: ::core::option::Option<Timestamp>,
     #[serde(default)]
@@ -548,8 +548,6 @@ pub struct TvcDeployment {
     pub qos_version: ::prost::alloc::string::String,
     #[serde(default)]
     pub pivot_container: ::core::option::Option<TvcContainerSpec>,
-    #[serde(default)]
-    pub host_container: ::core::option::Option<TvcContainerSpec>,
     pub stage: super::super::super::immutable::common::v1::TvcDeploymentStage,
     #[serde(default)]
     pub created_at: ::core::option::Option<Timestamp>,
