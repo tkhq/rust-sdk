@@ -5,3 +5,4 @@ pub mod commands;
 pub mod config;
 pub mod pair;
 pub mod util;
+pub mod pull_secret;

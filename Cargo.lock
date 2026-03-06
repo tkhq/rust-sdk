@@ -3924,6 +3924,8 @@ dependencies = [
  "chrono",
  "clap",
  "hex",
+ "hpke",
+ "p256 0.13.2",
  "predicates",
  "qos_core",
  "qos_p256",
@@ -3934,6 +3936,7 @@ dependencies = [
  "toml",
  "turnkey_api_key_stamper",
  "turnkey_client",
+ "turnkey_enclave_encrypt",
 ]
 
 [[package]]

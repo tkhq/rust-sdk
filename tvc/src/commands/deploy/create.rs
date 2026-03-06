@@ -2,6 +2,7 @@
 
 use crate::client::build_client;
 use crate::config::deploy::DeployConfig;
+use crate::pull_secret::encrypt_pivot_pull_secret;
 use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
 use std::path::PathBuf;
@@ -14,6 +15,13 @@ use turnkey_client::generated::CreateTvcDeploymentIntent;
 pub struct Args {
     /// Path to the deployment configuration file (JSON).
     pub config_file: PathBuf,
+
+    /// Path to an unencrypted pivot container pull secret file.
+    ///
+    /// The content will be encrypted based on the active org's API environment and
+    /// override `pivotContainerEncryptedPullSecret` from the config file.
+    #[arg(long, alias = "pull-secret", value_name = "PATH")]
+    pub pivot_pull_secret: Option<PathBuf>,
 }
 
 /// Run the deploy create command.
@@ -43,6 +51,24 @@ pub async fn run(args: Args) -> Result<()> {
     // Build authenticated client
     let auth = build_client().await?;
 
+    let pivot_container_encrypted_pull_secret = match args.pivot_pull_secret.as_ref() {
+        Some(path) => {
+            let pull_secret = std::fs::read_to_string(path).with_context(|| {
+                format!("failed to read pivot pull secret file: {}", path.display())
+            })?;
+
+            if pull_secret.trim().is_empty() {
+                anyhow::bail!(
+                    "pivot pull secret file is empty after trimming whitespace: {}",
+                    path.display()
+                );
+            }
+
+            Some(encrypt_pivot_pull_secret(&pull_secret, &auth.api_base_url)?)
+        }
+        None => deploy_config.pivot_container_encrypted_pull_secret.clone(),
+    };
+
     // Convert config to API intent
     let intent = CreateTvcDeploymentIntent {
         app_id: deploy_config.app_id.clone(),
@@ -54,7 +80,7 @@ pub async fn run(args: Args) -> Result<()> {
         host_container_image_url: deploy_config.host_container_image_url.clone(),
         host_path: deploy_config.host_path.clone(),
         host_args: deploy_config.host_args.clone(),
-        pivot_container_encrypted_pull_secret: deploy_config.pivot_container_encrypted_pull_secret,
+        pivot_container_encrypted_pull_secret,
         host_container_encrypted_pull_secret: deploy_config.host_container_encrypted_pull_secret,
         nonce: None,
     };
