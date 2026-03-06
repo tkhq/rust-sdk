@@ -307,10 +307,62 @@ impl<S: Stamp> TurnkeyClient<S> {
         request: Request,
         path: String,
     ) -> Result<Activity, TurnkeyClientError> {
+        let post_body = serde_json::to_string(&request)?;
+        self.process_activity_internal(post_body, path, None).await
+    }
+
+    /// POSTs an activity with a provided `stamp` and polls until the status is "COMPLETE"
+    ///
+    /// `process_activity` accepts a  arbitrary `Request` and `path` to POST to the Turnkey API.
+    /// It encapsulates the polling logic and is generally meant to be called by other
+    /// activity-specific client functions (e.g. `create_sub_organization`).
+    ///
+    /// Given the Turnkey API is backwards-compatible, this function can be used to submit old versions of activities.
+    /// For example, if the latest version for create_sub_organization is "ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V7",
+    /// you may want to use `process_activity` to process `ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V6`. Note that this
+    /// requires manually setting the correct URL and activity request type.
+    /// The response is an generic Activity. If you're invoking this function manually you'll have to manually look at
+    /// the correct `.activity.result` enum.
+    ///
+    /// # Returns
+    ///
+    /// This function returns an `Activity` object which contains the deserialized version of the response.
+    ///
+    /// # Errors
+    ///
+    /// If the server errors with a validation error, a server error, a deserialization error, the proper variant of `TurnkeyClientError` is returned.
+    /// If the activity is pending and exceeds the maximum amount of retries allowed, `TurnkeyClientError::ExceededRetries` is returned.
+    /// If the activity requires consensus, `TurnkeyClientError::ActivityRequiresApproval` is returned.
+    pub async fn process_activity_with_stamp<Request: DeserializeOwned>(
+        &self,
+        post_body: String,
+        path: String,
+        stamp: StampHeader,
+    ) -> Result<(Request, Activity), TurnkeyClientError> {
+        // validate post_body matches the expected request type
+        let request = serde_json::from_str::<Request>(&post_body)?;
+        let response = self
+            .process_activity_internal(post_body, path, Some(stamp))
+            .await;
+        Ok((request, response?))
+    }
+
+    async fn process_activity_internal(
+        &self,
+        post_body: String,
+        path: String,
+        stamp: Option<StampHeader>,
+    ) -> Result<Activity, TurnkeyClientError> {
         let mut retry_count = 0;
 
+        let stamp = match stamp {
+            Some(stamp) => stamp,
+            None => self.api_key.stamp(post_body.as_bytes())?,
+        };
         loop {
-            let response: ActivityResponse = self.process_request(&request, path.clone()).await?;
+            let response: ActivityResponse = self
+                .process_request_internal(post_body.clone(), path.clone(), stamp.clone())
+                .await?;
             let activity = response
                 .activity
                 .ok_or_else(|| TurnkeyClientError::MissingActivity)?;
@@ -368,9 +420,43 @@ impl<S: Stamp> TurnkeyClient<S> {
         Request: Serialize,
         Response: DeserializeOwned,
     {
-        let url = format!("{}{}", self.base_url, path);
         let post_body = serde_json::to_string(&request)?;
-        let StampHeader { name, value } = self.api_key.stamp(post_body.as_bytes())?;
+        let stamp = self.api_key.stamp(post_body.as_bytes())?;
+        self.process_request_internal(post_body, path, stamp).await
+    }
+
+    /// Processes a `Request` (at `path`) by:
+    /// * Serializing the request to JSON
+    /// * POSTing the POST body with the provided stamp to the Turnkey API
+    ///
+    /// This function is generic and can handle POSTing queries or activities.
+    pub async fn process_request_with_stamp<Request, Response>(
+        &self,
+        post_body: String,
+        path: String,
+        stamp: StampHeader,
+    ) -> Result<(Request, Response), TurnkeyClientError>
+    where
+        Request: DeserializeOwned,
+        Response: DeserializeOwned,
+    {
+        // validate post_body matches the expected request type
+        let request = serde_json::from_str::<Request>(&post_body)?;
+        let response = self.process_request_internal(post_body, path, stamp).await;
+        Ok((request, response?))
+    }
+
+    async fn process_request_internal<Response>(
+        &self,
+        post_body: String,
+        path: String,
+        stamp: StampHeader,
+    ) -> Result<Response, TurnkeyClientError>
+    where
+        Response: DeserializeOwned,
+    {
+        let StampHeader { name, value } = stamp;
+        let url = format!("{}{}", self.base_url, path);
         let res = self
             .http
             .post(url)
