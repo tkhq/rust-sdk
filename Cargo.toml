@@ -18,13 +18,14 @@ resolver = "2"
 
 [workspace.dependencies]
 # QuorumOS
-qos_core = { git = "https://github.com/tkhq/qos.git", rev = "b86ad1b22f74263b22da65d88c18096e07841ad8", default-features = false }
-qos_p256 = { git = "https://github.com/tkhq/qos.git", rev = "b86ad1b22f74263b22da65d88c18096e07841ad8", default-features = false }
+qos_core = { git = "https://github.com/tkhq/qos.git", rev = "08dacd4c681fa68eeec70528015f1704f82b00db", default-features = false }
+qos_hex = { git = "https://github.com/tkhq/qos.git", rev = "08dacd4c681fa68eeec70528015f1704f82b00db", default-features = false, features = ["serde"] }
+qos_p256 = { git = "https://github.com/tkhq/qos.git", rev = "08dacd4c681fa68eeec70528015f1704f82b00db", default-features = false }
 
 # Encoding and serialization
 base64 = { version = "0.22.0", default-features = false, features = ["std"] }
 bs58 = { version = "0.5.0", features = ["std", "check"], default-features = false }
-hex = { version = "0.4.3", default-features = false, features = ["std"] }
+hex = { version = "0.4.3", default-features = false, features = ["std", "serde"] }
 serde = { version = "1.0.219", default-features = false, features = ["std", "derive"] }
 serde_json = { version = "1.0.140", default-features = false, features = ["std"] }
 serde_bytes = { version = "0.11", default-features = false }
