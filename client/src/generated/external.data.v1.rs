@@ -569,6 +569,7 @@ pub struct TvcContainerSpec {
     pub has_pull_secret: bool,
 }
 #[derive(Debug)]
+#[serde_with::serde_as]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -578,6 +579,7 @@ pub struct TvcOperatorApproval {
     #[serde(default)]
     pub operator: ::core::option::Option<TvcOperator>,
     #[serde(default)]
+    #[serde_as(as = "serde_with::base64::Base64")]
     pub approval: ::prost::alloc::vec::Vec<u8>,
     #[serde(default)]
     pub created_at: ::core::option::Option<Timestamp>,
