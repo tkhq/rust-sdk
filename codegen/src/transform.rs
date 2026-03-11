@@ -10,6 +10,7 @@ use syn::{
 /// serialized/deserialized as base64.
 const BASE64_FIELDS: &[(&str, &str)] = &[
     ("TvcManifest", "manifest"),
+    ("TvcOperatorApproval", "approval"),
     // Add more fields here as needed
 ];
 
