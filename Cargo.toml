@@ -18,8 +18,8 @@ resolver = "2"
 
 [workspace.dependencies]
 # QuorumOS
-qos_core = { git = "https://github.com/tkhq/qos.git", rev = "b86ad1b22f74263b22da65d88c18096e07841ad8", default-features = false }
-qos_p256 = { git = "https://github.com/tkhq/qos.git", rev = "b86ad1b22f74263b22da65d88c18096e07841ad8", default-features = false }
+qos_core = { version = "0.5.0", default-features = false }
+qos_p256 = { version = "0.5.0", default-features = false }
 
 # Encoding and serialization
 base64 = { version = "0.22.0", default-features = false, features = ["std"] }
