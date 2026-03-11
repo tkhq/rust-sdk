@@ -88,8 +88,7 @@ mod tests {
 
         // Build HPKE key pair from the known LOCALHOST private key
         let private_key_bytes = hex::decode(LOCALHOST_PRIVATE_KEY_HEX).unwrap();
-        let target_private =
-            <Kem as KemTrait>::PrivateKey::from_bytes(&private_key_bytes).unwrap();
+        let target_private = <Kem as KemTrait>::PrivateKey::from_bytes(&private_key_bytes).unwrap();
 
         let public_key_compressed =
             hex::decode(LOCALHOST_PULL_SECRET_ENCRYPTION_PUBLIC_KEY).unwrap();
