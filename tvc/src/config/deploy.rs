@@ -13,11 +13,11 @@ pub struct DeployConfig {
     #[serde(default)]
     pub pivot_args: Vec<String>,
     pub expected_pivot_digest: String,
-    pub host_container_image_url: String,
-    pub host_path: String,
     #[serde(default)]
-    pub host_args: Vec<String>,
-    pub host_container_encrypted_pull_secret: Option<String>,
+    pub pivot_bind_addresses: Vec<String>,
+    #[serde(default)]
+    pub debug_mode: Option<bool>,
+    #[serde(default)]
     pub pivot_container_encrypted_pull_secret: Option<String>,
 }
 
@@ -32,14 +32,10 @@ impl DeployConfig {
             pivot_path: "<FILL_IN_PIVOT_PATH>".to_string(),
             pivot_args: vec![],
             expected_pivot_digest: "<FILL_IN_EXPECTED_PIVOT_DIGEST>".to_string(),
-            host_container_image_url: "<FILL_IN_HOST_CONTAINER_IMAGE_URL>".to_string(),
-            host_path: "<FILL_IN_HOST_PATH>".to_string(),
-            host_args: vec![],
+            pivot_bind_addresses: vec![],
+            debug_mode: Some(false),
             pivot_container_encrypted_pull_secret: Some(
                 "<REMOVE_ME_IF_PIVOT_CONTAINER_URL_IS_PUBLIC>".to_string(),
-            ),
-            host_container_encrypted_pull_secret: Some(
-                "<REMOVE_ME_IF_HOST_CONTAINER_URL_IS_PUBLIC>".to_string(),
             ),
         }
     }
@@ -51,7 +47,5 @@ impl DeployConfig {
             || self.pivot_container_image_url.starts_with("<FILL_IN")
             || self.pivot_path.starts_with("<FILL_IN")
             || self.expected_pivot_digest.starts_with("<FILL_IN")
-            || self.host_container_image_url.starts_with("<FILL_IN")
-            || self.host_path.starts_with("<FILL_IN")
     }
 }

@@ -132,6 +132,10 @@ pub mod intent {
         CreateTvcDeploymentIntent(super::CreateTvcDeploymentIntent),
         CreateTvcManifestApprovalsIntent(super::CreateTvcManifestApprovalsIntent),
         SolSendTransactionIntent(super::SolSendTransactionIntent),
+        InitOtpIntentV3(super::InitOtpIntentV3),
+        VerifyOtpIntentV2(super::VerifyOtpIntentV2),
+        OtpLoginIntentV2(super::OtpLoginIntentV2),
+        UpdateOrganizationNameIntent(super::UpdateOrganizationNameIntent),
     }
 }
 #[derive(Debug)]
@@ -185,6 +189,11 @@ pub struct UpdateAuthProxyConfigIntent {
     /// @inject_tag: validate:"omitempty"
     #[serde(default)]
     pub verification_token_required_for_get_account_pii: ::core::option::Option<bool>,
+    /// @inject_tag: validate:"omitempty,dive"
+    #[serde(default)]
+    pub social_linking_client_ids: ::prost::alloc::vec::Vec<
+        ::prost::alloc::string::String,
+    >,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -368,6 +377,14 @@ pub struct UpdateWalletIntent {
     pub wallet_id: ::prost::alloc::string::String,
     /// @inject_tag: validate:"omitempty,tk_label,tk_label_length"
     pub wallet_name: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct UpdateOrganizationNameIntent {
+    /// @inject_tag: validate:"required,tk_label,tk_label_length"
+    pub organization_name: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -1405,6 +1422,21 @@ pub struct OtpLoginIntent {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct OtpLoginIntentV2 {
+    pub verification_token: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"omitempty,hexadecimal"
+    pub public_key: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub client_signature: ::core::option::Option<ClientSignature>,
+    #[serde(default)]
+    pub expiration_seconds: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub invalidate_existing: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct InitOtpAuthIntent {
     /// @inject_tag: validate:"required,oneof=OTP_TYPE_SMS OTP_TYPE_EMAIL"
     pub otp_type: ::prost::alloc::string::String,
@@ -1474,6 +1506,42 @@ pub struct InitOtpIntentV2 {
     pub otp_length: ::core::option::Option<i32>,
     /// @inject_tag: validate:"tk_label_length,tk_label"
     pub app_name: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub email_customization: ::core::option::Option<EmailCustomizationParamsV2>,
+    #[serde(default)]
+    pub sms_customization: ::core::option::Option<SmsCustomizationParams>,
+    #[serde(default)]
+    pub user_identifier: ::core::option::Option<::prost::alloc::string::String>,
+    /// @inject_tag: validate:"omitempty,email,tk_email"
+    #[serde(default)]
+    pub send_from_email_address: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub alphanumeric: ::core::option::Option<bool>,
+    /// @inject_tag: validate:"omitempty,tk_label_length,tk_label"
+    #[serde(default)]
+    pub send_from_email_sender_name: ::core::option::Option<
+        ::prost::alloc::string::String,
+    >,
+    /// @inject_tag: validate:"omitempty,numeric,max=600"
+    #[serde(default)]
+    pub expiration_seconds: ::core::option::Option<::prost::alloc::string::String>,
+    /// @inject_tag: validate:"omitempty,email,tk_email"
+    #[serde(default)]
+    pub reply_to_email_address: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct InitOtpIntentV3 {
+    /// @inject_tag: validate:"required,oneof=OTP_TYPE_SMS OTP_TYPE_EMAIL"
+    pub otp_type: ::prost::alloc::string::String,
+    pub contact: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"tk_label_length,tk_label"
+    pub app_name: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"omitempty,min=6,max=9"
+    #[serde(default)]
+    pub otp_length: ::core::option::Option<i32>,
     #[serde(default)]
     pub email_customization: ::core::option::Option<EmailCustomizationParamsV2>,
     #[serde(default)]
@@ -1592,6 +1660,18 @@ pub struct VerifyOtpIntent {
     /// @inject_tag: validate:"omitempty,hexadecimal"
     #[serde(default)]
     pub public_key: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct VerifyOtpIntentV2 {
+    /// @inject_tag: validate:"required"
+    pub otp_id: ::prost::alloc::string::String,
+    pub encrypted_otp_bundle: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"omitempty,numeric,max=86400"
+    #[serde(default)]
+    pub expiration_seconds: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -1985,7 +2065,7 @@ pub struct CreateTvcAppIntent {
     #[serde(default)]
     pub share_set_params: ::core::option::Option<TvcOperatorSetParams>,
     #[serde(default)]
-    pub external_connectivity: ::core::option::Option<bool>,
+    pub enable_egress: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -2029,12 +2109,6 @@ pub struct CreateTvcDeploymentIntent {
     pub pivot_args: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     /// @inject_tag: validate:"required"
     pub expected_pivot_digest: ::prost::alloc::string::String,
-    /// @inject_tag: validate:"required"
-    pub host_container_image_url: ::prost::alloc::string::String,
-    /// @inject_tag: validate:"required"
-    pub host_path: ::prost::alloc::string::String,
-    #[serde(default)]
-    pub host_args: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[serde(default)]
     pub nonce: ::core::option::Option<u32>,
     #[serde(default)]
@@ -2042,9 +2116,9 @@ pub struct CreateTvcDeploymentIntent {
         ::prost::alloc::string::String,
     >,
     #[serde(default)]
-    pub host_container_encrypted_pull_secret: ::core::option::Option<
-        ::prost::alloc::string::String,
-    >,
+    pub pivot_bind_addresses: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub debug_mode: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -2182,6 +2256,8 @@ pub mod result {
         CreateTvcDeploymentResult(super::CreateTvcDeploymentResult),
         CreateTvcManifestApprovalsResult(super::CreateTvcManifestApprovalsResult),
         SolSendTransactionResult(super::SolSendTransactionResult),
+        InitOtpResultV2(super::InitOtpResultV2),
+        UpdateOrganizationNameResult(super::UpdateOrganizationNameResult),
     }
 }
 #[derive(Debug)]
@@ -2409,6 +2485,14 @@ pub struct InitOtpResult {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct InitOtpResultV2 {
+    pub otp_id: ::prost::alloc::string::String,
+    pub otp_encryption_target_bundle: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct InitOtpAuthResult {
     pub otp_id: ::prost::alloc::string::String,
 }
@@ -2623,6 +2707,14 @@ pub struct DeletePrivateKeyTagsResult {
     pub private_key_tag_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[serde(default)]
     pub private_key_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct UpdateOrganizationNameResult {
+    pub organization_id: ::prost::alloc::string::String,
+    pub organization_name: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -3470,6 +3562,14 @@ pub enum ActivityType {
     CreateTvcManifestApprovals = 116,
     #[serde(rename = "ACTIVITY_TYPE_SOL_SEND_TRANSACTION")]
     SolSendTransaction = 117,
+    #[serde(rename = "ACTIVITY_TYPE_INIT_OTP_V3")]
+    InitOtpV3 = 118,
+    #[serde(rename = "ACTIVITY_TYPE_VERIFY_OTP_V2")]
+    VerifyOtpV2 = 119,
+    #[serde(rename = "ACTIVITY_TYPE_OTP_LOGIN_V2")]
+    OtpLoginV2 = 120,
+    #[serde(rename = "ACTIVITY_TYPE_UPDATE_ORGANIZATION_NAME")]
+    UpdateOrganizationName = 121,
 }
 impl ActivityType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -3612,6 +3712,10 @@ impl ActivityType {
                 "ACTIVITY_TYPE_CREATE_TVC_MANIFEST_APPROVALS"
             }
             Self::SolSendTransaction => "ACTIVITY_TYPE_SOL_SEND_TRANSACTION",
+            Self::InitOtpV3 => "ACTIVITY_TYPE_INIT_OTP_V3",
+            Self::VerifyOtpV2 => "ACTIVITY_TYPE_VERIFY_OTP_V2",
+            Self::OtpLoginV2 => "ACTIVITY_TYPE_OTP_LOGIN_V2",
+            Self::UpdateOrganizationName => "ACTIVITY_TYPE_UPDATE_ORGANIZATION_NAME",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -3777,6 +3881,12 @@ impl ActivityType {
                 Some(Self::CreateTvcManifestApprovals)
             }
             "ACTIVITY_TYPE_SOL_SEND_TRANSACTION" => Some(Self::SolSendTransaction),
+            "ACTIVITY_TYPE_INIT_OTP_V3" => Some(Self::InitOtpV3),
+            "ACTIVITY_TYPE_VERIFY_OTP_V2" => Some(Self::VerifyOtpV2),
+            "ACTIVITY_TYPE_OTP_LOGIN_V2" => Some(Self::OtpLoginV2),
+            "ACTIVITY_TYPE_UPDATE_ORGANIZATION_NAME" => {
+                Some(Self::UpdateOrganizationName)
+            }
             _ => None,
         }
     }
