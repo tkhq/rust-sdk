@@ -91,8 +91,8 @@
       "resultType": "DeleteInvitationResult"
     },
     "/public/v1/submit/create_users": {
-      "type": "ACTIVITY_TYPE_CREATE_USERS_V3",
-      "intentType": "CreateUsersIntentV3",
+      "type": "ACTIVITY_TYPE_CREATE_USERS_V4",
+      "intentType": "CreateUsersIntentV4",
       "resultType": "CreateUsersResult"
     },
     "/public/v1/submit/create_api_only_users": {
@@ -181,8 +181,8 @@
       "resultType": "CreateWalletAccountsResult"
     },
     "/public/v1/submit/create_sub_organization": {
-      "type": "ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V7",
-      "intentType": "CreateSubOrganizationIntentV7",
+      "type": "ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V8",
+      "intentType": "CreateSubOrganizationIntentV8",
       "resultType": "CreateSubOrganizationResultV7"
     },
     "/public/v1/submit/init_user_email_recovery": {
@@ -256,8 +256,8 @@
       "resultType": "OauthResult"
     },
     "/public/v1/submit/init_otp": {
-      "type": "ACTIVITY_TYPE_INIT_OTP_V2",
-      "intentType": "InitOtpIntentV2",
+      "type": "ACTIVITY_TYPE_INIT_OTP_V3",
+      "intentType": "InitOtpIntentV3",
       "resultType": "InitOtpResult"
     },
     "/public/v1/submit/init_otp_auth": {
@@ -276,8 +276,8 @@
       "resultType": "OauthLoginResult"
     },
     "/public/v1/submit/otp_login": {
-      "type": "ACTIVITY_TYPE_OTP_LOGIN",
-      "intentType": "OtpLoginIntent",
+      "type": "ACTIVITY_TYPE_OTP_LOGIN_V2",
+      "intentType": "OtpLoginIntentV2",
       "resultType": "OtpLoginResult"
     },
     "/public/v1/submit/stamp_login": {
@@ -286,13 +286,13 @@
       "resultType": "StampLoginResult"
     },
     "/public/v1/submit/verify_otp": {
-      "type": "ACTIVITY_TYPE_VERIFY_OTP",
-      "intentType": "VerifyOtpIntent",
+      "type": "ACTIVITY_TYPE_VERIFY_OTP_V2",
+      "intentType": "VerifyOtpIntentV2",
       "resultType": "VerifyOtpResult"
     },
     "/public/v1/submit/create_oauth_providers": {
-      "type": "ACTIVITY_TYPE_CREATE_OAUTH_PROVIDERS",
-      "intentType": "CreateOauthProvidersIntent",
+      "type": "ACTIVITY_TYPE_CREATE_OAUTH_PROVIDERS_V2",
+      "intentType": "CreateOauthProvidersIntentV2",
       "resultType": "CreateOauthProvidersResult"
     },
     "/public/v1/submit/delete_oauth_providers": {
@@ -345,6 +345,11 @@
       "intentType": "DeleteWalletAccountsIntent",
       "resultType": "DeleteWalletAccountsResult"
     },
+    "/public/v1/submit/update_organization_name": {
+      "type": "ACTIVITY_TYPE_UPDATE_ORGANIZATION_NAME",
+      "intentType": "UpdateOrganizationNameIntent",
+      "resultType": "UpdateOrganizationNameResult"
+    },
     "/public/v1/submit/delete_policies": {
       "type": "ACTIVITY_TYPE_DELETE_POLICIES",
       "intentType": "DeletePoliciesIntent",
@@ -391,7 +396,7 @@
       "resultType": "CreateTvcDeploymentResult"
     },
     "/public/v1/submit/create_tvc_manifest_approvals": {
-      "type": "ACTIVITY_TYPE_CREATE_TVC_MANIFEST_APPROVALS",
+      "type": "ACTIVITY_TYPE_APPROVE_TVC_DEPLOYMENT",
       "intentType": "CreateTvcManifestApprovalsIntent",
       "resultType": "CreateTvcManifestApprovalsResult"
     }

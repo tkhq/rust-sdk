@@ -1100,6 +1100,18 @@ service PublicApiService {
     };
   }
 
+  rpc UpdateOrganizationName(external.activity.v1.UpdateOrganizationNameRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/update_organization_name"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Update the name of an organization."
+      summary: "Update organization name"
+      tags: "Organizations"
+    };
+  }
+
   rpc InitUserEmailRecovery(external.activity.v1.InitUserEmailRecoveryRequest) returns (ActivityResponse) {
     option (google.api.http) = {
       post: "/public/v1/submit/init_user_email_recovery"
@@ -1743,7 +1755,7 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Get non-zero balances of supported assets for a single wallet account address on the specified network."
+      description: "Get balances of supported assets for an address on the specified network. Only non-zero balances are returned. This feature is in beta - please contact support for access."
       summary: "Get balances"
       tags: "Wallets"
     };
@@ -1755,7 +1767,7 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "List supported assets for the specified network"
+      description: "List supported assets for the specified network. This feature is in beta - please contact support for access."
       summary: "List supported assets"
       tags: "Wallets"
     };
@@ -1765,7 +1777,6 @@ service PublicApiService {
   // It's used at compile time for generating extra OpenAPI/TypeScript types
   // that are not directly referenced in requests.
   rpc NOOPCodegenAnchor(NOOPCodegenAnchorRequest) returns (NOOPCodegenAnchorResponse) {
-    option (google.api.method_visibility).restriction = "INTERNAL";
     option (google.api.http) = {post: "/tkhq/api/v1/noop-codegen-anchor"};
   }
 }
@@ -2458,7 +2469,17 @@ message GetNoncesRequest {
   ];
   string caip2 = 3 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The network identifier in CAIP-2 format (e.g., 'eip155:1' for Ethereum mainnet)."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "CAIP-2 chain ID (e.g., 'eip155:1' for Ethereum mainnet)."
+      enum: [
+        "eip155:1",
+        "eip155:11155111",
+        "eip155:8453",
+        "eip155:84532",
+        "eip155:137",
+        "eip155:80002"
+      ]
+    }
   ];
   bool nonce = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether to fetch the standard on-chain nonce."}];
   bool gas_station_nonce = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether to fetch the gas station nonce used for sponsored transactions."}];
@@ -2585,7 +2606,19 @@ message GetWalletAddressBalancesRequest {
   ];
   string caip2 = 3 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The network identifier in CAIP-2 format (e.g., 'eip155:1' for Ethereum mainnet)."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "CAIP-2 chain ID (e.g., 'eip155:1' for Ethereum mainnet or 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp' for Solana mainnet). Human-readable Solana aliases ('solana:mainnet', 'solana:devnet') are also accepted and normalized to canonical CAIP-2 values."
+      enum: [
+        "eip155:1",
+        "eip155:11155111",
+        "eip155:8453",
+        "eip155:84532",
+        "eip155:137",
+        "eip155:80002",
+        "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+        "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1"
+      ]
+    }
   ];
 }
 
@@ -2599,6 +2632,7 @@ message AssetBalance {
   string balance = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The balance in atomic units"}];
   int32 decimals = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The number of decimals this asset uses"}];
   AssetBalanceDisplay display = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Normalized balance values for display purposes only. Do not do any arithmetic or calculations with these, as the results could be imprecise. Use the balance field instead."}];
+  string name = 6 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The asset name"}];
 }
 
 message AssetBalanceDisplay {
@@ -2613,17 +2647,30 @@ message ListSupportedAssetsRequest {
   ];
   string caip2 = 2 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The network identifier in CAIP-2 format (e.g., 'eip155:1' for Ethereum mainnet)."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "CAIP-2 chain ID (e.g., 'eip155:1' for Ethereum mainnet or 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp' for Solana mainnet). Human-readable Solana aliases ('solana:mainnet', 'solana:devnet') are also accepted and normalized to canonical CAIP-2 values."
+      enum: [
+        "eip155:1",
+        "eip155:11155111",
+        "eip155:8453",
+        "eip155:84532",
+        "eip155:137",
+        "eip155:80002",
+        "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+        "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1"
+      ]
+    }
   ];
 }
 
 message ListSupportedAssetsResponse {
-  repeated AssetMetadata assets = 1;
+  repeated AssetMetadata assets = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "List of asset metadata"}];
 }
 
 message AssetMetadata {
-  string caip19 = 1;
-  string symbol = 2;
-  int32 decimals = 3;
-  string logo_url = 4;
+  string caip19 = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The caip-19 asset identifier"}];
+  string symbol = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The asset symbol"}];
+  int32 decimals = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The number of decimals this asset uses"}];
+  string logo_url = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The url of the asset logo"}];
+  string name = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The asset name"}];
 }

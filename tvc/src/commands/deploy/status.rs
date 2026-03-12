@@ -52,16 +52,6 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         }
     }
 
-    if let Some(host) = &deployment.host_container {
-        println!();
-        println!("Host Container:");
-        println!("  URL: {}", host.container_url);
-        println!("  Path: {}", host.path);
-        if !host.args.is_empty() {
-            println!("  Args: {:?}", host.args);
-        }
-    }
-
     if let Some(created) = &deployment.created_at {
         println!();
         println!("Created: {}.{:09}s", created.seconds, created.nanos);
