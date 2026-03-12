@@ -34,9 +34,9 @@ message TvcApp {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Share Set (people who have a share of the Quorum Key)"}
   ];
-  bool external_connectivity = 7 [
+  bool enable_egress = 7 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether or not this TVC App has external connectivity enabled."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether or not this TVC App has network egress enabled."}
   ];
   Timestamp created_at = 8 [(google.api.field_behavior) = REQUIRED];
   Timestamp updated_at = 9 [(google.api.field_behavior) = REQUIRED];
@@ -76,10 +76,6 @@ message TvcDeployment {
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "QOS Version used for this deployment"}
   ];
   TvcContainerSpec pivot_container = 9 [
-    (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The pivot container spec for this deployment"}
-  ];
-  TvcContainerSpec host_container = 10 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The pivot container spec for this deployment"}
   ];

@@ -331,7 +331,7 @@ pub struct CreateUsersRequest {
     pub organization_id: ::prost::alloc::string::String,
     #[serde(default)]
     pub parameters: ::core::option::Option<
-        super::super::super::immutable::activity::v1::CreateUsersIntentV3,
+        super::super::super::immutable::activity::v1::CreateUsersIntentV4,
     >,
     #[serde(default)]
     pub generate_app_proofs: ::core::option::Option<bool>,
@@ -395,6 +395,19 @@ pub struct UpdateUserPhoneNumberRequest {
     >,
     #[serde(default)]
     pub generate_app_proofs: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct UpdateOrganizationNameRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::UpdateOrganizationNameIntent,
+    >,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -721,7 +734,7 @@ pub struct CreateSubOrganizationRequest {
     pub organization_id: ::prost::alloc::string::String,
     #[serde(default)]
     pub parameters: ::core::option::Option<
-        super::super::super::immutable::activity::v1::CreateSubOrganizationIntentV7,
+        super::super::super::immutable::activity::v1::CreateSubOrganizationIntentV8,
     >,
     #[serde(default)]
     pub generate_app_proofs: ::core::option::Option<bool>,
@@ -916,7 +929,7 @@ pub struct OtpLoginRequest {
     pub organization_id: ::prost::alloc::string::String,
     #[serde(default)]
     pub parameters: ::core::option::Option<
-        super::super::super::immutable::activity::v1::OtpLoginIntent,
+        super::super::super::immutable::activity::v1::OtpLoginIntentV2,
     >,
     #[serde(default)]
     pub generate_app_proofs: ::core::option::Option<bool>,
@@ -931,7 +944,7 @@ pub struct InitOtpRequest {
     pub organization_id: ::prost::alloc::string::String,
     #[serde(default)]
     pub parameters: ::core::option::Option<
-        super::super::super::immutable::activity::v1::InitOtpIntentV2,
+        super::super::super::immutable::activity::v1::InitOtpIntentV3,
     >,
     #[serde(default)]
     pub generate_app_proofs: ::core::option::Option<bool>,
@@ -974,7 +987,7 @@ pub struct VerifyOtpRequest {
     pub organization_id: ::prost::alloc::string::String,
     #[serde(default)]
     pub parameters: ::core::option::Option<
-        super::super::super::immutable::activity::v1::VerifyOtpIntent,
+        super::super::super::immutable::activity::v1::VerifyOtpIntentV2,
     >,
     #[serde(default)]
     pub generate_app_proofs: ::core::option::Option<bool>,
@@ -1094,7 +1107,7 @@ pub struct CreateOauthProvidersRequest {
     pub organization_id: ::prost::alloc::string::String,
     #[serde(default)]
     pub parameters: ::core::option::Option<
-        super::super::super::immutable::activity::v1::CreateOauthProvidersIntent,
+        super::super::super::immutable::activity::v1::CreateOauthProvidersIntentV2,
     >,
     #[serde(default)]
     pub generate_app_proofs: ::core::option::Option<bool>,

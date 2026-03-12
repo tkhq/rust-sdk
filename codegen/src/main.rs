@@ -184,13 +184,7 @@ fn main() {
                     let short_req_type = req_type.rsplit(".").next().unwrap();
                     let activity_intent = activities_details.intent_type.clone();
                     let activity_result = activities_details.result_type.clone();
-
-                    // TVC requests don't have generate_app_proofs field
-                    let app_proofs_field = if is_tvc {
-                        String::new()
-                    } else {
-                        "generate_app_proofs: self.generate_app_proofs(),".to_string()
-                    };
+                    let app_proofs_field = build_generate_app_proofs_field(short_req_type, is_tvc);
 
                     // Approve and Reject activity functions are a bit different than the rest
                     // In the mapping they have a resultType set to "*" (because they can indeed reference ANY activity.
@@ -342,4 +336,30 @@ fn to_snake_case(name: &str) -> String {
         result.push(ch.to_ascii_lowercase());
     }
     result
+}
+fn build_generate_app_proofs_field(req_type: &str, is_tvc: bool) -> String {
+    if is_tvc || req_type == "UpdateOrganizationNameRequest" {
+        String::new()
+    } else {
+        "generate_app_proofs: self.generate_app_proofs(),".to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generate_app_proofs_field_is_emitted_only_when_request_supports_it() {
+        assert!(build_generate_app_proofs_field("CreateUsersRequest", false)
+            .contains("generate_app_proofs"));
+        assert_eq!(
+            build_generate_app_proofs_field("UpdateOrganizationNameRequest", false),
+            ""
+        );
+        assert_eq!(
+            build_generate_app_proofs_field("CreateTvcAppRequest", true),
+            ""
+        );
+    }
 }

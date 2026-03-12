@@ -77,11 +77,9 @@ pub async fn run(args: Args) -> Result<()> {
         pivot_path: deploy_config.pivot_path.clone(),
         pivot_args: deploy_config.pivot_args.clone(),
         expected_pivot_digest: deploy_config.expected_pivot_digest.clone(),
-        host_container_image_url: deploy_config.host_container_image_url.clone(),
-        host_path: deploy_config.host_path.clone(),
-        host_args: deploy_config.host_args.clone(),
         pivot_container_encrypted_pull_secret,
-        host_container_encrypted_pull_secret: deploy_config.host_container_encrypted_pull_secret,
+        pivot_bind_addresses: deploy_config.pivot_bind_addresses.clone(),
+        debug_mode: deploy_config.debug_mode,
         nonce: None,
     };
 

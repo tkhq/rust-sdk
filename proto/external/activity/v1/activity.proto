@@ -450,7 +450,7 @@ message CreateUsersRequest {
   string type = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      enum: ["ACTIVITY_TYPE_CREATE_USERS_V3"]
+      enum: ["ACTIVITY_TYPE_CREATE_USERS_V4"]
     }
   ];
   string timestamp_ms = 2 [
@@ -461,7 +461,7 @@ message CreateUsersRequest {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
-  immutable.activity.v1.CreateUsersIntentV3 parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  immutable.activity.v1.CreateUsersIntentV4 parameters = 4 [(google.api.field_behavior) = REQUIRED];
   optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
 }
 
@@ -539,6 +539,24 @@ message UpdateUserPhoneNumberRequest {
   ];
   immutable.activity.v1.UpdateUserPhoneNumberIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
   optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
+}
+
+message UpdateOrganizationNameRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_UPDATE_ORGANIZATION_NAME"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.UpdateOrganizationNameIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
 }
 
 message DeleteUsersRequest {
@@ -944,7 +962,7 @@ message CreateSubOrganizationRequest {
   string type = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      enum: ["ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V7"]
+      enum: ["ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V8"]
     }
   ];
   string timestamp_ms = 2 [
@@ -955,7 +973,7 @@ message CreateSubOrganizationRequest {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
-  immutable.activity.v1.CreateSubOrganizationIntentV7 parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  immutable.activity.v1.CreateSubOrganizationIntentV8 parameters = 4 [(google.api.field_behavior) = REQUIRED];
   optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
 }
 
@@ -1191,7 +1209,7 @@ message OtpLoginRequest {
   string type = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      enum: ["ACTIVITY_TYPE_OTP_LOGIN"]
+      enum: ["ACTIVITY_TYPE_OTP_LOGIN_V2"]
     }
   ];
   string timestamp_ms = 2 [
@@ -1202,7 +1220,7 @@ message OtpLoginRequest {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
-  immutable.activity.v1.OtpLoginIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  immutable.activity.v1.OtpLoginIntentV2 parameters = 4 [(google.api.field_behavior) = REQUIRED];
   optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
 }
 
@@ -1210,7 +1228,7 @@ message InitOtpRequest {
   string type = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      enum: ["ACTIVITY_TYPE_INIT_OTP_V2"]
+      enum: ["ACTIVITY_TYPE_INIT_OTP_V3"]
     }
   ];
   string timestamp_ms = 2 [
@@ -1221,7 +1239,7 @@ message InitOtpRequest {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
-  immutable.activity.v1.InitOtpIntentV2 parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  immutable.activity.v1.InitOtpIntentV3 parameters = 4 [(google.api.field_behavior) = REQUIRED];
   optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
 }
 
@@ -1266,7 +1284,7 @@ message VerifyOtpRequest {
   string type = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      enum: ["ACTIVITY_TYPE_VERIFY_OTP"]
+      enum: ["ACTIVITY_TYPE_VERIFY_OTP_V2"]
     }
   ];
   string timestamp_ms = 2 [
@@ -1277,7 +1295,7 @@ message VerifyOtpRequest {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
-  immutable.activity.v1.VerifyOtpIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  immutable.activity.v1.VerifyOtpIntentV2 parameters = 4 [(google.api.field_behavior) = REQUIRED];
   optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
 }
 
@@ -1418,7 +1436,7 @@ message CreateOauthProvidersRequest {
   string type = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      enum: ["ACTIVITY_TYPE_CREATE_OAUTH_PROVIDERS"]
+      enum: ["ACTIVITY_TYPE_CREATE_OAUTH_PROVIDERS_V2"]
     }
   ];
   string timestamp_ms = 2 [
@@ -1429,7 +1447,7 @@ message CreateOauthProvidersRequest {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
-  immutable.activity.v1.CreateOauthProvidersIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  immutable.activity.v1.CreateOauthProvidersIntentV2 parameters = 4 [(google.api.field_behavior) = REQUIRED];
   optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
 }
 
