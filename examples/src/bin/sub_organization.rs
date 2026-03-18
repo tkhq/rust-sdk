@@ -1,9 +1,9 @@
 use std::error::Error;
 use std::{env, vec};
-use turnkey_client::generated::DeleteSubOrganizationIntent;
+use turnkey_client::generated::{CreateSubOrganizationIntentV8, DeleteSubOrganizationIntent};
 use turnkey_client::generated::{
     immutable::common::v1::{AddressFormat, ApiKeyCurve, Curve, PathFormat},
-    ApiKeyParamsV2, CreateSubOrganizationIntentV7, RootUserParamsV4, WalletAccountParams,
+    ApiKeyParamsV2, RootUserParamsV5, WalletAccountParams,
     WalletParams,
 };
 use turnkey_client::{TurnkeyP256ApiKey, TurnkeySecp256k1ApiKey};
@@ -25,9 +25,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let client = turnkey_client::TurnkeyClient::builder()
         .api_key(api_key)
         .build()?;
-    let intent = CreateSubOrganizationIntentV7 {
+    let intent = CreateSubOrganizationIntentV8 {
         sub_organization_name: "New sub-organization".to_string(),
-        root_users: vec![RootUserParamsV4 {
+        root_users: vec![RootUserParamsV5 {
             user_name: "Root User".to_string(),
             api_keys: vec![
                 ApiKeyParamsV2 {
