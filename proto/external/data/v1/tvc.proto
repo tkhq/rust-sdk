@@ -104,6 +104,18 @@ message TvcContainerSpec {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether or not this container requires a pull secret to access."}
   ];
+  immutable.common.v1.TvcHealthCheckType health_check_type = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The type of health check to perform against this executable."}
+  ];
+  uint32 health_check_port = 6 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The port to use for health checks against this executable."}
+  ];
+  uint32 public_ingress_port = 7 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The port to use for public ingress to this executable."}
+  ];
 }
 
 message TvcOperatorApproval {
@@ -180,4 +192,38 @@ message TvcManifest {
   ];
   Timestamp created_at = 3 [(google.api.field_behavior) = REQUIRED];
   Timestamp updated_at = 4 [(google.api.field_behavior) = REQUIRED];
+}
+
+message DeploymentStatus {
+  string deployment_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for this deployment (corresponds to k8s deployment label)"}
+  ];
+  int32 ready_replicas = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Number of ready replicas"}
+  ];
+  int32 desired_replicas = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Desired number of replicas"}
+  ];
+  Timestamp last_updated_time = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Last time this deployment was updated"}
+  ];
+}
+
+message AppStatus {
+  string app_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for this TVC App"}
+  ];
+  repeated DeploymentStatus deployments = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "List of deployment statuses for this app"}
+  ];
+  string targeted_deployment_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The deployment ID currently serving traffic for this app"}
+  ];
 }

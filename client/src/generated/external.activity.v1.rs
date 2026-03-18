@@ -331,7 +331,7 @@ pub struct CreateUsersRequest {
     pub organization_id: ::prost::alloc::string::String,
     #[serde(default)]
     pub parameters: ::core::option::Option<
-        super::super::super::immutable::activity::v1::CreateUsersIntentV3,
+        super::super::super::immutable::activity::v1::CreateUsersIntentV4,
     >,
     #[serde(default)]
     pub generate_app_proofs: ::core::option::Option<bool>,
@@ -734,7 +734,7 @@ pub struct CreateSubOrganizationRequest {
     pub organization_id: ::prost::alloc::string::String,
     #[serde(default)]
     pub parameters: ::core::option::Option<
-        super::super::super::immutable::activity::v1::CreateSubOrganizationIntentV7,
+        super::super::super::immutable::activity::v1::CreateSubOrganizationIntentV8,
     >,
     #[serde(default)]
     pub generate_app_proofs: ::core::option::Option<bool>,
@@ -1107,7 +1107,7 @@ pub struct CreateOauthProvidersRequest {
     pub organization_id: ::prost::alloc::string::String,
     #[serde(default)]
     pub parameters: ::core::option::Option<
-        super::super::super::immutable::activity::v1::CreateOauthProvidersIntent,
+        super::super::super::immutable::activity::v1::CreateOauthProvidersIntentV2,
     >,
     #[serde(default)]
     pub generate_app_proofs: ::core::option::Option<bool>,
@@ -1427,4 +1427,49 @@ pub struct CreateTvcManifestApprovalsRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::CreateTvcManifestApprovalsIntent,
     >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateWebhookEndpointRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::CreateWebhookEndpointIntent,
+    >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct UpdateWebhookEndpointRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::UpdateWebhookEndpointIntent,
+    >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeleteWebhookEndpointRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::DeleteWebhookEndpointIntent,
+    >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }

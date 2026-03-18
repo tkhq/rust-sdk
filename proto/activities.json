@@ -91,8 +91,8 @@
       "resultType": "DeleteInvitationResult"
     },
     "/public/v1/submit/create_users": {
-      "type": "ACTIVITY_TYPE_CREATE_USERS_V3",
-      "intentType": "CreateUsersIntentV3",
+      "type": "ACTIVITY_TYPE_CREATE_USERS_V4",
+      "intentType": "CreateUsersIntentV4",
       "resultType": "CreateUsersResult"
     },
     "/public/v1/submit/create_api_only_users": {
@@ -181,9 +181,9 @@
       "resultType": "CreateWalletAccountsResult"
     },
     "/public/v1/submit/create_sub_organization": {
-      "type": "ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V7",
-      "intentType": "CreateSubOrganizationIntentV7",
-      "resultType": "CreateSubOrganizationResultV7"
+      "type": "ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V8",
+      "intentType": "CreateSubOrganizationIntentV8",
+      "resultType": "CreateSubOrganizationResultV8"
     },
     "/public/v1/submit/init_user_email_recovery": {
       "type": "ACTIVITY_TYPE_INIT_USER_EMAIL_RECOVERY_V2",
@@ -291,9 +291,9 @@
       "resultType": "VerifyOtpResult"
     },
     "/public/v1/submit/create_oauth_providers": {
-      "type": "ACTIVITY_TYPE_CREATE_OAUTH_PROVIDERS",
-      "intentType": "CreateOauthProvidersIntent",
-      "resultType": "CreateOauthProvidersResult"
+      "type": "ACTIVITY_TYPE_CREATE_OAUTH_PROVIDERS_V2",
+      "intentType": "CreateOauthProvidersIntentV2",
+      "resultType": "CreateOauthProvidersResultV2"
     },
     "/public/v1/submit/delete_oauth_providers": {
       "type": "ACTIVITY_TYPE_DELETE_OAUTH_PROVIDERS",
@@ -399,6 +399,21 @@
       "type": "ACTIVITY_TYPE_CREATE_TVC_MANIFEST_APPROVALS",
       "intentType": "CreateTvcManifestApprovalsIntent",
       "resultType": "CreateTvcManifestApprovalsResult"
+    },
+    "/public/v1/submit/create_webhook_endpoint": {
+      "type": "ACTIVITY_TYPE_CREATE_WEBHOOK_ENDPOINT",
+      "intentType": "CreateWebhookEndpointIntent",
+      "resultType": "CreateWebhookEndpointResult"
+    },
+    "/public/v1/submit/update_webhook_endpoint": {
+      "type": "ACTIVITY_TYPE_UPDATE_WEBHOOK_ENDPOINT",
+      "intentType": "UpdateWebhookEndpointIntent",
+      "resultType": "UpdateWebhookEndpointResult"
+    },
+    "/public/v1/submit/delete_webhook_endpoint": {
+      "type": "ACTIVITY_TYPE_DELETE_WEBHOOK_ENDPOINT",
+      "intentType": "DeleteWebhookEndpointIntent",
+      "resultType": "DeleteWebhookEndpointResult"
     }
   }
 }

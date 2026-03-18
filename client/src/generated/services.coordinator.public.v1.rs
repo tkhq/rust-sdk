@@ -373,6 +373,14 @@ pub struct EthSendTransactionStatus {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct SolanaSendTransactionStatus {
+    #[serde(default)]
+    pub signature: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct GetSendTransactionStatusResponse {
     pub tx_status: ::prost::alloc::string::String,
     #[serde(default)]
@@ -392,6 +400,8 @@ pub mod get_send_transaction_status_response {
     pub enum Details {
         #[serde(rename = "DETAILS_ETH")]
         Eth(super::EthSendTransactionStatus),
+        #[serde(rename = "DETAILS_SOLANA")]
+        Solana(super::SolanaSendTransactionStatus),
     }
 }
 #[derive(Debug)]
@@ -618,6 +628,23 @@ pub struct ListOauth2CredentialsResponse {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct ListWebhookEndpointsRequest {
+    pub organization_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct ListWebhookEndpointsResponse {
+    #[serde(default)]
+    pub webhook_endpoints: ::prost::alloc::vec::Vec<
+        super::super::super::super::immutable::activity::v1::WebhookEndpointData,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct GetOauth2CredentialRequest {
     pub organization_id: ::prost::alloc::string::String,
     pub oauth2_credential_id: ::prost::alloc::string::String,
@@ -744,6 +771,18 @@ pub struct TxError {
     pub message: ::prost::alloc::string::String,
     #[serde(default)]
     pub revert_chain: ::prost::alloc::vec::Vec<RevertChainEntry>,
+    #[serde(default)]
+    pub solana: ::core::option::Option<SolanaFailureDetails>,
+    #[serde(default)]
+    pub eth: ::core::option::Option<EthFailureDetails>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct EthFailureDetails {
+    #[serde(default)]
+    pub revert_chain: ::prost::alloc::vec::Vec<RevertChainEntry>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -803,6 +842,27 @@ pub struct CustomRevertError {
     pub error_name: ::core::option::Option<::prost::alloc::string::String>,
     #[serde(default)]
     pub params_json: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[serde_with::serde_as]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SolanaFailureDetails {
+    pub source: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub rpc_code: ::core::option::Option<i32>,
+    #[serde(default)]
+    pub rpc_message: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub transaction_error_json: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub logs: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[serde(default)]
+    #[serde_as(as = "Option<serde_with::DisplayFromStr>")]
+    pub units_consumed: ::core::option::Option<u64>,
+    #[serde(default)]
+    pub inner_instructions_json: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -873,6 +933,24 @@ pub struct GetTvcDeploymentResponse {
     #[serde(default)]
     pub tvc_deployment: ::core::option::Option<
         super::super::super::super::external::data::v1::TvcDeployment,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetAppStatusRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub app_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetAppStatusResponse {
+    #[serde(default)]
+    pub app_status: ::core::option::Option<
+        super::super::super::super::external::data::v1::AppStatus,
     >,
 }
 #[derive(Debug)]

@@ -26,6 +26,7 @@ message TokenUsage {
   oneof usage {
     SignupUsage signup = 3;
     LoginUsage login = 4;
+    SignupUsageV2 signup_v2 = 5;
   }
 }
 
@@ -35,6 +36,14 @@ message SignupUsage {
   repeated immutable.activity.v1.ApiKeyParamsV2 api_keys = 3;
   repeated immutable.activity.v1.AuthenticatorParamsV2 authenticators = 4;
   repeated immutable.activity.v1.OauthProviderParams oauth_providers = 5;
+}
+
+message SignupUsageV2 {
+  optional string email = 1;
+  optional string phone_number = 2;
+  repeated immutable.activity.v1.ApiKeyParamsV2 api_keys = 3;
+  repeated immutable.activity.v1.AuthenticatorParamsV2 authenticators = 4;
+  repeated immutable.activity.v1.OauthProviderParamsV2 oauth_providers = 5;
 }
 
 message LoginUsage {

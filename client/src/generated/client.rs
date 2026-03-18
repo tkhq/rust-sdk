@@ -965,10 +965,10 @@ impl<S: Stamp> TurnkeyClient<S> {
         &self,
         organization_id: String,
         timestamp_ms: u128,
-        params: immutable_activity::CreateUsersIntentV3,
+        params: immutable_activity::CreateUsersIntentV4,
     ) -> Result<ActivityResult<immutable_activity::CreateUsersResult>, TurnkeyClientError> {
         let request = external_activity::CreateUsersRequest {
-            r#type: "ACTIVITY_TYPE_CREATE_USERS_V3".to_string(),
+            r#type: "ACTIVITY_TYPE_CREATE_USERS_V4".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
@@ -1831,11 +1831,11 @@ impl<S: Stamp> TurnkeyClient<S> {
         &self,
         organization_id: String,
         timestamp_ms: u128,
-        params: immutable_activity::CreateSubOrganizationIntentV7,
-    ) -> Result<ActivityResult<immutable_activity::CreateSubOrganizationResultV7>, TurnkeyClientError>
+        params: immutable_activity::CreateSubOrganizationIntentV8,
+    ) -> Result<ActivityResult<immutable_activity::CreateSubOrganizationResultV8>, TurnkeyClientError>
     {
         let request = external_activity::CreateSubOrganizationRequest {
-            r#type: "ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V7".to_string(),
+            r#type: "ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V8".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
@@ -1853,7 +1853,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             .inner
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         let result = match inner {
-            immutable_activity::result::Inner::CreateSubOrganizationResultV7(res) => res,
+            immutable_activity::result::Inner::CreateSubOrganizationResultV8(res) => res,
             other => {
                 return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
                     serde_json::to_string(&other)?,
@@ -2643,11 +2643,11 @@ impl<S: Stamp> TurnkeyClient<S> {
         &self,
         organization_id: String,
         timestamp_ms: u128,
-        params: immutable_activity::CreateOauthProvidersIntent,
-    ) -> Result<ActivityResult<immutable_activity::CreateOauthProvidersResult>, TurnkeyClientError>
+        params: immutable_activity::CreateOauthProvidersIntentV2,
+    ) -> Result<ActivityResult<immutable_activity::CreateOauthProvidersResultV2>, TurnkeyClientError>
     {
         let request = external_activity::CreateOauthProvidersRequest {
-            r#type: "ACTIVITY_TYPE_CREATE_OAUTH_PROVIDERS".to_string(),
+            r#type: "ACTIVITY_TYPE_CREATE_OAUTH_PROVIDERS_V2".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
@@ -2665,7 +2665,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             .inner
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         let result = match inner {
-            immutable_activity::result::Inner::CreateOauthProvidersResult(res) => res,
+            immutable_activity::result::Inner::CreateOauthProvidersResultV2(res) => res,
             other => {
                 return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
                     serde_json::to_string(&other)?,
@@ -3041,6 +3041,135 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
+    /// Create webhook endpoint
+    ///
+    /// Create a webhook endpoint for an organization.
+    pub async fn create_webhook_endpoint(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::CreateWebhookEndpointIntent,
+    ) -> Result<ActivityResult<immutable_activity::CreateWebhookEndpointResult>, TurnkeyClientError>
+    {
+        let request = external_activity::CreateWebhookEndpointRequest {
+            r#type: "ACTIVITY_TYPE_CREATE_WEBHOOK_ENDPOINT".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/create_webhook_endpoint".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::CreateWebhookEndpointResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Update webhook endpoint
+    ///
+    /// Update a webhook endpoint for an organization.
+    pub async fn update_webhook_endpoint(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::UpdateWebhookEndpointIntent,
+    ) -> Result<ActivityResult<immutable_activity::UpdateWebhookEndpointResult>, TurnkeyClientError>
+    {
+        let request = external_activity::UpdateWebhookEndpointRequest {
+            r#type: "ACTIVITY_TYPE_UPDATE_WEBHOOK_ENDPOINT".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/update_webhook_endpoint".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::UpdateWebhookEndpointResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Delete webhook endpoint
+    ///
+    /// Delete a webhook endpoint for an organization.
+    pub async fn delete_webhook_endpoint(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::DeleteWebhookEndpointIntent,
+    ) -> Result<ActivityResult<immutable_activity::DeleteWebhookEndpointResult>, TurnkeyClientError>
+    {
+        let request = external_activity::DeleteWebhookEndpointRequest {
+            r#type: "ACTIVITY_TYPE_DELETE_WEBHOOK_ENDPOINT".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/delete_webhook_endpoint".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::DeleteWebhookEndpointResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
     /// Get a specific boot proof
     ///
     /// Get the boot proof for a given ephemeral key.
@@ -3084,6 +3213,19 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(
             &request,
             "/public/v1/query/list_oauth2_credentials".to_string(),
+        )
+        .await
+    }
+    /// List webhook endpoints
+    ///
+    /// List webhook endpoints within an organization.
+    pub async fn list_webhook_endpoints(
+        &self,
+        request: coordinator::ListWebhookEndpointsRequest,
+    ) -> Result<coordinator::ListWebhookEndpointsResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/list_webhook_endpoints".to_string(),
         )
         .await
     }
@@ -3606,6 +3748,16 @@ impl<S: Stamp> TurnkeyClient<S> {
             status: activity.status,
             app_proofs: activity.app_proofs,
         })
+    }
+    /// Get TVC App status
+    ///
+    /// Get live runtime status for a TVC App from the cluster.
+    pub async fn get_app_status(
+        &self,
+        request: coordinator::GetAppStatusRequest,
+    ) -> Result<coordinator::GetAppStatusResponse, TurnkeyClientError> {
+        self.process_request(&request, "/public/v1/query/get_app_status".to_string())
+            .await
     }
     /// Get balances
     ///
