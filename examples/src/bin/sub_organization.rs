@@ -1,17 +1,17 @@
 use std::error::Error;
 use std::{env, vec};
-use turnkey_client::generated::{CreateSubOrganizationIntentV8, DeleteSubOrganizationIntent};
 use turnkey_client::generated::{
     immutable::common::v1::{AddressFormat, ApiKeyCurve, Curve, PathFormat},
-    ApiKeyParamsV2, RootUserParamsV5, WalletAccountParams,
-    WalletParams,
+    ApiKeyParamsV2, RootUserParamsV5, WalletAccountParams, WalletParams,
 };
+use turnkey_client::generated::{CreateSubOrganizationIntentV8, DeleteSubOrganizationIntent};
 use turnkey_client::{TurnkeyP256ApiKey, TurnkeySecp256k1ApiKey};
-use turnkey_examples::load_api_key_from_env;
+use turnkey_examples::{load_api_key_from_env, load_base_url_from_env};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let api_key = load_api_key_from_env()?;
+    let api_base_url = load_base_url_from_env();
 
     // In a real scenario this will be the public key associated with an end user, or a passkey, etc.
     // We generate a brand new API key to simulate this.
@@ -24,6 +24,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let client = turnkey_client::TurnkeyClient::builder()
         .api_key(api_key)
+        .base_url(api_base_url.clone())
         .build()?;
     let intent = CreateSubOrganizationIntentV8 {
         sub_organization_name: "New sub-organization".to_string(),
@@ -86,6 +87,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // This needs to be done by the sub-organization user, authenticated by our fresh API key
     let sub_organization_client = turnkey_client::TurnkeyClient::builder()
         .api_key(sub_organization_secp256k1_api_key)
+        .base_url(api_base_url)
         .build()?;
     let delete_res = sub_organization_client
         .delete_sub_organization(
