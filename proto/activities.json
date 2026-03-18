@@ -257,7 +257,7 @@
     },
     "/public/v1/submit/init_otp": {
       "type": "ACTIVITY_TYPE_INIT_OTP_V2",
-      "intentType": "InitOtpIntentV2",
+      "intentType": "InitOtpIntentV3",
       "resultType": "InitOtpResult"
     },
     "/public/v1/submit/init_otp_auth": {
@@ -276,8 +276,8 @@
       "resultType": "OauthLoginResult"
     },
     "/public/v1/submit/otp_login": {
-      "type": "ACTIVITY_TYPE_OTP_LOGIN",
-      "intentType": "OtpLoginIntent",
+      "type": "ACTIVITY_TYPE_OTP_LOGIN_V2",
+      "intentType": "OtpLoginIntentV2",
       "resultType": "OtpLoginResult"
     },
     "/public/v1/submit/stamp_login": {
@@ -286,8 +286,8 @@
       "resultType": "StampLoginResult"
     },
     "/public/v1/submit/verify_otp": {
-      "type": "ACTIVITY_TYPE_VERIFY_OTP",
-      "intentType": "VerifyOtpIntent",
+      "type": "ACTIVITY_TYPE_VERIFY_OTP_V2",
+      "intentType": "VerifyOtpIntentV2",
       "resultType": "VerifyOtpResult"
     },
     "/public/v1/submit/create_oauth_providers": {
@@ -344,6 +344,11 @@
       "type": "ACTIVITY_TYPE_DELETE_WALLET_ACCOUNTS",
       "intentType": "DeleteWalletAccountsIntent",
       "resultType": "DeleteWalletAccountsResult"
+    },
+    "/public/v1/submit/update_organization_name": {
+      "type": "ACTIVITY_TYPE_UPDATE_ORGANIZATION_NAME",
+      "intentType": "UpdateOrganizationNameIntent",
+      "resultType": "UpdateOrganizationNameResult"
     },
     "/public/v1/submit/delete_policies": {
       "type": "ACTIVITY_TYPE_DELETE_POLICIES",

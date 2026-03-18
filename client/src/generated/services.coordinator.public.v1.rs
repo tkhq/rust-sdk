@@ -914,6 +914,7 @@ pub struct AssetBalance {
     pub decimals: i32,
     #[serde(default)]
     pub display: ::core::option::Option<AssetBalanceDisplay>,
+    pub name: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -949,4 +950,5 @@ pub struct AssetMetadata {
     #[serde(default)]
     pub decimals: i32,
     pub logo_url: ::prost::alloc::string::String,
+    pub name: ::prost::alloc::string::String,
 }
