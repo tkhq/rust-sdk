@@ -2245,8 +2245,6 @@ pub struct CreateWebhookEndpointIntent {
     pub url: ::prost::alloc::string::String,
     /// @inject_tag: validate:"required,tk_label,tk_label_length"
     pub name: ::prost::alloc::string::String,
-    /// @inject_tag: validate:"required,uuid"
-    pub organization_id: ::prost::alloc::string::String,
     /// @inject_tag: validate:"omitempty,dive"
     #[serde(default)]
     pub subscriptions: ::prost::alloc::vec::Vec<WebhookSubscriptionParams>,
@@ -2258,8 +2256,6 @@ pub struct CreateWebhookEndpointIntent {
 pub struct UpdateWebhookEndpointIntent {
     /// @inject_tag: validate:"required,uuid"
     pub endpoint_id: ::prost::alloc::string::String,
-    /// @inject_tag: validate:"required,uuid"
-    pub organization_id: ::prost::alloc::string::String,
     /// @inject_tag: validate:"omitempty"
     #[serde(default)]
     pub url: ::core::option::Option<::prost::alloc::string::String>,
@@ -2276,8 +2272,6 @@ pub struct UpdateWebhookEndpointIntent {
 pub struct DeleteWebhookEndpointIntent {
     /// @inject_tag: validate:"required,uuid"
     pub endpoint_id: ::prost::alloc::string::String,
-    /// @inject_tag: validate:"required,uuid"
-    pub organization_id: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 /// Result of the intended action.
