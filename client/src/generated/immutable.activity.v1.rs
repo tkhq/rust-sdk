@@ -3283,17 +3283,17 @@ pub struct OauthProviderParams {
 pub struct OauthProviderParamsV2 {
     pub provider_name: ::prost::alloc::string::String,
     #[serde(default)]
+    #[serde(flatten)]
     pub token_or_claims: ::core::option::Option<oauth_provider_params_v2::TokenOrClaims>,
 }
 /// Nested message and enum types in `OauthProviderParamsV2`.
 pub mod oauth_provider_params_v2 {
     #[derive(::serde::Serialize, ::serde::Deserialize)]
     #[derive(Clone, PartialEq)]
+    #[serde(rename_all = "camelCase")]
     #[derive(Debug)]
     pub enum TokenOrClaims {
-        #[serde(rename = "TOKEN_OR_CLAIMS_OIDC_TOKEN")]
         OidcToken(::prost::alloc::string::String),
-        #[serde(rename = "TOKEN_OR_CLAIMS_OIDC_CLAIMS")]
         OidcClaims(super::OidcClaims),
     }
 }

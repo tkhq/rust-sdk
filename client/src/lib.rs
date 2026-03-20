@@ -416,7 +416,9 @@ mod test {
     use crate::generated::external::data::v1::ApiKey;
     use crate::generated::immutable::common::v1::{HashFunction, PayloadEncoding};
     use crate::generated::result::Inner;
-    use crate::generated::{DeleteSubOrganizationIntent, SignRawPayloadIntentV2};
+    use crate::generated::{
+        DeleteSubOrganizationIntent, OauthProviderParamsV2, OidcClaims, SignRawPayloadIntentV2,
+    };
     use std::sync::Arc;
     use std::time::Duration;
     use wiremock::matchers::{header, method};
@@ -781,6 +783,42 @@ mod test {
                 panic!("didn't match on the right type!")
             }
         }
+    }
+
+    #[tokio::test]
+    async fn test_oauth_params_v2_serialization() {
+        // Ensure the serialization skips the "oneof" and doesn't produce a "tokenOrClaim" key.
+        assert_eq!(
+            serde_json::to_string(&OauthProviderParamsV2 {
+                provider_name: "test provider".to_string(),
+                token_or_claims: Some(
+                    generated::oauth_provider_params_v2::TokenOrClaims::OidcToken(
+                        "test-token".to_string(),
+                    ),
+                ),
+            })
+            .unwrap(),
+            "{\"providerName\":\"test provider\",\"oidcToken\":\"test-token\"}".to_string(),
+        );
+
+        // Same thing with the other variant (OIDC claims)
+        assert_eq!(
+            serde_json::to_string(
+                &OauthProviderParamsV2 {
+                    provider_name: "test provider".to_string(),
+                    token_or_claims: Some(
+                        generated::oauth_provider_params_v2::TokenOrClaims::OidcClaims(
+                            OidcClaims{
+                                iss: "test-issuer".to_string(),
+                                sub: "test-subject".to_string(),
+                                aud: "test-audience".to_string(),
+                            }
+                        ),
+                    ),
+                }
+            ).unwrap(),
+            "{\"providerName\":\"test provider\",\"oidcClaims\":{\"iss\":\"test-issuer\",\"sub\":\"test-subject\",\"aud\":\"test-audience\"}}".to_string(),
+        );
     }
 
     #[tokio::test]
