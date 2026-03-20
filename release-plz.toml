@@ -38,3 +38,8 @@ version_group = "rust-sdk"
 name = "tvc"
 publish = false
 release = false
+
+[[package]]
+name = "auth"
+publish = false
+release = false

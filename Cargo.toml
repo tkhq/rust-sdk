@@ -1,5 +1,6 @@
 [workspace]
 members = [
+  "auth",
   # Crate to produce stamps with an API key
   "api_key_stamper",
   # Main API client (generated)
