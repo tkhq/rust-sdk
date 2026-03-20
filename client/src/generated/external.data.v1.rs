@@ -565,6 +565,11 @@ pub struct TvcContainerSpec {
     pub args: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[serde(default)]
     pub has_pull_secret: bool,
+    pub health_check_type: super::super::super::immutable::common::v1::TvcHealthCheckType,
+    #[serde(default)]
+    pub health_check_port: u32,
+    #[serde(default)]
+    pub public_ingress_port: u32,
 }
 #[derive(Debug)]
 #[serde_with::serde_as]
@@ -628,6 +633,29 @@ pub struct TvcManifest {
     pub created_at: ::core::option::Option<Timestamp>,
     #[serde(default)]
     pub updated_at: ::core::option::Option<Timestamp>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeploymentStatus {
+    pub deployment_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub ready_replicas: i32,
+    #[serde(default)]
+    pub desired_replicas: i32,
+    #[serde(default)]
+    pub last_updated_time: ::core::option::Option<Timestamp>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct AppStatus {
+    pub app_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub deployments: ::prost::alloc::vec::Vec<DeploymentStatus>,
+    pub targeted_deployment_id: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 /// An account derived from a Wallet

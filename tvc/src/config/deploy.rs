@@ -1,6 +1,7 @@
 //! Deployment configuration file format for `tvc deploy create`.
 
 use serde::{Deserialize, Serialize};
+use turnkey_client::generated::immutable::common::v1::TvcHealthCheckType;
 
 /// Deployment configuration loaded from JSON file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -14,11 +15,12 @@ pub struct DeployConfig {
     pub pivot_args: Vec<String>,
     pub expected_pivot_digest: String,
     #[serde(default)]
-    pub pivot_bind_addresses: Vec<String>,
-    #[serde(default)]
     pub debug_mode: Option<bool>,
     #[serde(default)]
     pub pivot_container_encrypted_pull_secret: Option<String>,
+    pub health_check_type: TvcHealthCheckType,
+    pub health_check_port: u16,
+    pub public_ingress_port: u16,
 }
 
 impl DeployConfig {
@@ -32,11 +34,13 @@ impl DeployConfig {
             pivot_path: "<FILL_IN_PIVOT_PATH>".to_string(),
             pivot_args: vec![],
             expected_pivot_digest: "<FILL_IN_EXPECTED_PIVOT_DIGEST>".to_string(),
-            pivot_bind_addresses: vec![],
             debug_mode: Some(false),
             pivot_container_encrypted_pull_secret: Some(
                 "<REMOVE_ME_IF_PIVOT_CONTAINER_URL_IS_PUBLIC>".to_string(),
             ),
+            health_check_type: TvcHealthCheckType::Http,
+            health_check_port: 3000,
+            public_ingress_port: 3000,
         }
     }
 

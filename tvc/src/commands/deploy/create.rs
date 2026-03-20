@@ -78,9 +78,11 @@ pub async fn run(args: Args) -> Result<()> {
         pivot_args: deploy_config.pivot_args.clone(),
         expected_pivot_digest: deploy_config.expected_pivot_digest.clone(),
         pivot_container_encrypted_pull_secret,
-        pivot_bind_addresses: deploy_config.pivot_bind_addresses.clone(),
         debug_mode: deploy_config.debug_mode,
         nonce: None,
+        health_check_type: deploy_config.health_check_type,
+        health_check_port: deploy_config.health_check_port as u32,
+        public_ingress_port: deploy_config.public_ingress_port as u32,
     };
 
     // Get timestamp

@@ -625,6 +625,8 @@ pub enum FeatureName {
     OtpEmailAuth = 7,
     #[serde(rename = "FEATURE_NAME_AUTH_PROXY")]
     AuthProxy = 8,
+    #[serde(rename = "FEATURE_NAME_SOLANA_RENT_PREFUND_ENABLED")]
+    SolanaRentPrefundEnabled = 9,
 }
 impl FeatureName {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -642,6 +644,7 @@ impl FeatureName {
             Self::SmsAuth => "FEATURE_NAME_SMS_AUTH",
             Self::OtpEmailAuth => "FEATURE_NAME_OTP_EMAIL_AUTH",
             Self::AuthProxy => "FEATURE_NAME_AUTH_PROXY",
+            Self::SolanaRentPrefundEnabled => "FEATURE_NAME_SOLANA_RENT_PREFUND_ENABLED",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -656,6 +659,9 @@ impl FeatureName {
             "FEATURE_NAME_SMS_AUTH" => Some(Self::SmsAuth),
             "FEATURE_NAME_OTP_EMAIL_AUTH" => Some(Self::OtpEmailAuth),
             "FEATURE_NAME_AUTH_PROXY" => Some(Self::AuthProxy),
+            "FEATURE_NAME_SOLANA_RENT_PREFUND_ENABLED" => {
+                Some(Self::SolanaRentPrefundEnabled)
+            }
             _ => None,
         }
     }
@@ -1354,6 +1360,39 @@ impl TvcDeploymentStage {
             "TVC_DEPLOYMENT_STAGE_PROVISION" => Some(Self::Provision),
             "TVC_DEPLOYMENT_STAGE_LIVE" => Some(Self::Live),
             "TVC_DEPLOYMENT_STAGE_DELETE" => Some(Self::Delete),
+            _ => None,
+        }
+    }
+}
+/// Types of health checks supported for customer TVC apps
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum TvcHealthCheckType {
+    #[serde(rename = "TVC_HEALTH_CHECK_TYPE_UNSPECIFIED")]
+    Unspecified = 0,
+    #[serde(rename = "TVC_HEALTH_CHECK_TYPE_HTTP")]
+    Http = 1,
+    #[serde(rename = "TVC_HEALTH_CHECK_TYPE_GRPC")]
+    Grpc = 2,
+}
+impl TvcHealthCheckType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "TVC_HEALTH_CHECK_TYPE_UNSPECIFIED",
+            Self::Http => "TVC_HEALTH_CHECK_TYPE_HTTP",
+            Self::Grpc => "TVC_HEALTH_CHECK_TYPE_GRPC",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "TVC_HEALTH_CHECK_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+            "TVC_HEALTH_CHECK_TYPE_HTTP" => Some(Self::Http),
+            "TVC_HEALTH_CHECK_TYPE_GRPC" => Some(Self::Grpc),
             _ => None,
         }
     }

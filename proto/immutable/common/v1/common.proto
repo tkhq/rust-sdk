@@ -177,6 +177,7 @@ enum FeatureName {
   FEATURE_NAME_SMS_AUTH = 6;
   FEATURE_NAME_OTP_EMAIL_AUTH = 7;
   FEATURE_NAME_AUTH_PROXY = 8;
+  FEATURE_NAME_SOLANA_RENT_PREFUND_ENABLED = 9;
 }
 
 // The supported Fiat On Ramp Providers.
@@ -325,4 +326,11 @@ enum TvcDeploymentStage {
   TVC_DEPLOYMENT_STAGE_PROVISION = 20;
   TVC_DEPLOYMENT_STAGE_LIVE = 30;
   TVC_DEPLOYMENT_STAGE_DELETE = 40;
+}
+
+// Types of health checks supported for customer TVC apps
+enum TvcHealthCheckType {
+  TVC_HEALTH_CHECK_TYPE_UNSPECIFIED = 0;
+  TVC_HEALTH_CHECK_TYPE_HTTP = 1;
+  TVC_HEALTH_CHECK_TYPE_GRPC = 2;
 }

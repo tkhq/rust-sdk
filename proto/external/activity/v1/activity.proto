@@ -450,7 +450,7 @@ message CreateUsersRequest {
   string type = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      enum: ["ACTIVITY_TYPE_CREATE_USERS_V3"]
+      enum: ["ACTIVITY_TYPE_CREATE_USERS_V4"]
     }
   ];
   string timestamp_ms = 2 [
@@ -461,7 +461,7 @@ message CreateUsersRequest {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
-  immutable.activity.v1.CreateUsersIntentV3 parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  immutable.activity.v1.CreateUsersIntentV4 parameters = 4 [(google.api.field_behavior) = REQUIRED];
   optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
 }
 
@@ -962,7 +962,7 @@ message CreateSubOrganizationRequest {
   string type = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      enum: ["ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V7"]
+      enum: ["ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V8"]
     }
   ];
   string timestamp_ms = 2 [
@@ -973,7 +973,7 @@ message CreateSubOrganizationRequest {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
-  immutable.activity.v1.CreateSubOrganizationIntentV7 parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  immutable.activity.v1.CreateSubOrganizationIntentV8 parameters = 4 [(google.api.field_behavior) = REQUIRED];
   optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
 }
 
@@ -1436,7 +1436,7 @@ message CreateOauthProvidersRequest {
   string type = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      enum: ["ACTIVITY_TYPE_CREATE_OAUTH_PROVIDERS"]
+      enum: ["ACTIVITY_TYPE_CREATE_OAUTH_PROVIDERS_V2"]
     }
   ];
   string timestamp_ms = 2 [
@@ -1447,7 +1447,7 @@ message CreateOauthProvidersRequest {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
-  immutable.activity.v1.CreateOauthProvidersIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  immutable.activity.v1.CreateOauthProvidersIntentV2 parameters = 4 [(google.api.field_behavior) = REQUIRED];
   optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
 }
 
@@ -1861,4 +1861,61 @@ message CreateTvcManifestApprovalsRequest {
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   immutable.activity.v1.CreateTvcManifestApprovalsIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+}
+
+message CreateWebhookEndpointRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_CREATE_WEBHOOK_ENDPOINT"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.CreateWebhookEndpointIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
+}
+
+message UpdateWebhookEndpointRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_UPDATE_WEBHOOK_ENDPOINT"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.UpdateWebhookEndpointIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
+}
+
+message DeleteWebhookEndpointRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_DELETE_WEBHOOK_ENDPOINT"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.DeleteWebhookEndpointIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
 }

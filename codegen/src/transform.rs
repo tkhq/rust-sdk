@@ -99,11 +99,11 @@ fn mutate_enum(enum_item: &syn::ItemEnum) -> TokenStream {
             variant_name.to_string().to_shouty_snake_case()
         );
 
-        // A bit of a special case, but it doesn't make sense to have these renames for our result::Inner and intent::Inner
-        // enums, which are complex enums anyway.
+        // A bit of a special case, but it doesn't make sense to rename result::Inner, intent::Inner, or TokenOrClaim
+        // which are complex enums we flatten at serialization/parsing time.
         // TODO: would be nice to filter this in a more generic way: basically if the enum isn't a "simple" enum, we shouldn't
         // have to individually rename the variants
-        if ident != "Inner" {
+        if ident != "Inner" && ident != "TokenOrClaims" {
             let rename_attr: syn::Attribute = syn::parse_quote!(
                 #[serde(rename = #full_name)]
             );
@@ -113,9 +113,9 @@ fn mutate_enum(enum_item: &syn::ItemEnum) -> TokenStream {
         quote! { #v }
     });
 
-    // Another quick special case: Result::Inner and Intent::Inner require #[serde(rename_all = "camelCase")]
+    // Another quick special case: Result::Inner and Intent::Inner and TokenOrClaims require #[serde(rename_all = "camelCase")]
     // We also derive "Debug", it's very useful to be able to serialize activities in a pinch.
-    if ident == "Inner" {
+    if ident == "Inner" || ident == "TokenOrClaims" {
         attrs.push(quote! {
             #[serde(rename_all = "camelCase")]
             #[derive(Debug)]
@@ -188,8 +188,14 @@ fn mutate_struct(struct_value: &syn::ItemStruct) -> TokenStream {
                 ));
             }
 
-            // Flatten out Result::inner and Intent::inner since we have no "inner" key in the JSON responses we return!
-            if field.ident.as_ref().map(|i| i == "inner").unwrap_or(false) {
+            // Flatten out Result::inner and Intent::inner since we have no "inner" key in the JSON responses we return or expect!
+            // We also flatten out "tokenOrClaims" (part of Oauth params v2) for the same reason.
+            if field
+                .ident
+                .as_ref()
+                .map(|i| i == "inner" || i == "token_or_claims")
+                .unwrap_or(false)
+            {
                 field.attrs.push(syn::parse_quote!(
                     #[serde(flatten)]
                 ));

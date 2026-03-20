@@ -18,6 +18,8 @@ pub mod token_usage {
         Signup(super::SignupUsage),
         #[serde(rename = "USAGE_LOGIN")]
         Login(super::LoginUsage),
+        #[serde(rename = "USAGE_SIGNUP_V2")]
+        SignupV2(super::SignupUsageV2),
     }
 }
 #[derive(Debug)]
@@ -38,6 +40,26 @@ pub struct SignupUsage {
     #[serde(default)]
     pub oauth_providers: ::prost::alloc::vec::Vec<
         super::super::activity::v1::OauthProviderParams,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SignupUsageV2 {
+    #[serde(default)]
+    pub email: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub phone_number: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub api_keys: ::prost::alloc::vec::Vec<super::super::activity::v1::ApiKeyParamsV2>,
+    #[serde(default)]
+    pub authenticators: ::prost::alloc::vec::Vec<
+        super::super::activity::v1::AuthenticatorParamsV2,
+    >,
+    #[serde(default)]
+    pub oauth_providers: ::prost::alloc::vec::Vec<
+        super::super::activity::v1::OauthProviderParamsV2,
     >,
 }
 #[derive(Debug)]

@@ -9,7 +9,7 @@ use turnkey_client::generated::{
     CreateWalletIntent, DeleteWalletsIntent, ExportWalletIntent, SignRawPayloadIntentV2,
 };
 use turnkey_enclave_encrypt::{ExportClient, QuorumPublicKey};
-use turnkey_examples::load_api_key_from_env;
+use turnkey_examples::{load_api_key_from_env, load_base_url_from_env};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -23,6 +23,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create our Turnkey client
     let client = turnkey_client::TurnkeyClient::builder()
         .api_key(api_key)
+        .base_url(load_base_url_from_env())
         .build()?;
 
     // Create a new wallet in the organization
