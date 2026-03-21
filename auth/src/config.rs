@@ -166,7 +166,9 @@ pub fn set_persisted_config_value(key: ConfigKey, value: &str) -> Result<()> {
 fn load_persisted_config(path: &Path) -> Result<PersistedConfigFile> {
     match fs::read_to_string(path) {
         Ok(contents) => toml::from_str(&contents).context("failed to parse config file"),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(PersistedConfigFile::default()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            Ok(PersistedConfigFile::default())
+        }
         Err(error) => Err(error.into()),
     }
 }
@@ -185,7 +187,9 @@ fn read_value(env: &BTreeMap<String, String>, key: &str) -> Option<String> {
 }
 
 fn read_value_from_process_env(key: &str) -> Option<String> {
-    std::env::var(key).ok().and_then(|value| normalize_value(&value))
+    std::env::var(key)
+        .ok()
+        .and_then(|value| normalize_value(&value))
 }
 
 fn normalize_value(value: &str) -> Option<String> {
