@@ -4,7 +4,7 @@ Git SSH signing with a Turnkey Ed25519 private key.
 
 > Warning: `turnkey-auth` is experimental and has not been audited.
 
-## Installqation
+## Installation
 
 ```bash
 # from the root of this repo run
@@ -63,15 +63,4 @@ These environment variables override values stored in the global config file. Th
 
 ## Git setup
 
-```bash
-auth config set turnkey.organizationId "<org-id>"
-auth config set turnkey.apiPublicKey "<api-public-key>"
-auth config set turnkey.apiPrivateKey "<api-private-key>"
-auth config set turnkey.privateKeyId "<ed25519-private-key-id>"
-
-git config --global gpg.format ssh
-git config --global gpg.ssh.program "$(which auth)"
-git config --global user.signingkey "key::$(auth public-key)"
-printf '%s %s\n' "you@example.com" "$(auth public-key)" >> ~/.config/git/allowed_signers
-git config --global gpg.ssh.allowedSignersFile ~/.config/git/allowed_signers
-```
+Use `turnkey-auth` as Git's SSH signing program after configuring your Turnkey credentials. The full setup guide lives in [Git signing](docs/git-signing.md).
