@@ -1,6 +1,7 @@
 # `turnkey-auth`
 
-Git SSH signing with a Turnkey Ed25519 private key.
+- Git SSH signing with a Turnkey Ed25519 private key.
+- SSH agent for signing SSH requests with a Turnkey Ed25519 private key.
 
 > Warning: `turnkey-auth` is experimental and has not been audited.
 
@@ -19,8 +20,9 @@ The installed binary is named `auth`.
 auth config
 auth public-key
 auth git-sign
+auth ssh-agent
 ```
-
+wher
 ## Configuration
 
 `auth` resolves configuration in this order:

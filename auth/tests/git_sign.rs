@@ -1,11 +1,12 @@
-use std::fs;
-use std::fs::File;
-use std::process::Command;
+use std::process::Stdio;
 
-use turnkey_auth::ssh;
 use predicates::prelude::*;
 use tempfile::tempdir;
+use tokio::fs;
+use tokio::io::AsyncWriteExt;
+use tokio::process::Command;
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
+use turnkey_auth::ssh;
 use wiremock::matchers::{header_exists, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -23,13 +24,18 @@ async fn git_sign_writes_verifiable_sshsig_file() {
         .args(["-q", "-t", "ed25519", "-N", "", "-f"])
         .arg(&key_path)
         .status()
+        .await
         .expect("ssh-keygen should run");
     assert!(status.success());
 
-    fs::write(&payload_path, b"hello world").expect("payload should be written");
+    fs::write(&payload_path, b"hello world")
+        .await
+        .expect("payload should be written");
 
-    let raw_signature = extract_raw_signature(&key_path, &payload_path);
-    let public_key_line = fs::read_to_string(&public_key_path).expect("public key should exist");
+    let raw_signature = extract_raw_signature(&key_path, &payload_path).await;
+    let public_key_line = fs::read_to_string(&public_key_path)
+        .await
+        .expect("public key should exist");
     let parsed_public_key =
         ssh::parse_public_key_line(&public_key_line).expect("public key should parse");
 
@@ -82,22 +88,39 @@ async fn git_sign_writes_verifiable_sshsig_file() {
     cmd.assert().success();
 
     let signature_path = payload_path.with_extension("txt.sig");
-    assert!(signature_path.exists(), "signature file should be created");
+    assert!(
+        fs::try_exists(&signature_path)
+            .await
+            .expect("signature path should be readable"),
+        "signature file should be created"
+    );
 
     fs::write(
         &allowed_signers_path,
         format!("git {}", public_key_line.trim()),
     )
+    .await
     .expect("allowed signers should be written");
 
-    let status = Command::new("ssh-keygen")
+    let payload = fs::read(&payload_path)
+        .await
+        .expect("payload should be readable");
+    let mut verify = Command::new("ssh-keygen");
+    verify
         .args(["-Y", "verify", "-n", "git", "-I", "git", "-f"])
         .arg(&allowed_signers_path)
         .arg("-s")
         .arg(&signature_path)
-        .stdin(File::open(&payload_path).expect("payload should open"))
-        .status()
-        .expect("ssh-keygen verify should run");
+        .stdin(Stdio::piped());
+    let mut child = verify.spawn().expect("ssh-keygen verify should spawn");
+    child
+        .stdin
+        .take()
+        .expect("stdin should be piped")
+        .write_all(&payload)
+        .await
+        .expect("payload should write to stdin");
+    let status = child.wait().await.expect("ssh-keygen verify should run");
 
     assert!(status.success(), "ssh-keygen should verify auth output");
 }
@@ -114,13 +137,18 @@ async fn direct_ssh_signer_invocation_writes_verifiable_sshsig_file() {
         .args(["-q", "-t", "ed25519", "-N", "", "-f"])
         .arg(&key_path)
         .status()
+        .await
         .expect("ssh-keygen should run");
     assert!(status.success());
 
-    fs::write(&payload_path, b"hello world").expect("payload should be written");
+    fs::write(&payload_path, b"hello world")
+        .await
+        .expect("payload should be written");
 
-    let raw_signature = extract_raw_signature(&key_path, &payload_path);
-    let public_key_line = fs::read_to_string(&public_key_path).expect("public key should exist");
+    let raw_signature = extract_raw_signature(&key_path, &payload_path).await;
+    let public_key_line = fs::read_to_string(&public_key_path)
+        .await
+        .expect("public key should exist");
     let parsed_public_key =
         ssh::parse_public_key_line(&public_key_line).expect("public key should parse");
 
@@ -172,22 +200,39 @@ async fn direct_ssh_signer_invocation_writes_verifiable_sshsig_file() {
     cmd.assert().success();
 
     let signature_path = payload_path.with_extension("txt.sig");
-    assert!(signature_path.exists(), "signature file should be created");
+    assert!(
+        fs::try_exists(&signature_path)
+            .await
+            .expect("signature path should be readable"),
+        "signature file should be created"
+    );
 
     fs::write(
         &allowed_signers_path,
         format!("git {}", public_key_line.trim()),
     )
+    .await
     .expect("allowed signers should be written");
 
-    let status = Command::new("ssh-keygen")
+    let payload = fs::read(&payload_path)
+        .await
+        .expect("payload should be readable");
+    let mut verify = Command::new("ssh-keygen");
+    verify
         .args(["-Y", "verify", "-n", "git", "-I", "git", "-f"])
         .arg(&allowed_signers_path)
         .arg("-s")
         .arg(&signature_path)
-        .stdin(File::open(&payload_path).expect("payload should open"))
-        .status()
-        .expect("ssh-keygen verify should run");
+        .stdin(Stdio::piped());
+    let mut child = verify.spawn().expect("ssh-keygen verify should spawn");
+    child
+        .stdin
+        .take()
+        .expect("stdin should be piped")
+        .write_all(&payload)
+        .await
+        .expect("payload should write to stdin");
+    let status = child.wait().await.expect("ssh-keygen verify should run");
 
     assert!(status.success(), "ssh-keygen should verify auth output");
 }
@@ -203,10 +248,13 @@ async fn git_sign_rejects_public_key_that_does_not_match_configured_turnkey_key(
         .args(["-q", "-t", "ed25519", "-N", "", "-f"])
         .arg(&key_path)
         .status()
+        .await
         .expect("ssh-keygen should run");
     assert!(status.success());
 
-    fs::write(&payload_path, b"hello world").expect("payload should be written");
+    fs::write(&payload_path, b"hello world")
+        .await
+        .expect("payload should be written");
 
     let server = MockServer::start().await;
     Mock::given(method("POST"))
@@ -257,7 +305,9 @@ async fn git_sign_rejects_public_key_that_does_not_match_configured_turnkey_key(
 
     let signature_path = payload_path.with_extension("txt.sig");
     assert!(
-        !signature_path.exists(),
+        !fs::try_exists(&signature_path)
+            .await
+            .expect("signature path should be readable"),
         "signature file should not be created"
     );
 }
@@ -284,17 +334,23 @@ async fn mount_get_private_key_mock(server: &MockServer, public_key: &str) {
         .await;
 }
 
-fn extract_raw_signature(key_path: &std::path::Path, payload_path: &std::path::Path) -> Vec<u8> {
+async fn extract_raw_signature(
+    key_path: &std::path::Path,
+    payload_path: &std::path::Path,
+) -> Vec<u8> {
     let status = Command::new("ssh-keygen")
         .args(["-Y", "sign", "-n", "git", "-f"])
         .arg(key_path)
         .arg(payload_path)
         .status()
+        .await
         .expect("ssh-keygen sign should run");
     assert!(status.success());
 
     let signature_path = payload_path.with_extension("txt.sig");
-    let armored = fs::read_to_string(signature_path).expect("signature should exist");
+    let armored = fs::read_to_string(signature_path)
+        .await
+        .expect("signature should exist");
     parse_raw_signature_from_armored(&armored)
 }
 

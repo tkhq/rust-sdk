@@ -11,6 +11,7 @@ fn cli_help_lists_commands() {
         .success()
         .stdout(predicate::str::contains("config"))
         .stdout(predicate::str::contains("git-sign"))
+        .stdout(predicate::str::contains("ssh-agent"))
         .stdout(predicate::str::contains("public-key"))
         .stdout(predicate::str::contains("TURNKEY_ORGANIZATION_ID"))
         .stdout(predicate::str::contains("TURNKEY_API_PUBLIC_KEY"))
@@ -18,7 +19,21 @@ fn cli_help_lists_commands() {
         .stdout(predicate::str::contains("TURNKEY_PRIVATE_KEY_ID"))
         .stdout(predicate::str::contains("TURNKEY_API_BASE_URL"))
         .stdout(predicate::str::contains("TURNKEY_AUTH_CONFIG_PATH"))
-        .stdout(predicate::str::contains("~/.config/turnkey/auth.toml"));
+        .stdout(predicate::str::contains("~/.config/turnkey/auth.toml"))
+        .stdout(predicate::str::contains(
+            "ssh-agent   Run a foreground SSH agent over a Unix socket",
+        ))
+        .stdout(predicate::str::contains(
+            "export SSH_AUTH_SOCK=/tmp/auth.sock",
+        ));
+
+    let mut agent_cmd = Command::new(env!("CARGO_BIN_EXE_auth"));
+    agent_cmd.arg("ssh-agent").arg("--help");
+
+    agent_cmd
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--socket"));
 }
 
 #[test]

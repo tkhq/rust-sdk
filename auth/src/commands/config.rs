@@ -35,14 +35,14 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     match args.command {
         Command::Get(args) => {
             let key = ConfigKey::parse(&args.key)?;
-            println!("{}", config::get_resolved_config_value(key)?);
+            println!("{}", config::get_resolved_config_value(key).await?);
         }
         Command::Set(args) => {
             let key = ConfigKey::parse(&args.key)?;
-            config::set_config_value(key, &args.value)?;
+            config::set_config_value(key, &args.value).await?;
         }
         Command::List => {
-            print!("{}", config::render_config()?);
+            print!("{}", config::render_config().await?);
         }
     }
 

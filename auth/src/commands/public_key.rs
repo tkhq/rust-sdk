@@ -10,7 +10,7 @@ pub struct Args {}
 
 /// Runs the `auth public-key` subcommand.
 pub async fn run(_args: Args) -> anyhow::Result<()> {
-    let signer = TurnkeySigner::new(Config::resolve()?)?;
+    let signer = TurnkeySigner::new(Config::resolve().await?)?;
     let public_key = signer.get_public_key().await?;
     println!("{}", encode_public_key_line(&public_key, None)?);
     Ok(())

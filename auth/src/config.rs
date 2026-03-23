@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
@@ -16,36 +15,56 @@ const API_BASE_URL_ENV: &str = "TURNKEY_API_BASE_URL";
 const REDACTED_VALUE: &str = "<redacted>";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Fully resolved Turnkey auth configuration.
 pub struct Config {
+    /// Turnkey organization identifier.
     pub organization_id: String,
+    /// Turnkey API public key used for request stamping.
     pub api_public_key: String,
+    /// Turnkey API private key used for request stamping.
     pub api_private_key: String,
+    /// Turnkey Ed25519 private key identifier.
     pub private_key_id: String,
+    /// Base URL for the Turnkey API.
     pub api_base_url: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// Partially resolved auth configuration with missing required fields preserved as `None`.
 pub struct ResolvedConfig {
+    /// Resolved Turnkey organization identifier, if present.
     pub organization_id: Option<String>,
+    /// Resolved Turnkey API public key, if present.
     pub api_public_key: Option<String>,
+    /// Resolved Turnkey API private key, if present.
     pub api_private_key: Option<String>,
+    /// Resolved Turnkey private key identifier, if present.
     pub private_key_id: Option<String>,
+    /// Resolved API base URL, including defaulting.
     pub api_base_url: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Supported config keys exposed through the CLI.
 pub enum ConfigKey {
+    /// `turnkey.organizationId`
     OrganizationId,
+    /// `turnkey.apiPublicKey`
     ApiPublicKey,
+    /// `turnkey.apiPrivateKey`
     ApiPrivateKey,
+    /// `turnkey.privateKeyId`
     PrivateKeyId,
+    /// `turnkey.apiBaseUrl`
     ApiBaseUrl,
 }
 
 impl Config {
     /// Resolves the complete auth configuration from the current process environment and config file.
-    pub fn resolve() -> Result<Self> {
-        ResolvedConfig::resolve().and_then(ResolvedConfig::into_complete)
+    pub async fn resolve() -> Result<Self> {
+        ResolvedConfig::resolve()
+            .await
+            .and_then(ResolvedConfig::into_complete)
     }
 
     /// Resolves the complete auth configuration from an explicit config path and environment map.
@@ -56,15 +75,51 @@ impl Config {
 
 impl ResolvedConfig {
     /// Resolves the effective auth configuration, preserving unset required values as `None`.
-    pub fn resolve() -> Result<Self> {
+    pub async fn resolve() -> Result<Self> {
         let path = global_config_path()?;
         let env = std::env::vars().collect::<BTreeMap<_, _>>();
-        Self::resolve_from_map(&path, &env)
+        Self::resolve_from_map_async(&path, &env).await
     }
 
     /// Resolves the effective auth configuration from an explicit config path and environment map.
     pub fn resolve_from_map(path: &Path, env: &BTreeMap<String, String>) -> Result<Self> {
-        let persisted = load_persisted_config(path)?;
+        let persisted = load_persisted_config_sync(path)?;
+        Ok(Self {
+            organization_id: resolve_value(
+                env,
+                ORGANIZATION_ID_ENV,
+                persisted.turnkey.organization_id.as_deref(),
+            ),
+            api_public_key: resolve_value(
+                env,
+                API_PUBLIC_KEY_ENV,
+                persisted.turnkey.api_public_key.as_deref(),
+            ),
+            api_private_key: resolve_value(
+                env,
+                API_PRIVATE_KEY_ENV,
+                persisted.turnkey.api_private_key.as_deref(),
+            ),
+            private_key_id: resolve_value(
+                env,
+                PRIVATE_KEY_ID_ENV,
+                persisted.turnkey.private_key_id.as_deref(),
+            ),
+            api_base_url: resolve_value(
+                env,
+                API_BASE_URL_ENV,
+                persisted.turnkey.api_base_url.as_deref(),
+            )
+            .unwrap_or_else(|| DEFAULT_API_BASE_URL.to_string()),
+        })
+    }
+
+    /// Resolves the effective auth configuration from an explicit config path and environment map.
+    pub async fn resolve_from_map_async(
+        path: &Path,
+        env: &BTreeMap<String, String>,
+    ) -> Result<Self> {
+        let persisted = load_persisted_config(path).await?;
         Ok(Self {
             organization_id: resolve_value(
                 env,
@@ -160,8 +215,8 @@ pub fn global_config_path() -> Result<PathBuf> {
 }
 
 /// Returns one resolved config value, redacting the private key when requested.
-pub fn get_resolved_config_value(key: ConfigKey) -> Result<String> {
-    let config = ResolvedConfig::resolve()?;
+pub async fn get_resolved_config_value(key: ConfigKey) -> Result<String> {
+    let config = ResolvedConfig::resolve().await?;
     let value = config
         .get(key)
         .filter(|value| !value.is_empty())
@@ -174,20 +229,20 @@ pub fn get_resolved_config_value(key: ConfigKey) -> Result<String> {
 }
 
 /// Renders the effective config as redacted JSON.
-pub fn render_config() -> Result<String> {
-    ResolvedConfig::resolve()?.render_json()
+pub async fn render_config() -> Result<String> {
+    ResolvedConfig::resolve().await?.render_json()
 }
 
 /// Persists one config value to the global config file.
-pub fn set_config_value(key: ConfigKey, value: &str) -> Result<()> {
+pub async fn set_config_value(key: ConfigKey, value: &str) -> Result<()> {
     let path = global_config_path()?;
-    let mut persisted = load_persisted_config(&path)?;
+    let mut persisted = load_persisted_config(&path).await?;
     persisted.turnkey.set(key, value.to_string());
-    save_persisted_config(&path, &persisted)
+    save_persisted_config(&path, &persisted).await
 }
 
-fn load_persisted_config(path: &Path) -> Result<PersistedConfigFile> {
-    match fs::read_to_string(path) {
+async fn load_persisted_config(path: &Path) -> Result<PersistedConfigFile> {
+    match tokio::fs::read_to_string(path).await {
         Ok(contents) => toml::from_str(&contents).context("failed to parse config file"),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             Ok(PersistedConfigFile::default())
@@ -196,12 +251,22 @@ fn load_persisted_config(path: &Path) -> Result<PersistedConfigFile> {
     }
 }
 
-fn save_persisted_config(path: &Path, config: &PersistedConfigFile) -> Result<()> {
+fn load_persisted_config_sync(path: &Path) -> Result<PersistedConfigFile> {
+    match std::fs::read_to_string(path) {
+        Ok(contents) => toml::from_str(&contents).context("failed to parse config file"),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            Ok(PersistedConfigFile::default())
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
+async fn save_persisted_config(path: &Path, config: &PersistedConfigFile) -> Result<()> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
+        tokio::fs::create_dir_all(parent).await?;
     }
     let serialized = toml::to_string_pretty(config).context("failed to serialize config file")?;
-    fs::write(path, serialized)?;
+    tokio::fs::write(path, serialized).await?;
     Ok(())
 }
 

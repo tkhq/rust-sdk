@@ -25,6 +25,10 @@ This project uses `make` to encapsulate common tasks:
 * `make examples` runs the [examples](./examples/) (requires a local `.env` file, see [instructions](./examples/README.md))
 * `make generate` re-generates `client::generated` from the [`proto`](./proto/) folder. Code generation logic lives in [`codegen`](./codegen/)
 
+## SSH setup
+
+To use the `auth` crate as an SSH agent for plain `ssh` authentication, see the [SSH agent guide](./auth/docs/ssh-agent.md).
+
 ## Releases
 
 This project uses [`release-plz`](https://github.com/release-plz/release-plz). Install it with:

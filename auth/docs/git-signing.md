@@ -16,3 +16,5 @@ git config --global gpg.ssh.allowedSignersFile ~/.config/git/allowed_signers
 ```
 
 After this setup, Git can use `auth git-sign` through the configured SSH signing program when creating signed commits or tags. It is invoked with `auth -Y` since that is how Git expects to invoke the given ssh program.
+
+If you want plain `ssh` sessions instead of Git signing, use the [SSH agent guide](ssh-agent.md).

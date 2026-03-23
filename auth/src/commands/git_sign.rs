@@ -15,8 +15,8 @@ pub struct Args {
 
 /// Runs the `auth git-sign` subcommand or direct SSH signer invocation.
 pub async fn run(args: Args) -> anyhow::Result<()> {
-    let invocation = ssh::GitSignInvocation::parse(&args.ssh_keygen_args)?;
-    let signer = TurnkeySigner::new(Config::resolve()?)?;
+    let invocation = ssh::git::GitSignInvocation::parse(&args.ssh_keygen_args)?;
+    let signer = TurnkeySigner::new(Config::resolve().await?)?;
     let payload = tokio::fs::read(&invocation.payload_path).await?;
     let public_key = tokio::fs::read_to_string(&invocation.public_key_path).await?;
     let parsed_public_key = ssh::parse_public_key_line(&public_key)?;

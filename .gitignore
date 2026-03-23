@@ -1,5 +1,7 @@
 target/
 .env
 .DS_Store
+AGENTS.md
+Agent.md
 .claude/
 docs/plans/

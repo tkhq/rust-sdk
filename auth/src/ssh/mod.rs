@@ -1,10 +1,16 @@
 use anyhow::{anyhow, Context, Result};
 use base64::Engine;
 use sha2::{Digest, Sha512};
-use std::path::PathBuf;
+
+/// SSH agent protocol constants, framing helpers, and reference links.
+pub mod protocol;
+
+/// Git signing invocation parsing.
+pub mod git;
 
 const SSH_ED25519_ALGORITHM: &str = "ssh-ed25519";
 const SSHSIG_PREAMBLE: &[u8] = b"SSHSIG";
+/// Default hash algorithm name encoded into SSHSIG payloads.
 pub const DEFAULT_HASH_ALGORITHM: &str = "sha512";
 
 /// Encodes a raw Ed25519 public key as an OpenSSH `authorized_keys` line.
@@ -34,74 +40,12 @@ fn encode_string(bytes: &[u8], mut output: Vec<u8>) -> Vec<u8> {
     output
 }
 
+/// Parsed components of an OpenSSH Ed25519 public key line.
 pub struct ParsedPublicKey {
+    /// Raw 32-byte Ed25519 public key.
     pub public_key: Vec<u8>,
+    /// Full OpenSSH public key blob including algorithm tag.
     pub public_key_blob: Vec<u8>,
-}
-
-pub struct GitSignInvocation {
-    pub namespace: String,
-    pub public_key_path: PathBuf,
-    pub payload_path: PathBuf,
-}
-
-impl GitSignInvocation {
-    /// Parses the `ssh-keygen -Y sign` style arguments Git passes to an SSH signer.
-    pub fn parse(args: &[String]) -> Result<Self> {
-        let mut namespace = None;
-        let mut public_key_path = None;
-        let mut payload_path = None;
-        let mut iter = args.iter();
-
-        while let Some(arg) = iter.next() {
-            match arg.as_str() {
-                "-Y" => {
-                    let value = iter
-                        .next()
-                        .ok_or_else(|| anyhow!("missing value after -Y"))?;
-                    if value != "sign" {
-                        return Err(anyhow!("unsupported ssh signer operation: {value}"));
-                    }
-                }
-                "-n" => {
-                    namespace = Some(
-                        iter.next()
-                            .ok_or_else(|| anyhow!("missing value after -n"))?
-                            .to_string(),
-                    );
-                }
-                "-f" => {
-                    public_key_path = Some(PathBuf::from(
-                        iter.next()
-                            .ok_or_else(|| anyhow!("missing value after -f"))?,
-                    ));
-                }
-                value if value.starts_with('-') => {
-                    return Err(anyhow!("unsupported ssh signer argument: {value}"));
-                }
-                value => {
-                    payload_path = Some(PathBuf::from(value));
-                }
-            }
-        }
-
-        let namespace = namespace.ok_or_else(|| anyhow!("missing required -n <namespace>"))?;
-        if namespace != "git" {
-            return Err(anyhow!("unsupported ssh signing namespace: {namespace}"));
-        }
-
-        Ok(Self {
-            namespace,
-            public_key_path: public_key_path
-                .ok_or_else(|| anyhow!("missing required -f <public-key-file>"))?,
-            payload_path: payload_path.ok_or_else(|| anyhow!("missing payload file path"))?,
-        })
-    }
-
-    /// Returns the output path where the detached signature should be written.
-    pub fn signature_path(&self) -> PathBuf {
-        PathBuf::from(format!("{}.sig", self.payload_path.display()))
-    }
 }
 
 /// Parses an OpenSSH Ed25519 public key line.

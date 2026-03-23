@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 use std::fs;
 
-use turnkey_auth::config::Config;
 use tempfile::tempdir;
+use turnkey_auth::config::Config;
 
 #[test]
 fn config_resolution_prefers_env_over_global_over_default() {
