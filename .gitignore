@@ -2,3 +2,4 @@ target/
 .env
 .DS_Store
 .claude/
+docs/plans/

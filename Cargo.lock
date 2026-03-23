@@ -228,6 +228,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "auth"
+version = "0.0.0-alpha.0"
+dependencies = [
+ "anyhow",
+ "assert_cmd",
+ "base64 0.22.1",
+ "clap",
+ "hex",
+ "predicates",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
+ "toml",
+ "turnkey_api_key_stamper",
+ "turnkey_client",
+ "wiremock",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
