@@ -2,6 +2,7 @@ use std::fs;
 
 use assert_cmd::Command;
 use predicates::prelude::*;
+use serde_json::Value;
 use tempfile::tempdir;
 
 #[test]
@@ -58,10 +59,9 @@ fn config_round_trip() {
         .env_remove("TURNKEY_API_PRIVATE_KEY")
         .env_remove("TURNKEY_PRIVATE_KEY_ID")
         .env_remove("TURNKEY_API_BASE_URL");
-    list_cmd
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("organizationId = \"env-org\""));
+    let output = list_cmd.assert().success().get_output().stdout.clone();
+    let value: Value = serde_json::from_slice(&output).expect("config list should output json");
+    assert_eq!(value["turnkey"]["organizationId"], "env-org");
 }
 
 #[test]
@@ -71,7 +71,12 @@ fn config_list_and_get_redact_private_key() {
 
     let mut set_cmd = Command::new(env!("CARGO_BIN_EXE_auth"));
     set_cmd
-        .args(["config", "set", "turnkey.apiPrivateKey", "persisted-private-key"])
+        .args([
+            "config",
+            "set",
+            "turnkey.apiPrivateKey",
+            "persisted-private-key",
+        ])
         .env("TURNKEY_AUTH_CONFIG_PATH", &config_path)
         .env_remove("TURNKEY_ORGANIZATION_ID")
         .env_remove("TURNKEY_API_PUBLIC_KEY")
@@ -89,11 +94,10 @@ fn config_list_and_get_redact_private_key() {
         .env_remove("TURNKEY_API_PRIVATE_KEY")
         .env_remove("TURNKEY_PRIVATE_KEY_ID")
         .env_remove("TURNKEY_API_BASE_URL");
-    list_cmd
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("apiPrivateKey = \"<redacted>\""))
-        .stdout(predicate::str::contains("persisted-private-key").not());
+    let output = list_cmd.assert().success().get_output().stdout.clone();
+    let value: Value = serde_json::from_slice(&output).expect("config list should output json");
+    assert_eq!(value["turnkey"]["apiPrivateKey"], "<redacted>");
+    assert!(!String::from_utf8_lossy(&output).contains("persisted-private-key"));
 
     let mut get_cmd = Command::new(env!("CARGO_BIN_EXE_auth"));
     get_cmd

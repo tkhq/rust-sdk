@@ -90,8 +90,8 @@ impl ResolvedConfig {
         }
     }
 
-    pub fn render_toml(&self) -> Result<String> {
-        toml::to_string_pretty(&DisplayConfigFile {
+    pub fn render_json(&self) -> Result<String> {
+        serde_json::to_string_pretty(&DisplayConfigFile {
             turnkey: DisplayTurnkeyConfig {
                 organization_id: self.organization_id.clone().unwrap_or_default(),
                 api_public_key: self.api_public_key.clone().unwrap_or_default(),
@@ -158,7 +158,7 @@ pub fn get_config_value(key: ConfigKey) -> Result<String> {
 }
 
 pub fn render_resolved_config() -> Result<String> {
-    load_resolved_config()?.render_toml()
+    load_resolved_config()?.render_json()
 }
 
 pub fn set_persisted_config_value(key: ConfigKey, value: &str) -> Result<()> {
@@ -171,7 +171,9 @@ pub fn set_persisted_config_value(key: ConfigKey, value: &str) -> Result<()> {
 fn load_persisted_config(path: &Path) -> Result<PersistedConfigFile> {
     match fs::read_to_string(path) {
         Ok(contents) => toml::from_str(&contents).context("failed to parse config file"),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(PersistedConfigFile::default()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            Ok(PersistedConfigFile::default())
+        }
         Err(error) => Err(error.into()),
     }
 }
@@ -190,7 +192,9 @@ fn read_value(env: &BTreeMap<String, String>, key: &str) -> Option<String> {
 }
 
 fn read_value_from_process_env(key: &str) -> Option<String> {
-    std::env::var(key).ok().and_then(|value| normalize_value(&value))
+    std::env::var(key)
+        .ok()
+        .and_then(|value| normalize_value(&value))
 }
 
 fn normalize_value(value: &str) -> Option<String> {
