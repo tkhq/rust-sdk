@@ -1,4 +1,4 @@
-use auth::ssh::encode_public_key_line;
+use turnkey_auth::ssh::encode_public_key_line;
 
 #[test]
 fn encode_public_key_line_matches_openssh_format() {

@@ -2,7 +2,7 @@ use std::fs;
 use std::fs::File;
 use std::process::Command;
 
-use auth::ssh;
+use turnkey_auth::ssh;
 use predicates::prelude::*;
 use tempfile::tempdir;
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;

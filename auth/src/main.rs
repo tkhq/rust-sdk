@@ -1,5 +1,5 @@
-use auth::cli::Cli;
-use auth::commands;
+use turnkey_auth::cli::Cli;
+use turnkey_auth::commands;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

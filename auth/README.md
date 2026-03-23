@@ -1,13 +1,17 @@
-# `auth`
+# `turnkey-auth`
 
 Git SSH signing with a Turnkey Ed25519 private key.
 
-## Instalation
+> Warning: `turnkey-auth` is experimental and has not been audited.
+
+## Installqation
 
 ```bash
 # from the root of this repo run
-cargo install -p auth
+cargo install -p turnkey-auth
 ```
+
+The installed binary is named `auth`.
 
 ## Commands
 

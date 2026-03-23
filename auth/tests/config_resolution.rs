@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::fs;
 
-use auth::config::Config;
+use turnkey_auth::config::Config;
 use tempfile::tempdir;
 
 #[test]

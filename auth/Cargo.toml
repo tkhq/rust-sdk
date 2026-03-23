@@ -1,11 +1,15 @@
 [package]
-name = "auth"
+name = "turnkey-auth"
 version = "0.0.0-alpha.0"
 edition = "2021"
 license = "Apache-2.0"
-description = "CLI for Turnkey-backed authentication and Git signing workflows"
+description = "Experimental, unaudited CLI for Turnkey-backed authentication and Git signing workflows"
 repository = "https://github.com/tkhq/rust-sdk"
 homepage = "https://turnkey.com"
+
+[[bin]]
+name = "auth"
+path = "src/main.rs"
 
 [dependencies]
 anyhow = { workspace = true }

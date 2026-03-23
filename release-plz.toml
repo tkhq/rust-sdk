@@ -40,6 +40,6 @@ publish = false
 release = false
 
 [[package]]
-name = "auth"
+name = "turnkey-auth"
 publish = false
 release = false
