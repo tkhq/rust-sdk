@@ -1,6 +1,11 @@
 # `auth`
 
-Git SSH signing with a Turnkey Ed25519 private key.
+Experimental CLI for using Turnkey for agent authentication and attribution.
+
+## Supported functionality
+
+- [x] Git SSH signing with a Turnkey Ed25519 private key
+- [ ] SSH authentication
 
 ## Instalation
 

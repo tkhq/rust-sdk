@@ -1,4 +1,6 @@
 use anyhow::{anyhow, Context, Result};
+use std::future::Future;
+use std::pin::Pin;
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use turnkey_client::generated::immutable::common::v1::HashFunction;
 use turnkey_client::generated::immutable::common::v1::PayloadEncoding;
@@ -10,6 +12,14 @@ use crate::config::Config;
 pub struct TurnkeySigner {
     client: TurnkeyClient<TurnkeyP256ApiKey>,
     config: Config,
+}
+
+pub trait Signer {
+    fn get_public_key(&self) -> Pin<Box<dyn Future<Output = Result<Vec<u8>>> + Send + '_>>;
+    fn sign_ed25519<'a>(
+        &'a self,
+        payload: &'a [u8],
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<u8>>> + Send + 'a>>;
 }
 
 impl TurnkeySigner {
@@ -65,6 +75,19 @@ impl TurnkeySigner {
             .map_err(map_turnkey_error)?;
 
         decode_signature_parts(&response.result.r, &response.result.s, &response.result.v)
+    }
+}
+
+impl Signer for TurnkeySigner {
+    fn get_public_key(&self) -> Pin<Box<dyn Future<Output = Result<Vec<u8>>> + Send + '_>> {
+        Box::pin(async move { TurnkeySigner::get_public_key(self).await })
+    }
+
+    fn sign_ed25519<'a>(
+        &'a self,
+        payload: &'a [u8],
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<u8>>> + Send + 'a>> {
+        Box::pin(async move { TurnkeySigner::sign_ed25519(self, payload).await })
     }
 }
 
