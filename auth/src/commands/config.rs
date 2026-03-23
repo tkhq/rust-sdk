@@ -30,18 +30,19 @@ struct SetArgs {
     value: String,
 }
 
+/// Runs the `auth config` subcommand.
 pub async fn run(args: Args) -> anyhow::Result<()> {
     match args.command {
         Command::Get(args) => {
             let key = ConfigKey::parse(&args.key)?;
-            println!("{}", config::get_config_value(key)?);
+            println!("{}", config::get_resolved_config_value(key)?);
         }
         Command::Set(args) => {
             let key = ConfigKey::parse(&args.key)?;
-            config::set_persisted_config_value(key, &args.value)?;
+            config::set_config_value(key, &args.value)?;
         }
         Command::List => {
-            print!("{}", config::render_resolved_config()?);
+            print!("{}", config::render_config()?);
         }
     }
 

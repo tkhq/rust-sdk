@@ -21,10 +21,7 @@ privateKeyId = "file-key"
 
     let env = BTreeMap::from([
         ("TURNKEY_ORGANIZATION_ID".to_string(), "env-org".to_string()),
-        (
-            "TURNKEY_API_PUBLIC_KEY".to_string(),
-            "env-pub".to_string(),
-        ),
+        ("TURNKEY_API_PUBLIC_KEY".to_string(), "env-pub".to_string()),
         (
             "TURNKEY_API_PRIVATE_KEY".to_string(),
             "env-priv".to_string(),

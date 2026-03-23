@@ -43,43 +43,59 @@ pub enum ConfigKey {
 }
 
 impl Config {
-    pub fn from_env() -> Result<Self> {
-        Self::resolve()
-    }
-
+    /// Resolves the complete auth configuration from the current process environment and config file.
     pub fn resolve() -> Result<Self> {
         ResolvedConfig::resolve().and_then(ResolvedConfig::into_complete)
     }
 
+    /// Resolves the complete auth configuration from an explicit config path and environment map.
     pub fn resolve_from_map(path: &Path, env: &BTreeMap<String, String>) -> Result<Self> {
         ResolvedConfig::resolve_from_map(path, env).and_then(ResolvedConfig::into_complete)
     }
 }
 
 impl ResolvedConfig {
+    /// Resolves the effective auth configuration, preserving unset required values as `None`.
     pub fn resolve() -> Result<Self> {
         let path = global_config_path()?;
         let env = std::env::vars().collect::<BTreeMap<_, _>>();
         Self::resolve_from_map(&path, &env)
     }
 
+    /// Resolves the effective auth configuration from an explicit config path and environment map.
     pub fn resolve_from_map(path: &Path, env: &BTreeMap<String, String>) -> Result<Self> {
         let persisted = load_persisted_config(path)?;
         Ok(Self {
-            organization_id: read_value(env, ORGANIZATION_ID_ENV)
-                .or_else(|| persisted.turnkey.organization_id.clone()),
-            api_public_key: read_value(env, API_PUBLIC_KEY_ENV)
-                .or_else(|| persisted.turnkey.api_public_key.clone()),
-            api_private_key: read_value(env, API_PRIVATE_KEY_ENV)
-                .or_else(|| persisted.turnkey.api_private_key.clone()),
-            private_key_id: read_value(env, PRIVATE_KEY_ID_ENV)
-                .or_else(|| persisted.turnkey.private_key_id.clone()),
-            api_base_url: read_value(env, API_BASE_URL_ENV)
-                .or_else(|| persisted.turnkey.api_base_url.clone())
-                .unwrap_or_else(|| DEFAULT_API_BASE_URL.to_string()),
+            organization_id: resolve_value(
+                env,
+                ORGANIZATION_ID_ENV,
+                persisted.turnkey.organization_id.as_deref(),
+            ),
+            api_public_key: resolve_value(
+                env,
+                API_PUBLIC_KEY_ENV,
+                persisted.turnkey.api_public_key.as_deref(),
+            ),
+            api_private_key: resolve_value(
+                env,
+                API_PRIVATE_KEY_ENV,
+                persisted.turnkey.api_private_key.as_deref(),
+            ),
+            private_key_id: resolve_value(
+                env,
+                PRIVATE_KEY_ID_ENV,
+                persisted.turnkey.private_key_id.as_deref(),
+            ),
+            api_base_url: resolve_value(
+                env,
+                API_BASE_URL_ENV,
+                persisted.turnkey.api_base_url.as_deref(),
+            )
+            .unwrap_or_else(|| DEFAULT_API_BASE_URL.to_string()),
         })
     }
 
+    /// Returns the effective value for a specific config key.
     pub fn get(&self, key: ConfigKey) -> Option<&str> {
         match key {
             ConfigKey::OrganizationId => self.organization_id.as_deref(),
@@ -90,8 +106,9 @@ impl ResolvedConfig {
         }
     }
 
-    pub fn render_toml(&self) -> Result<String> {
-        toml::to_string_pretty(&DisplayConfigFile {
+    /// Serializes the effective config as JSON with sensitive values redacted.
+    pub fn render_json(&self) -> Result<String> {
+        serde_json::to_string_pretty(&DisplayConfigFile {
             turnkey: DisplayTurnkeyConfig {
                 organization_id: self.organization_id.clone().unwrap_or_default(),
                 api_public_key: self.api_public_key.clone().unwrap_or_default(),
@@ -115,6 +132,7 @@ impl ResolvedConfig {
 }
 
 impl ConfigKey {
+    /// Parses a dotted config key name accepted by the CLI.
     pub fn parse(value: &str) -> Result<Self> {
         match value {
             "turnkey.organizationId" => Ok(Self::OrganizationId),
@@ -127,6 +145,7 @@ impl ConfigKey {
     }
 }
 
+/// Returns the global auth config path, honoring `TURNKEY_AUTH_CONFIG_PATH` when set.
 pub fn global_config_path() -> Result<PathBuf> {
     if let Some(path) = read_value_from_process_env(CONFIG_PATH_ENV) {
         return Ok(PathBuf::from(path));
@@ -140,12 +159,9 @@ pub fn global_config_path() -> Result<PathBuf> {
         .join("auth.toml"))
 }
 
-pub fn load_resolved_config() -> Result<ResolvedConfig> {
-    ResolvedConfig::resolve()
-}
-
-pub fn get_config_value(key: ConfigKey) -> Result<String> {
-    let config = load_resolved_config()?;
+/// Returns one resolved config value, redacting the private key when requested.
+pub fn get_resolved_config_value(key: ConfigKey) -> Result<String> {
+    let config = ResolvedConfig::resolve()?;
     let value = config
         .get(key)
         .filter(|value| !value.is_empty())
@@ -157,11 +173,13 @@ pub fn get_config_value(key: ConfigKey) -> Result<String> {
     })
 }
 
-pub fn render_resolved_config() -> Result<String> {
-    load_resolved_config()?.render_toml()
+/// Renders the effective config as redacted JSON.
+pub fn render_config() -> Result<String> {
+    ResolvedConfig::resolve()?.render_json()
 }
 
-pub fn set_persisted_config_value(key: ConfigKey, value: &str) -> Result<()> {
+/// Persists one config value to the global config file.
+pub fn set_config_value(key: ConfigKey, value: &str) -> Result<()> {
     let path = global_config_path()?;
     let mut persisted = load_persisted_config(&path)?;
     persisted.turnkey.set(key, value.to_string());
@@ -171,7 +189,9 @@ pub fn set_persisted_config_value(key: ConfigKey, value: &str) -> Result<()> {
 fn load_persisted_config(path: &Path) -> Result<PersistedConfigFile> {
     match fs::read_to_string(path) {
         Ok(contents) => toml::from_str(&contents).context("failed to parse config file"),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(PersistedConfigFile::default()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            Ok(PersistedConfigFile::default())
+        }
         Err(error) => Err(error.into()),
     }
 }
@@ -189,8 +209,18 @@ fn read_value(env: &BTreeMap<String, String>, key: &str) -> Option<String> {
     env.get(key).and_then(|value| normalize_value(value))
 }
 
+fn resolve_value(
+    env: &BTreeMap<String, String>,
+    env_key: &str,
+    persisted: Option<&str>,
+) -> Option<String> {
+    read_value(env, env_key).or_else(|| persisted.and_then(normalize_value))
+}
+
 fn read_value_from_process_env(key: &str) -> Option<String> {
-    std::env::var(key).ok().and_then(|value| normalize_value(&value))
+    std::env::var(key)
+        .ok()
+        .and_then(|value| normalize_value(&value))
 }
 
 fn normalize_value(value: &str) -> Option<String> {

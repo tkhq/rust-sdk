@@ -1,6 +1,6 @@
 # `auth`
 
-CLI for Turnkey-backed auth workflows.
+Git SSH signing with a Turnkey Ed25519 private key.
 
 ## Instalation
 
@@ -13,6 +13,8 @@ cargo install -p auth
 
 ```bash
 auth config
+auth public-key
+auth git-sign
 ```
 
 ## Configuration
@@ -54,3 +56,18 @@ export TURNKEY_API_BASE_URL="https://api.turnkey.com" # optional
 ```
 
 These environment variables override values stored in the global config file. This can be helpful for CI.
+
+## Git setup
+
+```bash
+auth config set turnkey.organizationId "<org-id>"
+auth config set turnkey.apiPublicKey "<api-public-key>"
+auth config set turnkey.apiPrivateKey "<api-private-key>"
+auth config set turnkey.privateKeyId "<ed25519-private-key-id>"
+
+git config --global gpg.format ssh
+git config --global gpg.ssh.program "$(which auth)"
+git config --global user.signingkey "key::$(auth public-key)"
+printf '%s %s\n' "you@example.com" "$(auth public-key)" >> ~/.config/git/allowed_signers
+git config --global gpg.ssh.allowedSignersFile ~/.config/git/allowed_signers
+```
