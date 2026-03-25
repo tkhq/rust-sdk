@@ -23,11 +23,6 @@ pub struct Args {
     #[arg(long)]
     pub org: Option<String>,
 
-    /// Organization ID for creating a new org config.
-    /// Use with --alias and --api-env for fully non-interactive setup.
-    #[arg(long, env = "TVC_ORG_ID")]
-    pub org_id: Option<String>,
-
     /// Alias for the organization config (used with --org-id).
     #[arg(long, env = "TVC_ORG_ALIAS", default_value = "default")]
     pub alias: String,
@@ -130,8 +125,8 @@ async fn select_or_create_org(
     args: &Args,
     global: &GlobalOpts,
 ) -> Result<(String, OrgConfig)> {
-    // If --org-id provided, create/update org non-interactively
-    if let Some(ref org_id) = args.org_id {
+    // If --org-id provided (via global flag), create/update org non-interactively
+    if let Some(ref org_id) = global.org_id {
         let api_base_url = resolve_api_env(args.api_env.as_deref())?;
         config.add_org(&args.alias, org_id.clone(), api_base_url)?;
         let org_config = config.orgs.get(&args.alias).unwrap().clone();

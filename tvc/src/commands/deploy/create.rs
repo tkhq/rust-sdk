@@ -1,6 +1,6 @@
 //! Deploy create command - creates a deployment from a config file.
 
-use crate::client::build_client;
+use crate::client::build_client_with_overrides;
 use crate::config::deploy::DeployConfig;
 use crate::output::Output;
 use crate::pull_secret::encrypt_pivot_pull_secret;
@@ -63,7 +63,7 @@ pub async fn run(args: Args, global: &crate::cli::GlobalOpts) -> Result<()> {
     ));
 
     // Build authenticated client
-    let auth = build_client().await?;
+    let auth = build_client_with_overrides(global).await?;
 
     let pivot_container_encrypted_pull_secret = match args.pivot_pull_secret.as_ref() {
         Some(path) => {

@@ -42,7 +42,7 @@ struct PivotContainerOutput {
 pub async fn run(args: Args, global: &crate::cli::GlobalOpts) -> anyhow::Result<()> {
     let output = Output::new(global);
 
-    let auth = crate::client::build_client().await?;
+    let auth = crate::client::build_client_with_overrides(global).await?;
 
     let request = GetTvcDeploymentRequest {
         organization_id: auth.org_id.clone(),

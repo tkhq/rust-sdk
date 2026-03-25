@@ -3,6 +3,7 @@
 use crate::commands;
 use clap::{Args as ClapArgs, Parser, Subcommand};
 use std::io::IsTerminal;
+use std::path::PathBuf;
 
 /// Global options available to all commands.
 #[derive(Debug, Clone, ClapArgs)]
@@ -18,6 +19,27 @@ pub struct GlobalOpts {
     /// Suppress non-essential output.
     #[arg(long, short, global = true)]
     pub quiet: bool,
+
+    /// Path to API key JSON file. Overrides the logged-in org's API key.
+    #[arg(long, global = true, env = "TVC_API_KEY_FILE", value_name = "PATH")]
+    pub api_key_file: Option<PathBuf>,
+
+    /// Path to operator key JSON file. Overrides the logged-in org's operator key.
+    #[arg(
+        long,
+        global = true,
+        env = "TVC_OPERATOR_KEY_FILE",
+        value_name = "PATH"
+    )]
+    pub operator_key_file: Option<PathBuf>,
+
+    /// API base URL override (e.g., https://api.turnkey.com).
+    #[arg(long, global = true, env = "TVC_API_URL")]
+    pub api_url: Option<String>,
+
+    /// Organization ID override. Bypasses the logged-in org config.
+    #[arg(long, global = true, env = "TVC_ORG_ID")]
+    pub org_id: Option<String>,
 }
 
 impl GlobalOpts {

@@ -1,6 +1,6 @@
 //! App create command - creates an app from a config file.
 
-use crate::client::build_client;
+use crate::client::build_client_with_overrides;
 use crate::config::app::AppConfig;
 use crate::config::turnkey;
 use crate::output::Output;
@@ -63,7 +63,7 @@ pub async fn run(args: Args, global: &crate::cli::GlobalOpts) -> Result<()> {
     output.status(&format!("Creating app '{}'...", app_config.name));
 
     // Build authenticated client
-    let auth = build_client().await?;
+    let auth = build_client_with_overrides(global).await?;
 
     // Convert config to API intent
     let intent = CreateTvcAppIntent {
