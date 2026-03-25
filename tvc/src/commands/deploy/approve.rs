@@ -137,8 +137,9 @@ pub async fn run(args: Args, global: &crate::cli::GlobalOpts) -> anyhow::Result<
     // Write to file or stdout
     if let Some(ref path) = args.output {
         write_file(path, &json).await?;
-        eprintln!("Approval written to: {}", path.display());
-    } else {
+        output.status(&format!("Approval written to: {}", path.display()));
+    } else if !global.json || args.skip_post {
+        // Print raw approval JSON to stdout unless --json mode will print structured post result
         println!("{json}");
     }
 

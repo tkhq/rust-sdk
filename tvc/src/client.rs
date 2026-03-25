@@ -90,34 +90,3 @@ pub async fn build_client_with_overrides(global: &GlobalOpts) -> Result<Authenti
         api_base_url: api_base_url.to_string(),
     })
 }
-
-/// Build an authenticated Turnkey client from the local config.
-///
-/// Loads the active organization and API key from `~/.config/turnkey/`.
-/// Returns an error if not logged in.
-pub async fn build_client() -> Result<AuthenticatedClient> {
-    let config = Config::load().await?;
-
-    let (alias, org_config) = config
-        .active_org_config()
-        .ok_or_else(|| anyhow::anyhow!("No active organization. Run `tvc login` first."))?;
-
-    let api_key = StoredApiKey::load(org_config).await?.ok_or_else(|| {
-        anyhow::anyhow!("No API key found for org '{alias}'. Run `tvc login` first.")
-    })?;
-
-    let stamper = TurnkeyP256ApiKey::from_strings(&api_key.private_key, Some(&api_key.public_key))
-        .context("failed to load API key")?;
-
-    let client = TurnkeyClient::builder()
-        .api_key(stamper)
-        .base_url(&org_config.api_base_url)
-        .build()
-        .context("failed to build Turnkey client")?;
-
-    Ok(AuthenticatedClient {
-        client,
-        org_id: org_config.id.clone(),
-        api_base_url: org_config.api_base_url.clone(),
-    })
-}

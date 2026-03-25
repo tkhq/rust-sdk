@@ -249,15 +249,17 @@ async fn get_or_generate_api_key(
     args: &Args,
     global: &GlobalOpts,
 ) -> Result<StoredApiKey> {
+    let output = Output::new(global);
+
     // Check if API key already exists
     if let Some(api_key) = StoredApiKey::load(org_config).await? {
-        eprintln!("Using existing API key.");
+        output.status("Using existing API key.");
         return Ok(api_key);
     }
 
     // Generate new API key
-    eprintln!();
-    eprintln!("Generating API key...");
+    output.status("");
+    output.status("Generating API key...");
 
     let stamper = TurnkeyP256ApiKey::generate();
     let public_key = hex::encode(stamper.compressed_public_key());
@@ -273,16 +275,16 @@ async fn get_or_generate_api_key(
     api_key.save(org_config).await?;
 
     // Display instructions
-    eprintln!();
-    eprintln!("API Key Generated!");
-    eprintln!();
-    eprintln!("Public Key: {public_key}");
-    eprintln!();
-    eprintln!("Add this API key to your Turnkey dashboard:");
-    eprintln!("  1. Go to https://app.turnkey.com/dashboard/users");
-    eprintln!("  2. Click your user > Create API Key > Generate API Keys via CLI > Continue");
-    eprintln!("  3. Paste the public key > Name it \"TVC CLI\" > Continue > Approve");
-    eprintln!();
+    output.status("");
+    output.status("API Key Generated!");
+    output.status("");
+    output.status(&format!("Public Key: {public_key}"));
+    output.status("");
+    output.status("Add this API key to your Turnkey dashboard:");
+    output.status("  1. Go to https://app.turnkey.com/dashboard/users");
+    output.status("  2. Click your user > Create API Key > Generate API Keys via CLI > Continue");
+    output.status("  3. Paste the public key > Name it \"TVC CLI\" > Continue > Approve");
+    output.status("");
 
     // Skip wait in non-interactive mode or with --skip-api-key-wait
     if !global.no_input && !args.skip_api_key_wait {
