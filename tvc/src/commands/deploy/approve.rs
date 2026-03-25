@@ -75,7 +75,7 @@ pub struct Args {
 }
 
 /// Run the approve deploy command.
-pub async fn run(args: Args) -> anyhow::Result<()> {
+pub async fn run(args: Args, _global: &crate::cli::GlobalOpts) -> anyhow::Result<()> {
     // Fetch manifest - track manifest_id if fetched from API
     let (manifest, fetched_manifest_id) = match (&args.manifest, &args.deploy_id) {
         (Some(path), _) => (read_manifest_from_path(path).await?, None),

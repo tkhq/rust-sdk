@@ -25,7 +25,7 @@ pub struct Args {
 }
 
 /// Run the deploy create command.
-pub async fn run(args: Args) -> Result<()> {
+pub async fn run(args: Args, _global: &crate::cli::GlobalOpts) -> Result<()> {
     // Read and parse config file
     let config_content = std::fs::read_to_string(&args.config_file)
         .with_context(|| format!("failed to read config file: {}", args.config_file.display()))?;

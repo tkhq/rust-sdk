@@ -3,6 +3,7 @@ pub mod cli;
 pub mod client;
 pub mod commands;
 pub mod config;
+pub mod output;
 pub mod pair;
 pub mod pull_secret;
 pub mod util;

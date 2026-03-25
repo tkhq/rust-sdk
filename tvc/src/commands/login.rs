@@ -22,7 +22,7 @@ pub struct Args {
 }
 
 /// Run the login command.
-pub async fn run(args: Args) -> anyhow::Result<()> {
+pub async fn run(args: Args, _global: &crate::cli::GlobalOpts) -> anyhow::Result<()> {
     // Load existing config
     let mut config = Config::load().await?;
 

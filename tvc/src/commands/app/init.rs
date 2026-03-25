@@ -16,7 +16,7 @@ pub struct Args {
 }
 
 /// Run the app init command.
-pub async fn run(args: Args) -> Result<()> {
+pub async fn run(args: Args, _global: &crate::cli::GlobalOpts) -> Result<()> {
     // Check if file already exists
     if args.output.exists() {
         anyhow::bail!("File already exists: {}", args.output.display());
