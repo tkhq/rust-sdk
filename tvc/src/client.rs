@@ -26,18 +26,10 @@ pub async fn build_client_with_overrides(global: &GlobalOpts) -> Result<Authenti
     if let (Some(api_key_file), Some(api_url), Some(org_id)) =
         (&global.api_key_file, &global.api_url, &global.org_id)
     {
-        let content = std::fs::read_to_string(api_key_file).with_context(|| {
-            format!(
-                "failed to read API key file: {}",
-                api_key_file.display()
-            )
-        })?;
-        let api_key: StoredApiKey = serde_json::from_str(&content).with_context(|| {
-            format!(
-                "failed to parse API key file: {}",
-                api_key_file.display()
-            )
-        })?;
+        let content = std::fs::read_to_string(api_key_file)
+            .with_context(|| format!("failed to read API key file: {}", api_key_file.display()))?;
+        let api_key: StoredApiKey = serde_json::from_str(&content)
+            .with_context(|| format!("failed to parse API key file: {}", api_key_file.display()))?;
 
         let stamper =
             TurnkeyP256ApiKey::from_strings(&api_key.private_key, Some(&api_key.public_key))
@@ -66,12 +58,10 @@ pub async fn build_client_with_overrides(global: &GlobalOpts) -> Result<Authenti
     // Use override API key file or default from org config
     let api_key = match &global.api_key_file {
         Some(path) => {
-            let content = std::fs::read_to_string(path).with_context(|| {
-                format!("failed to read API key file: {}", path.display())
-            })?;
-            serde_json::from_str(&content).with_context(|| {
-                format!("failed to parse API key file: {}", path.display())
-            })?
+            let content = std::fs::read_to_string(path)
+                .with_context(|| format!("failed to read API key file: {}", path.display()))?;
+            serde_json::from_str(&content)
+                .with_context(|| format!("failed to parse API key file: {}", path.display()))?
         }
         None => StoredApiKey::load(org_config).await?.ok_or_else(|| {
             anyhow::anyhow!("No API key found for org '{alias}'. Run `tvc login` first.")

@@ -63,13 +63,14 @@ pub async fn run(args: Args, global: &crate::cli::GlobalOpts) -> anyhow::Result<
         .manifest
         .ok_or_else(|| anyhow::anyhow!("manifest not found in deployment"))?;
 
-    let pivot_container = deployment.pivot_container.as_ref().map(|p| {
-        PivotContainerOutput {
+    let pivot_container = deployment
+        .pivot_container
+        .as_ref()
+        .map(|p| PivotContainerOutput {
             container_url: p.container_url.clone(),
             path: p.path.clone(),
             args: p.args.clone(),
-        }
-    });
+        });
 
     let created_at = deployment
         .created_at

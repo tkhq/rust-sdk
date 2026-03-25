@@ -144,8 +144,14 @@ pub async fn run(args: Args, global: &crate::cli::GlobalOpts) -> anyhow::Result<
 
     // Post to API if not skipped
     if !args.skip_post {
-        post_approval_to_api(&args, &approval, fetched_manifest_id.as_deref(), global, &output)
-            .await?;
+        post_approval_to_api(
+            &args,
+            &approval,
+            fetched_manifest_id.as_deref(),
+            global,
+            &output,
+        )
+        .await?;
     }
 
     Ok(())
