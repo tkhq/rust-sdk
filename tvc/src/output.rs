@@ -75,8 +75,8 @@ impl<'a> Output<'a> {
         self.global.quiet
     }
 
-    /// Returns true if interactive prompts are disabled.
+    /// Returns true if interactive prompts are disabled (explicit --no-input or non-TTY stdin).
     pub fn is_no_input(&self) -> bool {
-        self.global.no_input
+        self.global.is_no_input()
     }
 }

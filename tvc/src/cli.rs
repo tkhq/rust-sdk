@@ -20,6 +20,14 @@ pub struct GlobalOpts {
     pub quiet: bool,
 }
 
+impl GlobalOpts {
+    /// Returns true if interactive prompts should be suppressed.
+    /// This is true when --no-input is explicitly set OR when stdin is not a terminal.
+    pub fn is_no_input(&self) -> bool {
+        self.no_input || !std::io::stdin().is_terminal()
+    }
+}
+
 /// CLI command parsing and dispatch.
 #[derive(Debug, Parser)]
 #[command(about = "CLI for building with Turnkey Verifiable Cloud", long_about = None)]
@@ -35,12 +43,7 @@ impl Cli {
     /// Run the CLI.
     pub async fn run() -> anyhow::Result<()> {
         let args = Cli::parse();
-
-        // Auto-enable no_input when stdin is not a terminal
-        let mut global = args.global;
-        if !std::io::stdin().is_terminal() {
-            global.no_input = true;
-        }
+        let global = args.global;
 
         match args.command {
             Commands::Deploy { command } => match command {

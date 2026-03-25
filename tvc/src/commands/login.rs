@@ -1,5 +1,6 @@
 //! Login command for authenticating with Turnkey.
 
+use crate::cli::GlobalOpts;
 use crate::config::turnkey::{
     Config, KeyCurve, OrgConfig, StoredApiKey, StoredQosOperatorKey, API_BASE_URL_DEV,
     API_BASE_URL_LOCAL, API_BASE_URL_PREPROD, API_BASE_URL_PROD,
@@ -15,19 +16,36 @@ use turnkey_client::generated::GetWhoamiRequest;
 #[derive(Debug, ClapArgs)]
 #[command(about, long_about = None)]
 pub struct Args {
-    /// Organization alias or ID to log in with.
+    /// Organization alias or ID to log in with (select existing org).
     /// If not provided, will prompt interactively.
     #[arg(long)]
     pub org: Option<String>,
+
+    /// Organization ID for creating a new org config.
+    /// Use with --alias and --api-env for fully non-interactive setup.
+    #[arg(long, env = "TVC_ORG_ID")]
+    pub org_id: Option<String>,
+
+    /// Alias for the organization config (used with --org-id).
+    #[arg(long, env = "TVC_ORG_ALIAS", default_value = "default")]
+    pub alias: String,
+
+    /// API environment to use (used with --org-id).
+    #[arg(long, env = "TVC_API_ENV", value_parser = ["prod", "preprod", "dev", "local"])]
+    pub api_env: Option<String>,
+
+    /// Skip the interactive prompt after API key generation.
+    #[arg(long)]
+    pub skip_api_key_wait: bool,
 }
 
 /// Run the login command.
-pub async fn run(args: Args, _global: &crate::cli::GlobalOpts) -> anyhow::Result<()> {
+pub async fn run(args: Args, global: &GlobalOpts) -> anyhow::Result<()> {
     // Load existing config
     let mut config = Config::load().await?;
 
     // Select or create org
-    let (alias, org_config) = select_or_create_org(&mut config, args.org.as_deref()).await?;
+    let (alias, org_config) = select_or_create_org(&mut config, &args, global).await?;
 
     println!("Selected org: {} ({})", alias, org_config.id);
 
@@ -36,7 +54,7 @@ pub async fn run(args: Args, _global: &crate::cli::GlobalOpts) -> anyhow::Result
     config.save().await?;
 
     // Get or generate API key
-    let api_key = get_or_generate_api_key(&org_config).await?;
+    let api_key = get_or_generate_api_key(&org_config, &args, global).await?;
 
     // Verify credentials with whoami
     println!();
@@ -73,14 +91,32 @@ pub async fn run(args: Args, _global: &crate::cli::GlobalOpts) -> anyhow::Result
 /// Returns the alias and a clone of the org config.
 async fn select_or_create_org(
     config: &mut Config,
-    org_arg: Option<&str>,
+    args: &Args,
+    global: &GlobalOpts,
 ) -> Result<(String, OrgConfig)> {
+    // If --org-id provided, create/update org non-interactively
+    if let Some(ref org_id) = args.org_id {
+        let api_base_url = resolve_api_env(args.api_env.as_deref())?;
+        config.add_org(&args.alias, org_id.clone(), api_base_url)?;
+        let org_config = config.orgs.get(&args.alias).unwrap().clone();
+        return Ok((args.alias.clone(), org_config));
+    }
+
     // If --org provided, try to find it by alias or ID
-    if let Some(org) = org_arg {
+    if let Some(ref org) = args.org {
         if let Some((alias, org_config)) = find_org(config, org) {
             return Ok((alias.clone(), org_config.clone()));
         }
         bail!("Organization '{org}' not found. Run `tvc login` without --org to set up a new organization.");
+    }
+
+    // Non-interactive mode requires --org or --org-id
+    if global.no_input {
+        bail!(
+            "No organization specified in non-interactive mode. \
+             Use --org <ALIAS> to select an existing org, or \
+             --org-id <ID> to create a new org config."
+        );
     }
 
     // No --org provided, check existing orgs
@@ -117,6 +153,18 @@ async fn select_or_create_org(
     }
 
     bail!("Organization '{}' not found", selection)
+}
+
+/// Resolve an API environment name to a URL.
+fn resolve_api_env(api_env: Option<&str>) -> Result<String> {
+    let url = match api_env.unwrap_or("prod") {
+        "prod" => API_BASE_URL_PROD,
+        "preprod" => API_BASE_URL_PREPROD,
+        "dev" => API_BASE_URL_DEV,
+        "local" => API_BASE_URL_LOCAL,
+        other => bail!("Invalid API environment: {other}"),
+    };
+    Ok(url.to_string())
 }
 
 /// Prompt the user to enter a new organization ID and alias.
@@ -165,7 +213,11 @@ fn prompt_for_api_url() -> Result<String> {
 /// Get an existing API key or generate a new one.
 /// If an API key exists, it's returned directly.
 /// If not, a new key is generated, saved, and the user is prompted to add it to the dashboard.
-async fn get_or_generate_api_key(org_config: &OrgConfig) -> Result<StoredApiKey> {
+async fn get_or_generate_api_key(
+    org_config: &OrgConfig,
+    args: &Args,
+    global: &GlobalOpts,
+) -> Result<StoredApiKey> {
     // Check if API key already exists
     if let Some(api_key) = StoredApiKey::load(org_config).await? {
         println!("Using existing API key.");
@@ -201,7 +253,10 @@ async fn get_or_generate_api_key(org_config: &OrgConfig) -> Result<StoredApiKey>
     println!("  3. Paste the public key > Name it \"TVC CLI\" > Continue > Approve");
     println!();
 
-    wait_for_enter("Press Enter when done...")?;
+    // Skip wait in non-interactive mode or with --skip-api-key-wait
+    if !global.no_input && !args.skip_api_key_wait {
+        wait_for_enter("Press Enter when done...")?;
+    }
 
     Ok(api_key)
 }
