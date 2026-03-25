@@ -2,6 +2,7 @@
 
 use crate::config::app::KNOWN_SHARE_SET_KEYS;
 use crate::config::turnkey::{Config, StoredQosOperatorKey};
+use crate::output::Output;
 use crate::pair::LocalPair;
 use crate::util::{read_file_to_string, write_file};
 use anyhow::{anyhow, bail, Context};
@@ -11,6 +12,7 @@ use qos_core::protocol::services::boot::{
     Manifest, ManifestSet, Namespace, NitroConfig, PivotConfig, QuorumMember, ShareSet,
 };
 use qos_core::protocol::QosHash;
+use serde::Serialize;
 use std::io::{BufRead, Write};
 use std::path::Path;
 use std::path::PathBuf;
@@ -74,13 +76,23 @@ pub struct Args {
     pub skip_post: bool,
 }
 
+#[derive(Serialize)]
+struct ApprovePostOutput {
+    approval_ids: Vec<String>,
+    manifest_id: String,
+    operator_id: String,
+}
+
 /// Run the approve deploy command.
 pub async fn run(args: Args, global: &crate::cli::GlobalOpts) -> anyhow::Result<()> {
+    let output = Output::new(global);
+
     // Fetch manifest - track manifest_id if fetched from API
     let (manifest, fetched_manifest_id) = match (&args.manifest, &args.deploy_id) {
         (Some(path), _) => (read_manifest_from_path(path).await?, None),
         (_, Some(deploy_id)) => {
-            let (manifest, manifest_id) = fetch_manifest_from_deploy(deploy_id).await?;
+            let (manifest, manifest_id) =
+                fetch_manifest_from_deploy(deploy_id, &output).await?;
             (manifest, Some(manifest_id))
         }
         (None, None) => bail!("a manifest source is required"),
@@ -92,7 +104,7 @@ pub async fn run(args: Args, global: &crate::cli::GlobalOpts) -> anyhow::Result<
     }
 
     if args.dry_run {
-        println!("Dry run complete. No approval generated.");
+        output.status("Dry run complete. No approval generated.");
         return Ok(());
     }
 
@@ -125,14 +137,14 @@ pub async fn run(args: Args, global: &crate::cli::GlobalOpts) -> anyhow::Result<
     // Write to file or stdout
     if let Some(ref path) = args.output {
         write_file(path, &json).await?;
-        println!("Approval written to: {}", path.display());
+        eprintln!("Approval written to: {}", path.display());
     } else {
         println!("{json}");
     }
 
     // Post to API if not skipped
     if !args.skip_post {
-        post_approval_to_api(&args, &approval, fetched_manifest_id.as_deref()).await?;
+        post_approval_to_api(&args, &approval, fetched_manifest_id.as_deref(), &output).await?;
     }
 
     Ok(())
@@ -142,6 +154,7 @@ async fn post_approval_to_api(
     args: &Args,
     approval: &Approval,
     fetched_manifest_id: Option<&str>,
+    output: &Output<'_>,
 ) -> anyhow::Result<()> {
     // Use fetched manifest_id (from --deploy-id) or fall back to --manifest-id arg
     let manifest_id = fetched_manifest_id
@@ -175,8 +188,8 @@ async fn post_approval_to_api(
         }
     };
 
-    println!();
-    println!("Posting approval to Turnkey...");
+    output.status("");
+    output.status("Posting approval to Turnkey...");
 
     // Build authenticated client
     let auth = crate::client::build_client().await?;
@@ -205,12 +218,20 @@ async fn post_approval_to_api(
         .await
         .context("failed to post manifest approval")?;
 
-    println!();
-    println!("Approval posted successfully!");
-    println!();
-    println!("Approval IDs: {:?}", result.result.approval_ids);
-    println!("Manifest ID: {manifest_id}");
-    println!("Operator ID: {operator_id}");
+    let post_result = ApprovePostOutput {
+        approval_ids: result.result.approval_ids.clone(),
+        manifest_id: manifest_id.clone(),
+        operator_id: operator_id.clone(),
+    };
+
+    output.result(&post_result, || {
+        println!();
+        println!("Approval posted successfully!");
+        println!();
+        println!("Approval IDs: {:?}", result.result.approval_ids);
+        println!("Manifest ID: {manifest_id}");
+        println!("Operator ID: {operator_id}");
+    })?;
 
     Ok(())
 }
@@ -370,8 +391,11 @@ async fn read_manifest_from_path(path: &Path) -> anyhow::Result<Manifest> {
 
 /// Fetch manifest from Turnkey using GetTvcDeployment API.
 /// Returns the manifest and its Turnkey manifest_id.
-async fn fetch_manifest_from_deploy(deploy_id: &str) -> anyhow::Result<(Manifest, String)> {
-    println!("Fetching deployment {deploy_id}...");
+async fn fetch_manifest_from_deploy(
+    deploy_id: &str,
+    output: &Output<'_>,
+) -> anyhow::Result<(Manifest, String)> {
+    output.status(&format!("Fetching deployment {deploy_id}..."));
 
     let auth = crate::client::build_client().await?;
 
@@ -398,7 +422,10 @@ async fn fetch_manifest_from_deploy(deploy_id: &str) -> anyhow::Result<(Manifest
     let manifest: Manifest = serde_json::from_slice(&tvc_manifest.manifest)
         .context("failed to parse manifest from deployment")?;
 
-    println!("✓ Manifest loaded (manifest_id: {})", tvc_manifest.id);
+    output.status(&format!(
+        "Manifest loaded (manifest_id: {})",
+        tvc_manifest.id
+    ));
 
     Ok((manifest, tvc_manifest.id))
 }

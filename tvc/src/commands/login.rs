@@ -5,9 +5,11 @@ use crate::config::turnkey::{
     Config, KeyCurve, OrgConfig, StoredApiKey, StoredQosOperatorKey, API_BASE_URL_DEV,
     API_BASE_URL_LOCAL, API_BASE_URL_PREPROD, API_BASE_URL_PROD,
 };
+use crate::output::Output;
 use anyhow::{anyhow, bail, Context, Result};
 use clap::Args as ClapArgs;
 use qos_p256::P256Pair;
+use serde::Serialize;
 use std::io::{BufRead, Write};
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use turnkey_client::generated::GetWhoamiRequest;
@@ -39,15 +41,31 @@ pub struct Args {
     pub skip_api_key_wait: bool,
 }
 
+#[derive(Serialize)]
+struct LoginOutput {
+    organization_name: String,
+    organization_id: String,
+    username: String,
+    user_id: String,
+    active_org: String,
+    api_key_public: String,
+    operator_key_public: String,
+    config_path: String,
+    api_key_path: String,
+    operator_key_path: String,
+}
+
 /// Run the login command.
 pub async fn run(args: Args, global: &GlobalOpts) -> anyhow::Result<()> {
+    let output = Output::new(global);
+
     // Load existing config
     let mut config = Config::load().await?;
 
     // Select or create org
     let (alias, org_config) = select_or_create_org(&mut config, &args, global).await?;
 
-    println!("Selected org: {} ({})", alias, org_config.id);
+    output.status(&format!("Selected org: {} ({})", alias, org_config.id));
 
     // Save config with the new/updated org
     config.set_active_org(&alias)?;
@@ -57,32 +75,50 @@ pub async fn run(args: Args, global: &GlobalOpts) -> anyhow::Result<()> {
     let api_key = get_or_generate_api_key(&org_config, &args, global).await?;
 
     // Verify credentials with whoami
-    println!();
-    println!("Verifying credentials...");
+    output.status("");
+    output.status("Verifying credentials...");
 
     let whoami = verify_credentials(&api_key, &org_config.id, &org_config.api_base_url).await?;
 
     // Get or generate operator key
-    let operator_key = get_or_generate_operator_key(&org_config).await?;
+    let operator_key = get_or_generate_operator_key(&org_config, &output).await?;
 
-    println!();
-    println!("Successfully logged in!");
-    println!();
-    println!(
-        "Organization: {} ({})",
-        whoami.organization_name, whoami.organization_id
-    );
-    println!("User: {} ({})", whoami.username, whoami.user_id);
-    println!("Active Org: {alias}");
-    println!("API Key: {}", api_key.public_key);
-    println!("Operator Key: {}", operator_key.public_key);
-    println!();
-    println!(
-        "Config: {}",
-        crate::config::turnkey::config_file_path()?.display()
-    );
-    println!("API Key: {}", org_config.api_key_path.display());
-    println!("Operator Key: {}", org_config.operator_key_path.display());
+    let config_path = crate::config::turnkey::config_file_path()?
+        .display()
+        .to_string();
+    let api_key_path = org_config.api_key_path.display().to_string();
+    let operator_key_path = org_config.operator_key_path.display().to_string();
+
+    let result = LoginOutput {
+        organization_name: whoami.organization_name.clone(),
+        organization_id: whoami.organization_id.clone(),
+        username: whoami.username.clone(),
+        user_id: whoami.user_id.clone(),
+        active_org: alias.clone(),
+        api_key_public: api_key.public_key.clone(),
+        operator_key_public: operator_key.public_key.clone(),
+        config_path: config_path.clone(),
+        api_key_path: api_key_path.clone(),
+        operator_key_path: operator_key_path.clone(),
+    };
+
+    output.result(&result, || {
+        println!();
+        println!("Successfully logged in!");
+        println!();
+        println!(
+            "Organization: {} ({})",
+            whoami.organization_name, whoami.organization_id
+        );
+        println!("User: {} ({})", whoami.username, whoami.user_id);
+        println!("Active Org: {alias}");
+        println!("API Key: {}", api_key.public_key);
+        println!("Operator Key: {}", operator_key.public_key);
+        println!();
+        println!("Config: {config_path}");
+        println!("API Key: {api_key_path}");
+        println!("Operator Key: {operator_key_path}");
+    })?;
 
     Ok(())
 }
@@ -220,13 +256,13 @@ async fn get_or_generate_api_key(
 ) -> Result<StoredApiKey> {
     // Check if API key already exists
     if let Some(api_key) = StoredApiKey::load(org_config).await? {
-        println!("Using existing API key.");
+        eprintln!("Using existing API key.");
         return Ok(api_key);
     }
 
     // Generate new API key
-    println!();
-    println!("Generating API key...");
+    eprintln!();
+    eprintln!("Generating API key...");
 
     let stamper = TurnkeyP256ApiKey::generate();
     let public_key = hex::encode(stamper.compressed_public_key());
@@ -242,16 +278,16 @@ async fn get_or_generate_api_key(
     api_key.save(org_config).await?;
 
     // Display instructions
-    println!();
-    println!("API Key Generated!");
-    println!();
-    println!("Public Key: {public_key}");
-    println!();
-    println!("Add this API key to your Turnkey dashboard:");
-    println!("  1. Go to https://app.turnkey.com/dashboard/users");
-    println!("  2. Click your user > Create API Key > Generate API Keys via CLI > Continue");
-    println!("  3. Paste the public key > Name it \"TVC CLI\" > Continue > Approve");
-    println!();
+    eprintln!();
+    eprintln!("API Key Generated!");
+    eprintln!();
+    eprintln!("Public Key: {public_key}");
+    eprintln!();
+    eprintln!("Add this API key to your Turnkey dashboard:");
+    eprintln!("  1. Go to https://app.turnkey.com/dashboard/users");
+    eprintln!("  2. Click your user > Create API Key > Generate API Keys via CLI > Continue");
+    eprintln!("  3. Paste the public key > Name it \"TVC CLI\" > Continue > Approve");
+    eprintln!();
 
     // Skip wait in non-interactive mode or with --skip-api-key-wait
     if !global.no_input && !args.skip_api_key_wait {
@@ -262,16 +298,19 @@ async fn get_or_generate_api_key(
 }
 
 /// Get an existing operator key or generate a new one.
-async fn get_or_generate_operator_key(org_config: &OrgConfig) -> Result<StoredQosOperatorKey> {
+async fn get_or_generate_operator_key(
+    org_config: &OrgConfig,
+    output: &Output<'_>,
+) -> Result<StoredQosOperatorKey> {
     // Check if operator key already exists
     if let Some(operator_key) = StoredQosOperatorKey::load(org_config).await? {
-        println!("Using existing operator key.");
+        output.status("Using existing operator key.");
         return Ok(operator_key);
     }
 
     // Generate new operator key
-    println!();
-    println!("Generating operator key...");
+    output.status("");
+    output.status("Generating operator key...");
 
     let pair =
         P256Pair::generate().map_err(|e| anyhow!("failed to generate operator key: {e:?}"))?;
@@ -286,13 +325,13 @@ async fn get_or_generate_operator_key(org_config: &OrgConfig) -> Result<StoredQo
     // Save the key
     operator_key.save(org_config).await?;
 
-    println!();
-    println!("Operator Key Generated!");
-    println!();
-    println!("Public Key: {public_key}");
-    println!();
-    println!("This key will be used for approving deployment manifests.");
-    println!("Make sure to register this as an operator in your organization.");
+    output.status("");
+    output.status("Operator Key Generated!");
+    output.status("");
+    output.status(&format!("Public Key: {public_key}"));
+    output.status("");
+    output.status("This key will be used for approving deployment manifests.");
+    output.status("Make sure to register this as an operator in your organization.");
 
     Ok(operator_key)
 }
@@ -316,8 +355,8 @@ fn find_org<'a>(config: &'a Config, org: &str) -> Option<(&'a String, &'a OrgCon
 
 /// Prompt the user for input and return the trimmed response.
 fn prompt(message: &str) -> Result<String> {
-    print!("{message}: ");
-    std::io::stdout().flush()?;
+    eprint!("{message}: ");
+    std::io::stderr().flush()?;
 
     let mut input = String::new();
     std::io::stdin().lock().read_line(&mut input)?;
@@ -327,8 +366,8 @@ fn prompt(message: &str) -> Result<String> {
 /// Prompt the user for input with a default value.
 /// If the user enters nothing, returns the default.
 fn prompt_with_default(message: &str, default: &str) -> Result<String> {
-    print!("{message} [{default}]: ");
-    std::io::stdout().flush()?;
+    eprint!("{message} [{default}]: ");
+    std::io::stderr().flush()?;
 
     let mut input = String::new();
     std::io::stdin().lock().read_line(&mut input)?;
@@ -343,8 +382,8 @@ fn prompt_with_default(message: &str, default: &str) -> Result<String> {
 
 /// Wait for the user to press Enter.
 fn wait_for_enter(message: &str) -> Result<()> {
-    print!("{message}");
-    std::io::stdout().flush()?;
+    eprint!("{message}");
+    std::io::stderr().flush()?;
 
     let mut input = String::new();
     std::io::stdin().lock().read_line(&mut input)?;
