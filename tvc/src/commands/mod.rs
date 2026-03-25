@@ -5,5 +5,6 @@
 //! - A `run(args, config) -> anyhow::Result<()>` function
 
 pub mod app;
+pub mod app_status;
 pub mod deploy;
 pub mod login;
