@@ -2,7 +2,6 @@
 
 use crate::commands;
 use clap::{Args as ClapArgs, Parser, Subcommand};
-use std::io::IsTerminal;
 
 /// Global options available to all commands.
 #[derive(Debug, Clone, ClapArgs)]
@@ -12,20 +11,13 @@ pub struct GlobalOpts {
     pub json: bool,
 
     /// Disable all interactive prompts. Fails if input is required.
+    /// Set TVC_NO_INPUT=true in CI/CD environments.
     #[arg(long, global = true, env = "TVC_NO_INPUT")]
     pub no_input: bool,
 
     /// Suppress non-essential output.
     #[arg(long, short, global = true)]
     pub quiet: bool,
-}
-
-impl GlobalOpts {
-    /// Returns true if interactive prompts should be suppressed.
-    /// This is true when --no-input is explicitly set OR when stdin is not a terminal.
-    pub fn is_no_input(&self) -> bool {
-        self.no_input || !std::io::stdin().is_terminal()
-    }
 }
 
 /// CLI command parsing and dispatch.
