@@ -233,17 +233,7 @@ async fn get_or_generate_api_key(
     };
 
     api_key.save(org_config).await?;
-
-    output.notice("");
-    output.notice("API Key Generated!");
-    output.notice("");
-    output.notice(&format!("Public Key: {public_key}"));
-    output.notice("");
-    output.notice("Add this API key to your Turnkey dashboard:");
-    output.notice("  1. Go to https://app.turnkey.com/dashboard/users");
-    output.notice("  2. Click your user > Create API Key > Generate API Keys via CLI > Continue");
-    output.notice("  3. Paste the public key > Name it \"TVC CLI\" > Continue > Approve");
-    output.notice("");
+    print_api_key_setup_instructions(output, &public_key);
 
     if !global.no_input {
         wait_for_enter("Press Enter when done...")?;
@@ -285,6 +275,19 @@ async fn get_or_generate_operator_key(
     output.status("Make sure to register this as an operator in your organization.");
 
     Ok(operator_key)
+}
+
+fn print_api_key_setup_instructions(output: &Output<'_>, public_key: &str) {
+    output.notice("");
+    output.notice("API Key Generated!");
+    output.notice("");
+    output.notice(&format!("Public Key: {public_key}"));
+    output.notice("");
+    output.notice("Add this API key to your Turnkey dashboard:");
+    output.notice("  1. Go to https://app.turnkey.com/dashboard/users");
+    output.notice("  2. Click your user > Create API Key > Generate API Keys via CLI > Continue");
+    output.notice("  3. Paste the public key > Name it \"TVC CLI\" > Continue > Approve");
+    output.notice("");
 }
 
 fn find_org<'a>(config: &'a Config, org: &str) -> Option<(&'a String, &'a OrgConfig)> {

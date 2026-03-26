@@ -135,16 +135,7 @@ pub async fn run(args: Args, global: &crate::cli::GlobalOpts) -> anyhow::Result<
     };
 
     let approval = generate_approval(pair, &manifest).await?;
-    let json = serde_json::to_string_pretty(&approval)?;
-
-    // Write to file or stdout
-    if let Some(ref path) = args.output {
-        write_file(path, &json).await?;
-        output.status(&format!("Approval written to: {}", path.display()));
-    } else if !global.json || args.skip_post {
-        // Print raw approval JSON to stdout unless --json mode will print structured post result
-        println!("{json}");
-    }
+    emit_local_approval(&args, global, &output, &approval).await?;
 
     // Post to API if not skipped
     if !args.skip_post {
@@ -156,6 +147,24 @@ pub async fn run(args: Args, global: &crate::cli::GlobalOpts) -> anyhow::Result<
             &output,
         )
         .await?;
+    }
+
+    Ok(())
+}
+
+async fn emit_local_approval(
+    args: &Args,
+    global: &crate::cli::GlobalOpts,
+    output: &Output<'_>,
+    approval: &Approval,
+) -> anyhow::Result<()> {
+    let json = serde_json::to_string_pretty(approval)?;
+
+    if let Some(ref path) = args.output {
+        write_file(path, &json).await?;
+        output.status(&format!("Approval written to: {}", path.display()));
+    } else if !global.json || args.skip_post {
+        println!("{json}");
     }
 
     Ok(())
@@ -204,7 +213,7 @@ async fn post_approval_to_api(
     output.status("Posting approval to Turnkey...");
 
     // Build authenticated client
-    let auth = crate::client::build_client_with_overrides(global).await?;
+    let auth = crate::client::build_client(&global.client_overrides()).await?;
 
     // Convert local approval to API format
     let tvc_approval = TvcManifestApproval {
@@ -411,7 +420,7 @@ async fn fetch_manifest_from_deploy(
 ) -> anyhow::Result<(Manifest, String)> {
     output.status(&format!("Fetching deployment {deploy_id}..."));
 
-    let auth = crate::client::build_client_with_overrides(global).await?;
+    let auth = crate::client::build_client(&global.client_overrides()).await?;
 
     let request = GetTvcDeploymentRequest {
         organization_id: auth.org_id.clone(),

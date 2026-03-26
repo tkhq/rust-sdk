@@ -1,5 +1,6 @@
 //! CLI parsing and dispatch.
 
+use crate::client::ClientOverrides;
 use crate::commands;
 use clap::{Args as ClapArgs, Parser, Subcommand};
 use std::path::PathBuf;
@@ -33,6 +34,16 @@ pub struct GlobalOpts {
     pub org_id: Option<String>,
 }
 
+impl GlobalOpts {
+    pub fn client_overrides(&self) -> ClientOverrides {
+        ClientOverrides {
+            api_key_file: self.api_key_file.clone(),
+            api_url: self.api_url.clone(),
+            org_id: self.org_id.clone(),
+        }
+    }
+}
+
 /// CLI command parsing and dispatch.
 #[derive(Debug, Parser)]
 #[command(about = "CLI for building with Turnkey Verifiable Cloud", long_about = None)]
@@ -61,16 +72,14 @@ impl Cli {
                 DeployCommands::Create(cmd_args) => {
                     commands::deploy::create::run(cmd_args, &global).await
                 }
-                DeployCommands::Init(cmd_args) => {
-                    commands::deploy::init::run(cmd_args, &global).await
-                }
+                DeployCommands::Init(cmd_args) => commands::deploy::init::run(cmd_args).await,
             },
             Commands::App { command } => match command {
                 AppCommands::List(cmd_args) => commands::app::list::run(cmd_args).await,
                 AppCommands::Create(cmd_args) => {
                     commands::app::create::run(cmd_args, &global).await
                 }
-                AppCommands::Init(cmd_args) => commands::app::init::run(cmd_args, &global).await,
+                AppCommands::Init(cmd_args) => commands::app::init::run(cmd_args).await,
             },
             Commands::Login(cmd_args) => commands::login::run(cmd_args, &global).await,
         }
