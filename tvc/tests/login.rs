@@ -6,6 +6,7 @@ use tempfile::TempDir;
 fn login_empty_org_id_fails() {
     let temp = TempDir::new().unwrap();
 
+    // User enters empty org ID
     let input = "\n";
 
     cargo_bin_cmd!("tvc")
@@ -36,12 +37,14 @@ fn login_no_input_without_org_fails() {
 fn login_no_input_with_org_id_creates_config() {
     let temp = TempDir::new().unwrap();
 
+    // This will fail at the whoami step since there's no real API,
+    // but it should get past org creation
     let result = cargo_bin_cmd!("tvc")
         .env("HOME", temp.path())
         .arg("--no-input")
-        .arg("login")
         .arg("--org-id")
         .arg("test-org-id")
+        .arg("login")
         .arg("--alias")
         .arg("test")
         .arg("--api-env")
@@ -51,8 +54,8 @@ fn login_no_input_with_org_id_creates_config() {
 
     let stderr = String::from_utf8(result.stderr).expect("not utf8");
 
-    // Should proceed past org creation to credential verification
-    // (which fails since there's no real API, but the point is it didn't hang)
+    // It should have created the org config and proceeded to credential verification
+    // (which will fail since there's no real API server, but the point is it didn't hang)
     assert!(
         stderr.contains("Verifying credentials") || stderr.contains("whoami request failed"),
         "Expected login to proceed past org creation, got: {stderr}"

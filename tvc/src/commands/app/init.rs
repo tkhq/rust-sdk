@@ -2,8 +2,10 @@
 
 use crate::config::app::AppConfig;
 use crate::config::turnkey::{Config, StoredQosOperatorKey};
+use crate::output::Output;
 use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
+use serde::Serialize;
 use std::path::PathBuf;
 
 /// Generate a template app configuration file.
@@ -15,8 +17,14 @@ pub struct Args {
     pub output: PathBuf,
 }
 
+#[derive(Serialize)]
+struct AppInitOutput {
+    config_file: String,
+}
+
 /// Run the app init command.
-pub async fn run(args: Args) -> Result<()> {
+pub async fn run(args: Args, global: &crate::cli::GlobalOpts) -> Result<()> {
+    let output = Output::new(global);
     // Check if file already exists
     if args.output.exists() {
         anyhow::bail!("File already exists: {}", args.output.display());
@@ -33,10 +41,16 @@ pub async fn run(args: Args) -> Result<()> {
     std::fs::write(&args.output, json)
         .with_context(|| format!("failed to write file: {}", args.output.display()))?;
 
-    println!("Created app config template: {}", args.output.display());
-    println!();
-    println!("Edit the file to fill in your values, then run:");
-    println!("  tvc app create {}", args.output.display());
+    let result = AppInitOutput {
+        config_file: args.output.display().to_string(),
+    };
+
+    output.result(&result, || {
+        println!("Created app config template: {}", args.output.display());
+        println!();
+        println!("Edit the file to fill in your values, then run:");
+        println!("  tvc app create {}", args.output.display());
+    })?;
 
     Ok(())
 }

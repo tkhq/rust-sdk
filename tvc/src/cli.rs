@@ -2,10 +2,15 @@
 
 use crate::commands;
 use clap::{Args as ClapArgs, Parser, Subcommand};
+use std::path::PathBuf;
 
 /// Global options available to all commands.
 #[derive(Debug, Clone, ClapArgs)]
 pub struct GlobalOpts {
+    /// Output results as JSON.
+    #[arg(long, global = true, env = "TVC_JSON")]
+    pub json: bool,
+
     /// Disable all interactive prompts. Fails if input is required.
     /// Set TVC_NO_INPUT=true in CI/CD environments.
     #[arg(long, global = true, env = "TVC_NO_INPUT")]
@@ -14,6 +19,18 @@ pub struct GlobalOpts {
     /// Suppress non-essential output.
     #[arg(long, short, global = true)]
     pub quiet: bool,
+
+    /// Path to API key JSON file. Overrides the logged-in org's API key.
+    #[arg(long, global = true, env = "TVC_API_KEY_FILE", value_name = "PATH")]
+    pub api_key_file: Option<PathBuf>,
+
+    /// API base URL override (e.g., https://api.turnkey.com).
+    #[arg(long, global = true, env = "TVC_API_URL")]
+    pub api_url: Option<String>,
+
+    /// Organization ID override. Bypasses the logged-in org config.
+    #[arg(long, global = true, env = "TVC_ORG_ID")]
+    pub org_id: Option<String>,
 }
 
 /// CLI command parsing and dispatch.
@@ -31,24 +48,31 @@ impl Cli {
     /// Run the CLI.
     pub async fn run() -> anyhow::Result<()> {
         let args = Cli::parse();
-        let no_input = args.global.no_input;
-        let quiet = args.global.quiet;
+        let global = args.global;
 
         match args.command {
             Commands::Deploy { command } => match command {
                 DeployCommands::Approve(cmd_args) => {
-                    commands::deploy::approve::run(cmd_args, no_input).await
+                    commands::deploy::approve::run(cmd_args, &global).await
                 }
-                DeployCommands::Status(cmd_args) => commands::deploy::status::run(cmd_args).await,
-                DeployCommands::Create(cmd_args) => commands::deploy::create::run(cmd_args).await,
-                DeployCommands::Init(cmd_args) => commands::deploy::init::run(cmd_args).await,
+                DeployCommands::Status(cmd_args) => {
+                    commands::deploy::status::run(cmd_args, &global).await
+                }
+                DeployCommands::Create(cmd_args) => {
+                    commands::deploy::create::run(cmd_args, &global).await
+                }
+                DeployCommands::Init(cmd_args) => {
+                    commands::deploy::init::run(cmd_args, &global).await
+                }
             },
             Commands::App { command } => match command {
                 AppCommands::List(cmd_args) => commands::app::list::run(cmd_args).await,
-                AppCommands::Create(cmd_args) => commands::app::create::run(cmd_args).await,
-                AppCommands::Init(cmd_args) => commands::app::init::run(cmd_args).await,
+                AppCommands::Create(cmd_args) => {
+                    commands::app::create::run(cmd_args, &global).await
+                }
+                AppCommands::Init(cmd_args) => commands::app::init::run(cmd_args, &global).await,
             },
-            Commands::Login(cmd_args) => commands::login::run(cmd_args, no_input, quiet).await,
+            Commands::Login(cmd_args) => commands::login::run(cmd_args, &global).await,
         }
     }
 }

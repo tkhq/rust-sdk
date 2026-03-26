@@ -1,10 +1,12 @@
 //! Deploy create command - creates a deployment from a config file.
 
-use crate::client::build_client;
+use crate::client::build_client_with_overrides;
 use crate::config::deploy::DeployConfig;
+use crate::output::Output;
 use crate::pull_secret::encrypt_pivot_pull_secret;
 use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
+use serde::Serialize;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::CreateTvcDeploymentIntent;
@@ -24,8 +26,16 @@ pub struct Args {
     pub pivot_pull_secret: Option<PathBuf>,
 }
 
+#[derive(Serialize)]
+struct DeployCreateOutput {
+    deployment_id: String,
+    app_id: String,
+    config_file: String,
+}
+
 /// Run the deploy create command.
-pub async fn run(args: Args) -> Result<()> {
+pub async fn run(args: Args, global: &crate::cli::GlobalOpts) -> Result<()> {
+    let output = Output::new(global);
     // Read and parse config file
     let config_content = std::fs::read_to_string(&args.config_file)
         .with_context(|| format!("failed to read config file: {}", args.config_file.display()))?;
@@ -46,10 +56,13 @@ pub async fn run(args: Args) -> Result<()> {
         );
     }
 
-    println!("Creating deployment for app '{}'...", deploy_config.app_id);
+    output.status(&format!(
+        "Creating deployment for app '{}'...",
+        deploy_config.app_id
+    ));
 
     // Build authenticated client
-    let auth = build_client().await?;
+    let auth = build_client_with_overrides(global).await?;
 
     let pivot_container_encrypted_pull_secret = match args.pivot_pull_secret.as_ref() {
         Some(path) => {
@@ -92,28 +105,36 @@ pub async fn run(args: Args) -> Result<()> {
         .as_millis();
 
     // Create the deployment
-    let result = auth
+    let api_result = auth
         .client
         .create_tvc_deployment(auth.org_id, timestamp_ms, intent)
         .await
         .context("failed to create TVC deployment")?;
 
-    println!();
-    println!("Deployment created successfully!");
-    println!();
-    println!("Deployment ID: {}", result.result.deployment_id);
-    println!("App ID: {}", deploy_config.app_id);
-    println!("Config: {}", args.config_file.display());
-    println!();
-    println!("Next steps:");
-    println!(
-        "  - Run `WIP: tvc deploy status {}` to check deployment status",
-        result.result.deployment_id
-    );
-    println!(
-        "  - Run `tvc deploy approve --deploy-id {}` to approve the manifest",
-        result.result.deployment_id
-    );
+    let deployment_id = api_result.result.deployment_id;
+
+    let result_data = DeployCreateOutput {
+        deployment_id: deployment_id.clone(),
+        app_id: deploy_config.app_id.clone(),
+        config_file: args.config_file.display().to_string(),
+    };
+
+    output.result(&result_data, || {
+        println!();
+        println!("Deployment created successfully!");
+        println!();
+        println!("Deployment ID: {deployment_id}");
+        println!("App ID: {}", deploy_config.app_id);
+        println!("Config: {}", args.config_file.display());
+        println!();
+        println!("Next steps:");
+        println!(
+            "  - Run `tvc deploy status --deploy-id {deployment_id}` to check deployment status"
+        );
+        println!(
+            "  - Run `tvc deploy approve --deploy-id {deployment_id}` to approve the manifest"
+        );
+    })?;
 
     Ok(())
 }

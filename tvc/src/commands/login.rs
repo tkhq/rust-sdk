@@ -1,12 +1,15 @@
 //! Login command for authenticating with Turnkey.
 
+use crate::cli::GlobalOpts;
 use crate::config::turnkey::{
     Config, KeyCurve, OrgConfig, StoredApiKey, StoredQosOperatorKey, API_BASE_URL_DEV,
     API_BASE_URL_LOCAL, API_BASE_URL_PREPROD, API_BASE_URL_PROD,
 };
+use crate::output::Output;
 use anyhow::{anyhow, bail, Context, Result};
 use clap::Args as ClapArgs;
 use qos_p256::P256Pair;
+use serde::Serialize;
 use std::io::{BufRead, Write};
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use turnkey_client::generated::GetWhoamiRequest;
@@ -20,11 +23,6 @@ pub struct Args {
     #[arg(long)]
     pub org: Option<String>,
 
-    /// Organization ID for creating a new org config.
-    /// Use with --alias and --api-env for fully non-interactive setup.
-    #[arg(long, env = "TVC_ORG_ID")]
-    pub org_id: Option<String>,
-
     /// Alias for the organization config (used with --org-id).
     #[arg(long, env = "TVC_ORG_ALIAS", default_value = "default")]
     pub alias: String,
@@ -34,66 +32,86 @@ pub struct Args {
     pub api_env: Option<String>,
 }
 
+#[derive(Serialize)]
+struct LoginOutput {
+    organization_name: String,
+    organization_id: String,
+    username: String,
+    user_id: String,
+    active_org: String,
+    api_key_public: String,
+    operator_key_public: String,
+    config_path: String,
+    api_key_path: String,
+    operator_key_path: String,
+}
+
 /// Run the login command.
-pub async fn run(args: Args, no_input: bool, quiet: bool) -> anyhow::Result<()> {
-    // Load existing config
+pub async fn run(args: Args, global: &GlobalOpts) -> anyhow::Result<()> {
+    let output = Output::new(global);
+
     let mut config = Config::load().await?;
+    let (alias, org_config) = select_or_create_org(&mut config, &args, global).await?;
 
-    // Select or create org
-    let (alias, org_config) = select_or_create_org(&mut config, &args, no_input).await?;
+    output.status(&format!("Selected org: {} ({})", alias, org_config.id));
 
-    status(
-        quiet,
-        &format!("Selected org: {} ({})", alias, org_config.id),
-    );
-
-    // Save config with the new/updated org
     config.set_active_org(&alias)?;
     config.save().await?;
 
-    // Get or generate API key
-    let api_key = get_or_generate_api_key(&org_config, no_input, quiet).await?;
+    let api_key = get_or_generate_api_key(&org_config, global, &output).await?;
 
-    // Verify credentials with whoami
-    status(quiet, "");
-    status(quiet, "Verifying credentials...");
+    output.status("");
+    output.status("Verifying credentials...");
 
     let whoami = verify_credentials(&api_key, &org_config.id, &org_config.api_base_url).await?;
+    let operator_key = get_or_generate_operator_key(&org_config, &output).await?;
 
-    // Get or generate operator key
-    let operator_key = get_or_generate_operator_key(&org_config, quiet).await?;
+    let config_path = crate::config::turnkey::config_file_path()?
+        .display()
+        .to_string();
+    let api_key_path = org_config.api_key_path.display().to_string();
+    let operator_key_path = org_config.operator_key_path.display().to_string();
 
-    println!();
-    println!("Successfully logged in!");
-    println!();
-    println!(
-        "Organization: {} ({})",
-        whoami.organization_name, whoami.organization_id
-    );
-    println!("User: {} ({})", whoami.username, whoami.user_id);
-    println!("Active Org: {alias}");
-    println!("API Key: {}", api_key.public_key);
-    println!("Operator Key: {}", operator_key.public_key);
-    println!();
-    println!(
-        "Config: {}",
-        crate::config::turnkey::config_file_path()?.display()
-    );
-    println!("API Key: {}", org_config.api_key_path.display());
-    println!("Operator Key: {}", org_config.operator_key_path.display());
+    let result = LoginOutput {
+        organization_name: whoami.organization_name.clone(),
+        organization_id: whoami.organization_id.clone(),
+        username: whoami.username.clone(),
+        user_id: whoami.user_id.clone(),
+        active_org: alias.clone(),
+        api_key_public: api_key.public_key.clone(),
+        operator_key_public: operator_key.public_key.clone(),
+        config_path: config_path.clone(),
+        api_key_path: api_key_path.clone(),
+        operator_key_path: operator_key_path.clone(),
+    };
+
+    output.result(&result, || {
+        println!();
+        println!("Successfully logged in!");
+        println!();
+        println!(
+            "Organization: {} ({})",
+            whoami.organization_name, whoami.organization_id
+        );
+        println!("User: {} ({})", whoami.username, whoami.user_id);
+        println!("Active Org: {alias}");
+        println!("API Key: {}", api_key.public_key);
+        println!("Operator Key: {}", operator_key.public_key);
+        println!();
+        println!("Config: {config_path}");
+        println!("API Key: {api_key_path}");
+        println!("Operator Key: {operator_key_path}");
+    })?;
 
     Ok(())
 }
 
-/// Select an existing org or create a new one.
-/// Returns the alias and a clone of the org config.
 async fn select_or_create_org(
     config: &mut Config,
     args: &Args,
-    no_input: bool,
+    global: &GlobalOpts,
 ) -> Result<(String, OrgConfig)> {
-    // If --org-id provided, create/update org non-interactively
-    if let Some(ref org_id) = args.org_id {
+    if let Some(ref org_id) = global.org_id {
         let api_base_url = match args.api_env.as_deref().unwrap_or("prod") {
             "prod" => API_BASE_URL_PROD,
             "preprod" => API_BASE_URL_PREPROD,
@@ -106,7 +124,6 @@ async fn select_or_create_org(
         return Ok((args.alias.clone(), org_config));
     }
 
-    // If --org provided, try to find it by alias or ID
     if let Some(ref org) = args.org {
         if let Some((alias, org_config)) = find_org(config, org) {
             return Ok((alias.clone(), org_config.clone()));
@@ -114,8 +131,7 @@ async fn select_or_create_org(
         bail!("Organization '{org}' not found. Run `tvc login` without --org to set up a new organization.");
     }
 
-    // Non-interactive mode requires --org or --org-id
-    if no_input {
+    if global.no_input {
         bail!(
             "No organization specified in non-interactive mode. \
              Use --org <ALIAS> to select an existing org, or \
@@ -123,16 +139,11 @@ async fn select_or_create_org(
         );
     }
 
-    // No --org provided, check existing orgs
-    let org_count = config.orgs.len();
-
-    if org_count == 0 {
-        // No orgs configured - prompt for new org
+    if config.orgs.is_empty() {
         println!("No organization configured.");
         return prompt_for_new_org(config).await;
     }
 
-    // Show existing orgs and let user select or add new
     println!("Organization choices:");
     for (alias, org) in &config.orgs {
         let active = if config.active_org.as_ref() == Some(alias) {
@@ -159,7 +170,6 @@ async fn select_or_create_org(
     bail!("Organization '{}' not found", selection)
 }
 
-/// Prompt the user to enter a new organization ID and alias.
 async fn prompt_for_new_org(config: &mut Config) -> Result<(String, OrgConfig)> {
     println!("You can find your Organization ID at: https://app.turnkey.com/dashboard/welcome");
     println!();
@@ -170,8 +180,6 @@ async fn prompt_for_new_org(config: &mut Config) -> Result<(String, OrgConfig)> 
     }
 
     let alias = prompt_with_default("Organization alias", "default")?;
-
-    // Prompt for API base URL
     let api_base_url = prompt_for_api_url()?;
 
     config.add_org(&alias, org_id, api_base_url)?;
@@ -179,7 +187,6 @@ async fn prompt_for_new_org(config: &mut Config) -> Result<(String, OrgConfig)> 
     Ok((alias, org_config))
 }
 
-/// Prompt the user to select a Turnkey API URL.
 fn prompt_for_api_url() -> Result<String> {
     println!();
     println!("Select Turnkey API URL:");
@@ -202,21 +209,18 @@ fn prompt_for_api_url() -> Result<String> {
     Ok(url.to_string())
 }
 
-/// Get an existing API key or generate a new one.
 async fn get_or_generate_api_key(
     org_config: &OrgConfig,
-    no_input: bool,
-    quiet: bool,
+    global: &GlobalOpts,
+    output: &Output<'_>,
 ) -> Result<StoredApiKey> {
-    // Check if API key already exists
     if let Some(api_key) = StoredApiKey::load(org_config).await? {
-        status(quiet, "Using existing API key.");
+        output.status("Using existing API key.");
         return Ok(api_key);
     }
 
-    // Generate new API key
-    status(quiet, "");
-    status(quiet, "Generating API key...");
+    output.status("");
+    output.status("Generating API key...");
 
     let stamper = TurnkeyP256ApiKey::generate();
     let public_key = hex::encode(stamper.compressed_public_key());
@@ -228,43 +232,37 @@ async fn get_or_generate_api_key(
         curve: KeyCurve::P256,
     };
 
-    // Save the key
     api_key.save(org_config).await?;
 
-    // Always show manual setup instructions, even with --quiet.
-    notice("");
-    notice("API Key Generated!");
-    notice("");
-    notice(&format!("Public Key: {public_key}"));
-    notice("");
-    notice("Add this API key to your Turnkey dashboard:");
-    notice("  1. Go to https://app.turnkey.com/dashboard/users");
-    notice("  2. Click your user > Create API Key > Generate API Keys via CLI > Continue");
-    notice("  3. Paste the public key > Name it \"TVC CLI\" > Continue > Approve");
-    notice("");
+    output.notice("");
+    output.notice("API Key Generated!");
+    output.notice("");
+    output.notice(&format!("Public Key: {public_key}"));
+    output.notice("");
+    output.notice("Add this API key to your Turnkey dashboard:");
+    output.notice("  1. Go to https://app.turnkey.com/dashboard/users");
+    output.notice("  2. Click your user > Create API Key > Generate API Keys via CLI > Continue");
+    output.notice("  3. Paste the public key > Name it \"TVC CLI\" > Continue > Approve");
+    output.notice("");
 
-    // Skip wait in non-interactive mode.
-    if !no_input {
+    if !global.no_input {
         wait_for_enter("Press Enter when done...")?;
     }
 
     Ok(api_key)
 }
 
-/// Get an existing operator key or generate a new one.
 async fn get_or_generate_operator_key(
     org_config: &OrgConfig,
-    quiet: bool,
+    output: &Output<'_>,
 ) -> Result<StoredQosOperatorKey> {
-    // Check if operator key already exists
     if let Some(operator_key) = StoredQosOperatorKey::load(org_config).await? {
-        status(quiet, "Using existing operator key.");
+        output.status("Using existing operator key.");
         return Ok(operator_key);
     }
 
-    // Generate new operator key
-    status(quiet, "");
-    status(quiet, "Generating operator key...");
+    output.status("");
+    output.status("Generating operator key...");
 
     let pair =
         P256Pair::generate().map_err(|e| anyhow!("failed to generate operator key: {e:?}"))?;
@@ -276,34 +274,24 @@ async fn get_or_generate_operator_key(
         private_key,
     };
 
-    // Save the key
     operator_key.save(org_config).await?;
 
-    status(quiet, "");
-    status(quiet, "Operator Key Generated!");
-    status(quiet, "");
-    status(quiet, &format!("Public Key: {public_key}"));
-    status(quiet, "");
-    status(
-        quiet,
-        "This key will be used for approving deployment manifests.",
-    );
-    status(
-        quiet,
-        "Make sure to register this as an operator in your organization.",
-    );
+    output.status("");
+    output.status("Operator Key Generated!");
+    output.status("");
+    output.status(&format!("Public Key: {public_key}"));
+    output.status("");
+    output.status("This key will be used for approving deployment manifests.");
+    output.status("Make sure to register this as an operator in your organization.");
 
     Ok(operator_key)
 }
 
-/// Find an org by alias or by org ID.
 fn find_org<'a>(config: &'a Config, org: &str) -> Option<(&'a String, &'a OrgConfig)> {
-    // First try by alias
     if let Some((alias, org_config)) = config.orgs.get_key_value(org) {
         return Some((alias, org_config));
     }
 
-    // Then try by org ID
     for (alias, org_config) in &config.orgs {
         if org_config.id == org {
             return Some((alias, org_config));
@@ -313,7 +301,6 @@ fn find_org<'a>(config: &'a Config, org: &str) -> Option<(&'a String, &'a OrgCon
     None
 }
 
-/// Prompt the user for input and return the trimmed response.
 fn prompt(message: &str) -> Result<String> {
     eprint!("{message}: ");
     std::io::stderr().flush()?;
@@ -323,7 +310,6 @@ fn prompt(message: &str) -> Result<String> {
     Ok(input.trim().to_string())
 }
 
-/// Prompt the user for input with a default value.
 fn prompt_with_default(message: &str, default: &str) -> Result<String> {
     eprint!("{message} [{default}]: ");
     std::io::stderr().flush()?;
@@ -339,7 +325,6 @@ fn prompt_with_default(message: &str, default: &str) -> Result<String> {
     }
 }
 
-/// Wait for the user to press Enter.
 fn wait_for_enter(message: &str) -> Result<()> {
     eprint!("{message}");
     std::io::stderr().flush()?;
@@ -349,17 +334,7 @@ fn wait_for_enter(message: &str) -> Result<()> {
     Ok(())
 }
 
-fn status(quiet: bool, message: &str) {
-    if !quiet {
-        eprintln!("{message}");
-    }
-}
-
-fn notice(message: &str) {
-    eprintln!("{message}");
-}
-
-/// Result of a successful whoami verification.
+#[derive(Debug, serde::Deserialize)]
 pub struct WhoamiResult {
     pub organization_name: String,
     pub organization_id: String,
@@ -367,7 +342,6 @@ pub struct WhoamiResult {
     pub user_id: String,
 }
 
-/// Verify credentials by calling the whoami endpoint.
 async fn verify_credentials(
     api_key: &StoredApiKey,
     org_id: &str,

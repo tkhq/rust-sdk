@@ -1,10 +1,12 @@
 //! App create command - creates an app from a config file.
 
-use crate::client::build_client;
+use crate::client::build_client_with_overrides;
 use crate::config::app::AppConfig;
 use crate::config::turnkey;
+use crate::output::Output;
 use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
+use serde::Serialize;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::{CreateTvcAppIntent, TvcOperatorParams, TvcOperatorSetParams};
@@ -17,8 +19,18 @@ pub struct Args {
     pub config_file: PathBuf,
 }
 
+#[derive(Serialize)]
+struct AppCreateOutput {
+    app_id: String,
+    name: String,
+    manifest_set_id: String,
+    manifest_set_operator_ids: Vec<String>,
+    config_file: String,
+}
+
 /// Run the app create command.
-pub async fn run(args: Args) -> Result<()> {
+pub async fn run(args: Args, global: &crate::cli::GlobalOpts) -> Result<()> {
+    let output = Output::new(global);
     // Read and parse config file
     let config_content = std::fs::read_to_string(&args.config_file)
         .with_context(|| format!("failed to read config file: {}", args.config_file.display()))?;
@@ -47,10 +59,10 @@ pub async fn run(args: Args) -> Result<()> {
         anyhow::bail!("Must specify either manifestSetId or manifestSetParams");
     }
 
-    println!("Creating app '{}'...", app_config.name);
+    output.status(&format!("Creating app '{}'...", app_config.name));
 
     // Build authenticated client
-    let auth = build_client().await?;
+    let auth = build_client_with_overrides(global).await?;
 
     // Convert config to API intent
     let intent = CreateTvcAppIntent {
@@ -107,6 +119,7 @@ pub async fn run(args: Args) -> Result<()> {
 
     let app_id = result.result.app_id;
     let operator_ids = result.result.manifest_set_operator_ids;
+    let manifest_set_id = result.result.manifest_set_id;
 
     // save the app ID and operator_ids to config
     let mut config = turnkey::Config::load().await?;
@@ -114,20 +127,30 @@ pub async fn run(args: Args) -> Result<()> {
     config.set_last_operator_ids(&operator_ids)?;
     config.save().await?;
 
-    println!();
-    println!("App created successfully!");
-    println!();
-    println!("App ID: {app_id}");
-    println!("Name: {}", app_config.name);
-    println!("Manifest Set ID: {}", result.result.manifest_set_id);
-    if !operator_ids.is_empty() {
-        println!("Manifest Set Operator IDs: {}", operator_ids.join(", "));
-    }
-    println!("Config: {}", args.config_file.display());
-    println!();
-    println!(
-        "Use one of the Manifest Set Operator IDs above with `tvc deploy approve --operator-id`"
-    );
+    let result_data = AppCreateOutput {
+        app_id: app_id.clone(),
+        name: app_config.name.clone(),
+        manifest_set_id: manifest_set_id.clone(),
+        manifest_set_operator_ids: operator_ids.clone(),
+        config_file: args.config_file.display().to_string(),
+    };
+
+    output.result(&result_data, || {
+        println!();
+        println!("App created successfully!");
+        println!();
+        println!("App ID: {app_id}");
+        println!("Name: {}", app_config.name);
+        println!("Manifest Set ID: {manifest_set_id}");
+        if !operator_ids.is_empty() {
+            println!("Manifest Set Operator IDs: {}", operator_ids.join(", "));
+        }
+        println!("Config: {}", args.config_file.display());
+        println!();
+        println!(
+            "Use one of the Manifest Set Operator IDs above with `tvc deploy approve --operator-id`"
+        );
+    })?;
 
     Ok(())
 }
