@@ -231,23 +231,17 @@ async fn get_or_generate_api_key(
     // Save the key
     api_key.save(org_config).await?;
 
-    // Display instructions
-    status(quiet, "");
-    status(quiet, "API Key Generated!");
-    status(quiet, "");
-    status(quiet, &format!("Public Key: {public_key}"));
-    status(quiet, "");
-    status(quiet, "Add this API key to your Turnkey dashboard:");
-    status(quiet, "  1. Go to https://app.turnkey.com/dashboard/users");
-    status(
-        quiet,
-        "  2. Click your user > Create API Key > Generate API Keys via CLI > Continue",
-    );
-    status(
-        quiet,
-        "  3. Paste the public key > Name it \"TVC CLI\" > Continue > Approve",
-    );
-    status(quiet, "");
+    // Always show manual setup instructions, even with --quiet.
+    notice("");
+    notice("API Key Generated!");
+    notice("");
+    notice(&format!("Public Key: {public_key}"));
+    notice("");
+    notice("Add this API key to your Turnkey dashboard:");
+    notice("  1. Go to https://app.turnkey.com/dashboard/users");
+    notice("  2. Click your user > Create API Key > Generate API Keys via CLI > Continue");
+    notice("  3. Paste the public key > Name it \"TVC CLI\" > Continue > Approve");
+    notice("");
 
     // Skip wait in non-interactive mode.
     if !no_input {
@@ -359,6 +353,10 @@ fn status(quiet: bool, message: &str) {
     if !quiet {
         eprintln!("{message}");
     }
+}
+
+fn notice(message: &str) {
+    eprintln!("{message}");
 }
 
 /// Result of a successful whoami verification.

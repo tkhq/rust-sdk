@@ -178,10 +178,15 @@ fn login_quiet_suppresses_status() {
         .expect("failed to execute");
 
     let stderr = String::from_utf8(result.stderr).expect("not utf8");
-    // --quiet suppresses status messages like "Verifying credentials"
-    // but errors still appear on stderr
+    // --quiet suppresses routine status messages, but manual recovery
+    // instructions for first-time API key setup should still be visible.
     assert!(
-        !stderr.contains("Selected org") && !stderr.contains("Generating"),
+        !stderr.contains("Selected org")
+            && !stderr.contains("Generating")
+            && !stderr.contains("Verifying credentials")
+            && stderr.contains("API Key Generated!")
+            && stderr.contains("Public Key:")
+            && stderr.contains("Add this API key to your Turnkey dashboard:"),
         "Expected --quiet to suppress status messages, got: {stderr}"
     );
 }
