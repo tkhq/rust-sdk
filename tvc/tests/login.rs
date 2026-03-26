@@ -46,7 +46,6 @@ fn login_no_input_with_org_id_creates_config() {
         .arg("test")
         .arg("--api-env")
         .arg("prod")
-        .arg("--skip-api-key-wait")
         .output()
         .expect("failed to execute");
 
@@ -72,7 +71,6 @@ fn login_api_env_dev() {
         .arg("test-org-id")
         .arg("--api-env")
         .arg("dev")
-        .arg("--skip-api-key-wait")
         .output()
         .expect("failed to execute");
 
@@ -95,7 +93,6 @@ fn login_api_env_preprod() {
         .arg("test-org-id")
         .arg("--api-env")
         .arg("preprod")
-        .arg("--skip-api-key-wait")
         .output()
         .expect("failed to execute");
 
@@ -118,7 +115,6 @@ fn login_api_env_local() {
         .arg("test-org-id")
         .arg("--api-env")
         .arg("local")
-        .arg("--skip-api-key-wait")
         .output()
         .expect("failed to execute");
 
@@ -157,7 +153,6 @@ fn login_api_env_defaults_to_prod() {
         .arg("login")
         .arg("--org-id")
         .arg("test-org-id")
-        .arg("--skip-api-key-wait")
         .output()
         .expect("failed to execute");
 
@@ -179,7 +174,6 @@ fn login_quiet_suppresses_status() {
         .arg("login")
         .arg("--org-id")
         .arg("test-org-id")
-        .arg("--skip-api-key-wait")
         .output()
         .expect("failed to execute");
 

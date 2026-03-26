@@ -32,10 +32,6 @@ pub struct Args {
     /// API environment to use (used with --org-id).
     #[arg(long, env = "TVC_API_ENV", value_parser = ["prod", "preprod", "dev", "local"])]
     pub api_env: Option<String>,
-
-    /// Skip the interactive prompt after API key generation.
-    #[arg(long)]
-    pub skip_api_key_wait: bool,
 }
 
 /// Run the login command.
@@ -56,7 +52,7 @@ pub async fn run(args: Args, no_input: bool, quiet: bool) -> anyhow::Result<()> 
     config.save().await?;
 
     // Get or generate API key
-    let api_key = get_or_generate_api_key(&org_config, &args, no_input, quiet).await?;
+    let api_key = get_or_generate_api_key(&org_config, no_input, quiet).await?;
 
     // Verify credentials with whoami
     status(quiet, "");
@@ -98,8 +94,14 @@ async fn select_or_create_org(
 ) -> Result<(String, OrgConfig)> {
     // If --org-id provided, create/update org non-interactively
     if let Some(ref org_id) = args.org_id {
-        let api_base_url = resolve_api_env(args.api_env.as_deref())?;
-        config.add_org(&args.alias, org_id.clone(), api_base_url)?;
+        let api_base_url = match args.api_env.as_deref().unwrap_or("prod") {
+            "prod" => API_BASE_URL_PROD,
+            "preprod" => API_BASE_URL_PREPROD,
+            "dev" => API_BASE_URL_DEV,
+            "local" => API_BASE_URL_LOCAL,
+            _ => unreachable!("clap validates api_env"),
+        };
+        config.add_org(&args.alias, org_id.clone(), api_base_url.to_string())?;
         let org_config = config.orgs.get(&args.alias).unwrap().clone();
         return Ok((args.alias.clone(), org_config));
     }
@@ -157,18 +159,6 @@ async fn select_or_create_org(
     bail!("Organization '{}' not found", selection)
 }
 
-/// Resolve an API environment name to a URL.
-fn resolve_api_env(api_env: Option<&str>) -> Result<String> {
-    let url = match api_env.unwrap_or("prod") {
-        "prod" => API_BASE_URL_PROD,
-        "preprod" => API_BASE_URL_PREPROD,
-        "dev" => API_BASE_URL_DEV,
-        "local" => API_BASE_URL_LOCAL,
-        other => bail!("Invalid API environment: {other}"),
-    };
-    Ok(url.to_string())
-}
-
 /// Prompt the user to enter a new organization ID and alias.
 async fn prompt_for_new_org(config: &mut Config) -> Result<(String, OrgConfig)> {
     println!("You can find your Organization ID at: https://app.turnkey.com/dashboard/welcome");
@@ -215,7 +205,6 @@ fn prompt_for_api_url() -> Result<String> {
 /// Get an existing API key or generate a new one.
 async fn get_or_generate_api_key(
     org_config: &OrgConfig,
-    args: &Args,
     no_input: bool,
     quiet: bool,
 ) -> Result<StoredApiKey> {
@@ -260,8 +249,8 @@ async fn get_or_generate_api_key(
     );
     status(quiet, "");
 
-    // Skip wait in non-interactive mode or with --skip-api-key-wait
-    if !no_input && !args.skip_api_key_wait {
+    // Skip wait in non-interactive mode.
+    if !no_input {
         wait_for_enter("Press Enter when done...")?;
     }
 
