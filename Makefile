@@ -43,3 +43,13 @@ examples: build
 	cargo run -p turnkey_examples --bin sub_organization
 	cargo run -p turnkey_examples --bin wallet
 	cargo run -p turnkey_examples --bin proofs
+
+.PHONY: check
+check: lint test
+	@echo "All checks passed."
+
+.PHONY: install-hooks
+install-hooks:
+	@cp scripts/pre-commit .git/hooks/pre-commit
+	@chmod +x .git/hooks/pre-commit
+	@echo "Pre-commit hook installed."
