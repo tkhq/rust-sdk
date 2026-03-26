@@ -1,11 +1,9 @@
 //! Login command for authenticating with Turnkey.
 
-use crate::cli::GlobalOpts;
 use crate::config::turnkey::{
     Config, KeyCurve, OrgConfig, StoredApiKey, StoredQosOperatorKey, API_BASE_URL_DEV,
     API_BASE_URL_LOCAL, API_BASE_URL_PREPROD, API_BASE_URL_PROD,
 };
-use crate::output::Output;
 use anyhow::{anyhow, bail, Context, Result};
 use clap::Args as ClapArgs;
 use qos_p256::P256Pair;
@@ -41,32 +39,33 @@ pub struct Args {
 }
 
 /// Run the login command.
-pub async fn run(args: Args, global: &GlobalOpts) -> anyhow::Result<()> {
-    let output = Output::new(global);
-
+pub async fn run(args: Args, no_input: bool, quiet: bool) -> anyhow::Result<()> {
     // Load existing config
     let mut config = Config::load().await?;
 
     // Select or create org
-    let (alias, org_config) = select_or_create_org(&mut config, &args, global).await?;
+    let (alias, org_config) = select_or_create_org(&mut config, &args, no_input).await?;
 
-    output.status(&format!("Selected org: {} ({})", alias, org_config.id));
+    status(
+        quiet,
+        &format!("Selected org: {} ({})", alias, org_config.id),
+    );
 
     // Save config with the new/updated org
     config.set_active_org(&alias)?;
     config.save().await?;
 
     // Get or generate API key
-    let api_key = get_or_generate_api_key(&org_config, &args, global).await?;
+    let api_key = get_or_generate_api_key(&org_config, &args, no_input, quiet).await?;
 
     // Verify credentials with whoami
-    output.status("");
-    output.status("Verifying credentials...");
+    status(quiet, "");
+    status(quiet, "Verifying credentials...");
 
     let whoami = verify_credentials(&api_key, &org_config.id, &org_config.api_base_url).await?;
 
     // Get or generate operator key
-    let operator_key = get_or_generate_operator_key(&org_config, &output).await?;
+    let operator_key = get_or_generate_operator_key(&org_config, quiet).await?;
 
     println!();
     println!("Successfully logged in!");
@@ -95,7 +94,7 @@ pub async fn run(args: Args, global: &GlobalOpts) -> anyhow::Result<()> {
 async fn select_or_create_org(
     config: &mut Config,
     args: &Args,
-    global: &GlobalOpts,
+    no_input: bool,
 ) -> Result<(String, OrgConfig)> {
     // If --org-id provided, create/update org non-interactively
     if let Some(ref org_id) = args.org_id {
@@ -114,7 +113,7 @@ async fn select_or_create_org(
     }
 
     // Non-interactive mode requires --org or --org-id
-    if global.no_input {
+    if no_input {
         bail!(
             "No organization specified in non-interactive mode. \
              Use --org <ALIAS> to select an existing org, or \
@@ -217,19 +216,18 @@ fn prompt_for_api_url() -> Result<String> {
 async fn get_or_generate_api_key(
     org_config: &OrgConfig,
     args: &Args,
-    global: &GlobalOpts,
+    no_input: bool,
+    quiet: bool,
 ) -> Result<StoredApiKey> {
-    let output = Output::new(global);
-
     // Check if API key already exists
     if let Some(api_key) = StoredApiKey::load(org_config).await? {
-        output.status("Using existing API key.");
+        status(quiet, "Using existing API key.");
         return Ok(api_key);
     }
 
     // Generate new API key
-    output.status("");
-    output.status("Generating API key...");
+    status(quiet, "");
+    status(quiet, "Generating API key...");
 
     let stamper = TurnkeyP256ApiKey::generate();
     let public_key = hex::encode(stamper.compressed_public_key());
@@ -245,19 +243,25 @@ async fn get_or_generate_api_key(
     api_key.save(org_config).await?;
 
     // Display instructions
-    output.status("");
-    output.status("API Key Generated!");
-    output.status("");
-    output.status(&format!("Public Key: {public_key}"));
-    output.status("");
-    output.status("Add this API key to your Turnkey dashboard:");
-    output.status("  1. Go to https://app.turnkey.com/dashboard/users");
-    output.status("  2. Click your user > Create API Key > Generate API Keys via CLI > Continue");
-    output.status("  3. Paste the public key > Name it \"TVC CLI\" > Continue > Approve");
-    output.status("");
+    status(quiet, "");
+    status(quiet, "API Key Generated!");
+    status(quiet, "");
+    status(quiet, &format!("Public Key: {public_key}"));
+    status(quiet, "");
+    status(quiet, "Add this API key to your Turnkey dashboard:");
+    status(quiet, "  1. Go to https://app.turnkey.com/dashboard/users");
+    status(
+        quiet,
+        "  2. Click your user > Create API Key > Generate API Keys via CLI > Continue",
+    );
+    status(
+        quiet,
+        "  3. Paste the public key > Name it \"TVC CLI\" > Continue > Approve",
+    );
+    status(quiet, "");
 
     // Skip wait in non-interactive mode or with --skip-api-key-wait
-    if !global.no_input && !args.skip_api_key_wait {
+    if !no_input && !args.skip_api_key_wait {
         wait_for_enter("Press Enter when done...")?;
     }
 
@@ -267,17 +271,17 @@ async fn get_or_generate_api_key(
 /// Get an existing operator key or generate a new one.
 async fn get_or_generate_operator_key(
     org_config: &OrgConfig,
-    output: &Output<'_>,
+    quiet: bool,
 ) -> Result<StoredQosOperatorKey> {
     // Check if operator key already exists
     if let Some(operator_key) = StoredQosOperatorKey::load(org_config).await? {
-        output.status("Using existing operator key.");
+        status(quiet, "Using existing operator key.");
         return Ok(operator_key);
     }
 
     // Generate new operator key
-    output.status("");
-    output.status("Generating operator key...");
+    status(quiet, "");
+    status(quiet, "Generating operator key...");
 
     let pair =
         P256Pair::generate().map_err(|e| anyhow!("failed to generate operator key: {e:?}"))?;
@@ -292,13 +296,19 @@ async fn get_or_generate_operator_key(
     // Save the key
     operator_key.save(org_config).await?;
 
-    output.status("");
-    output.status("Operator Key Generated!");
-    output.status("");
-    output.status(&format!("Public Key: {public_key}"));
-    output.status("");
-    output.status("This key will be used for approving deployment manifests.");
-    output.status("Make sure to register this as an operator in your organization.");
+    status(quiet, "");
+    status(quiet, "Operator Key Generated!");
+    status(quiet, "");
+    status(quiet, &format!("Public Key: {public_key}"));
+    status(quiet, "");
+    status(
+        quiet,
+        "This key will be used for approving deployment manifests.",
+    );
+    status(
+        quiet,
+        "Make sure to register this as an operator in your organization.",
+    );
 
     Ok(operator_key)
 }
@@ -354,6 +364,12 @@ fn wait_for_enter(message: &str) -> Result<()> {
     let mut input = String::new();
     std::io::stdin().lock().read_line(&mut input)?;
     Ok(())
+}
+
+fn status(quiet: bool, message: &str) {
+    if !quiet {
+        eprintln!("{message}");
+    }
 }
 
 /// Result of a successful whoami verification.

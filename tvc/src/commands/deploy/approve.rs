@@ -75,7 +75,7 @@ pub struct Args {
 }
 
 /// Run the approve deploy command.
-pub async fn run(args: Args, global: &crate::cli::GlobalOpts) -> anyhow::Result<()> {
+pub async fn run(args: Args, no_input: bool) -> anyhow::Result<()> {
     // Fetch manifest - track manifest_id if fetched from API
     let (manifest, fetched_manifest_id) = match (&args.manifest, &args.deploy_id) {
         (Some(path), _) => (read_manifest_from_path(path).await?, None),
@@ -86,8 +86,12 @@ pub async fn run(args: Args, global: &crate::cli::GlobalOpts) -> anyhow::Result<
         (None, None) => bail!("a manifest source is required"),
     };
 
-    // Skip interactive approval when --yes/-y is passed or --no-input is explicitly set
-    if !args.yes && !global.no_input {
+    if no_input && !args.yes {
+        bail!("Approval input is required in non-interactive mode. Re-run with --yes to explicitly approve the manifest.");
+    }
+
+    // Skip interactive approval only when --yes/-y is passed
+    if !args.yes {
         interactive_approve(&manifest)?;
     }
 

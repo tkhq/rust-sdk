@@ -139,7 +139,7 @@ fn approve_requires_manifest_id_or_skip_post() {
 }
 
 #[test]
-fn approve_no_input_skips_interactive() {
+fn approve_no_input_requires_explicit_yes() {
     cargo_bin_cmd!("tvc")
         .arg("--no-input")
         .arg("deploy")
@@ -148,6 +148,25 @@ fn approve_no_input_skips_interactive() {
         .arg("fixtures/manifest.json")
         .arg("--operator-seed")
         .arg("fixtures/seed.hex")
+        .arg("--skip-post")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Approval input is required in non-interactive mode",
+        ));
+}
+
+#[test]
+fn approve_no_input_with_yes_succeeds() {
+    cargo_bin_cmd!("tvc")
+        .arg("--no-input")
+        .arg("deploy")
+        .arg("approve")
+        .arg("--manifest")
+        .arg("fixtures/manifest.json")
+        .arg("--operator-seed")
+        .arg("fixtures/seed.hex")
+        .arg("--yes")
         .arg("--skip-post")
         .assert()
         .success()

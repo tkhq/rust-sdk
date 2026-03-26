@@ -6,10 +6,6 @@ use clap::{Args as ClapArgs, Parser, Subcommand};
 /// Global options available to all commands.
 #[derive(Debug, Clone, ClapArgs)]
 pub struct GlobalOpts {
-    /// Output results as JSON.
-    #[arg(long, global = true, env = "TVC_JSON")]
-    pub json: bool,
-
     /// Disable all interactive prompts. Fails if input is required.
     /// Set TVC_NO_INPUT=true in CI/CD environments.
     #[arg(long, global = true, env = "TVC_NO_INPUT")]
@@ -35,31 +31,24 @@ impl Cli {
     /// Run the CLI.
     pub async fn run() -> anyhow::Result<()> {
         let args = Cli::parse();
-        let global = args.global;
+        let no_input = args.global.no_input;
+        let quiet = args.global.quiet;
 
         match args.command {
             Commands::Deploy { command } => match command {
                 DeployCommands::Approve(cmd_args) => {
-                    commands::deploy::approve::run(cmd_args, &global).await
+                    commands::deploy::approve::run(cmd_args, no_input).await
                 }
-                DeployCommands::Status(cmd_args) => {
-                    commands::deploy::status::run(cmd_args, &global).await
-                }
-                DeployCommands::Create(cmd_args) => {
-                    commands::deploy::create::run(cmd_args, &global).await
-                }
-                DeployCommands::Init(cmd_args) => {
-                    commands::deploy::init::run(cmd_args, &global).await
-                }
+                DeployCommands::Status(cmd_args) => commands::deploy::status::run(cmd_args).await,
+                DeployCommands::Create(cmd_args) => commands::deploy::create::run(cmd_args).await,
+                DeployCommands::Init(cmd_args) => commands::deploy::init::run(cmd_args).await,
             },
             Commands::App { command } => match command {
-                AppCommands::List(cmd_args) => commands::app::list::run(cmd_args, &global).await,
-                AppCommands::Create(cmd_args) => {
-                    commands::app::create::run(cmd_args, &global).await
-                }
-                AppCommands::Init(cmd_args) => commands::app::init::run(cmd_args, &global).await,
+                AppCommands::List(cmd_args) => commands::app::list::run(cmd_args).await,
+                AppCommands::Create(cmd_args) => commands::app::create::run(cmd_args).await,
+                AppCommands::Init(cmd_args) => commands::app::init::run(cmd_args).await,
             },
-            Commands::Login(cmd_args) => commands::login::run(cmd_args, &global).await,
+            Commands::Login(cmd_args) => commands::login::run(cmd_args, no_input, quiet).await,
         }
     }
 }
