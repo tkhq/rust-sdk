@@ -31,7 +31,6 @@ impl<'a> Output<'a> {
     }
 
     /// Print result data: JSON when `--json` is set, otherwise call the human-readable formatter.
-    /// In `--quiet` mode, human-readable output is suppressed.
     pub fn result<T, F>(&self, data: &T, human_fn: F) -> anyhow::Result<()>
     where
         T: Serialize,
@@ -39,9 +38,36 @@ impl<'a> Output<'a> {
     {
         if self.global.json {
             println!("{}", serde_json::to_string_pretty(data)?);
-        } else if !self.global.quiet {
+        } else {
             human_fn();
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Output;
+    use crate::cli::GlobalOpts;
+    use std::cell::Cell;
+
+    #[test]
+    fn quiet_still_runs_human_result_formatter() {
+        let global = GlobalOpts {
+            json: false,
+            no_input: false,
+            quiet: true,
+            api_key_file: None,
+            api_url: None,
+            org_id: None,
+        };
+        let output = Output::new(&global);
+        let called = Cell::new(false);
+
+        output
+            .result(&serde_json::json!({"ok": true}), || called.set(true))
+            .unwrap();
+
+        assert!(called.get());
     }
 }
