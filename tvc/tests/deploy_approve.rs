@@ -7,14 +7,44 @@ fn approve_requires_source() {
         .arg("deploy")
         .arg("approve")
         .arg("--dry-run")
-        .arg("--dangerous-skip-interactive")
+        .arg("--yes")
         .assert()
         .failure()
         .stderr(predicate::str::contains("manifest source is required"));
 }
 
 #[test]
-fn dangerous_approve_with_file() {
+fn approve_with_yes_flag() {
+    cargo_bin_cmd!("tvc")
+        .arg("deploy")
+        .arg("approve")
+        .arg("--manifest")
+        .arg("fixtures/manifest.json")
+        .arg("--operator-seed")
+        .arg("fixtures/seed.hex")
+        .arg("--yes")
+        .arg("--skip-post")
+        .assert()
+        .success();
+}
+
+#[test]
+fn approve_with_short_y_flag() {
+    cargo_bin_cmd!("tvc")
+        .arg("deploy")
+        .arg("approve")
+        .arg("--manifest")
+        .arg("fixtures/manifest.json")
+        .arg("--operator-seed")
+        .arg("fixtures/seed.hex")
+        .arg("-y")
+        .arg("--skip-post")
+        .assert()
+        .success();
+}
+
+#[test]
+fn approve_with_dangerous_skip_interactive_backward_compat() {
     cargo_bin_cmd!("tvc")
         .arg("deploy")
         .arg("approve")
@@ -30,8 +60,6 @@ fn dangerous_approve_with_file() {
 
 #[test]
 fn approve_interactive_prompts() {
-    // Simulate user typing "yes" or "y" for each of the 5 prompts:
-    // namespace, enclave, pivot, manifest set, share set
     let input = "yes\nyes\ny\nyes\ny\n";
 
     cargo_bin_cmd!("tvc")
@@ -59,7 +87,6 @@ fn approve_interactive_prompts() {
 
 #[test]
 fn approve_interactive_reject() {
-    // User rejects at first prompt
     let input = "no\n";
 
     cargo_bin_cmd!("tvc")
@@ -84,7 +111,7 @@ fn manifest_and_deploy_id_are_mutually_exclusive() {
         .arg("fixtures/manifest.json")
         .arg("--deploy-id")
         .arg("some-deploy-id")
-        .arg("--dangerous-skip-interactive")
+        .arg("--yes")
         .assert()
         .failure()
         .stderr(predicate::str::contains(
@@ -92,7 +119,6 @@ fn manifest_and_deploy_id_are_mutually_exclusive() {
         ));
 }
 
-/// Test that --skip-post is required when --manifest-id is not provided
 #[test]
 fn approve_requires_manifest_id_or_skip_post() {
     cargo_bin_cmd!("tvc")
@@ -102,10 +128,26 @@ fn approve_requires_manifest_id_or_skip_post() {
         .arg("fixtures/manifest.json")
         .arg("--operator-seed")
         .arg("fixtures/seed.hex")
-        .arg("--dangerous-skip-interactive")
+        .arg("--yes")
         .assert()
         .failure()
         .stderr(predicate::str::contains(
             "--manifest-id is required to post approval to API",
         ));
+}
+
+#[test]
+fn approve_no_input_skips_interactive() {
+    cargo_bin_cmd!("tvc")
+        .arg("--no-input")
+        .arg("deploy")
+        .arg("approve")
+        .arg("--manifest")
+        .arg("fixtures/manifest.json")
+        .arg("--operator-seed")
+        .arg("fixtures/seed.hex")
+        .arg("--skip-post")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"signature\""));
 }

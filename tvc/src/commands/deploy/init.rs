@@ -17,7 +17,7 @@ pub struct Args {
 }
 
 /// Run the deploy init command.
-pub async fn run(args: Args) -> Result<()> {
+pub async fn run(args: Args, _global: &crate::cli::GlobalOpts) -> Result<()> {
     // Generate output filename with timestamp if not provided
     let output = args.output.unwrap_or_else(|| {
         let timestamp = Local::now().format("%Y-%m-%d-%H%M%S");
