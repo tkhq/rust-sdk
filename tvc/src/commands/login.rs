@@ -44,6 +44,7 @@ struct LoginOutput {
     config_path: String,
     api_key_path: String,
     operator_key_path: String,
+    pending_key_registration: bool,
 }
 
 /// Run the login command.
@@ -58,12 +59,57 @@ pub async fn run(args: Args, global: &GlobalOpts) -> anyhow::Result<()> {
     config.set_active_org(&alias)?;
     config.save().await?;
 
-    let api_key = get_or_generate_api_key(&org_config, global, &output).await?;
+    let (api_key, freshly_generated) =
+        get_or_generate_api_key(&org_config, global, &output).await?;
 
     output.status("");
     output.status("Verifying credentials...");
 
-    let whoami = verify_credentials(&api_key, &org_config.id, &org_config.api_base_url).await?;
+    let verification = verify_credentials(&api_key, &org_config.id, &org_config.api_base_url).await;
+
+    // If the key was just generated and verification fails, the user still needs to
+    // register it in the dashboard. Save config and exit cleanly instead of erroring.
+    if freshly_generated && verification.is_err() {
+        let operator_key = get_or_generate_operator_key(&org_config, &output).await?;
+
+        let config_path = crate::config::turnkey::config_file_path()?
+            .display()
+            .to_string();
+        let api_key_path = org_config.api_key_path.display().to_string();
+        let operator_key_path = org_config.operator_key_path.display().to_string();
+
+        let result = LoginOutput {
+            organization_name: String::new(),
+            organization_id: org_config.id.clone(),
+            username: String::new(),
+            user_id: String::new(),
+            active_org: alias.clone(),
+            api_key_public: api_key.public_key.clone(),
+            operator_key_public: operator_key.public_key.clone(),
+            config_path: config_path.clone(),
+            api_key_path: api_key_path.clone(),
+            operator_key_path: operator_key_path.clone(),
+            pending_key_registration: true,
+        };
+
+        output.result(&result, || {
+            println!();
+            println!("Key saved. After adding the public key to your dashboard, run `tvc login --org {alias}` to verify.");
+            println!();
+            println!("Organization ID: {}", org_config.id);
+            println!("Active Org: {alias}");
+            println!("API Key: {}", api_key.public_key);
+            println!("Operator Key: {}", operator_key.public_key);
+            println!();
+            println!("Config: {config_path}");
+            println!("API Key: {api_key_path}");
+            println!("Operator Key: {operator_key_path}");
+        })?;
+
+        return Ok(());
+    }
+
+    let whoami = verification?;
     let operator_key = get_or_generate_operator_key(&org_config, &output).await?;
 
     let config_path = crate::config::turnkey::config_file_path()?
@@ -83,6 +129,7 @@ pub async fn run(args: Args, global: &GlobalOpts) -> anyhow::Result<()> {
         config_path: config_path.clone(),
         api_key_path: api_key_path.clone(),
         operator_key_path: operator_key_path.clone(),
+        pending_key_registration: false,
     };
 
     output.result(&result, || {
@@ -251,11 +298,13 @@ fn parse_api_key_file(content: &str) -> Result<StoredApiKey> {
     })
 }
 
+/// Returns `(api_key, freshly_generated)` where `freshly_generated` is true
+/// when a brand-new keypair was created (the user still needs to register it).
 async fn get_or_generate_api_key(
     org_config: &OrgConfig,
     global: &GlobalOpts,
     output: &Output<'_>,
-) -> Result<StoredApiKey> {
+) -> Result<(StoredApiKey, bool)> {
     // If --api-key-file is provided, import it and save to the org's key path
     if let Some(ref api_key_file) = global.api_key_file {
         output.status(&format!(
@@ -270,12 +319,12 @@ async fn get_or_generate_api_key(
         let api_key = parse_api_key_file(&content)?;
         api_key.save(org_config).await?;
         output.status("API key imported successfully.");
-        return Ok(api_key);
+        return Ok((api_key, false));
     }
 
     if let Some(api_key) = StoredApiKey::load(org_config).await? {
         output.status("Using existing API key.");
-        return Ok(api_key);
+        return Ok((api_key, false));
     }
 
     output.status("");
@@ -298,7 +347,7 @@ async fn get_or_generate_api_key(
         wait_for_enter("Press Enter when done...")?;
     }
 
-    Ok(api_key)
+    Ok((api_key, true))
 }
 
 async fn get_or_generate_operator_key(
