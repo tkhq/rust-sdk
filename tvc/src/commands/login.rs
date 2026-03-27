@@ -209,11 +209,70 @@ fn prompt_for_api_url() -> Result<String> {
     Ok(url.to_string())
 }
 
+/// A single entry from the Turnkey dashboard's exported credentials JSON array.
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DashboardExportedKey {
+    #[allow(dead_code)]
+    api_key_name: Option<String>,
+    public_key: String,
+    curve_type: Option<String>,
+    private_key: String,
+}
+
+/// Parse an API key file that may be in either the dashboard export format
+/// (JSON array with camelCase fields) or the CLI internal format (single JSON
+/// object with snake_case fields).
+fn parse_api_key_file(content: &str) -> Result<StoredApiKey> {
+    // Try CLI internal format first (single object)
+    if let Ok(key) = serde_json::from_str::<StoredApiKey>(content) {
+        return Ok(key);
+    }
+
+    // Try dashboard export format (array of objects)
+    let entries: Vec<DashboardExportedKey> = serde_json::from_str(content)
+        .context("failed to parse API key file as either CLI format or dashboard export format")?;
+
+    let entry = entries
+        .into_iter()
+        .next()
+        .context("API key file contains an empty array")?;
+
+    let curve = match entry.curve_type.as_deref() {
+        Some("API_KEY_CURVE_P256") | None => KeyCurve::P256,
+        Some("API_KEY_CURVE_SECP256K1") => KeyCurve::Secp256k1,
+        Some(other) => bail!("unsupported curve type: {other}"),
+    };
+
+    Ok(StoredApiKey {
+        public_key: entry.public_key,
+        private_key: entry.private_key,
+        curve,
+    })
+}
+
 async fn get_or_generate_api_key(
     org_config: &OrgConfig,
     global: &GlobalOpts,
     output: &Output<'_>,
 ) -> Result<StoredApiKey> {
+    // If --api-key-file is provided, import it and save to the org's key path
+    if let Some(ref api_key_file) = global.api_key_file {
+        output.status(&format!(
+            "Importing API key from {}...",
+            api_key_file.display()
+        ));
+
+        let content = tokio::fs::read_to_string(api_key_file)
+            .await
+            .with_context(|| format!("failed to read API key file: {}", api_key_file.display()))?;
+
+        let api_key = parse_api_key_file(&content)?;
+        api_key.save(org_config).await?;
+        output.status("API key imported successfully.");
+        return Ok(api_key);
+    }
+
     if let Some(api_key) = StoredApiKey::load(org_config).await? {
         output.status("Using existing API key.");
         return Ok(api_key);
