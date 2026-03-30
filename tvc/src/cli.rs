@@ -29,17 +29,17 @@ impl Cli {
 
         match args.command {
             Commands::Deploy { command } => match command {
-                DeployCommands::Approve(cmd_args) => commands::deploy::approve::run(cmd_args).await,
-                DeployCommands::Status(cmd_args) => commands::deploy::status::run(cmd_args).await,
-                DeployCommands::Create(cmd_args) => commands::deploy::create::run(cmd_args).await,
-                DeployCommands::Init(cmd_args) => commands::deploy::init::run(cmd_args).await,
+                DeployCommands::Approve(args) => commands::deploy::approve::run(args).await,
+                DeployCommands::Status(args) => commands::deploy::status::run(args).await,
+                DeployCommands::Create(args) => commands::deploy::create::run(args).await,
+                DeployCommands::Init(args) => commands::deploy::init::run(args).await,
             },
             Commands::App { command } => match command {
-                AppCommands::List(cmd_args) => commands::app::list::run(cmd_args).await,
-                AppCommands::Create(cmd_args) => commands::app::create::run(cmd_args).await,
-                AppCommands::Init(cmd_args) => commands::app::init::run(cmd_args).await,
+                AppCommands::List(args) => commands::app::list::run(args).await,
+                AppCommands::Create(args) => commands::app::create::run(args).await,
+                AppCommands::Init(args) => commands::app::init::run(args).await,
             },
-            Commands::Login(cmd_args) => commands::login::run(cmd_args, no_input, quiet).await,
+            Commands::Login(args) => commands::login::run(args, no_input, quiet).await,
         }
     }
 }

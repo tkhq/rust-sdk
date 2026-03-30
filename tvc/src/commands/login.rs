@@ -17,7 +17,7 @@ use turnkey_client::generated::GetWhoamiRequest;
 pub struct Args {
     /// Organization alias or ID to log in with (select existing org).
     /// If not provided, will prompt interactively.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "org_id")]
     pub org: Option<String>,
 
     /// Organization ID for creating a new org config.
@@ -26,11 +26,16 @@ pub struct Args {
     pub org_id: Option<String>,
 
     /// Alias for the organization config (used with --org-id).
-    #[arg(long, env = "TVC_ORG_ALIAS", default_value = "default")]
+    #[arg(
+        long,
+        env = "TVC_ORG_ALIAS",
+        default_value = "default",
+        requires = "org_id"
+    )]
     pub alias: String,
 
     /// API environment to use (used with --org-id).
-    #[arg(long, env = "TVC_API_ENV", value_parser = ["prod", "preprod", "dev", "local"])]
+    #[arg(long, env = "TVC_API_ENV", value_parser = ["prod", "preprod", "dev", "local"], requires = "org_id")]
     pub api_env: Option<String>,
 }
 
@@ -63,24 +68,26 @@ pub async fn run(args: Args, no_input: bool, quiet: bool) -> anyhow::Result<()> 
     // Get or generate operator key
     let operator_key = get_or_generate_operator_key(&org_config, quiet).await?;
 
-    println!();
-    println!("Successfully logged in!");
-    println!();
-    println!(
-        "Organization: {} ({})",
-        whoami.organization_name, whoami.organization_id
-    );
-    println!("User: {} ({})", whoami.username, whoami.user_id);
-    println!("Active Org: {alias}");
-    println!("API Key: {}", api_key.public_key);
-    println!("Operator Key: {}", operator_key.public_key);
-    println!();
-    println!(
-        "Config: {}",
-        crate::config::turnkey::config_file_path()?.display()
-    );
-    println!("API Key: {}", org_config.api_key_path.display());
-    println!("Operator Key: {}", org_config.operator_key_path.display());
+    if !quiet {
+        println!();
+        println!("Successfully logged in!");
+        println!();
+        println!(
+            "Organization: {} ({})",
+            whoami.organization_name, whoami.organization_id
+        );
+        println!("User: {} ({})", whoami.username, whoami.user_id);
+        println!("Active Org: {alias}");
+        println!("API Key: {}", api_key.public_key);
+        println!("Operator Key: {}", operator_key.public_key);
+        println!();
+        println!(
+            "Config: {}",
+            crate::config::turnkey::config_file_path()?.display()
+        );
+        println!("API Key: {}", org_config.api_key_path.display());
+        println!("Operator Key: {}", org_config.operator_key_path.display());
+    }
 
     Ok(())
 }
@@ -232,16 +239,16 @@ async fn get_or_generate_api_key(
     api_key.save(org_config).await?;
 
     // Always show manual setup instructions, even with --quiet.
-    notice("");
-    notice("API Key Generated!");
-    notice("");
-    notice(&format!("Public Key: {public_key}"));
-    notice("");
-    notice("Add this API key to your Turnkey dashboard:");
-    notice("  1. Go to https://app.turnkey.com/dashboard/users");
-    notice("  2. Click your user > Create API Key > Generate API Keys via CLI > Continue");
-    notice("  3. Paste the public key > Name it \"TVC CLI\" > Continue > Approve");
-    notice("");
+    println!();
+    println!("API Key Generated!");
+    println!();
+    println!("Public Key: {public_key}");
+    println!();
+    println!("Add this API key to your Turnkey dashboard:");
+    println!("  1. Go to https://app.turnkey.com/dashboard/users");
+    println!("  2. Click your user > Create API Key > Generate API Keys via CLI > Continue");
+    println!("  3. Paste the public key > Name it \"TVC CLI\" > Continue > Approve");
+    println!();
 
     // Skip wait in non-interactive mode.
     if !no_input {
@@ -353,10 +360,6 @@ fn status(quiet: bool, message: &str) {
     if !quiet {
         println!("{message}");
     }
-}
-
-fn notice(message: &str) {
-    println!("{message}");
 }
 
 /// Result of a successful whoami verification.
