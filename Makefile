@@ -44,10 +44,6 @@ examples: build
 	cargo run -p turnkey_examples --bin wallet
 	cargo run -p turnkey_examples --bin proofs
 
-.PHONY: check
-check: lint test
-	@echo "All checks passed."
-
 .PHONY: install-hooks
 install-hooks:
 	@cp scripts/pre-commit .git/hooks/pre-commit

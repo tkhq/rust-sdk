@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Pre-commit hook for rust-sdk
-# Runs formatting, clippy, and tests for staged Rust changes.
+# Runs formatting and clippy for staged Rust changes.
 # Install with: make install-hooks
 
 set -euo pipefail
@@ -9,34 +9,13 @@ set -euo pipefail
 STAGED_RS=$(git diff --cached --name-only --diff-filter=ACM | grep '\.rs$' || true)
 STAGED_TOML=$(git diff --cached --name-only --diff-filter=ACM | grep 'Cargo\.toml$' || true)
 
+# No Rust files staged, skip checks
 if [ -z "$STAGED_RS" ] && [ -z "$STAGED_TOML" ]; then
     exit 0
 fi
 
 echo "Running pre-commit checks..."
 
-# Check formatting
-echo "  Checking formatting..."
-if ! cargo fmt -- --check; then
-    echo ""
-    echo "Formatting check failed. Run 'cargo fmt' to fix."
-    exit 1
-fi
-
-# Run clippy
-echo "  Running clippy..."
-if ! cargo clippy --all-targets --all-features -- -D warnings; then
-    echo ""
-    echo "Clippy check failed. Fix the warnings above."
-    exit 1
-fi
-
-# Run tests
-echo "  Running tests..."
-if ! cargo test; then
-    echo ""
-    echo "Tests failed. Fix the failing tests above."
-    exit 1
-fi
+make lint
 
 echo "Pre-commit checks passed."
