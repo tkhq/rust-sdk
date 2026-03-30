@@ -7,6 +7,15 @@ use clap::{Parser, Subcommand};
 #[derive(Debug, Parser)]
 #[command(about = "CLI for building with Turnkey Verifiable Cloud", long_about = None)]
 pub struct Cli {
+    /// Disable all interactive prompts. Fails if input is required.
+    /// Set TVC_NO_INPUT=true in CI/CD environments.
+    #[arg(long, global = true, env = "TVC_NO_INPUT")]
+    no_input: bool,
+
+    /// Suppress non-essential output.
+    #[arg(long, short, global = true)]
+    quiet: bool,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -15,20 +24,22 @@ impl Cli {
     /// Run the CLI.
     pub async fn run() -> anyhow::Result<()> {
         let args = Cli::parse();
+        let no_input = args.no_input;
+        let quiet = args.quiet;
 
         match args.command {
             Commands::Deploy { command } => match command {
-                DeployCommands::Approve(args) => commands::deploy::approve::run(args).await,
-                DeployCommands::Status(args) => commands::deploy::status::run(args).await,
-                DeployCommands::Create(args) => commands::deploy::create::run(args).await,
-                DeployCommands::Init(args) => commands::deploy::init::run(args).await,
+                DeployCommands::Approve(cmd_args) => commands::deploy::approve::run(cmd_args).await,
+                DeployCommands::Status(cmd_args) => commands::deploy::status::run(cmd_args).await,
+                DeployCommands::Create(cmd_args) => commands::deploy::create::run(cmd_args).await,
+                DeployCommands::Init(cmd_args) => commands::deploy::init::run(cmd_args).await,
             },
             Commands::App { command } => match command {
-                AppCommands::List(args) => commands::app::list::run(args).await,
-                AppCommands::Create(args) => commands::app::create::run(args).await,
-                AppCommands::Init(args) => commands::app::init::run(args).await,
+                AppCommands::List(cmd_args) => commands::app::list::run(cmd_args).await,
+                AppCommands::Create(cmd_args) => commands::app::create::run(cmd_args).await,
+                AppCommands::Init(cmd_args) => commands::app::init::run(cmd_args).await,
             },
-            Commands::Login(args) => commands::login::run(args).await,
+            Commands::Login(cmd_args) => commands::login::run(cmd_args, no_input, quiet).await,
         }
     }
 }
