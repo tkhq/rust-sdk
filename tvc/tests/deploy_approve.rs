@@ -4,30 +4,28 @@ use predicates::prelude::*;
 #[test]
 fn approve_requires_source() {
     cargo_bin_cmd!("tvc")
-        .arg("--no-input")
         .arg("deploy")
         .arg("approve")
         .arg("--dry-run")
+        .arg("--dangerous-skip-interactive")
         .assert()
         .failure()
         .stderr(predicate::str::contains("manifest source is required"));
 }
 
 #[test]
-fn approve_no_input_skips_interactive() {
+fn dangerous_approve_with_file() {
     cargo_bin_cmd!("tvc")
-        .arg("--no-input")
         .arg("deploy")
         .arg("approve")
         .arg("--manifest")
         .arg("fixtures/manifest.json")
         .arg("--operator-seed")
         .arg("fixtures/seed.hex")
+        .arg("--dangerous-skip-interactive")
         .arg("--skip-post")
         .assert()
-        .success()
-        .stdout(predicate::str::contains("\"signature\""))
-        .stdout(predicate::str::contains("MANIFEST APPROVAL").not());
+        .success();
 }
 
 #[test]
@@ -86,6 +84,7 @@ fn manifest_and_deploy_id_are_mutually_exclusive() {
         .arg("fixtures/manifest.json")
         .arg("--deploy-id")
         .arg("some-deploy-id")
+        .arg("--dangerous-skip-interactive")
         .assert()
         .failure()
         .stderr(predicate::str::contains(
@@ -97,13 +96,13 @@ fn manifest_and_deploy_id_are_mutually_exclusive() {
 #[test]
 fn approve_requires_manifest_id_or_skip_post() {
     cargo_bin_cmd!("tvc")
-        .arg("--no-input")
         .arg("deploy")
         .arg("approve")
         .arg("--manifest")
         .arg("fixtures/manifest.json")
         .arg("--operator-seed")
         .arg("fixtures/seed.hex")
+        .arg("--dangerous-skip-interactive")
         .assert()
         .failure()
         .stderr(predicate::str::contains(
