@@ -26,11 +26,14 @@ fn approve_no_input_skips_interactive() {
         .arg("--skip-post")
         .assert()
         .success()
-        .stdout(predicate::str::contains("\"signature\""));
+        .stdout(predicate::str::contains("\"signature\""))
+        .stdout(predicate::str::contains("MANIFEST APPROVAL").not());
 }
 
 #[test]
 fn approve_interactive_prompts() {
+    // Simulate user typing "yes" or "y" for each of the 5 prompts:
+    // namespace, enclave, pivot, manifest set, share set
     let input = "yes\nyes\ny\nyes\ny\n";
 
     cargo_bin_cmd!("tvc")
@@ -58,6 +61,7 @@ fn approve_interactive_prompts() {
 
 #[test]
 fn approve_interactive_reject() {
+    // User rejects at first prompt
     let input = "no\n";
 
     cargo_bin_cmd!("tvc")
@@ -89,6 +93,7 @@ fn manifest_and_deploy_id_are_mutually_exclusive() {
         ));
 }
 
+/// Test that --skip-post is required when --manifest-id is not provided
 #[test]
 fn approve_requires_manifest_id_or_skip_post() {
     cargo_bin_cmd!("tvc")

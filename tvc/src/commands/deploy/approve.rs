@@ -235,7 +235,6 @@ async fn generate_approval(
 }
 
 /// Walk the user through each section of the manifest for approval.
-/// All interactive output goes to stdout.
 fn interactive_approve(manifest: &Manifest) -> anyhow::Result<()> {
     println!("\n========================================");
     println!("         MANIFEST APPROVAL");
@@ -352,7 +351,7 @@ fn review_share_set(set: &ShareSet) -> anyhow::Result<()> {
 
     println!("SHARE SET");
     println!("─────────────────────────────────────");
-    println!("  Keys and threshold match dev known share set operators");
+    println!("  ✓ Keys and threshold match dev known share set operators");
     println!();
 
     Ok(())
