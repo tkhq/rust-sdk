@@ -62,72 +62,22 @@ fn login_no_input_with_org_id_creates_config() {
 }
 
 #[test]
-fn login_api_env_dev() {
+fn login_org_and_org_id_conflict() {
     let temp = TempDir::new().unwrap();
 
-    let result = cargo_bin_cmd!("tvc")
+    cargo_bin_cmd!("tvc")
         .env("HOME", temp.path())
         .arg("--no-input")
         .arg("login")
+        .arg("--org")
+        .arg("some-alias")
         .arg("--org-id")
-        .arg("test-org-id")
-        .arg("--api-env")
-        .arg("dev")
-        .output()
-        .expect("failed to execute");
-
-    let stdout = String::from_utf8(result.stdout).expect("not utf8");
-    let stderr = String::from_utf8(result.stderr).expect("not utf8");
-    assert!(
-        stdout.contains("Verifying credentials") || stderr.contains("whoami request failed"),
-        "Expected login to proceed with --api-env dev, got stdout: {stdout}, stderr: {stderr}"
-    );
-}
-
-#[test]
-fn login_api_env_preprod() {
-    let temp = TempDir::new().unwrap();
-
-    let result = cargo_bin_cmd!("tvc")
-        .env("HOME", temp.path())
-        .arg("--no-input")
-        .arg("login")
-        .arg("--org-id")
-        .arg("test-org-id")
-        .arg("--api-env")
-        .arg("preprod")
-        .output()
-        .expect("failed to execute");
-
-    let stdout = String::from_utf8(result.stdout).expect("not utf8");
-    let stderr = String::from_utf8(result.stderr).expect("not utf8");
-    assert!(
-        stdout.contains("Verifying credentials") || stderr.contains("whoami request failed"),
-        "Expected login to proceed with --api-env preprod, got stdout: {stdout}, stderr: {stderr}"
-    );
-}
-
-#[test]
-fn login_api_env_local() {
-    let temp = TempDir::new().unwrap();
-
-    let result = cargo_bin_cmd!("tvc")
-        .env("HOME", temp.path())
-        .arg("--no-input")
-        .arg("login")
-        .arg("--org-id")
-        .arg("test-org-id")
-        .arg("--api-env")
-        .arg("local")
-        .output()
-        .expect("failed to execute");
-
-    let stdout = String::from_utf8(result.stdout).expect("not utf8");
-    let stderr = String::from_utf8(result.stderr).expect("not utf8");
-    assert!(
-        stdout.contains("Verifying credentials") || stderr.contains("whoami request failed"),
-        "Expected login to proceed with --api-env local, got stdout: {stdout}, stderr: {stderr}"
-    );
+        .arg("some-id")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "the argument '--org <ORG>' cannot be used with '--org-id <ORG_ID>'",
+        ));
 }
 
 #[test]
