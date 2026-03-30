@@ -24,7 +24,9 @@ impl Cli {
 
         match args.command {
             Commands::Deploy { command } => match command {
-                DeployCommands::Approve(args) => commands::deploy::approve::run(args).await,
+                DeployCommands::Approve(args) => {
+                    commands::deploy::approve::run(args, no_input).await
+                }
                 DeployCommands::Status(args) => commands::deploy::status::run(args).await,
                 DeployCommands::Create(args) => commands::deploy::create::run(args).await,
                 DeployCommands::Init(args) => commands::deploy::init::run(args).await,

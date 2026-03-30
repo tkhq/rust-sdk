@@ -17,7 +17,7 @@ fn no_input_flag_recognized() {
         .arg("deploy")
         .arg("approve")
         .arg("--dry-run")
-        .arg("--dangerous-skip-interactive")
+        .arg("--yes")
         .assert()
         .failure()
         .stderr(predicate::str::contains("manifest source is required"));
