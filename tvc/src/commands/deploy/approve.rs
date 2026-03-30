@@ -61,10 +61,6 @@ pub struct Args {
     #[arg(long)]
     pub dry_run: bool,
 
-    /// DANGEROUS: skip interactive prompts for approving each aspect of manifest.
-    #[arg(long)]
-    pub dangerous_skip_interactive: bool,
-
     /// Write approval to file instead of stdout.
     #[arg(short, long, value_name = "PATH")]
     pub output: Option<PathBuf>,
@@ -75,7 +71,7 @@ pub struct Args {
 }
 
 /// Run the approve deploy command.
-pub async fn run(args: Args) -> anyhow::Result<()> {
+pub async fn run(args: Args, no_input: bool) -> anyhow::Result<()> {
     // Fetch manifest - track manifest_id if fetched from API
     let (manifest, fetched_manifest_id) = match (&args.manifest, &args.deploy_id) {
         (Some(path), _) => (read_manifest_from_path(path).await?, None),
@@ -86,7 +82,8 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         (None, None) => bail!("a manifest source is required"),
     };
 
-    if !args.dangerous_skip_interactive {
+    // Skip interactive approval in non-interactive mode
+    if !no_input {
         interactive_approve(&manifest)?;
     }
 
