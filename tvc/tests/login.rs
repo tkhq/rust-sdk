@@ -6,6 +6,7 @@ use tempfile::TempDir;
 fn login_empty_org_id_fails() {
     let temp = TempDir::new().unwrap();
 
+    // User enters empty org ID
     let input = "\n";
 
     cargo_bin_cmd!("tvc")
