@@ -7,17 +7,7 @@ fn help_shows_global_flags() {
         .arg("--help")
         .assert()
         .success()
-        .stdout(predicate::str::contains("--no-input"))
-        .stdout(predicate::str::contains("--quiet"));
-}
-
-#[test]
-fn quiet_flag_recognized() {
-    cargo_bin_cmd!("tvc")
-        .arg("--quiet")
-        .arg("--help")
-        .assert()
-        .success();
+        .stdout(predicate::str::contains("--no-input"));
 }
 
 #[test]

@@ -7,14 +7,10 @@ use clap::{Parser, Subcommand};
 #[derive(Debug, Parser)]
 #[command(about = "CLI for building with Turnkey Verifiable Cloud", long_about = None)]
 pub struct Cli {
-    /// Disable all interactive prompts. Fails if input is required.
-    /// Set TVC_NO_INPUT=true in CI/CD environments.
+    /// Disable all interactive prompts and suppress non-essential output.
+    /// Fails if required input is missing. Set TVC_NO_INPUT=true in CI/CD environments.
     #[arg(long, global = true, env = "TVC_NO_INPUT")]
     no_input: bool,
-
-    /// Suppress non-essential output.
-    #[arg(long, short, global = true)]
-    quiet: bool,
 
     #[command(subcommand)]
     command: Commands,
@@ -25,7 +21,6 @@ impl Cli {
     pub async fn run() -> anyhow::Result<()> {
         let args = Cli::parse();
         let no_input = args.no_input;
-        let quiet = args.quiet;
 
         match args.command {
             Commands::Deploy { command } => match command {
@@ -39,7 +34,7 @@ impl Cli {
                 AppCommands::Create(args) => commands::app::create::run(args).await,
                 AppCommands::Init(args) => commands::app::init::run(args).await,
             },
-            Commands::Login(args) => commands::login::run(args, no_input, quiet).await,
+            Commands::Login(args) => commands::login::run(args, no_input).await,
         }
     }
 }

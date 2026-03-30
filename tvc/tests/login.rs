@@ -169,12 +169,11 @@ fn login_api_env_defaults_to_prod() {
 }
 
 #[test]
-fn login_quiet_suppresses_status() {
+fn login_no_input_suppresses_status() {
     let temp = TempDir::new().unwrap();
 
     let result = cargo_bin_cmd!("tvc")
         .env("HOME", temp.path())
-        .arg("--quiet")
         .arg("--no-input")
         .arg("login")
         .arg("--org-id")
@@ -183,7 +182,7 @@ fn login_quiet_suppresses_status() {
         .expect("failed to execute");
 
     let stdout = String::from_utf8(result.stdout).expect("not utf8");
-    // --quiet suppresses routine status messages, but manual recovery
+    // --no-input suppresses routine status messages, but manual setup
     // instructions for first-time API key setup should still be visible.
     assert!(
         !stdout.contains("Selected org")
@@ -192,6 +191,6 @@ fn login_quiet_suppresses_status() {
             && stdout.contains("API Key Generated!")
             && stdout.contains("Public Key:")
             && stdout.contains("Add this API key to your Turnkey dashboard:"),
-        "Expected --quiet to suppress status messages, got: {stdout}"
+        "Expected --no-input to suppress status messages, got: {stdout}"
     );
 }

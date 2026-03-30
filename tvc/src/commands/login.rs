@@ -40,7 +40,7 @@ pub struct Args {
 }
 
 /// Run the login command.
-pub async fn run(args: Args, no_input: bool, quiet: bool) -> anyhow::Result<()> {
+pub async fn run(args: Args, no_input: bool) -> anyhow::Result<()> {
     // Load existing config
     let mut config = Config::load().await?;
 
@@ -48,7 +48,7 @@ pub async fn run(args: Args, no_input: bool, quiet: bool) -> anyhow::Result<()> 
     let (alias, org_config) = select_or_create_org(&mut config, &args, no_input).await?;
 
     status(
-        quiet,
+        no_input,
         &format!("Selected org: {} ({})", alias, org_config.id),
     );
 
@@ -57,18 +57,18 @@ pub async fn run(args: Args, no_input: bool, quiet: bool) -> anyhow::Result<()> 
     config.save().await?;
 
     // Get or generate API key
-    let api_key = get_or_generate_api_key(&org_config, no_input, quiet).await?;
+    let api_key = get_or_generate_api_key(&org_config, no_input).await?;
 
     // Verify credentials with whoami
-    status(quiet, "");
-    status(quiet, "Verifying credentials...");
+    status(no_input, "");
+    status(no_input, "Verifying credentials...");
 
     let whoami = verify_credentials(&api_key, &org_config.id, &org_config.api_base_url).await?;
 
     // Get or generate operator key
-    let operator_key = get_or_generate_operator_key(&org_config, quiet).await?;
+    let operator_key = get_or_generate_operator_key(&org_config, no_input).await?;
 
-    if !quiet {
+    if !no_input {
         println!();
         println!("Successfully logged in!");
         println!();
@@ -210,20 +210,18 @@ fn prompt_for_api_url() -> Result<String> {
 }
 
 /// Get an existing API key or generate a new one.
-async fn get_or_generate_api_key(
-    org_config: &OrgConfig,
-    no_input: bool,
-    quiet: bool,
-) -> Result<StoredApiKey> {
+/// If an API key exists, it's returned directly.
+/// If not, a new key is generated, saved, and the user is prompted to add it to the dashboard.
+async fn get_or_generate_api_key(org_config: &OrgConfig, no_input: bool) -> Result<StoredApiKey> {
     // Check if API key already exists
     if let Some(api_key) = StoredApiKey::load(org_config).await? {
-        status(quiet, "Using existing API key.");
+        status(no_input, "Using existing API key.");
         return Ok(api_key);
     }
 
     // Generate new API key
-    status(quiet, "");
-    status(quiet, "Generating API key...");
+    status(no_input, "");
+    status(no_input, "Generating API key...");
 
     let stamper = TurnkeyP256ApiKey::generate();
     let public_key = hex::encode(stamper.compressed_public_key());
@@ -238,7 +236,7 @@ async fn get_or_generate_api_key(
     // Save the key
     api_key.save(org_config).await?;
 
-    // Always show manual setup instructions, even with --quiet.
+    // Always show manual setup instructions, even in non-interactive mode.
     println!();
     println!("API Key Generated!");
     println!();
@@ -261,17 +259,17 @@ async fn get_or_generate_api_key(
 /// Get an existing operator key or generate a new one.
 async fn get_or_generate_operator_key(
     org_config: &OrgConfig,
-    quiet: bool,
+    no_input: bool,
 ) -> Result<StoredQosOperatorKey> {
     // Check if operator key already exists
     if let Some(operator_key) = StoredQosOperatorKey::load(org_config).await? {
-        status(quiet, "Using existing operator key.");
+        status(no_input, "Using existing operator key.");
         return Ok(operator_key);
     }
 
     // Generate new operator key
-    status(quiet, "");
-    status(quiet, "Generating operator key...");
+    status(no_input, "");
+    status(no_input, "Generating operator key...");
 
     let pair =
         P256Pair::generate().map_err(|e| anyhow!("failed to generate operator key: {e:?}"))?;
@@ -286,17 +284,17 @@ async fn get_or_generate_operator_key(
     // Save the key
     operator_key.save(org_config).await?;
 
-    status(quiet, "");
-    status(quiet, "Operator Key Generated!");
-    status(quiet, "");
-    status(quiet, &format!("Public Key: {public_key}"));
-    status(quiet, "");
+    status(no_input, "");
+    status(no_input, "Operator Key Generated!");
+    status(no_input, "");
+    status(no_input, &format!("Public Key: {public_key}"));
+    status(no_input, "");
     status(
-        quiet,
+        no_input,
         "This key will be used for approving deployment manifests.",
     );
     status(
-        quiet,
+        no_input,
         "Make sure to register this as an operator in your organization.",
     );
 
@@ -331,6 +329,7 @@ fn prompt(message: &str) -> Result<String> {
 }
 
 /// Prompt the user for input with a default value.
+/// If the user enters nothing, returns the default.
 fn prompt_with_default(message: &str, default: &str) -> Result<String> {
     print!("{message} [{default}]: ");
     std::io::stdout().flush()?;
@@ -356,8 +355,8 @@ fn wait_for_enter(message: &str) -> Result<()> {
     Ok(())
 }
 
-fn status(quiet: bool, message: &str) {
-    if !quiet {
+fn status(no_input: bool, message: &str) {
+    if !no_input {
         println!("{message}");
     }
 }
@@ -371,20 +370,24 @@ pub struct WhoamiResult {
 }
 
 /// Verify credentials by calling the whoami endpoint.
+/// Returns Ok(WhoamiResult) if credentials are valid, Err otherwise.
 async fn verify_credentials(
     api_key: &StoredApiKey,
     org_id: &str,
     api_base_url: &str,
 ) -> Result<WhoamiResult> {
+    // Build the API key stamper from stored keys
     let stamper = TurnkeyP256ApiKey::from_strings(&api_key.private_key, Some(&api_key.public_key))
         .context("failed to load API key")?;
 
+    // Build the client
     let client = turnkey_client::TurnkeyClient::builder()
         .api_key(stamper)
         .base_url(api_base_url)
         .build()
         .context("failed to build Turnkey client")?;
 
+    // Call whoami
     let request = GetWhoamiRequest {
         organization_id: org_id.to_string(),
     };
