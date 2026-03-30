@@ -61,10 +61,6 @@ pub struct Args {
     #[arg(long)]
     pub dry_run: bool,
 
-    /// Skip interactive prompts for approving each aspect of the manifest.
-    #[arg(short = 'y', long = "yes", alias = "dangerous-skip-interactive")]
-    pub yes: bool,
-
     /// Write approval to file instead of stdout.
     #[arg(short, long, value_name = "PATH")]
     pub output: Option<PathBuf>,
@@ -86,12 +82,8 @@ pub async fn run(args: Args, no_input: bool) -> anyhow::Result<()> {
         (None, None) => bail!("a manifest source is required"),
     };
 
-    if no_input && !args.yes {
-        bail!("Approval input is required in non-interactive mode. Re-run with --yes to explicitly approve the manifest.");
-    }
-
-    // Skip interactive approval only when --yes/-y is passed
-    if !args.yes {
+    // Skip interactive approval in non-interactive mode
+    if !no_input {
         interactive_approve(&manifest)?;
     }
 
