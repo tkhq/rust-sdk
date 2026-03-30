@@ -47,7 +47,7 @@ pub async fn run(args: Args, no_input: bool) -> anyhow::Result<()> {
     // Select or create org
     let (alias, org_config) = select_or_create_org(&mut config, &args, no_input).await?;
 
-    status(
+    info(
         no_input,
         &format!("Selected org: {} ({})", alias, org_config.id),
     );
@@ -60,8 +60,8 @@ pub async fn run(args: Args, no_input: bool) -> anyhow::Result<()> {
     let api_key = get_or_generate_api_key(&org_config, no_input).await?;
 
     // Verify credentials with whoami
-    status(no_input, "");
-    status(no_input, "Verifying credentials...");
+    info(no_input, "");
+    info(no_input, "Verifying credentials...");
 
     let whoami = verify_credentials(&api_key, &org_config.id, &org_config.api_base_url).await?;
 
@@ -215,13 +215,13 @@ fn prompt_for_api_url() -> Result<String> {
 async fn get_or_generate_api_key(org_config: &OrgConfig, no_input: bool) -> Result<StoredApiKey> {
     // Check if API key already exists
     if let Some(api_key) = StoredApiKey::load(org_config).await? {
-        status(no_input, "Using existing API key.");
+        info(no_input, "Using existing API key.");
         return Ok(api_key);
     }
 
     // Generate new API key
-    status(no_input, "");
-    status(no_input, "Generating API key...");
+    info(no_input, "");
+    info(no_input, "Generating API key...");
 
     let stamper = TurnkeyP256ApiKey::generate();
     let public_key = hex::encode(stamper.compressed_public_key());
@@ -263,13 +263,13 @@ async fn get_or_generate_operator_key(
 ) -> Result<StoredQosOperatorKey> {
     // Check if operator key already exists
     if let Some(operator_key) = StoredQosOperatorKey::load(org_config).await? {
-        status(no_input, "Using existing operator key.");
+        info(no_input, "Using existing operator key.");
         return Ok(operator_key);
     }
 
     // Generate new operator key
-    status(no_input, "");
-    status(no_input, "Generating operator key...");
+    info(no_input, "");
+    info(no_input, "Generating operator key...");
 
     let pair =
         P256Pair::generate().map_err(|e| anyhow!("failed to generate operator key: {e:?}"))?;
@@ -284,16 +284,16 @@ async fn get_or_generate_operator_key(
     // Save the key
     operator_key.save(org_config).await?;
 
-    status(no_input, "");
-    status(no_input, "Operator Key Generated!");
-    status(no_input, "");
-    status(no_input, &format!("Public Key: {public_key}"));
-    status(no_input, "");
-    status(
+    info(no_input, "");
+    info(no_input, "Operator Key Generated!");
+    info(no_input, "");
+    info(no_input, &format!("Public Key: {public_key}"));
+    info(no_input, "");
+    info(
         no_input,
         "This key will be used for approving deployment manifests.",
     );
-    status(
+    info(
         no_input,
         "Make sure to register this as an operator in your organization.",
     );
@@ -355,7 +355,7 @@ fn wait_for_enter(message: &str) -> Result<()> {
     Ok(())
 }
 
-fn status(no_input: bool, message: &str) {
+fn info(no_input: bool, message: &str) {
     if !no_input {
         println!("{message}");
     }
