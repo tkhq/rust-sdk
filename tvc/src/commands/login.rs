@@ -315,8 +315,8 @@ fn find_org<'a>(config: &'a Config, org: &str) -> Option<(&'a String, &'a OrgCon
 
 /// Prompt the user for input and return the trimmed response.
 fn prompt(message: &str) -> Result<String> {
-    eprint!("{message}: ");
-    std::io::stderr().flush()?;
+    print!("{message}: ");
+    std::io::stdout().flush()?;
 
     let mut input = String::new();
     std::io::stdin().lock().read_line(&mut input)?;
@@ -325,8 +325,8 @@ fn prompt(message: &str) -> Result<String> {
 
 /// Prompt the user for input with a default value.
 fn prompt_with_default(message: &str, default: &str) -> Result<String> {
-    eprint!("{message} [{default}]: ");
-    std::io::stderr().flush()?;
+    print!("{message} [{default}]: ");
+    std::io::stdout().flush()?;
 
     let mut input = String::new();
     std::io::stdin().lock().read_line(&mut input)?;
@@ -341,8 +341,8 @@ fn prompt_with_default(message: &str, default: &str) -> Result<String> {
 
 /// Wait for the user to press Enter.
 fn wait_for_enter(message: &str) -> Result<()> {
-    eprint!("{message}");
-    std::io::stderr().flush()?;
+    print!("{message}");
+    std::io::stdout().flush()?;
 
     let mut input = String::new();
     std::io::stdin().lock().read_line(&mut input)?;
@@ -351,12 +351,12 @@ fn wait_for_enter(message: &str) -> Result<()> {
 
 fn status(quiet: bool, message: &str) {
     if !quiet {
-        eprintln!("{message}");
+        println!("{message}");
     }
 }
 
 fn notice(message: &str) {
-    eprintln!("{message}");
+    println!("{message}");
 }
 
 /// Result of a successful whoami verification.

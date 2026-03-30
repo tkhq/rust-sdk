@@ -49,13 +49,14 @@ fn login_no_input_with_org_id_creates_config() {
         .output()
         .expect("failed to execute");
 
+    let stdout = String::from_utf8(result.stdout).expect("not utf8");
     let stderr = String::from_utf8(result.stderr).expect("not utf8");
 
     // Should proceed past org creation to credential verification
     // (which fails since there's no real API, but the point is it didn't hang)
     assert!(
-        stderr.contains("Verifying credentials") || stderr.contains("whoami request failed"),
-        "Expected login to proceed past org creation, got: {stderr}"
+        stdout.contains("Verifying credentials") || stderr.contains("whoami request failed"),
+        "Expected login to proceed past org creation, got stdout: {stdout}, stderr: {stderr}"
     );
 }
 
@@ -74,10 +75,11 @@ fn login_api_env_dev() {
         .output()
         .expect("failed to execute");
 
+    let stdout = String::from_utf8(result.stdout).expect("not utf8");
     let stderr = String::from_utf8(result.stderr).expect("not utf8");
     assert!(
-        stderr.contains("Verifying credentials") || stderr.contains("whoami request failed"),
-        "Expected login to proceed with --api-env dev, got: {stderr}"
+        stdout.contains("Verifying credentials") || stderr.contains("whoami request failed"),
+        "Expected login to proceed with --api-env dev, got stdout: {stdout}, stderr: {stderr}"
     );
 }
 
@@ -96,10 +98,11 @@ fn login_api_env_preprod() {
         .output()
         .expect("failed to execute");
 
+    let stdout = String::from_utf8(result.stdout).expect("not utf8");
     let stderr = String::from_utf8(result.stderr).expect("not utf8");
     assert!(
-        stderr.contains("Verifying credentials") || stderr.contains("whoami request failed"),
-        "Expected login to proceed with --api-env preprod, got: {stderr}"
+        stdout.contains("Verifying credentials") || stderr.contains("whoami request failed"),
+        "Expected login to proceed with --api-env preprod, got stdout: {stdout}, stderr: {stderr}"
     );
 }
 
@@ -118,10 +121,11 @@ fn login_api_env_local() {
         .output()
         .expect("failed to execute");
 
+    let stdout = String::from_utf8(result.stdout).expect("not utf8");
     let stderr = String::from_utf8(result.stderr).expect("not utf8");
     assert!(
-        stderr.contains("Verifying credentials") || stderr.contains("whoami request failed"),
-        "Expected login to proceed with --api-env local, got: {stderr}"
+        stdout.contains("Verifying credentials") || stderr.contains("whoami request failed"),
+        "Expected login to proceed with --api-env local, got stdout: {stdout}, stderr: {stderr}"
     );
 }
 
@@ -156,10 +160,11 @@ fn login_api_env_defaults_to_prod() {
         .output()
         .expect("failed to execute");
 
+    let stdout = String::from_utf8(result.stdout).expect("not utf8");
     let stderr = String::from_utf8(result.stderr).expect("not utf8");
     assert!(
-        stderr.contains("Verifying credentials") || stderr.contains("whoami request failed"),
-        "Expected login to proceed with default api-env, got: {stderr}"
+        stdout.contains("Verifying credentials") || stderr.contains("whoami request failed"),
+        "Expected login to proceed with default api-env, got stdout: {stdout}, stderr: {stderr}"
     );
 }
 
@@ -177,16 +182,16 @@ fn login_quiet_suppresses_status() {
         .output()
         .expect("failed to execute");
 
-    let stderr = String::from_utf8(result.stderr).expect("not utf8");
+    let stdout = String::from_utf8(result.stdout).expect("not utf8");
     // --quiet suppresses routine status messages, but manual recovery
     // instructions for first-time API key setup should still be visible.
     assert!(
-        !stderr.contains("Selected org")
-            && !stderr.contains("Generating")
-            && !stderr.contains("Verifying credentials")
-            && stderr.contains("API Key Generated!")
-            && stderr.contains("Public Key:")
-            && stderr.contains("Add this API key to your Turnkey dashboard:"),
-        "Expected --quiet to suppress status messages, got: {stderr}"
+        !stdout.contains("Selected org")
+            && !stdout.contains("Generating")
+            && !stdout.contains("Verifying credentials")
+            && stdout.contains("API Key Generated!")
+            && stdout.contains("Public Key:")
+            && stdout.contains("Add this API key to your Turnkey dashboard:"),
+        "Expected --quiet to suppress status messages, got: {stdout}"
     );
 }
