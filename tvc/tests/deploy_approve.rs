@@ -73,17 +73,15 @@ fn approve_interactive_prompts() {
         .write_stdin(input)
         .assert()
         .success()
-        // Interactive review output goes to stderr
-        .stderr(predicate::str::contains("MANIFEST APPROVAL"))
-        .stderr(predicate::str::contains("NAMESPACE"))
-        .stderr(predicate::str::contains("turnkey-prod"))
-        .stderr(predicate::str::contains("ENCLAVE (AWS Nitro)"))
-        .stderr(predicate::str::contains("PIVOT BINARY"))
-        .stderr(predicate::str::contains("MANIFEST SET"))
-        .stderr(predicate::str::contains("operator-alice"))
-        .stderr(predicate::str::contains("SHARE SET"))
-        .stderr(predicate::str::contains("ALL SECTIONS APPROVED"))
-        // Approval JSON goes to stdout
+        .stdout(predicate::str::contains("MANIFEST APPROVAL"))
+        .stdout(predicate::str::contains("NAMESPACE"))
+        .stdout(predicate::str::contains("turnkey-prod"))
+        .stdout(predicate::str::contains("ENCLAVE (AWS Nitro)"))
+        .stdout(predicate::str::contains("PIVOT BINARY"))
+        .stdout(predicate::str::contains("MANIFEST SET"))
+        .stdout(predicate::str::contains("operator-alice"))
+        .stdout(predicate::str::contains("SHARE SET"))
+        .stdout(predicate::str::contains("ALL SECTIONS APPROVED"))
         .stdout(predicate::str::contains("\"signature\""));
 }
 

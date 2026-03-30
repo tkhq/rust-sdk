@@ -243,11 +243,11 @@ async fn generate_approval(
 }
 
 /// Walk the user through each section of the manifest for approval.
-/// All interactive output goes to stderr to keep stdout clean for data.
+/// All interactive output goes to stdout.
 fn interactive_approve(manifest: &Manifest) -> anyhow::Result<()> {
-    eprintln!("\n========================================");
-    eprintln!("         MANIFEST APPROVAL");
-    eprintln!("========================================\n");
+    println!("\n========================================");
+    println!("         MANIFEST APPROVAL");
+    println!("========================================\n");
 
     review_namespace(&manifest.namespace)?;
     review_enclave(&manifest.enclave)?;
@@ -255,16 +255,16 @@ fn interactive_approve(manifest: &Manifest) -> anyhow::Result<()> {
     review_manifest_set(&manifest.manifest_set)?;
     review_share_set(&manifest.share_set)?;
 
-    eprintln!("\n========================================");
-    eprintln!("    ALL SECTIONS APPROVED");
-    eprintln!("========================================\n");
+    println!("\n========================================");
+    println!("    ALL SECTIONS APPROVED");
+    println!("========================================\n");
 
     Ok(())
 }
 
 fn confirm(prompt: &str) -> anyhow::Result<()> {
-    eprint!("{prompt} [y/N]: ");
-    std::io::stderr().flush()?;
+    print!("{prompt} [y/N]: ");
+    std::io::stdout().flush()?;
 
     let mut input = String::new();
     std::io::stdin().lock().read_line(&mut input)?;
@@ -278,56 +278,56 @@ fn confirm(prompt: &str) -> anyhow::Result<()> {
 }
 
 fn review_namespace(namespace: &Namespace) -> anyhow::Result<()> {
-    eprintln!("NAMESPACE");
-    eprintln!("─────────────────────────────────────");
-    eprintln!("  Name:       {}", namespace.name);
-    eprintln!("  Nonce:      {}", namespace.nonce);
-    eprintln!("  Quorum Key: {}", hex::encode(&namespace.quorum_key));
-    eprintln!();
+    println!("NAMESPACE");
+    println!("─────────────────────────────────────");
+    println!("  Name:       {}", namespace.name);
+    println!("  Nonce:      {}", namespace.nonce);
+    println!("  Quorum Key: {}", hex::encode(&namespace.quorum_key));
+    println!();
 
     confirm("Approve namespace?")
 }
 
 fn review_enclave(enclave: &NitroConfig) -> anyhow::Result<()> {
-    eprintln!("ENCLAVE (AWS Nitro)");
-    eprintln!("─────────────────────────────────────");
-    eprintln!("  PCR0 (image):     {}", hex::encode(&enclave.pcr0));
-    eprintln!("  PCR1 (kernel):    {}", hex::encode(&enclave.pcr1));
-    eprintln!("  PCR2 (app):       {}", hex::encode(&enclave.pcr2));
-    eprintln!("  PCR3 (IAM role):  {}", hex::encode(&enclave.pcr3));
+    println!("ENCLAVE (AWS Nitro)");
+    println!("─────────────────────────────────────");
+    println!("  PCR0 (image):     {}", hex::encode(&enclave.pcr0));
+    println!("  PCR1 (kernel):    {}", hex::encode(&enclave.pcr1));
+    println!("  PCR2 (app):       {}", hex::encode(&enclave.pcr2));
+    println!("  PCR3 (IAM role):  {}", hex::encode(&enclave.pcr3));
     // Skip the QOS commit since its not cryptographically linked
-    eprintln!();
+    println!();
 
     confirm("Approve enclave configuration?")
 }
 
 fn review_pivot(pivot: &PivotConfig) -> anyhow::Result<()> {
-    eprintln!("PIVOT BINARY");
-    eprintln!("─────────────────────────────────────");
-    eprintln!("  Pivot Binary Hash: {}", hex::encode(pivot.hash));
+    println!("PIVOT BINARY");
+    println!("─────────────────────────────────────");
+    println!("  Pivot Binary Hash: {}", hex::encode(pivot.hash));
     if pivot.args.is_empty() {
-        eprintln!("  CLI Args: (none)");
+        println!("  CLI Args: (none)");
     } else {
-        eprintln!("  CLI Args:\n   {}", pivot.args.join("\n   "));
+        println!("  CLI Args:\n   {}", pivot.args.join("\n   "));
     }
-    eprintln!();
+    println!();
 
     confirm("Approve pivot binary?")
 }
 
 fn print_quorum_members(members: &[QuorumMember]) {
     for member in members.iter() {
-        eprintln!("    {} ({})", member.alias, hex::encode(&member.pub_key));
+        println!("    {} ({})", member.alias, hex::encode(&member.pub_key));
     }
 }
 
 fn review_manifest_set(set: &ManifestSet) -> anyhow::Result<()> {
-    eprintln!("MANIFEST SET");
-    eprintln!("─────────────────────────────────────");
-    eprintln!("  Threshold: {} of {}", set.threshold, set.members.len());
-    eprintln!("  Members:");
+    println!("MANIFEST SET");
+    println!("─────────────────────────────────────");
+    println!("  Threshold: {} of {}", set.threshold, set.members.len());
+    println!("  Members:");
     print_quorum_members(&set.members);
-    eprintln!();
+    println!();
 
     confirm("Approve manifest set?")
 }
@@ -358,10 +358,10 @@ fn review_share_set(set: &ShareSet) -> anyhow::Result<()> {
         bail!("Share set threshold must be 2, found: {}", set.threshold);
     }
 
-    eprintln!("SHARE SET");
-    eprintln!("─────────────────────────────────────");
-    eprintln!("  Keys and threshold match dev known share set operators");
-    eprintln!();
+    println!("SHARE SET");
+    println!("─────────────────────────────────────");
+    println!("  Keys and threshold match dev known share set operators");
+    println!();
 
     Ok(())
 }
