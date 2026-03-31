@@ -19,11 +19,13 @@ impl Cli {
         match args.command {
             Commands::Deploy { command } => match command {
                 DeployCommands::Approve(args) => commands::deploy::approve::run(args).await,
+                DeployCommands::GetStatus(args) => commands::deploy::get_status::run(args).await,
                 DeployCommands::Status(args) => commands::deploy::status::run(args).await,
                 DeployCommands::Create(args) => commands::deploy::create::run(args).await,
                 DeployCommands::Init(args) => commands::deploy::init::run(args).await,
             },
             Commands::App { command } => match command {
+                AppCommands::Status(args) => commands::app::status::run(args).await,
                 AppCommands::List(args) => commands::app::list::run(args).await,
                 AppCommands::Create(args) => commands::app::create::run(args).await,
                 AppCommands::Init(args) => commands::app::init::run(args).await,
@@ -53,6 +55,8 @@ enum Commands {
 enum DeployCommands {
     /// Approve a deployment manifest.
     Approve(commands::deploy::approve::Args),
+    /// Get live runtime status for a deployment from the cluster.
+    GetStatus(commands::deploy::get_status::Args),
     /// Get the status of a deployment.
     Status(commands::deploy::status::Args),
     /// Create a new deployment from a config file.
@@ -63,6 +67,8 @@ enum DeployCommands {
 
 #[derive(Debug, Subcommand)]
 enum AppCommands {
+    /// Get live runtime status for an app from the cluster.
+    Status(commands::app::status::Args),
     /// List applications.
     List(commands::app::list::Args),
     /// Create a new application from a config file.
