@@ -25,7 +25,7 @@ impl Cli {
                 DeployCommands::Init(args) => commands::deploy::init::run(args).await,
             },
             Commands::App { command } => match command {
-                AppCommands::GetStatus(args) => commands::app::get_status::run(args).await,
+                AppCommands::Status(args) => commands::app::status::run(args).await,
                 AppCommands::List(args) => commands::app::list::run(args).await,
                 AppCommands::Create(args) => commands::app::create::run(args).await,
                 AppCommands::Init(args) => commands::app::init::run(args).await,
@@ -68,7 +68,7 @@ enum DeployCommands {
 #[derive(Debug, Subcommand)]
 enum AppCommands {
     /// Get live runtime status for an app from the cluster.
-    GetStatus(commands::app::get_status::Args),
+    Status(commands::app::status::Args),
     /// List applications.
     List(commands::app::list::Args),
     /// Create a new application from a config file.

@@ -1,4 +1,4 @@
-//! App get-status command.
+//! App status command.
 
 use anyhow::{anyhow, Context};
 use clap::Args as ClapArgs;
@@ -13,7 +13,7 @@ pub struct Args {
     pub app_id: String,
 }
 
-/// Run the app get-status command.
+/// Run the app status command.
 pub async fn run(args: Args) -> anyhow::Result<()> {
     let auth = crate::client::build_client().await?;
 
