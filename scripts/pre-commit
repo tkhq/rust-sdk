@@ -11,6 +11,7 @@ STAGED_TOML=$(git diff --cached --name-only --diff-filter=ACM | grep 'Cargo\.tom
 
 # No Rust files staged, skip checks
 if [ -z "$STAGED_RS" ] && [ -z "$STAGED_TOML" ]; then
+    echo "No relevant changes. Skipping rust pre-commit checks."
     exit 0
 fi
 
