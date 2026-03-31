@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.6.1](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.6.0...turnkey_client-v0.6.1) - 2026-03-31
+
+### Other
+
+- Flatten and fix serialization of TokenOrClaims enum
+- Sync with v2025.3.6
+- Sync protos with v2026.3.5 + manually adjust result/intent types for create sub-org, create users, and create oauth providers endpoints
+- Sync protos v2026.3.0
+- TvcOperatorApproval.approval is a base64 field
+
 ## [0.6.0](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.5.0...turnkey_client-v0.6.0) - 2026-02-20
 
 ### Added
