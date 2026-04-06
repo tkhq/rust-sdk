@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
-use turnkey_client::generated::CreateTvcDeploymentIntent;
+use turnkey_client::generated::{CreateTvcDeploymentIntent, ValidateTvcImageRequest};
 
 /// Create a new TVC deployment from a config file.
 #[derive(Debug, ClapArgs)]
@@ -22,6 +22,47 @@ pub struct Args {
     /// override `pivotContainerEncryptedPullSecret` from the config file.
     #[arg(long, alias = "pull-secret", value_name = "PATH")]
     pub pivot_pull_secret: Option<PathBuf>,
+}
+
+fn build_validate_image_request(
+    organization_id: &str,
+    image_url: &str,
+    pivot_container_encrypted_pull_secret: Option<String>,
+) -> ValidateTvcImageRequest {
+    ValidateTvcImageRequest {
+        organization_id: organization_id.to_string(),
+        pivot_container_image_url: image_url.to_string(),
+        pivot_container_encrypted_pull_secret,
+    }
+}
+
+fn build_create_intent(
+    deploy_config: &DeployConfig,
+    pivot_container_image_url: String,
+    pivot_container_encrypted_pull_secret: Option<String>,
+) -> CreateTvcDeploymentIntent {
+    CreateTvcDeploymentIntent {
+        app_id: deploy_config.app_id.clone(),
+        qos_version: deploy_config.qos_version.clone(),
+        pivot_container_image_url,
+        pivot_path: deploy_config.pivot_path.clone(),
+        pivot_args: deploy_config.pivot_args.clone(),
+        expected_pivot_digest: deploy_config.expected_pivot_digest.clone(),
+        pivot_container_encrypted_pull_secret,
+        debug_mode: deploy_config.debug_mode,
+        nonce: None,
+        health_check_type: deploy_config.health_check_type,
+        health_check_port: deploy_config.health_check_port as u32,
+        public_ingress_port: deploy_config.public_ingress_port as u32,
+    }
+}
+
+fn pin_image_url(image_url: &str, resolved_digest: &str) -> String {
+    if image_url.contains("@") {
+        image_url.to_string()
+    } else {
+        format!("{image_url}@{resolved_digest}") // works for docker pull even if image_url included a :tag
+    }
 }
 
 /// Run the deploy create command.
@@ -69,21 +110,32 @@ pub async fn run(args: Args) -> Result<()> {
         None => deploy_config.pivot_container_encrypted_pull_secret.clone(),
     };
 
-    // Convert config to API intent
-    let intent = CreateTvcDeploymentIntent {
-        app_id: deploy_config.app_id.clone(),
-        qos_version: deploy_config.qos_version.clone(),
-        pivot_container_image_url: deploy_config.pivot_container_image_url.clone(),
-        pivot_path: deploy_config.pivot_path.clone(),
-        pivot_args: deploy_config.pivot_args.clone(),
-        expected_pivot_digest: deploy_config.expected_pivot_digest.clone(),
+    let validate_image_request = build_validate_image_request(
+        &auth.org_id,
+        &deploy_config.pivot_container_image_url,
+        pivot_container_encrypted_pull_secret.clone(),
+    );
+
+    let validate_image_response = auth
+        .client
+        .validate_tvc_image(validate_image_request)
+        .await
+        .context("failed to validate TVC image")?;
+
+    let pinned_image_url = pin_image_url(
+        &deploy_config.pivot_container_image_url,
+        &validate_image_response.resolved_image_digest,
+    );
+
+    if pinned_image_url != deploy_config.pivot_container_image_url {
+        println!("Using pinned image reference for deployment request: {pinned_image_url}");
+    }
+
+    let intent = build_create_intent(
+        &deploy_config,
+        pinned_image_url,
         pivot_container_encrypted_pull_secret,
-        debug_mode: deploy_config.debug_mode,
-        nonce: None,
-        health_check_type: deploy_config.health_check_type,
-        health_check_port: deploy_config.health_check_port as u32,
-        public_ingress_port: deploy_config.public_ingress_port as u32,
-    };
+    );
 
     // Get timestamp
     let timestamp_ms = SystemTime::now()
@@ -116,4 +168,25 @@ pub async fn run(args: Args) -> Result<()> {
     );
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pin_image_url;
+
+    #[test]
+    fn pin_image_url_appends_digest_to_tagged_reference() {
+        let image_url = "ghcr.io/team/app:latest";
+        let pinned = pin_image_url(image_url, "sha256:abc123");
+
+        assert_eq!(pinned, "ghcr.io/team/app:latest@sha256:abc123");
+    }
+
+    #[test]
+    fn pin_image_url_appends_digest_to_untagged_reference() {
+        let image_url = "ghcr.io/team/app";
+        let pinned = pin_image_url(image_url, "sha256:abc123");
+
+        assert_eq!(pinned, "ghcr.io/team/app@sha256:abc123");
+    }
 }
