@@ -40,6 +40,7 @@ message TvcApp {
   ];
   Timestamp created_at = 8 [(google.api.field_behavior) = REQUIRED];
   Timestamp updated_at = 9 [(google.api.field_behavior) = REQUIRED];
+  optional string live_deployment_id = 10 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The deployment currently designated to receive traffic. Null if no deployment for this app is deployed."}];
 }
 
 message TvcDeployment {
@@ -85,6 +86,10 @@ message TvcDeployment {
   ];
   Timestamp created_at = 12 [(google.api.field_behavior) = REQUIRED];
   Timestamp updated_at = 13 [(google.api.field_behavior) = REQUIRED];
+  bool delete = 14 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether or not the user wants this deployment deleted from the cluster."}
+  ];
 }
 
 message TvcContainerSpec {

@@ -3682,6 +3682,16 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
+    /// Validate Container Image for TVC
+    ///
+    /// Validate a container image URL and pull secret for TVC deployment
+    pub async fn validate_tvc_image(
+        &self,
+        request: coordinator::ValidateTvcImageRequest,
+    ) -> Result<coordinator::ValidateTvcImageResponse, TurnkeyClientError> {
+        self.process_request(&request, "/public/v1/query/validate_tvc_image".to_string())
+            .await
+    }
     /// List TVC Deployments
     ///
     /// List all deployments for a given TVC App

@@ -528,6 +528,8 @@ pub struct TvcApp {
     pub created_at: ::core::option::Option<Timestamp>,
     #[serde(default)]
     pub updated_at: ::core::option::Option<Timestamp>,
+    #[serde(default)]
+    pub live_deployment_id: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -553,6 +555,8 @@ pub struct TvcDeployment {
     pub created_at: ::core::option::Option<Timestamp>,
     #[serde(default)]
     pub updated_at: ::core::option::Option<Timestamp>,
+    #[serde(default)]
+    pub delete: bool,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
