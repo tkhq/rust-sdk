@@ -23,6 +23,9 @@ impl Cli {
                 DeployCommands::Status(args) => commands::deploy::status::run(args).await,
                 DeployCommands::Create(args) => commands::deploy::create::run(args).await,
                 DeployCommands::Init(args) => commands::deploy::init::run(args).await,
+                DeployCommands::ValidatePivotDigest(args) => {
+                    commands::deploy::validate_pivot_digest::run(args).await
+                }
             },
             Commands::App { command } => match command {
                 AppCommands::Status(args) => commands::app::status::run(args).await,
@@ -63,6 +66,8 @@ enum DeployCommands {
     Create(commands::deploy::create::Args),
     /// Generate a template deployment configuration file.
     Init(commands::deploy::init::Args),
+    /// Compute or validate the pivot digest for a container image locally.
+    ValidatePivotDigest(commands::deploy::validate_pivot_digest::Args),
 }
 
 #[derive(Debug, Subcommand)]

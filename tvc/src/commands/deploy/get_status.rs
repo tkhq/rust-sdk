@@ -46,8 +46,8 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
 
     let app_status = crate::commands::app_status::sanitize_app_status(
         app_response
-        .app_status
-        .ok_or_else(|| anyhow!("no status returned for app: {}", deployment.app_id))?,
+            .app_status
+            .ok_or_else(|| anyhow!("no status returned for app: {}", deployment.app_id))?,
     );
 
     println!("Deployment: {}", deployment.id);
@@ -110,5 +110,4 @@ mod tests {
 
         assert!(deployment_status.is_some());
     }
-
 }

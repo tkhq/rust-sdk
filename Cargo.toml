@@ -24,12 +24,14 @@ qos_p256 = { version = "0.5.0", default-features = false }
 # Encoding and serialization
 base64 = { version = "0.22.0", default-features = false, features = ["std"] }
 bs58 = { version = "0.5.0", features = ["std", "check"], default-features = false }
+flate2 = { version = "1.1.9", default-features = false, features = ["rust_backend"] }
 hex = { version = "0.4.3", default-features = false, features = ["std"] }
 serde = { version = "1.0.219", default-features = false, features = ["std", "derive"] }
 serde_json = { version = "1.0.140", default-features = false, features = ["std"] }
 serde_bytes = { version = "0.11", default-features = false }
 serde_cbor = { version = "0.11", default-features = false }
 serde_with = { version = "3.14.0", default-features = false, features = ["macros", "base64"] }
+tar = { version = "0.4.45", default-features = false }
 
 # Cryptography
 hpke = { version = "0.10", features = ["alloc", "p256", "serde_impls"], default-features = false }

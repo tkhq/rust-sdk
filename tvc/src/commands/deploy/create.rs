@@ -1,7 +1,11 @@
 //! Deploy create command - creates a deployment from a config file.
 
 use crate::client::build_client;
+use crate::commands::deploy::validate_pivot_digest::print_result;
 use crate::config::deploy::DeployConfig;
+use crate::pivot_digest::{
+    compute_pivot_digest, resolve_pinned_image_url, validate_expected_digest, PivotDigestSource,
+};
 use crate::pull_secret::encrypt_pivot_pull_secret;
 use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
@@ -16,12 +20,37 @@ pub struct Args {
     /// Path to the deployment configuration file (JSON).
     pub config_file: PathBuf,
 
-    /// Path to an unencrypted pivot container pull secret file.
+    /// Path to an unencrypted Docker-style pull secret JSON file.
     ///
     /// The content will be encrypted based on the active org's API environment and
     /// override `pivotContainerEncryptedPullSecret` from the config file.
-    #[arg(long, alias = "pull-secret", value_name = "PATH")]
+    #[arg(long = "pull-secret", alias = "pivot-pull-secret", value_name = "PATH")]
     pub pivot_pull_secret: Option<PathBuf>,
+
+    /// Locally validate the digest of the file at `pivot_path` inside the pinned pivot image.
+    #[arg(long)]
+    pub validate_pivot_digest: bool,
+}
+
+fn build_create_intent(
+    deploy_config: &DeployConfig,
+    pivot_container_image_url: String,
+    pivot_container_encrypted_pull_secret: Option<String>,
+) -> CreateTvcDeploymentIntent {
+    CreateTvcDeploymentIntent {
+        app_id: deploy_config.app_id.clone(),
+        qos_version: deploy_config.qos_version.clone(),
+        pivot_container_image_url,
+        pivot_path: deploy_config.pivot_path.clone(),
+        pivot_args: deploy_config.pivot_args.clone(),
+        expected_pivot_digest: deploy_config.expected_pivot_digest.clone(),
+        pivot_container_encrypted_pull_secret,
+        debug_mode: deploy_config.debug_mode,
+        nonce: None,
+        health_check_type: deploy_config.health_check_type,
+        health_check_port: deploy_config.health_check_port as u32,
+        public_ingress_port: deploy_config.public_ingress_port as u32,
+    }
 }
 
 /// Run the deploy create command.
@@ -69,21 +98,42 @@ pub async fn run(args: Args) -> Result<()> {
         None => deploy_config.pivot_container_encrypted_pull_secret.clone(),
     };
 
-    // Convert config to API intent
-    let intent = CreateTvcDeploymentIntent {
-        app_id: deploy_config.app_id.clone(),
-        qos_version: deploy_config.qos_version.clone(),
-        pivot_container_image_url: deploy_config.pivot_container_image_url.clone(),
-        pivot_path: deploy_config.pivot_path.clone(),
-        pivot_args: deploy_config.pivot_args.clone(),
-        expected_pivot_digest: deploy_config.expected_pivot_digest.clone(),
-        pivot_container_encrypted_pull_secret,
-        debug_mode: deploy_config.debug_mode,
-        nonce: None,
-        health_check_type: deploy_config.health_check_type,
-        health_check_port: deploy_config.health_check_port as u32,
-        public_ingress_port: deploy_config.public_ingress_port as u32,
+    let deployment_image_url = if args.validate_pivot_digest {
+        let pinned_image_url = resolve_pinned_image_url(
+            &deploy_config.pivot_container_image_url,
+            args.pivot_pull_secret.as_deref(),
+        )
+        .await?;
+
+        if pinned_image_url != deploy_config.pivot_container_image_url {
+            println!("Using pinned image reference for deployment request: {pinned_image_url}");
+        }
+
+        pinned_image_url
+    } else {
+        deploy_config.pivot_container_image_url.clone()
     };
+
+    if args.validate_pivot_digest {
+        let result = compute_pivot_digest(
+            &PivotDigestSource {
+                image_url: deployment_image_url.clone(),
+                pivot_path: deploy_config.pivot_path.clone(),
+            },
+            args.pivot_pull_secret.as_deref(),
+        )
+        .await?;
+        validate_expected_digest(&result.digest, &deploy_config.expected_pivot_digest)?;
+        print_result(&result);
+        println!("Pivot digest validated successfully.");
+        println!();
+    }
+
+    let intent = build_create_intent(
+        &deploy_config,
+        deployment_image_url,
+        pivot_container_encrypted_pull_secret,
+    );
 
     // Get timestamp
     let timestamp_ms = SystemTime::now()
@@ -111,7 +161,7 @@ pub async fn run(args: Args) -> Result<()> {
         result.result.deployment_id
     );
     println!(
-        "  - Run `tvc deploy approve --deploy-id {}` to approve the manifest",
+        "  - Run `tvc deploy approve --deploy-id {} --validate-pivot-digest` to validate and approve the manifest",
         result.result.deployment_id
     );
 
