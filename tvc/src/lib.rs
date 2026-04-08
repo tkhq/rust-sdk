@@ -4,5 +4,6 @@ pub mod client;
 pub mod commands;
 pub mod config;
 pub mod pair;
+pub(crate) mod pivot_digest;
 pub mod pull_secret;
 pub mod util;

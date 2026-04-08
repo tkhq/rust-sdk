@@ -1,8 +1,10 @@
 //! Approve deploy command - cryptographically approve a QOS manifest.
 
+use super::validate_pivot_digest::print_result;
 use crate::config::app::KNOWN_SHARE_SET_KEYS;
 use crate::config::turnkey::{Config, StoredQosOperatorKey};
 use crate::pair::LocalPair;
+use crate::pivot_digest::{compute_pivot_digest, validate_expected_digest, PivotDigestSource};
 use crate::util::{read_file_to_string, write_file};
 use anyhow::{anyhow, bail, Context};
 use clap::{ArgGroup, Args as ClapArgs};
@@ -18,6 +20,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::{
     CreateTvcManifestApprovalsIntent, GetTvcDeploymentRequest, TvcManifestApproval,
 };
+
+struct DeployApprovalSource {
+    manifest: Manifest,
+    manifest_id: String,
+    pivot_image_url: Option<String>,
+    pivot_path: Option<String>,
+}
 
 /// Cryptographically approve a QOS manifest for a deployment with your operator's manifest set key.
 #[derive(Debug, ClapArgs)]
@@ -57,6 +66,14 @@ pub struct Args {
     #[arg(long, help_heading = "Operator signing key", value_name = "PATH")]
     pub operator_seed: Option<PathBuf>,
 
+    /// Locally validate the pivot digest before approval. Only supported with `--deploy-id`.
+    #[arg(long)]
+    pub validate_pivot_digest: bool,
+
+    /// Path to an unencrypted Docker-style pull secret JSON file.
+    #[arg(long, value_name = "PATH")]
+    pub pull_secret: Option<PathBuf>,
+
     /// Walk through manifest approval prompts but do not generate an approval.
     #[arg(long)]
     pub dry_run: bool,
@@ -76,15 +93,48 @@ pub struct Args {
 
 /// Run the approve deploy command.
 pub async fn run(args: Args) -> anyhow::Result<()> {
+    if args.validate_pivot_digest && args.manifest.is_some() {
+        bail!(
+            "--validate-pivot-digest only works with --deploy-id. \
+             Use `tvc deploy validate-pivot-digest` to validate a manifest file source locally."
+        );
+    }
+
     // Fetch manifest - track manifest_id if fetched from API
-    let (manifest, fetched_manifest_id) = match (&args.manifest, &args.deploy_id) {
-        (Some(path), _) => (read_manifest_from_path(path).await?, None),
-        (_, Some(deploy_id)) => {
-            let (manifest, manifest_id) = fetch_manifest_from_deploy(deploy_id).await?;
-            (manifest, Some(manifest_id))
-        }
-        (None, None) => bail!("a manifest source is required"),
-    };
+    let (manifest, fetched_manifest_id, pivot_image_url, pivot_path) =
+        match (&args.manifest, &args.deploy_id) {
+            (Some(path), _) => (read_manifest_from_path(path).await?, None, None, None),
+            (_, Some(deploy_id)) => {
+                let source = fetch_manifest_from_deploy(deploy_id).await?;
+                (
+                    source.manifest,
+                    Some(source.manifest_id),
+                    source.pivot_image_url,
+                    source.pivot_path,
+                )
+            }
+            (None, None) => bail!("a manifest source is required"),
+        };
+
+    if args.validate_pivot_digest {
+        let pivot_image_url = pivot_image_url
+            .ok_or_else(|| anyhow!("deployment is missing a pivot container image URL"))?;
+        let pivot_path =
+            pivot_path.ok_or_else(|| anyhow!("deployment is missing a pivot container path"))?;
+
+        let result = compute_pivot_digest(
+            &PivotDigestSource {
+                image_url: pivot_image_url,
+                pivot_path,
+            },
+            args.pull_secret.as_deref(),
+        )
+        .await?;
+        validate_expected_digest(&result.digest, &hex::encode(manifest.pivot.hash))?;
+        print_result(&result);
+        println!("Pivot digest validated successfully.");
+        println!();
+    }
 
     if !args.dangerous_skip_interactive {
         interactive_approve(&manifest)?;
@@ -369,7 +419,7 @@ async fn read_manifest_from_path(path: &Path) -> anyhow::Result<Manifest> {
 
 /// Fetch manifest from Turnkey using GetTvcDeployment API.
 /// Returns the manifest and its Turnkey manifest_id.
-async fn fetch_manifest_from_deploy(deploy_id: &str) -> anyhow::Result<(Manifest, String)> {
+async fn fetch_manifest_from_deploy(deploy_id: &str) -> anyhow::Result<DeployApprovalSource> {
     println!("Fetching deployment {deploy_id}...");
 
     let auth = crate::client::build_client().await?;
@@ -399,5 +449,15 @@ async fn fetch_manifest_from_deploy(deploy_id: &str) -> anyhow::Result<(Manifest
 
     println!("✓ Manifest loaded (manifest_id: {})", tvc_manifest.id);
 
-    Ok((manifest, tvc_manifest.id))
+    let (pivot_image_url, pivot_path) = deployment
+        .pivot_container
+        .map(|container| (Some(container.container_url), Some(container.path)))
+        .unwrap_or((None, None));
+
+    Ok(DeployApprovalSource {
+        manifest,
+        manifest_id: tvc_manifest.id,
+        pivot_image_url,
+        pivot_path,
+    })
 }

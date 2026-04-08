@@ -2,6 +2,18 @@ use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
 
 #[test]
+fn approve_help_mentions_validate_pivot_digest() {
+    cargo_bin_cmd!("tvc")
+        .arg("deploy")
+        .arg("approve")
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--validate-pivot-digest"))
+        .stdout(predicate::str::contains("--pull-secret"));
+}
+
+#[test]
 fn approve_requires_source() {
     cargo_bin_cmd!("tvc")
         .arg("deploy")
@@ -107,5 +119,20 @@ fn approve_requires_manifest_id_or_skip_post() {
         .failure()
         .stderr(predicate::str::contains(
             "--manifest-id is required to post approval to API",
+        ));
+}
+
+#[test]
+fn approve_validate_requires_deploy_id() {
+    cargo_bin_cmd!("tvc")
+        .arg("deploy")
+        .arg("approve")
+        .arg("--manifest")
+        .arg("fixtures/manifest.json")
+        .arg("--validate-pivot-digest")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--validate-pivot-digest only works with --deploy-id",
         ));
 }
