@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.6.2](https://github.com/tkhq/rust-sdk/compare/turnkey_proofs-v0.6.1...turnkey_proofs-v0.6.2) - 2026-04-09
+
+### Other
+
+- release v0.6.1
+
 ## [0.6.0](https://github.com/tkhq/rust-sdk/compare/turnkey_proofs-v0.5.0...turnkey_proofs-v0.6.0) - 2026-02-20
 
 ### Other
