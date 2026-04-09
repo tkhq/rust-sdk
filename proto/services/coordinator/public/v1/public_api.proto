@@ -1755,6 +1755,20 @@ service PublicApiService {
     };
   }
 
+  rpc ValidateTvcImage(ValidateTvcImageRequest) returns (ValidateTvcImageResponse) {
+    // TODO: remove me when it's time to unleash TVC
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/query/validate_tvc_image"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Validate a container image URL and pull secret for TVC deployment"
+      summary: "Validate Container Image for TVC"
+      tags: "TVC"
+    };
+  }
+
   rpc GetTvcAppDeployments(GetTvcAppDeploymentsRequest) returns (GetTvcAppDeploymentsResponse) {
     // TODO: remove me when it's time to unleash TVC
     option (google.api.method_visibility).restriction = "INTERNAL";
@@ -2683,6 +2697,25 @@ message GetTvcDeploymentResponse {
   ];
 }
 
+message ValidateTvcImageRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string pivot_container_image_url = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "URL of the container image."}
+  ];
+  optional string pivot_container_encrypted_pull_secret = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "HPKE-encrypted pull secret for private images."}
+  ];
+}
+
+message ValidateTvcImageResponse {
+  string resolved_image_digest = 1 [(google.api.field_behavior) = OPTIONAL];
+}
+
 message GetAppStatusRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
@@ -2712,7 +2745,7 @@ message GetWalletAddressBalancesRequest {
   ];
   string address = 2 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address corresponding to a wallet account."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address corresponding to a wallet account. Private key addresses are not supported."}
   ];
   string caip2 = 3 [
     (google.api.field_behavior) = REQUIRED,

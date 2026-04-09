@@ -4200,7 +4200,7 @@ message CreateTvcDeploymentIntent {
   ];
   immutable.common.v1.TvcHealthCheckType health_check_type = 14 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Heath check type (TVC_HEALTH_CHECK_TYPE_HTTP or TVC_HEALTH_CHECK_TYPE_GRPC). HTTP health checks are made with a GET request on /health, and gRPC health checks follow the standard gRPC health checking protocol."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Health check type (TVC_HEALTH_CHECK_TYPE_HTTP or TVC_HEALTH_CHECK_TYPE_GRPC). HTTP health checks are made with a GET request on /health, and gRPC health checks follow the standard gRPC health checking protocol."}
   ];
   uint32 health_check_port = 15 [
     (google.api.field_behavior) = REQUIRED,

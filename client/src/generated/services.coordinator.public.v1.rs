@@ -939,6 +939,25 @@ pub struct GetTvcDeploymentResponse {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct ValidateTvcImageRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub pivot_container_image_url: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub pivot_container_encrypted_pull_secret: ::core::option::Option<
+        ::prost::alloc::string::String,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct ValidateTvcImageResponse {
+    pub resolved_image_digest: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct GetAppStatusRequest {
     pub organization_id: ::prost::alloc::string::String,
     pub app_id: ::prost::alloc::string::String,

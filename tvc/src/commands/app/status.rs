@@ -30,15 +30,12 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
 
     let app_status = crate::commands::app_status::sanitize_app_status(
         response
-        .app_status
-        .ok_or_else(|| anyhow!("no status returned for app: {}", args.app_id))?,
+            .app_status
+            .ok_or_else(|| anyhow!("no status returned for app: {}", args.app_id))?,
     );
 
     println!("App ID: {}", app_status.app_id);
-    println!(
-        "Targeted Deployment: {}",
-        app_status.targeted_deployment_id
-    );
+    println!("Targeted Deployment: {}", app_status.targeted_deployment_id);
 
     if app_status.deployments.is_empty() {
         println!();
