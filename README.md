@@ -11,6 +11,7 @@ This repository contains tooling to interact with the Turnkey API using Rust, an
 | `turnkey_client` | Rust client to interact with the Turnkey API | [![Latest](https://img.shields.io/crates/v/turnkey_client.svg)](https://crates.io/crates/turnkey_client) | [![docs.rs](https://img.shields.io/docsrs/turnkey_client)](https://docs.rs/turnkey_client) | [CHANGELOG](./client/CHANGELOG.md) | [`client`](./client/) |
 | `turnkey_enclave_encrypt` | Utilities to decrypt and encrypt data from and to Turnkey secure enclaves | [![Latest](https://img.shields.io/crates/v/turnkey_enclave_encrypt.svg)](https://crates.io/crates/turnkey_enclave_encrypt) | [![docs.rs](https://img.shields.io/docsrs/turnkey_enclave_encrypt)](https://docs.rs/turnkey_enclave_encrypt) | [CHANGELOG](./enclave_encrypt/CHANGELOG.md) | [`enclave_encrypt`](./enclave_encrypt/) |
 | `turnkey_proofs` | Utilities to verify Turnkey secure enclave proofs | [![Latest](https://img.shields.io/crates/v/turnkey_proofs.svg)](https://crates.io/crates/turnkey_proofs) | [![docs.rs](https://img.shields.io/docsrs/turnkey_proofs)](https://docs.rs/turnkey_proofs) | [CHANGELOG](./proofs/CHANGELOG.md) | [`proofs`](./proofs/) |
+| `tvc` | CLI for Turnkey Verifiable Cloud | [![Latest](https://img.shields.io/crates/v/tvc.svg)](https://crates.io/crates/tvc) | [![docs.rs](https://img.shields.io/docsrs/tvc)](https://docs.rs/tvc) | [CHANGELOG](./tvc/CHANGELOG.md) | [`tvc`](./tvc/) |
 
 
 ## Examples
