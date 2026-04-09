@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Other
 
-- ran make proto from mono
+- Synced protos v2025.4.0: adds validation endpoint for tvc image URLs and new fields for deployment statuses
 
 ## [0.6.1](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.6.0...turnkey_client-v0.6.1) - 2026-03-31
 
