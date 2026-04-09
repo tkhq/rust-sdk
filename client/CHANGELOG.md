@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.6.2](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.6.1...turnkey_client-v0.6.2) - 2026-04-09
+
+### Other
+
+- ran make proto from mono
+
 ## [0.6.1](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.6.0...turnkey_client-v0.6.1) - 2026-03-31
 
 ### Other
