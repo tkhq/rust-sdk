@@ -144,6 +144,8 @@ We achieve recipient authentication for both the server and client:
 
 The underlying HPKE spec does not provide forward secrecy on the recipient side since the target key can be long lived. To improve forward secrecy we specify that the target key should only be used once by the sender and receiver. We cannot enforce this strictly on the client-side because a client may choose to reuse their key. We could implement timestamp-based validation or rate limiting client-side but it wouldn't be a complete solution. For now we accept that a client can use an encryption bundle multiple times if it so desires. However we enforce one-time use of the key pair on the enclave side by deleting it once a successful decryption happens.
 
+For the encrypted blob API, we introduced a variant that leverages a long lived enclave encryption target. For the encrypted blob API threat model we do not consider Quorum Key reconstruction outside the enclave in scope.
+
 #### Sender authentication
 
 We use `OpMode` Base because the sender's KEM private key is not long lived and thus does not need HPKE authentication. In order for this to be exploited one side's private key data would have to be leaked or an attacker would need to spoof a message from the sender. Turnkey mitigates this attack by layering a signature from an authentication key over payloads that contain ciphertext + encappedPub. Note that in the case of client to server the authentication signature is implicitly verified by the Ump policy engine. Read more about HPKE asymmetric authentication [here](https://datatracker.ietf.org/doc/html/rfc9180#name-authentication-using-an-asy).

@@ -2596,9 +2596,9 @@ dependencies = [
 
 [[package]]
 name = "qos_core"
-version = "0.5.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68ee8b50c99aa2d1d9163d8696d8c6ed4e5f9ff309410610b22a49d13fde9cc0"
+checksum = "893f63fac0ccdb1dd5f66da2d2b463b8c5c23763a61f440c2c3cdc4e6a481323"
 dependencies = [
  "aws-nitro-enclaves-nsm-api 0.4.0",
  "borsh",
@@ -2618,9 +2618,9 @@ dependencies = [
 
 [[package]]
 name = "qos_crypto"
-version = "0.5.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b4ef01e2fb11228dcb6a0d8a5af7016d27369a92cd1f43b86001d025ee47515"
+checksum = "a6c49415fb28a9dc7388e53fed1494189fdf9d917f956905288966d856a4a884"
 dependencies = [
  "rand 0.9.2",
  "sha2",
@@ -2630,18 +2630,18 @@ dependencies = [
 
 [[package]]
 name = "qos_hex"
-version = "0.5.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "10e492ce47887e4c69f23d6235fe8cae16e68e32296054ca80b1ba3ad9f35bc2"
+checksum = "d8a19810c8e0561e92b11bf4fbf1ae880a7251826b8aa711533c8e773c5e7ca1"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "qos_nsm"
-version = "0.5.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0227cb01964c41ba950b77b9c97aa3be12e9a5bf24991f3819dffcba68efc3b"
+checksum = "6d91112b30ca87b38b0e54e2a88a3395b47e755d35dc88abe9d41a1bd3576be2"
 dependencies = [
  "aws-nitro-enclaves-cose",
  "aws-nitro-enclaves-nsm-api 0.4.0",
@@ -2656,9 +2656,9 @@ dependencies = [
 
 [[package]]
 name = "qos_p256"
-version = "0.5.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13d218db6a6398ec262eb4b04dbc0088338c5abc2ada9c87d6fd9cf43151296a"
+checksum = "7d9af0113f0e9996a4f9d4446cbed70cd1682119d87536572f425fe752f2205e"
 dependencies = [
  "aes-gcm",
  "borsh",
@@ -3880,6 +3880,7 @@ dependencies = [
  "hex",
  "hpke",
  "p256 0.13.2",
+ "qos_p256",
  "rand_core 0.6.4",
  "serde",
  "serde_json",

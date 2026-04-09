@@ -40,6 +40,9 @@ pub enum EnclaveEncryptError {
     #[error("Error while deserializing the client target key")]
     InvalidClientTarget(hpke::HpkeError),
 
+    #[error("Error while deserializing the server target key")]
+    InvalidTargetPrivateKey(hpke::HpkeError),
+
     #[error("Error while deserializing the server encapsulated key")]
     InvalidSeverEncappedKeySignature,
 

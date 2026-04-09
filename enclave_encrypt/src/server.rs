@@ -1,13 +1,13 @@
 //! Enclave Encryption Server
-use hpke::{Deserializable, Kem as KemTrait, Serializable};
-use p256::ecdsa::{signature::Signer, Signature, SigningKey};
-use rand_core::OsRng;
-
 use crate::{
     compress_p256_public, decrypt, encrypt, errors::EnclaveEncryptError, ClientSendMsg, Kem,
     P256Public, ServerSendData, ServerSendMsgV1, ServerTargetData, ServerTargetMsgV1, DATA_VERSION,
     TURNKEY_HPKE_INFO,
 };
+use hpke::{Deserializable, Kem as KemTrait, Serializable};
+use p256::ecdsa::{signature::Signer, Signature, SigningKey};
+use p256::elliptic_curve::sec1::ToEncodedPoint;
+use rand_core::OsRng;
 
 /// An instance of the server side for `EnclaveEncrypt`. This should only be used for either
 /// a SINGLE send or a single receive.
@@ -204,5 +204,55 @@ impl EnclaveEncryptServerRecv {
         } else {
             Err(EnclaveEncryptError::ServerAlreadyUsedToDecrypt)
         }
+    }
+}
+
+/// A reusable receiving-side server abstraction backed by a stable target keypair.
+///
+/// Unlike [`EnclaveEncryptServerRecv`], this type does not consume its key material after a
+/// successful decrypt. It is intended for request transport decryption where the server key is
+/// derived from durable signer key material (e.g. the Encryption Quorum Key )
+pub struct BlobEnclaveEncryptServerRecv {
+    /// Server's encryption target secret.
+    target_private: <Kem as KemTrait>::PrivateKey,
+    /// Server's encryption target that the client encrypts to.
+    target_public: <Kem as KemTrait>::PublicKey,
+}
+
+impl BlobEnclaveEncryptServerRecv {
+    /// Create a server receiver from secret material. Meant to be easily interoperable
+    /// with `qos_p256::P256Pair::encryption_secret`.
+    pub fn from_encryption_key(
+        encryption_secret_key: &p256::SecretKey,
+    ) -> Result<Self, EnclaveEncryptError> {
+        let target_private_bytes = encryption_secret_key.to_bytes();
+        let target_public_bytes = encryption_secret_key
+            .public_key()
+            .to_encoded_point(false)
+            .to_bytes();
+
+        let target_private = <Kem as KemTrait>::PrivateKey::from_bytes(&target_private_bytes)
+            .map_err(EnclaveEncryptError::InvalidTargetPrivateKey)?;
+        let target_public = <Kem as KemTrait>::PublicKey::from_bytes(&target_public_bytes)
+            .map_err(EnclaveEncryptError::InvalidServerTarget)?;
+
+        Ok(Self {
+            target_private,
+            target_public,
+        })
+    }
+
+    /// Decrypt a message from a client.
+    pub fn decrypt(&self, msg: &ClientSendMsg) -> Result<Vec<u8>, EnclaveEncryptError> {
+        let encapped_public = <Kem as KemTrait>::EncappedKey::from_bytes(&*msg.encapped_public)
+            .map_err(EnclaveEncryptError::InvalidEncappedKey)?;
+
+        decrypt(
+            &encapped_public,
+            &self.target_private,
+            &self.target_public,
+            &msg.ciphertext,
+            TURNKEY_HPKE_INFO,
+        )
     }
 }

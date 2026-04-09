@@ -275,9 +275,13 @@ fn additional_associated_data(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use crate::{
+        client::EnclaveEncryptClient, server::BlobEnclaveEncryptServerRecv,
+        server::EnclaveEncryptServer,
+    };
     use p256::ecdsa::{signature::Signer, Signature, SigningKey, VerifyingKey};
-
-    use crate::{client::EnclaveEncryptClient, server::EnclaveEncryptServer};
+    use p256::elliptic_curve::sec1::ToEncodedPoint;
+    use qos_p256::P256Pair;
 
     use super::*;
     const FAKE_SEED: &[u8] = &[42; 32];
@@ -523,6 +527,77 @@ mod tests {
             // Satoshi's wallet
             // Test vector obtained from http://lenschulwitz.com/base58
             "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa".to_string(),
+        );
+    }
+
+    #[test]
+    fn client_blob_server_round_trip() {
+        let quorum_key_pair = P256Pair::generate().unwrap();
+
+        // Create a persistent server receiver from the quorum encryption secret
+        let server =
+            BlobEnclaveEncryptServerRecv::from_encryption_key(quorum_key_pair.encryption_key())
+                .unwrap();
+
+        // In practice this will be a pinned public key verified out of band
+        let target_public_key_bytes = quorum_key_pair
+            .encryption_key()
+            .public_key()
+            .to_encoded_point(false)
+            .to_bytes();
+        let quorum_verifying_key = quorum_key_pair.signing_key().verifying_key();
+
+        // Client encrypts to server's stable target public key
+        let client_ciphertext_bytes = EnclaveEncryptClient::encrypt_to_target_public_key(
+            &example_credential(),
+            &target_public_key_bytes,
+        )
+        .unwrap();
+        let client_msg: ClientSendMsg = serde_json::from_slice(&client_ciphertext_bytes).unwrap();
+
+        // Persistent server can decrypt without wiping
+        assert_eq!(server.decrypt(&client_msg).unwrap(), example_credential());
+
+        // Server encrypts to client
+        // Create a client
+        let mut client = EnclaveEncryptClient::from_enclave_auth_key(*quorum_verifying_key);
+        // Create a server
+        let organization_id = "b676ee7c-7eb4-47f1-8e1c-ff0e68e376cd";
+        let server_sender = EnclaveEncryptServer::from_enclave_auth_key(
+            quorum_key_pair.signing_key().clone(),
+            organization_id.to_string(),
+            None,
+        );
+        let client_target = client.target().unwrap();
+        let server_ciphertext = server_sender
+            .encrypt(&client_target, &example_credential())
+            .unwrap();
+        let server_ciphertext_bytes = serde_json::to_vec(&server_ciphertext).unwrap();
+
+        // Client decrypts and wipes key
+        assert_eq!(
+            client
+                .decrypt(&server_ciphertext_bytes, organization_id)
+                .unwrap(),
+            example_credential()
+        );
+        assert_eq!(
+            client.decrypt(&server_ciphertext_bytes, organization_id),
+            Err(EnclaveEncryptError::ClientAlreadyUsedToDecrypt)
+        );
+
+        // Fresh client: tampered server signature is rejected
+        let mut client2 = EnclaveEncryptClient::from_enclave_auth_key(*quorum_verifying_key);
+        let client2_target = client2.target().unwrap();
+        let mut bad_ciphertext = server_sender
+            .encrypt(&client2_target, &example_credential())
+            .unwrap();
+        bad_ciphertext.data_signature = random_signature();
+        let bad_ciphertext_bytes = serde_json::to_vec(&bad_ciphertext).unwrap();
+
+        assert_eq!(
+            client2.decrypt(&bad_ciphertext_bytes, organization_id),
+            Err(EnclaveEncryptError::ServerEncappedKeySignatureVerificationFail)
         );
     }
 }

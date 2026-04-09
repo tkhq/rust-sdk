@@ -20,3 +20,4 @@ rand_core = { workspace = true, default-features = false }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, features = ["alloc"] }
 thiserror.workspace = true
+qos_p256 = { workspace = true }
