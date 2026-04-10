@@ -1,13 +1,14 @@
 //! Enclave Encryption Server
+use hpke::{Deserializable, Kem as KemTrait, Serializable};
+use p256::ecdsa::{signature::Signer, Signature, SigningKey};
+use p256::elliptic_curve::sec1::ToEncodedPoint;
+use rand_core::OsRng;
+
 use crate::{
     compress_p256_public, decrypt, encrypt, errors::EnclaveEncryptError, ClientSendMsg, Kem,
     P256Public, ServerSendData, ServerSendMsgV1, ServerTargetData, ServerTargetMsgV1, DATA_VERSION,
     TURNKEY_HPKE_INFO,
 };
-use hpke::{Deserializable, Kem as KemTrait, Serializable};
-use p256::ecdsa::{signature::Signer, Signature, SigningKey};
-use p256::elliptic_curve::sec1::ToEncodedPoint;
-use rand_core::OsRng;
 
 /// An instance of the server side for `EnclaveEncrypt`. This should only be used for either
 /// a SINGLE send or a single receive.
@@ -211,15 +212,15 @@ impl EnclaveEncryptServerRecv {
 ///
 /// Unlike [`EnclaveEncryptServerRecv`], this type does not consume its key material after a
 /// successful decrypt. It is intended for request transport decryption where the server key is
-/// derived from durable signer key material (e.g. the Encryption Quorum Key )
-pub struct BlobEnclaveEncryptServerRecv {
+/// derived from durable signer key material (e.g. a encryption quorum key)
+pub struct ReusableEnclaveEncryptServerRecv {
     /// Server's encryption target secret.
     target_private: <Kem as KemTrait>::PrivateKey,
     /// Server's encryption target that the client encrypts to.
     target_public: <Kem as KemTrait>::PublicKey,
 }
 
-impl BlobEnclaveEncryptServerRecv {
+impl ReusableEnclaveEncryptServerRecv {
     /// Create a server receiver from secret material. Meant to be easily interoperable
     /// with `qos_p256::P256Pair::encryption_secret`.
     pub fn from_encryption_key(

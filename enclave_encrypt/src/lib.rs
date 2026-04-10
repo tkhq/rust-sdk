@@ -276,8 +276,8 @@ fn additional_associated_data(
 #[allow(clippy::unwrap_used)]
 mod tests {
     use crate::{
-        client::EnclaveEncryptClient, server::BlobEnclaveEncryptServerRecv,
-        server::EnclaveEncryptServer,
+        client::EnclaveEncryptClient, server::EnclaveEncryptServer,
+        server::ReusableEnclaveEncryptServerRecv,
     };
     use p256::ecdsa::{signature::Signer, Signature, SigningKey, VerifyingKey};
     use p256::elliptic_curve::sec1::ToEncodedPoint;
@@ -536,7 +536,7 @@ mod tests {
 
         // Create a persistent server receiver from the quorum encryption secret
         let server =
-            BlobEnclaveEncryptServerRecv::from_encryption_key(quorum_key_pair.encryption_key())
+            ReusableEnclaveEncryptServerRecv::from_encryption_key(quorum_key_pair.encryption_key())
                 .unwrap();
 
         // In practice this will be a pinned public key verified out of band
