@@ -1,9 +1,9 @@
 [package]
 name = "tvc"
-version = "0.1.0-alpha.1"
+version = "0.6.2"
 edition = "2021"
 license = "Apache-2.0"
-description = "Experimental CLI for Turnkey Verifiable Cloud"
+description = "CLI for Turnkey Verifiable Cloud"
 repository = "https://github.com/tkhq/rust-sdk"
 homepage = "https://turnkey.com"
 readme = "README.md"

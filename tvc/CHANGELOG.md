@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-## [0.1.0-alpha.1] - 2026-04-03
+## 0.6.2 - 2026-04-09
+
+### Other
+
+- Added `tvc` to `rust-sdk` release version group
+
+## 0.1.0-alpha.1 - 2026-04-03
 
 ### Added
 
