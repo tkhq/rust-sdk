@@ -144,7 +144,7 @@ We achieve recipient authentication for both the server and client:
 
 The underlying HPKE spec does not provide forward secrecy on the recipient side since the target key can be long lived. To improve forward secrecy we specify that the target key should only be used once by the sender and receiver. We cannot enforce this strictly on the client-side because a client may choose to reuse their key. We could implement timestamp-based validation or rate limiting client-side but it wouldn't be a complete solution. For now we accept that a client can use an encryption bundle multiple times if it so desires. However we enforce one-time use of the key pair on the enclave side by deleting it once a successful decryption happens.
 
-For the encrypted blob API, we introduced a variant that leverages a long lived enclave encryption target. For the encrypted blob API threat model we do not consider Quorum Key reconstruction outside the enclave in scope.
+In addition, we also support long lived enclave side keys. This allows clients to reuse a stable enclave encryption target, which can be helpful to reduce communication overhead for scenarios that are latency or throughput sensitive. We still recommend that the client does not reuse their key. The library types that support this pattern are `server::ReusableEnclaveEncryptServerRecv` and `client::encrypt_to_server_target`. Clients are still recommended to use `EnclaveEncryptClient` to receive messages from the server since it ensures the client target key is deleted after use.
 
 #### Sender authentication
 

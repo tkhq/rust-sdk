@@ -292,26 +292,6 @@ pub struct EnclaveEncryptClient {
 }
 
 impl EnclaveEncryptClient {
-    /// Encrypt a message directly to a fixed transport public key.
-    ///
-    /// This is intended for request ingress flows where the target public key is already known
-    /// and authenticated out of band.
-    pub fn encrypt_to_target_public_key(
-        plaintext: &[u8],
-        target_public_key_bytes: &[u8],
-    ) -> Result<Vec<u8>, EnclaveEncryptError> {
-        let receiver_public = <Kem as KemTrait>::PublicKey::from_bytes(target_public_key_bytes)
-            .map_err(EnclaveEncryptError::InvalidServerTarget)?;
-        let (ciphertext, encapped_public) =
-            encrypt(&receiver_public, plaintext, TURNKEY_HPKE_INFO)?;
-        let msg = ClientSendMsg {
-            encapped_public: encapped_public.to_bytes().to_vec().try_into()?,
-            ciphertext,
-        };
-
-        serde_json::to_vec(&msg).map_err(|_| EnclaveEncryptError::FailedToSerializeData)
-    }
-
     /// Create a client from the quorum public key.
     #[must_use]
     pub fn from_enclave_auth_key(enclave_auth_key: VerifyingKey) -> Self {
@@ -562,6 +542,25 @@ impl EnclaveEncryptClient {
             Err(EnclaveEncryptError::ClientAlreadyUsedToDecrypt)
         }
     }
+}
+
+/// Encrypt a message directly to a fixed transport public key.
+///
+/// This is intended for request ingress flows where the target public key is already known
+/// and authenticated out of band.
+pub fn encrypt_to_server_target(
+    plaintext: &[u8],
+    target_public_key_bytes: &[u8],
+) -> Result<Vec<u8>, EnclaveEncryptError> {
+    let receiver_public = <Kem as KemTrait>::PublicKey::from_bytes(target_public_key_bytes)
+        .map_err(EnclaveEncryptError::InvalidServerTarget)?;
+    let (ciphertext, encapped_public) = encrypt(&receiver_public, plaintext, TURNKEY_HPKE_INFO)?;
+    let msg = ClientSendMsg {
+        encapped_public: encapped_public.to_bytes().to_vec().try_into()?,
+        ciphertext,
+    };
+
+    serde_json::to_vec(&msg).map_err(|_| EnclaveEncryptError::FailedToSerializeData)
 }
 
 #[cfg(test)]

@@ -278,6 +278,7 @@ mod tests {
     use crate::{
         client::EnclaveEncryptClient, server::EnclaveEncryptServer,
         server::ReusableEnclaveEncryptServerRecv,
+        client::encrypt_to_server_target
     };
     use p256::ecdsa::{signature::Signer, Signature, SigningKey, VerifyingKey};
     use p256::elliptic_curve::sec1::ToEncodedPoint;
@@ -548,11 +549,8 @@ mod tests {
         let quorum_verifying_key = quorum_key_pair.signing_key().verifying_key();
 
         // Client encrypts to server's stable target public key
-        let client_ciphertext_bytes = EnclaveEncryptClient::encrypt_to_target_public_key(
-            &example_credential(),
-            &target_public_key_bytes,
-        )
-        .unwrap();
+        let client_ciphertext_bytes =
+            encrypt_to_server_target(&example_credential(), &target_public_key_bytes).unwrap();
         let client_msg: ClientSendMsg = serde_json::from_slice(&client_ciphertext_bytes).unwrap();
 
         // Persistent server can decrypt without wiping
