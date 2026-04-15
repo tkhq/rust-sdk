@@ -1,18 +1,18 @@
 //! Enclave Encrypt Client
-use hpke::{Deserializable, Kem as KemTrait, Serializable};
-use p256::{
-    ecdsa::{signature::Verifier, DerSignature, SigningKey, VerifyingKey},
-    PublicKey,
-};
-use rand_core::OsRng;
-use std::str::from_utf8;
-
 use crate::{
     decompress_p256_public, decrypt, encrypt, errors::EnclaveEncryptError,
     quorum_public_key::QuorumPublicKey, ClientSendMsg, Kem, P256Public, ServerSendData,
     ServerSendMsg, ServerSendMsgV0, ServerSendMsgV1, ServerTargetData, ServerTargetMsg,
     ServerTargetMsgV0, ServerTargetMsgV1, DATA_VERSION, TURNKEY_HPKE_INFO,
 };
+use hpke::{Deserializable, Kem as KemTrait, Serializable};
+use p256::elliptic_curve::sec1::ToEncodedPoint;
+use p256::{
+    ecdsa::{signature::Verifier, DerSignature, SigningKey, VerifyingKey},
+    PublicKey,
+};
+use rand_core::OsRng;
+use std::str::from_utf8;
 
 /// Expected length (in bytes) for imported private keys
 const EXPECTED_PRIVATE_KEY_BYTE_LENGTH: usize = 32;
@@ -550,17 +550,18 @@ impl EnclaveEncryptClient {
 /// and authenticated out of band.
 pub fn encrypt_to_server_target(
     plaintext: &[u8],
-    target_public_key_bytes: &[u8],
-) -> Result<Vec<u8>, EnclaveEncryptError> {
-    let receiver_public = <Kem as KemTrait>::PublicKey::from_bytes(target_public_key_bytes)
-        .map_err(EnclaveEncryptError::InvalidServerTarget)?;
+    server_target: QuorumPublicKey,
+) -> Result<ClientSendMsg, EnclaveEncryptError> {
+    let target_public_key_bytes = server_target.encrypt_public_key()?.to_encoded_point(false);
+
+    let receiver_public =
+        <Kem as KemTrait>::PublicKey::from_bytes(target_public_key_bytes.as_bytes())
+            .map_err(EnclaveEncryptError::InvalidServerTarget)?;
     let (ciphertext, encapped_public) = encrypt(&receiver_public, plaintext, TURNKEY_HPKE_INFO)?;
-    let msg = ClientSendMsg {
+    Ok(ClientSendMsg {
         encapped_public: encapped_public.to_bytes().to_vec().try_into()?,
         ciphertext,
-    };
-
-    serde_json::to_vec(&msg).map_err(|_| EnclaveEncryptError::FailedToSerializeData)
+    })
 }
 
 #[cfg(test)]

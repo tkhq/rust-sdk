@@ -102,4 +102,7 @@ pub enum EnclaveEncryptError {
 
     #[error("Cannot JSON-serialize bundle: {0}")]
     CannotSerializeBundle(String),
+
+    #[error("Invalid encryption public key")]
+    InvalidEncryptionKey,
 }
