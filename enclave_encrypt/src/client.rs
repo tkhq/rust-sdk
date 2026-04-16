@@ -550,7 +550,7 @@ impl EnclaveEncryptClient {
 /// and authenticated out of band.
 pub fn encrypt_to_server_target(
     plaintext: &[u8],
-    server_target: QuorumPublicKey,
+    server_target: &QuorumPublicKey,
 ) -> Result<ClientSendMsg, EnclaveEncryptError> {
     let target_public_key_bytes = server_target.encrypt_public_key()?.to_encoded_point(false);
 

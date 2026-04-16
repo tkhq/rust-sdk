@@ -534,14 +534,13 @@ mod tests {
         let quorum_key_pair = P256Pair::generate().unwrap();
 
         // Create a persistent server receiver from the quorum encryption secret
-        let server =
-            ReusableEnclaveEncryptServerRecv::from_encryption_key(quorum_key_pair.encryption_key())
-                .unwrap();
+        let server: ReusableEnclaveEncryptServerRecv =
+            quorum_key_pair.encryption_key().try_into().unwrap();
 
         // Client encrypts to server's stable target public key
         let client_msg = encrypt_to_server_target(
             &example_credential(),
-            quorum_key_pair.public_key().try_into().unwrap(),
+            &quorum_key_pair.public_key().try_into().unwrap(),
         )
         .unwrap();
 

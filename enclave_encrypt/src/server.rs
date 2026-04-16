@@ -221,11 +221,27 @@ pub struct ReusableEnclaveEncryptServerRecv {
 }
 
 impl ReusableEnclaveEncryptServerRecv {
+    /// Decrypt a message from a client.
+    pub fn decrypt(&self, msg: &ClientSendMsg) -> Result<Vec<u8>, EnclaveEncryptError> {
+        let encapped_public = <Kem as KemTrait>::EncappedKey::from_bytes(&*msg.encapped_public)
+            .map_err(EnclaveEncryptError::InvalidEncappedKey)?;
+
+        decrypt(
+            &encapped_public,
+            &self.target_private,
+            &self.target_public,
+            &msg.ciphertext,
+            TURNKEY_HPKE_INFO,
+        )
+    }
+}
+
+impl TryFrom<&p256::SecretKey> for ReusableEnclaveEncryptServerRecv {
+    type Error = EnclaveEncryptError;
+
     /// Create a server receiver from secret material. Meant to be easily interoperable
     /// with `qos_p256::P256Pair::encryption_secret`.
-    pub fn from_encryption_key(
-        encryption_secret_key: &p256::SecretKey,
-    ) -> Result<Self, EnclaveEncryptError> {
+    fn try_from(encryption_secret_key: &p256::SecretKey) -> Result<Self, Self::Error> {
         let target_private_bytes = encryption_secret_key.to_bytes();
         let target_public_bytes = encryption_secret_key
             .public_key()
@@ -241,19 +257,5 @@ impl ReusableEnclaveEncryptServerRecv {
             target_private,
             target_public,
         })
-    }
-
-    /// Decrypt a message from a client.
-    pub fn decrypt(&self, msg: &ClientSendMsg) -> Result<Vec<u8>, EnclaveEncryptError> {
-        let encapped_public = <Kem as KemTrait>::EncappedKey::from_bytes(&*msg.encapped_public)
-            .map_err(EnclaveEncryptError::InvalidEncappedKey)?;
-
-        decrypt(
-            &encapped_public,
-            &self.target_private,
-            &self.target_public,
-            &msg.ciphertext,
-            TURNKEY_HPKE_INFO,
-        )
     }
 }
