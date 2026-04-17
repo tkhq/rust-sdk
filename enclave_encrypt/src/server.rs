@@ -3,6 +3,7 @@ use hpke::{Deserializable, Kem as KemTrait, Serializable};
 use p256::ecdsa::{signature::Signer, Signature, SigningKey};
 use p256::elliptic_curve::sec1::ToEncodedPoint;
 use rand_core::OsRng;
+use zeroize::Zeroizing;
 
 use crate::{
     compress_p256_public, decrypt, encrypt, errors::EnclaveEncryptError, ClientSendMsg, Kem,
@@ -247,7 +248,7 @@ impl TryFrom<&qos_p256::P256Pair> for ReusableEnclaveEncryptServerRecv {
             .to_encoded_point(false)
             .to_bytes();
 
-        let target_private_bytes = encryption_secret.to_bytes();
+        let target_private_bytes = Zeroizing::new(encryption_secret.to_bytes());
 
         let target_private = <Kem as KemTrait>::PrivateKey::from_bytes(&target_private_bytes)
             .map_err(EnclaveEncryptError::InvalidTargetPrivateKey)?;
