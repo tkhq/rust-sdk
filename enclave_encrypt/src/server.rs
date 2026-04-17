@@ -259,3 +259,12 @@ impl TryFrom<&p256::SecretKey> for ReusableEnclaveEncryptServerRecv {
         })
     }
 }
+
+impl TryFrom<&qos_p256::P256Pair> for ReusableEnclaveEncryptServerRecv {
+    type Error = EnclaveEncryptError;
+
+    /// Create a server receiver from QOS `P256Pair`.
+    fn try_from(qos_pair: &qos_p256::P256Pair) -> Result<Self, Self::Error> {
+        qos_pair.encryption_key().try_into()
+    }
+}

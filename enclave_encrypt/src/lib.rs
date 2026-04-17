@@ -537,8 +537,7 @@ mod tests {
         let quorum_public_key_clone = quorum_public_key.clone();
 
         // Create a persistent server receiver from the quorum encryption secret
-        let server: ReusableEnclaveEncryptServerRecv =
-            quorum_key_pair.encryption_key().try_into().unwrap();
+        let server: ReusableEnclaveEncryptServerRecv = (&quorum_key_pair).try_into().unwrap();
 
         // Client encrypts to server's stable target public key
         let client: ReusableEnclaveEncryptClientSend = quorum_public_key.into();
@@ -548,5 +547,29 @@ mod tests {
         assert_eq!(server.decrypt(&client_msg).unwrap(), plaintext);
 
         assert_eq!(client.quorum_public_key(), &quorum_public_key_clone);
+    }
+
+    #[test]
+    fn try_p256_pair_and_secret_key_yield_same_reusable_server() {
+        let plaintext = b"got what plants crave";
+        let quorum_key_pair = qos_p256::P256Pair::generate().unwrap();
+
+        let quorum_public_key: QuorumPublicKey = quorum_key_pair.public_key().try_into().unwrap();
+        let client: ReusableEnclaveEncryptClientSend = quorum_public_key.into();
+
+        let client_msg = client.encrypt(plaintext).unwrap();
+
+        // TryFrom<&p256::SecretKey>
+        let server1: ReusableEnclaveEncryptServerRecv =
+            quorum_key_pair.encryption_key().try_into().unwrap();
+        // TryFrom<&qos_p256::P256Pair>
+        let server2: ReusableEnclaveEncryptServerRecv = (&quorum_key_pair).try_into().unwrap();
+
+        // Both servers can decrypt
+        let plaintext1 = server1.decrypt(&client_msg).unwrap();
+        let plaintext2 = server2.decrypt(&client_msg).unwrap();
+
+        assert_eq!(plaintext1, plaintext);
+        assert_eq!(plaintext2, plaintext);
     }
 }
