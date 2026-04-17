@@ -544,24 +544,45 @@ impl EnclaveEncryptClient {
     }
 }
 
-/// Encrypt a message directly to a fixed transport public key.
+/// Client for encrypting messages directly to a quorum public key.
 ///
-/// This is intended for request ingress flows where the target public key is already known
-/// and authenticated out of band.
-pub fn encrypt_to_server_target(
-    plaintext: &[u8],
-    server_target: &QuorumPublicKey,
-) -> Result<ClientSendMsg, EnclaveEncryptError> {
-    let target_public_key_bytes = server_target.encrypt_public_key()?.to_encoded_point(false);
+/// This is intended for enclave ingress flows to an enclave with a pre-authenticated
+/// quorum public key.
+pub struct ReusableEnclaveEncryptClientSend {
+    quorum_public_key: QuorumPublicKey,
+}
 
-    let receiver_public =
-        <Kem as KemTrait>::PublicKey::from_bytes(target_public_key_bytes.as_bytes())
-            .map_err(EnclaveEncryptError::InvalidServerTarget)?;
-    let (ciphertext, encapped_public) = encrypt(&receiver_public, plaintext, TURNKEY_HPKE_INFO)?;
-    Ok(ClientSendMsg {
-        encapped_public: encapped_public.to_bytes().to_vec().try_into()?,
-        ciphertext,
-    })
+impl ReusableEnclaveEncryptClientSend {
+    /// The quorum public key this client encrypts to.
+    #[must_use]
+    pub fn quorum_public_key(&self) -> &QuorumPublicKey {
+        &self.quorum_public_key
+    }
+
+    /// Encrypt directly to this client's quorum public key.
+    pub fn encrypt(&self, plaintext: &[u8]) -> Result<ClientSendMsg, EnclaveEncryptError> {
+        let target_public_key_bytes = self
+            .quorum_public_key
+            .encrypt_public_key()?
+            .to_encoded_point(false);
+
+        let receiver_public =
+            <Kem as KemTrait>::PublicKey::from_bytes(target_public_key_bytes.as_bytes())
+                .map_err(EnclaveEncryptError::InvalidServerTarget)?;
+        let (ciphertext, encapped_public) =
+            encrypt(&receiver_public, plaintext, TURNKEY_HPKE_INFO)?;
+
+        Ok(ClientSendMsg {
+            encapped_public: encapped_public.to_bytes().to_vec().try_into()?,
+            ciphertext,
+        })
+    }
+}
+
+impl From<QuorumPublicKey> for ReusableEnclaveEncryptClientSend {
+    fn from(quorum_public_key: QuorumPublicKey) -> Self {
+        Self { quorum_public_key }
+    }
 }
 
 #[cfg(test)]

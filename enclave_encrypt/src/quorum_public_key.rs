@@ -15,7 +15,7 @@ pub const TURNKEY_PREPROD_SIGNER_QUORUM_PUBLIC_KEY: &str = "048e92f6cdcc0b375505
 pub const QUORUM_PUBLIC_KEY_BYTE_LENGTH: usize = 130;
 
 /// Represents a Quorum key public key component.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct QuorumPublicKey {
     bytes: Vec<u8>,
 }

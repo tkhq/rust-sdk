@@ -276,7 +276,7 @@ fn additional_associated_data(
 #[allow(clippy::unwrap_used)]
 mod tests {
     use crate::{
-        client::encrypt_to_server_target, client::EnclaveEncryptClient,
+        client::EnclaveEncryptClient, client::ReusableEnclaveEncryptClientSend,
         server::EnclaveEncryptServer, server::ReusableEnclaveEncryptServerRecv,
     };
     use p256::ecdsa::{signature::Signer, Signature, SigningKey, VerifyingKey};
@@ -531,20 +531,22 @@ mod tests {
 
     #[test]
     fn client_to_reusable_server() {
+        let plaintext = b"thirst mutilator";
         let quorum_key_pair = P256Pair::generate().unwrap();
+        let quorum_public_key: QuorumPublicKey = quorum_key_pair.public_key().try_into().unwrap();
+        let quorum_public_key_clone = quorum_public_key.clone();
 
         // Create a persistent server receiver from the quorum encryption secret
         let server: ReusableEnclaveEncryptServerRecv =
             quorum_key_pair.encryption_key().try_into().unwrap();
 
         // Client encrypts to server's stable target public key
-        let client_msg = encrypt_to_server_target(
-            &example_credential(),
-            &quorum_key_pair.public_key().try_into().unwrap(),
-        )
-        .unwrap();
+        let client: ReusableEnclaveEncryptClientSend = quorum_public_key.into();
+        let client_msg = client.encrypt(plaintext).unwrap();
 
         // Persistent server can decrypt without wiping
-        assert_eq!(server.decrypt(&client_msg).unwrap(), example_credential());
+        assert_eq!(server.decrypt(&client_msg).unwrap(), plaintext);
+
+        assert_eq!(client.quorum_public_key(), &quorum_public_key_clone);
     }
 }
