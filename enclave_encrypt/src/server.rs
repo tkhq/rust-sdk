@@ -236,17 +236,18 @@ impl ReusableEnclaveEncryptServerRecv {
     }
 }
 
-impl TryFrom<&p256::SecretKey> for ReusableEnclaveEncryptServerRecv {
+impl TryFrom<&qos_p256::P256Pair> for ReusableEnclaveEncryptServerRecv {
     type Error = EnclaveEncryptError;
 
-    /// Create a server receiver from secret material. Meant to be easily interoperable
-    /// with `qos_p256::P256Pair::encryption_secret`.
-    fn try_from(encryption_secret_key: &p256::SecretKey) -> Result<Self, Self::Error> {
-        let target_private_bytes = encryption_secret_key.to_bytes();
-        let target_public_bytes = encryption_secret_key
+    /// Create a server receiver from QOS `P256Pair`.
+    fn try_from(qos_pair: &qos_p256::P256Pair) -> Result<Self, Self::Error> {
+        let encryption_secret = qos_pair.encryption_key();
+        let target_public_bytes = encryption_secret
             .public_key()
             .to_encoded_point(false)
             .to_bytes();
+
+        let target_private_bytes = encryption_secret.to_bytes();
 
         let target_private = <Kem as KemTrait>::PrivateKey::from_bytes(&target_private_bytes)
             .map_err(EnclaveEncryptError::InvalidTargetPrivateKey)?;
@@ -257,14 +258,5 @@ impl TryFrom<&p256::SecretKey> for ReusableEnclaveEncryptServerRecv {
             target_private,
             target_public,
         })
-    }
-}
-
-impl TryFrom<&qos_p256::P256Pair> for ReusableEnclaveEncryptServerRecv {
-    type Error = EnclaveEncryptError;
-
-    /// Create a server receiver from QOS `P256Pair`.
-    fn try_from(qos_pair: &qos_p256::P256Pair) -> Result<Self, Self::Error> {
-        qos_pair.encryption_key().try_into()
     }
 }
