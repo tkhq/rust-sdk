@@ -1,7 +1,9 @@
 //! Enclave Encryption Server
 use hpke::{Deserializable, Kem as KemTrait, Serializable};
 use p256::ecdsa::{signature::Signer, Signature, SigningKey};
+use p256::elliptic_curve::sec1::ToEncodedPoint;
 use rand_core::OsRng;
+use zeroize::Zeroizing;
 
 use crate::{
     compress_p256_public, decrypt, encrypt, errors::EnclaveEncryptError, ClientSendMsg, Kem,
@@ -204,5 +206,58 @@ impl EnclaveEncryptServerRecv {
         } else {
             Err(EnclaveEncryptError::ServerAlreadyUsedToDecrypt)
         }
+    }
+}
+
+/// A reusable receiving-side server abstraction backed by a stable target keypair.
+///
+/// Unlike [`EnclaveEncryptServerRecv`], this type does not consume its key material after a
+/// successful decrypt. It is intended for request transport decryption where the server key is
+/// derived from durable signer key material (e.g. a encryption quorum key)
+pub struct ReusableEnclaveEncryptServerRecv {
+    /// Server's encryption target secret.
+    target_private: <Kem as KemTrait>::PrivateKey,
+    /// Server's encryption target that the client encrypts to.
+    target_public: <Kem as KemTrait>::PublicKey,
+}
+
+impl ReusableEnclaveEncryptServerRecv {
+    /// Decrypt a message from a client.
+    pub fn decrypt(&self, msg: &ClientSendMsg) -> Result<Vec<u8>, EnclaveEncryptError> {
+        let encapped_public = <Kem as KemTrait>::EncappedKey::from_bytes(&*msg.encapped_public)
+            .map_err(EnclaveEncryptError::InvalidEncappedKey)?;
+
+        decrypt(
+            &encapped_public,
+            &self.target_private,
+            &self.target_public,
+            &msg.ciphertext,
+            TURNKEY_HPKE_INFO,
+        )
+    }
+}
+
+impl TryFrom<&qos_p256::P256Pair> for ReusableEnclaveEncryptServerRecv {
+    type Error = EnclaveEncryptError;
+
+    /// Create a server receiver from QOS `P256Pair`.
+    fn try_from(qos_pair: &qos_p256::P256Pair) -> Result<Self, Self::Error> {
+        let encryption_secret = qos_pair.encryption_key();
+        let target_public_bytes = encryption_secret
+            .public_key()
+            .to_encoded_point(false)
+            .to_bytes();
+
+        let target_private_bytes = Zeroizing::new(encryption_secret.to_bytes());
+
+        let target_private = <Kem as KemTrait>::PrivateKey::from_bytes(&target_private_bytes)
+            .map_err(EnclaveEncryptError::InvalidTargetPrivateKey)?;
+        let target_public = <Kem as KemTrait>::PublicKey::from_bytes(&target_public_bytes)
+            .map_err(EnclaveEncryptError::InvalidServerTarget)?;
+
+        Ok(Self {
+            target_private,
+            target_public,
+        })
     }
 }

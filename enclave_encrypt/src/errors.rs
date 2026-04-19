@@ -40,6 +40,9 @@ pub enum EnclaveEncryptError {
     #[error("Error while deserializing the client target key")]
     InvalidClientTarget(hpke::HpkeError),
 
+    #[error("Error while deserializing the server target key")]
+    InvalidTargetPrivateKey(hpke::HpkeError),
+
     #[error("Error while deserializing the server encapsulated key")]
     InvalidSeverEncappedKeySignature,
 
@@ -99,4 +102,7 @@ pub enum EnclaveEncryptError {
 
     #[error("Cannot JSON-serialize bundle: {0}")]
     CannotSerializeBundle(String),
+
+    #[error("Invalid encryption public key")]
+    InvalidEncryptionKey,
 }

@@ -1,18 +1,18 @@
 //! Enclave Encrypt Client
-use hpke::{Deserializable, Kem as KemTrait, Serializable};
-use p256::{
-    ecdsa::{signature::Verifier, DerSignature, SigningKey, VerifyingKey},
-    PublicKey,
-};
-use rand_core::OsRng;
-use std::str::from_utf8;
-
 use crate::{
     decompress_p256_public, decrypt, encrypt, errors::EnclaveEncryptError,
     quorum_public_key::QuorumPublicKey, ClientSendMsg, Kem, P256Public, ServerSendData,
     ServerSendMsg, ServerSendMsgV0, ServerSendMsgV1, ServerTargetData, ServerTargetMsg,
     ServerTargetMsgV0, ServerTargetMsgV1, DATA_VERSION, TURNKEY_HPKE_INFO,
 };
+use hpke::{Deserializable, Kem as KemTrait, Serializable};
+use p256::elliptic_curve::sec1::ToEncodedPoint;
+use p256::{
+    ecdsa::{signature::Verifier, DerSignature, SigningKey, VerifyingKey},
+    PublicKey,
+};
+use rand_core::OsRng;
+use std::str::from_utf8;
 
 /// Expected length (in bytes) for imported private keys
 const EXPECTED_PRIVATE_KEY_BYTE_LENGTH: usize = 32;
@@ -500,7 +500,7 @@ impl EnclaveEncryptClient {
         }
     }
 
-    /// Decrypt a base64 serialized email recovery or auth payload.
+    /// Decrypt a base58 serialized email recovery or auth payload.
     pub fn auth_decrypt(&mut self, payload: &str) -> Result<Vec<u8>, EnclaveEncryptError> {
         let payload_bytes = bs58::decode(payload)
             .with_check(None)
@@ -541,6 +541,47 @@ impl EnclaveEncryptClient {
         } else {
             Err(EnclaveEncryptError::ClientAlreadyUsedToDecrypt)
         }
+    }
+}
+
+/// Client for encrypting messages directly to a quorum public key.
+///
+/// This is intended for enclave ingress flows to an enclave with a pre-authenticated
+/// quorum public key.
+pub struct ReusableEnclaveEncryptClientSend {
+    quorum_public_key: QuorumPublicKey,
+}
+
+impl ReusableEnclaveEncryptClientSend {
+    /// The quorum public key this client encrypts to.
+    #[must_use]
+    pub fn quorum_public_key(&self) -> &QuorumPublicKey {
+        &self.quorum_public_key
+    }
+
+    /// Encrypt directly to this client's quorum public key.
+    pub fn encrypt(&self, plaintext: &[u8]) -> Result<ClientSendMsg, EnclaveEncryptError> {
+        let target_public_key_bytes = self
+            .quorum_public_key
+            .encrypt_public_key()?
+            .to_encoded_point(false);
+
+        let receiver_public =
+            <Kem as KemTrait>::PublicKey::from_bytes(target_public_key_bytes.as_bytes())
+                .map_err(EnclaveEncryptError::InvalidServerTarget)?;
+        let (ciphertext, encapped_public) =
+            encrypt(&receiver_public, plaintext, TURNKEY_HPKE_INFO)?;
+
+        Ok(ClientSendMsg {
+            encapped_public: encapped_public.to_bytes().to_vec().try_into()?,
+            ciphertext,
+        })
+    }
+}
+
+impl From<QuorumPublicKey> for ReusableEnclaveEncryptClientSend {
+    fn from(quorum_public_key: QuorumPublicKey) -> Self {
+        Self { quorum_public_key }
     }
 }
 

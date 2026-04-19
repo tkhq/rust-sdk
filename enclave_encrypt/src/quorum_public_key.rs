@@ -15,7 +15,7 @@ pub const TURNKEY_PREPROD_SIGNER_QUORUM_PUBLIC_KEY: &str = "048e92f6cdcc0b375505
 pub const QUORUM_PUBLIC_KEY_BYTE_LENGTH: usize = 130;
 
 /// Represents a Quorum key public key component.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct QuorumPublicKey {
     bytes: Vec<u8>,
 }
@@ -68,6 +68,20 @@ impl QuorumPublicKey {
         // The verifying key thus only uses the second part of the public key,
         VerifyingKey::from_sec1_bytes(&self.bytes[65..])
             .map_err(|_| EnclaveEncryptError::InvalidVerifyingKeyBytes)
+    }
+
+    /// Returns the encryption target `PublicKey` for this `QuorumPublicKey`
+    pub fn encrypt_public_key(&self) -> Result<p256::PublicKey, EnclaveEncryptError> {
+        p256::PublicKey::from_sec1_bytes(&self.bytes[..65])
+            .map_err(|_| EnclaveEncryptError::InvalidEncryptionKey)
+    }
+}
+
+impl TryFrom<qos_p256::P256Public> for QuorumPublicKey {
+    type Error = EnclaveEncryptError;
+
+    fn try_from(value: qos_p256::P256Public) -> Result<Self, Self::Error> {
+        QuorumPublicKey::from_bytes(value.to_bytes())
     }
 }
 
