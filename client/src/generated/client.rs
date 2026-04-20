@@ -3822,7 +3822,6 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
-            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/set_ip_allowlist".to_string())
@@ -3862,7 +3861,6 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
-            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
