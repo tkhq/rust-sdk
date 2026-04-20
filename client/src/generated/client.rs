@@ -3715,6 +3715,19 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/get_tvc_deployment".to_string())
             .await
     }
+    /// Get TVC Deployment's Provisioning Details
+    ///
+    /// Get the attestation document and manifest envelope of the provisioning enclave for a TVC deployment
+    pub async fn get_tvc_deployment_provisioning_details(
+        &self,
+        request: coordinator::GetTvcDeploymentProvisioningDetailsRequest,
+    ) -> Result<coordinator::GetTvcDeploymentProvisioningDetailsResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/get_tvc_deployment_provisioning_details".to_string(),
+        )
+        .await
+    }
     /// Create TVC Manifest Approvals
     ///
     /// Post one or more manifest approvals for a TVC Manifest
@@ -3794,5 +3807,97 @@ impl<S: Stamp> TurnkeyClient<S> {
             "/public/v1/query/list_supported_assets".to_string(),
         )
         .await
+    }
+    /// Set IP Allowlist
+    ///
+    /// Create or update IP allowlist and rules for organization or API key. The IP allowlist restricts API access to specific CIDR blocks. Organization-level allowlists apply to all API keys unless overridden by a key-specific allowlist.
+    pub async fn set_ip_allowlist(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::SetIpAllowlistIntent,
+    ) -> Result<ActivityResult<immutable_activity::SetIpAllowlistResult>, TurnkeyClientError> {
+        let request = external_activity::SetIpAllowlistRequest {
+            r#type: "ACTIVITY_TYPE_SET_IP_ALLOWLIST".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(&request, "/public/v1/submit/set_ip_allowlist".to_string())
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::SetIpAllowlistResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Remove IP Allowlist
+    ///
+    /// Delete IP allowlist and all associated rules for organization or API key. After removal, access will be determined by organization-level allowlist (for API keys) or allowed from all IPs (for organizations).
+    pub async fn remove_ip_allowlist(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::RemoveIpAllowlistIntent,
+    ) -> Result<ActivityResult<immutable_activity::RemoveIpAllowlistResult>, TurnkeyClientError>
+    {
+        let request = external_activity::RemoveIpAllowlistRequest {
+            r#type: "ACTIVITY_TYPE_REMOVE_IP_ALLOWLIST".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/remove_ip_allowlist".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::RemoveIpAllowlistResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Get IP Allowlist
+    ///
+    /// Get IP allowlist and rules for an organization.
+    pub async fn get_ip_allowlist(
+        &self,
+        request: coordinator::GetIpAllowlistRequest,
+    ) -> Result<coordinator::GetIpAllowlistResponse, TurnkeyClientError> {
+        self.process_request(&request, "/public/v1/query/get_ip_allowlist".to_string())
+            .await
     }
 }
