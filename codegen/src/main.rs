@@ -51,7 +51,6 @@ fn main() {
         .unwrap();
 
     let proto = fs::read_to_string(PUBLIC_API_PROTO_PATH).expect("Failed to read proto file");
-
     // Capture the start of "service... {" until a single "}" is encountered on its own line without indentation.
     // That's just a simple alternative to writing a nesting-aware parser...
     // We're trying to match on blocks like this one:
@@ -338,7 +337,11 @@ fn to_snake_case(name: &str) -> String {
     result
 }
 fn build_generate_app_proofs_field(req_type: &str, is_tvc: bool) -> String {
-    if is_tvc || req_type == "UpdateOrganizationNameRequest" {
+    if is_tvc
+        || req_type == "UpdateOrganizationNameRequest"
+        || req_type == "SetIpAllowlistRequest"
+        || req_type == "RemoveIpAllowlistRequest"
+    {
         String::new()
     } else {
         "generate_app_proofs: self.generate_app_proofs(),".to_string()
@@ -355,6 +358,14 @@ mod tests {
             .contains("generate_app_proofs"));
         assert_eq!(
             build_generate_app_proofs_field("UpdateOrganizationNameRequest", false),
+            ""
+        );
+        assert_eq!(
+            build_generate_app_proofs_field("SetIpAllowlistRequest", false),
+            ""
+        );
+        assert_eq!(
+            build_generate_app_proofs_field("RemoveIpAllowlistRequest", false),
             ""
         );
         assert_eq!(

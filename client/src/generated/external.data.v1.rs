@@ -530,6 +530,7 @@ pub struct TvcApp {
     pub updated_at: ::core::option::Option<Timestamp>,
     #[serde(default)]
     pub live_deployment_id: ::core::option::Option<::prost::alloc::string::String>,
+    pub public_domain: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]

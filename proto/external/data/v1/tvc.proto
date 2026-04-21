@@ -41,6 +41,10 @@ message TvcApp {
   Timestamp created_at = 8 [(google.api.field_behavior) = REQUIRED];
   Timestamp updated_at = 9 [(google.api.field_behavior) = REQUIRED];
   optional string live_deployment_id = 10 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The deployment currently designated to receive traffic. Null if no deployment for this app is deployed."}];
+  string public_domain = 11 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The public domain for ingress to this TVC App (in the format \"app-<ID>.turnkey.cloud\")."}
+  ];
 }
 
 message TvcDeployment {

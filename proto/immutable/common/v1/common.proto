@@ -97,6 +97,10 @@ enum AddressFormat {
   ADDRESS_FORMAT_TON_V5R1 = 36;
 
   ADDRESS_FORMAT_XRP = 35;
+
+  // Spark (Bitcoin L2) address types
+  ADDRESS_FORMAT_SPARK_MAINNET = 37;
+  ADDRESS_FORMAT_SPARK_REGTEST = 38;
 }
 
 enum HashFunction {

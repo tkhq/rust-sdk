@@ -145,6 +145,13 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
         "Policies can enforce consensus requirements for Activities. For example, adding a new user requires two admins to approve the request."
         "\n\n"
         "Activities that have been proposed, but don't yet meet the Consensus requirements will have the status: `REQUIRES_CONSENSUS`. Activities in this state can be approved or rejected using the unique fingerprint generated when an Activity is created."
+    },
+    {
+      name: "IP Allowlist"
+      description:
+        "IP Allowlists restrict API access to specific CIDR blocks. They can be configured at the organization level (applying to all API keys) or at the individual API key level (overriding organization-level allowlists)."
+        "\n\n"
+        "When no IP allowlist is configured, all IP addresses are allowed. Organization-level allowlists can be enabled or disabled, while API key-level allowlists are always enforced when present."
     }
   ]
 
@@ -167,7 +174,8 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
                       {string_value: "Organizations"},
                       {string_value: "Invitations"},
                       {string_value: "Policies"},
-                      {string_value: "Features"}]
+                      {string_value: "Features"},
+                      {string_value: "IP Allowlist"}]
                   }
                 }
               }
@@ -1700,8 +1708,6 @@ service PublicApiService {
   }
 
   rpc CreateTvcApp(external.activity.v1.CreateTvcAppRequest) returns (ActivityResponse) {
-    // TODO: remove me when it's time to unleash TVC
-    option (google.api.method_visibility).restriction = "INTERNAL";
     option (google.api.http) = {
       post: "/public/v1/submit/create_tvc_app"
       body: "*"
@@ -1714,8 +1720,6 @@ service PublicApiService {
   }
 
   rpc GetTvcApps(GetTvcAppsRequest) returns (GetTvcAppsResponse) {
-    // TODO: remove me when it's time to unleash TVC
-    option (google.api.method_visibility).restriction = "INTERNAL";
     option (google.api.http) = {
       post: "/public/v1/query/list_tvc_apps"
       body: "*"
@@ -1728,8 +1732,6 @@ service PublicApiService {
   }
 
   rpc GetTvcApp(GetTvcAppRequest) returns (GetTvcAppResponse) {
-    // TODO: remove me when it's time to unleash TVC
-    option (google.api.method_visibility).restriction = "INTERNAL";
     option (google.api.http) = {
       post: "/public/v1/query/get_tvc_app"
       body: "*"
@@ -1742,8 +1744,6 @@ service PublicApiService {
   }
 
   rpc CreateTvcDeployment(external.activity.v1.CreateTvcDeploymentRequest) returns (ActivityResponse) {
-    // TODO: remove me when it's time to unleash TVC
-    option (google.api.method_visibility).restriction = "INTERNAL";
     option (google.api.http) = {
       post: "/public/v1/submit/create_tvc_deployment"
       body: "*"
@@ -1756,8 +1756,6 @@ service PublicApiService {
   }
 
   rpc ValidateTvcImage(ValidateTvcImageRequest) returns (ValidateTvcImageResponse) {
-    // TODO: remove me when it's time to unleash TVC
-    option (google.api.method_visibility).restriction = "INTERNAL";
     option (google.api.http) = {
       post: "/public/v1/query/validate_tvc_image"
       body: "*"
@@ -1770,8 +1768,6 @@ service PublicApiService {
   }
 
   rpc GetTvcAppDeployments(GetTvcAppDeploymentsRequest) returns (GetTvcAppDeploymentsResponse) {
-    // TODO: remove me when it's time to unleash TVC
-    option (google.api.method_visibility).restriction = "INTERNAL";
     option (google.api.http) = {
       post: "/public/v1/query/list_tvc_app_deployments"
       body: "*"
@@ -1784,8 +1780,6 @@ service PublicApiService {
   }
 
   rpc GetTvcDeployment(GetTvcDeploymentRequest) returns (GetTvcDeploymentResponse) {
-    // TODO: remove me when it's time to unleash TVC
-    option (google.api.method_visibility).restriction = "INTERNAL";
     option (google.api.http) = {
       post: "/public/v1/query/get_tvc_deployment"
       body: "*"
@@ -1797,9 +1791,21 @@ service PublicApiService {
     };
   }
 
-  rpc CreateTvcManifestApprovals(external.activity.v1.CreateTvcManifestApprovalsRequest) returns (ActivityResponse) {
-    // TODO: remove me when it's time to unleash TVC
+  rpc GetTvcDeploymentProvisioningDetails(GetTvcDeploymentProvisioningDetailsRequest) returns (GetTvcDeploymentProvisioningDetailsResponse) {
+    // TODO(tvc): remove when provisioning flow is fully usable
     option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/query/get_tvc_deployment_provisioning_details"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get the attestation document and manifest envelope of the provisioning enclave for a TVC deployment"
+      summary: "Get TVC Deployment's Provisioning Details"
+      tags: "TVC"
+    };
+  }
+
+  rpc CreateTvcManifestApprovals(external.activity.v1.CreateTvcManifestApprovalsRequest) returns (ActivityResponse) {
     option (google.api.http) = {
       post: "/public/v1/submit/create_tvc_manifest_approvals"
       body: "*"
@@ -1844,6 +1850,42 @@ service PublicApiService {
       description: "List supported assets for the specified network. This feature is in beta - please contact support for access."
       summary: "List supported assets"
       tags: "Wallets"
+    };
+  }
+
+  rpc SetIpAllowlist(external.activity.v1.SetIpAllowlistRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/set_ip_allowlist"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Create or update IP allowlist and rules for organization or API key. The IP allowlist restricts API access to specific CIDR blocks. Organization-level allowlists apply to all API keys unless overridden by a key-specific allowlist."
+      summary: "Set IP Allowlist"
+      tags: "IP Allowlist"
+    };
+  }
+
+  rpc RemoveIpAllowlist(external.activity.v1.RemoveIpAllowlistRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/remove_ip_allowlist"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Delete IP allowlist and all associated rules for organization or API key. After removal, access will be determined by organization-level allowlist (for API keys) or allowed from all IPs (for organizations)."
+      summary: "Remove IP Allowlist"
+      tags: "IP Allowlist"
+    };
+  }
+
+  rpc GetIpAllowlist(GetIpAllowlistRequest) returns (GetIpAllowlistResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_ip_allowlist"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get IP allowlist and rules for an organization."
+      summary: "Get IP Allowlist"
+      tags: "IP Allowlist"
     };
   }
 
@@ -2716,6 +2758,28 @@ message ValidateTvcImageResponse {
   string resolved_image_digest = 1 [(google.api.field_behavior) = OPTIONAL];
 }
 
+message GetTvcDeploymentProvisioningDetailsRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string deployment_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given TVC Deployment."}
+  ];
+}
+
+message GetTvcDeploymentProvisioningDetailsResponse {
+  bytes attestation_document = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The attestation document of the provisioning enclave in a TVC deployment."}
+  ];
+  bytes manifest_envelope = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The manifest envelope containing the TVC deployment's manifest and signatures."}
+  ];
+}
+
 message GetAppStatusRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
@@ -2816,4 +2880,43 @@ message AssetMetadata {
   int32 decimals = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The number of decimals this asset uses"}];
   string logo_url = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The url of the asset logo"}];
   string name = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The asset name"}];
+}
+
+message GetIpAllowlistRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+  ];
+  optional string public_key = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "If provided, return only the allowlist for this specific API key."}
+  ];
+}
+
+message IpAllowlistRule {
+  string cidr = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CIDR block (e.g., '192.168.1.0/24')."}
+  ];
+  optional string label = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional human-readable label for this rule."}];
+  string created_at = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Creation timestamp as millisecond epoch string."}];
+}
+
+message IpAllowlist {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for the organization this allowlist belongs to."}
+  ];
+  repeated IpAllowlistRule rules = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "List of IP allowlist rules with their metadata."}
+  ];
+  optional string public_key = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Public key of the API key this allowlist applies to. Null means the allowlist applies to the entire organization."}];
+  optional bool enabled = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether the IP allowlist is enabled. Only present for organization-level allowlists. Null for API key-level allowlists (presence of the allowlist implies enablement)."}];
+  // @inject_tag: validate:"omitempty,oneof=ALLOW DENY"
+  optional string on_evaluation_error = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Behavior when an error occurs during IP allowlist evaluation. Valid values: ALLOW, DENY. Defaults to DENY."}];
+}
+
+message GetIpAllowlistResponse {
+  IpAllowlist allowlist = 1 [(google.api.field_behavior) = REQUIRED];
 }

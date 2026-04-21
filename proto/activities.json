@@ -414,6 +414,16 @@
       "type": "ACTIVITY_TYPE_DELETE_WEBHOOK_ENDPOINT",
       "intentType": "DeleteWebhookEndpointIntent",
       "resultType": "DeleteWebhookEndpointResult"
+    },
+    "/public/v1/submit/set_ip_allowlist": {
+      "type": "ACTIVITY_TYPE_SET_IP_ALLOWLIST",
+      "intentType": "SetIpAllowlistIntent",
+      "resultType": "SetIpAllowlistResult"
+    },
+    "/public/v1/submit/remove_ip_allowlist": {
+      "type": "ACTIVITY_TYPE_REMOVE_IP_ALLOWLIST",
+      "intentType": "RemoveIpAllowlistIntent",
+      "resultType": "RemoveIpAllowlistResult"
     }
   }
 }

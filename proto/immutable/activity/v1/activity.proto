@@ -152,6 +152,8 @@ enum ActivityType {
   ACTIVITY_TYPE_CREATE_WEBHOOK_ENDPOINT = 125;
   ACTIVITY_TYPE_UPDATE_WEBHOOK_ENDPOINT = 126;
   ACTIVITY_TYPE_DELETE_WEBHOOK_ENDPOINT = 127;
+  ACTIVITY_TYPE_SET_IP_ALLOWLIST = 128;
+  ACTIVITY_TYPE_REMOVE_IP_ALLOWLIST = 129;
 }
 
 // The current processing status of an Activity.
@@ -309,6 +311,8 @@ message Intent {
     CreateWebhookEndpointIntent create_webhook_endpoint_intent = 126;
     UpdateWebhookEndpointIntent update_webhook_endpoint_intent = 127;
     DeleteWebhookEndpointIntent delete_webhook_endpoint_intent = 128;
+    SetIpAllowlistIntent set_ip_allowlist_intent = 129;
+    RemoveIpAllowlistIntent remove_ip_allowlist_intent = 130;
   }
 }
 
@@ -4394,6 +4398,8 @@ message Result {
     CreateWebhookEndpointResult create_webhook_endpoint_result = 105;
     UpdateWebhookEndpointResult update_webhook_endpoint_result = 106;
     DeleteWebhookEndpointResult delete_webhook_endpoint_result = 107;
+    SetIpAllowlistResult set_ip_allowlist_result = 108;
+    RemoveIpAllowlistResult remove_ip_allowlist_result = 109;
   }
 }
 
@@ -5338,7 +5344,7 @@ message WebhookSubscriptionParams {
   // @inject_tag: validate:"required"
   string event_type = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The event type to subscribe to (for example, ACTIVITY_UPDATES or BALANCE_UPDATES)."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The event type to subscribe to (for example, ACTIVITY_UPDATES or BALANCE_CONFIRMED_UPDATES)."}
   ];
   // @inject_tag: validate:"omitempty"
   optional string filters_json = 2 [
@@ -5931,6 +5937,74 @@ message DeletePoliciesParams {
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "List of unique identifiers for policies within an organization"}
   ];
 }
+
+message IpAllowlistIntentRule {
+  // @inject_tag: validate:"required,tk_cidr"
+  string cidr = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "CIDR block (e.g., '192.168.1.0/24', '2001:db8::/32')."
+      title: ""
+    }
+  ];
+  optional string label = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Optional human-readable label for this rule (e.g., 'Office VPN')."
+      title: ""
+    }
+  ];
+}
+
+message SetIpAllowlistIntent {
+  // NULL = org-level, non-NULL = API key level
+  optional string public_key = 1 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The public component of an API key. If null, the IP allowlist applies at the organization level. If set, it applies only to this specific API key."
+      title: ""
+    }
+  ];
+  // Only meaningful for org-level allowlist; omit for API key-level allowlist.
+  optional bool enabled = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Whether the IP allowlist is enabled. Only meaningful for organization-level allowlists. Omit for API key-level allowlists."
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"dive,required"
+  repeated IpAllowlistIntentRule rules = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "List of IP allowlist rules with CIDR blocks and optional labels."
+      title: ""
+    }
+  ];
+  // Behavior when an error occurs during IP allowlist evaluation. Valid values: "ALLOW", "DENY". Defaults to "DENY".
+  optional string on_evaluation_error = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Behavior when an error occurs during IP allowlist evaluation. Valid values: ALLOW, DENY. Defaults to DENY."
+      title: ""
+    }
+  ];
+}
+
+message RemoveIpAllowlistIntent {
+  // NULL = org-level, non-NULL = API key level
+  optional string public_key = 1 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The public component of an API key. If null, removes the organization-level IP allowlist. If set, removes the IP allowlist for this specific API key."
+      title: ""
+    }
+  ];
+}
+
+message SetIpAllowlistResult {}
+
+message RemoveIpAllowlistResult {}
 
 message ClientSignature {
   string public_key = 1 [

@@ -224,6 +224,11 @@ pub enum AddressFormat {
     TonV5r1 = 36,
     #[serde(rename = "ADDRESS_FORMAT_XRP")]
     Xrp = 35,
+    /// Spark (Bitcoin L2) address types
+    #[serde(rename = "ADDRESS_FORMAT_SPARK_MAINNET")]
+    SparkMainnet = 37,
+    #[serde(rename = "ADDRESS_FORMAT_SPARK_REGTEST")]
+    SparkRegtest = 38,
 }
 impl AddressFormat {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -269,6 +274,8 @@ impl AddressFormat {
             Self::TonV4r2 => "ADDRESS_FORMAT_TON_V4R2",
             Self::TonV5r1 => "ADDRESS_FORMAT_TON_V5R1",
             Self::Xrp => "ADDRESS_FORMAT_XRP",
+            Self::SparkMainnet => "ADDRESS_FORMAT_SPARK_MAINNET",
+            Self::SparkRegtest => "ADDRESS_FORMAT_SPARK_REGTEST",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -311,6 +318,8 @@ impl AddressFormat {
             "ADDRESS_FORMAT_TON_V4R2" => Some(Self::TonV4r2),
             "ADDRESS_FORMAT_TON_V5R1" => Some(Self::TonV5r1),
             "ADDRESS_FORMAT_XRP" => Some(Self::Xrp),
+            "ADDRESS_FORMAT_SPARK_MAINNET" => Some(Self::SparkMainnet),
+            "ADDRESS_FORMAT_SPARK_REGTEST" => Some(Self::SparkRegtest),
             _ => None,
         }
     }

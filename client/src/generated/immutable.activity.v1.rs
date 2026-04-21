@@ -142,6 +142,8 @@ pub mod intent {
         CreateWebhookEndpointIntent(super::CreateWebhookEndpointIntent),
         UpdateWebhookEndpointIntent(super::UpdateWebhookEndpointIntent),
         DeleteWebhookEndpointIntent(super::DeleteWebhookEndpointIntent),
+        SetIpAllowlistIntent(super::SetIpAllowlistIntent),
+        RemoveIpAllowlistIntent(super::RemoveIpAllowlistIntent),
     }
 }
 #[derive(Debug)]
@@ -2395,6 +2397,8 @@ pub mod result {
         CreateWebhookEndpointResult(super::CreateWebhookEndpointResult),
         UpdateWebhookEndpointResult(super::UpdateWebhookEndpointResult),
         DeleteWebhookEndpointResult(super::DeleteWebhookEndpointResult),
+        SetIpAllowlistResult(super::SetIpAllowlistResult),
+        RemoveIpAllowlistResult(super::RemoveIpAllowlistResult),
     }
 }
 #[derive(Debug)]
@@ -3583,6 +3587,53 @@ pub struct DeletePoliciesParams {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct IpAllowlistIntentRule {
+    /// @inject_tag: validate:"required,tk_cidr"
+    pub cidr: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub label: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SetIpAllowlistIntent {
+    /// NULL = org-level, non-NULL = API key level
+    #[serde(default)]
+    pub public_key: ::core::option::Option<::prost::alloc::string::String>,
+    /// Only meaningful for org-level allowlist; omit for API key-level allowlist.
+    #[serde(default)]
+    pub enabled: ::core::option::Option<bool>,
+    /// @inject_tag: validate:"dive,required"
+    #[serde(default)]
+    pub rules: ::prost::alloc::vec::Vec<IpAllowlistIntentRule>,
+    /// Behavior when an error occurs during IP allowlist evaluation. Valid values: "ALLOW", "DENY". Defaults to "DENY".
+    #[serde(default)]
+    pub on_evaluation_error: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct RemoveIpAllowlistIntent {
+    /// NULL = org-level, non-NULL = API key level
+    #[serde(default)]
+    pub public_key: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, Copy, PartialEq)]
+pub struct SetIpAllowlistResult {}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, Copy, PartialEq)]
+pub struct RemoveIpAllowlistResult {}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct ClientSignature {
     pub public_key: ::prost::alloc::string::String,
     pub scheme: super::super::common::v1::ClientSignatureScheme,
@@ -3849,6 +3900,10 @@ pub enum ActivityType {
     UpdateWebhookEndpoint = 126,
     #[serde(rename = "ACTIVITY_TYPE_DELETE_WEBHOOK_ENDPOINT")]
     DeleteWebhookEndpoint = 127,
+    #[serde(rename = "ACTIVITY_TYPE_SET_IP_ALLOWLIST")]
+    SetIpAllowlist = 128,
+    #[serde(rename = "ACTIVITY_TYPE_REMOVE_IP_ALLOWLIST")]
+    RemoveIpAllowlist = 129,
 }
 impl ActivityType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4001,6 +4056,8 @@ impl ActivityType {
             Self::CreateWebhookEndpoint => "ACTIVITY_TYPE_CREATE_WEBHOOK_ENDPOINT",
             Self::UpdateWebhookEndpoint => "ACTIVITY_TYPE_UPDATE_WEBHOOK_ENDPOINT",
             Self::DeleteWebhookEndpoint => "ACTIVITY_TYPE_DELETE_WEBHOOK_ENDPOINT",
+            Self::SetIpAllowlist => "ACTIVITY_TYPE_SET_IP_ALLOWLIST",
+            Self::RemoveIpAllowlist => "ACTIVITY_TYPE_REMOVE_IP_ALLOWLIST",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4182,6 +4239,8 @@ impl ActivityType {
             "ACTIVITY_TYPE_CREATE_WEBHOOK_ENDPOINT" => Some(Self::CreateWebhookEndpoint),
             "ACTIVITY_TYPE_UPDATE_WEBHOOK_ENDPOINT" => Some(Self::UpdateWebhookEndpoint),
             "ACTIVITY_TYPE_DELETE_WEBHOOK_ENDPOINT" => Some(Self::DeleteWebhookEndpoint),
+            "ACTIVITY_TYPE_SET_IP_ALLOWLIST" => Some(Self::SetIpAllowlist),
+            "ACTIVITY_TYPE_REMOVE_IP_ALLOWLIST" => Some(Self::RemoveIpAllowlist),
             _ => None,
         }
     }

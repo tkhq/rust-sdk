@@ -958,6 +958,24 @@ pub struct ValidateTvcImageResponse {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct GetTvcDeploymentProvisioningDetailsRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub deployment_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetTvcDeploymentProvisioningDetailsResponse {
+    #[serde(default)]
+    pub attestation_document: ::prost::alloc::vec::Vec<u8>,
+    #[serde(default)]
+    pub manifest_envelope: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct GetAppStatusRequest {
     pub organization_id: ::prost::alloc::string::String,
     pub app_id: ::prost::alloc::string::String,
@@ -1048,4 +1066,47 @@ pub struct AssetMetadata {
     pub decimals: i32,
     pub logo_url: ::prost::alloc::string::String,
     pub name: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetIpAllowlistRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub public_key: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct IpAllowlistRule {
+    pub cidr: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub label: ::core::option::Option<::prost::alloc::string::String>,
+    pub created_at: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct IpAllowlist {
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub rules: ::prost::alloc::vec::Vec<IpAllowlistRule>,
+    #[serde(default)]
+    pub public_key: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub enabled: ::core::option::Option<bool>,
+    /// @inject_tag: validate:"omitempty,oneof=ALLOW DENY"
+    #[serde(default)]
+    pub on_evaluation_error: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetIpAllowlistResponse {
+    #[serde(default)]
+    pub allowlist: ::core::option::Option<IpAllowlist>,
 }
