@@ -3938,6 +3938,7 @@ version = "0.6.2"
 dependencies = [
  "anyhow",
  "assert_cmd",
+ "base64 0.22.1",
  "chrono",
  "clap",
  "hex",
@@ -3945,6 +3946,7 @@ dependencies = [
  "p256 0.13.2",
  "predicates",
  "qos_core",
+ "qos_nsm",
  "qos_p256",
  "serde",
  "serde_json",

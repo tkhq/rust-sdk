@@ -20,6 +20,9 @@ impl Cli {
             Commands::Deploy { command } => match command {
                 DeployCommands::Approve(args) => commands::deploy::approve::run(args).await,
                 DeployCommands::GetStatus(args) => commands::deploy::get_status::run(args).await,
+                DeployCommands::ProvisioningDetails(args) => {
+                    commands::deploy::provisioning_details::run(args).await
+                }
                 DeployCommands::Status(args) => commands::deploy::status::run(args).await,
                 DeployCommands::Create(args) => commands::deploy::create::run(args).await,
                 DeployCommands::Init(args) => commands::deploy::init::run(args).await,
@@ -57,6 +60,8 @@ enum DeployCommands {
     Approve(commands::deploy::approve::Args),
     /// Get live runtime status for a deployment from the cluster.
     GetStatus(commands::deploy::get_status::Args),
+    /// Get provisioning details for a deployment.
+    ProvisioningDetails(commands::deploy::provisioning_details::Args),
     /// Get the status of a deployment.
     Status(commands::deploy::status::Args),
     /// Create a new deployment from a config file.

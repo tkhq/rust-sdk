@@ -11,6 +11,14 @@ use syn::{
 const BASE64_FIELDS: &[(&str, &str)] = &[
     ("TvcManifest", "manifest"),
     ("TvcOperatorApproval", "approval"),
+    (
+        "GetTvcDeploymentProvisioningDetailsResponse",
+        "attestation_document",
+    ),
+    (
+        "GetTvcDeploymentProvisioningDetailsResponse",
+        "manifest_envelope",
+    ),
     // Add more fields here as needed
 ];
 

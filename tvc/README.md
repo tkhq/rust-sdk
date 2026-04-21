@@ -46,4 +46,10 @@ tvc deploy approve \
   --manifest manifest.json \
   --manifest-id <MANIFEST_UUID> \  # Turnkey's ID for the manifest (from deploy create response)
   --operator-id <OPERATOR_UUID>
+
+# Save a single provisioning bundle JSON for later re-encryption / submission
+# flows.
+tvc deploy provisioning-details \
+  --deploy-id <DEPLOYMENT_UUID> \
+  --provision-bundle-out provisioning-bundle.json
 ```
