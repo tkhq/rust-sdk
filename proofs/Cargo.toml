@@ -1,6 +1,6 @@
 [package]
 name = "turnkey_proofs"
-version = "0.6.2"
+version = "0.6.3"
 edition = "2021"
 license = "Apache-2.0"
 description = "Utilities to parse and verify Turnkey secure enclave proofs"
