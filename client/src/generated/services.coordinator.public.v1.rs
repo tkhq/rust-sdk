@@ -963,13 +963,16 @@ pub struct GetTvcDeploymentProvisioningDetailsRequest {
     pub deployment_id: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
+#[serde_with::serde_as]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct GetTvcDeploymentProvisioningDetailsResponse {
     #[serde(default)]
+    #[serde_as(as = "serde_with::base64::Base64")]
     pub attestation_document: ::prost::alloc::vec::Vec<u8>,
     #[serde(default)]
+    #[serde_as(as = "serde_with::base64::Base64")]
     pub manifest_envelope: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Debug)]

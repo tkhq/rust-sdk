@@ -13,12 +13,14 @@ categories = ["command-line-utilities", "cryptography"]
 
 [dependencies]
 qos_core = { workspace = true }
+qos_nsm = { workspace = true }
 qos_p256 = { workspace = true }
 turnkey_api_key_stamper = { workspace = true }
 turnkey_client = { workspace = true }
 turnkey_enclave_encrypt = { workspace = true }
 
 anyhow = { workspace = true }
+base64 = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["env"] }
 hex = { workspace = true }
@@ -32,4 +34,5 @@ tokio = { workspace = true, features = ["fs"] }
 assert_cmd = { workspace = true }
 hpke = { workspace = true }
 predicates = { workspace = true }
+qos_nsm = { workspace = true, features = ["mock"] }
 tempfile = { workspace = true }

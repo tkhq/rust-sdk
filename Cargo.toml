@@ -19,6 +19,7 @@ resolver = "2"
 [workspace.dependencies]
 # QuorumOS
 qos_core = { version = "0.6.1", default-features = false }
+qos_nsm = { version = "0.6.1", default-features = false }
 qos_p256 = { version = "0.6.1", default-features = false }
 
 # Encoding and serialization
