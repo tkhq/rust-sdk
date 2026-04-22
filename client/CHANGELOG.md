@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.6.3](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.6.2...turnkey_client-v0.6.3) - 2026-04-22
+
+### Added
+
+- *(tvc)* add provisioning-details command
+
+### Other
+
+- exclude set and remove ip allowlist endpoints from added generate_app_proofs field during codegen
+- sync protos v2026.4.9; tvc provisioning details, ip allowlist, public tvc endpoints
+
 ## [0.6.2](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.6.1...turnkey_client-v0.6.2) - 2026-04-09
 
 ### Other
