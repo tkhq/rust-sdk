@@ -89,6 +89,7 @@ walkdir = { version = "2.5", default-features = false }
 # Environment and configuration
 dotenvy = { version = "0.15.0", default-features = false }
 clap = { version = "4.5", features = ["std", "derive", "help", "usage", "error-context"], default-features = false }
+inquire = { version = "0.9" }
 
 # Development dependencies
 assert_cmd = { version = "2", default-features = false }
