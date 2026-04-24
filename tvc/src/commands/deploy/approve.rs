@@ -3,6 +3,8 @@
 use crate::config::app::KNOWN_SHARE_SET_KEYS;
 use crate::config::turnkey::{Config, StoredQosOperatorKey};
 use crate::pair::LocalPair;
+use crate::prompts;
+use crate::replay::ReplayHint;
 use crate::util::{read_file_to_string, write_file};
 use anyhow::{anyhow, bail, Context};
 use clap::{ArgGroup, Args as ClapArgs};
@@ -11,7 +13,6 @@ use qos_core::protocol::services::boot::{
     Manifest, ManifestSet, Namespace, NitroConfig, PivotConfig, QuorumMember, ShareSet,
 };
 use qos_core::protocol::QosHash;
-use std::io::{BufRead, Write};
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -76,6 +77,12 @@ pub struct Args {
 
 /// Run the approve deploy command.
 pub async fn run(args: Args) -> anyhow::Result<()> {
+    // Guard: running without --dangerous-skip-interactive means we'd prompt;
+    // refuse to stall when the user has explicitly opted out of prompts.
+    if !args.dangerous_skip_interactive {
+        prompts::bail_if_non_interactive("--dangerous-skip-interactive")?;
+    }
+
     // Fetch manifest - track manifest_id if fetched from API
     let (manifest, fetched_manifest_id) = match (&args.manifest, &args.deploy_id) {
         (Some(path), _) => (read_manifest_from_path(path).await?, None),
@@ -129,19 +136,66 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         println!("{json}");
     }
 
-    // Post to API if not skipped
-    if !args.skip_post {
-        post_approval_to_api(&args, &approval, fetched_manifest_id.as_deref()).await?;
-    }
+    // Post to API if not skipped. Capture the resolved operator_id so the
+    // replay banner can echo the concrete value the run actually used.
+    let operator_id_used = if args.skip_post {
+        args.operator_id.clone()
+    } else {
+        Some(post_approval_to_api(&args, &approval, fetched_manifest_id.as_deref()).await?)
+    };
+
+    print_replay_hint(&args, operator_id_used.as_deref());
 
     Ok(())
+}
+
+fn print_replay_hint(args: &Args, operator_id_used: Option<&str>) {
+    let mut hint = ReplayHint::new("deploy approve");
+
+    match (&args.manifest, &args.deploy_id) {
+        (Some(path), _) => {
+            hint = hint.literal("--manifest", path.display().to_string());
+            if let Some(mid) = &args.manifest_id {
+                hint = hint.literal("--manifest-id", mid);
+            }
+        }
+        (_, Some(deploy_id)) => {
+            // --deploy-id pulls the manifest (and its id) fresh each run, so
+            // we deliberately omit --manifest-id from the replay.
+            hint = hint.literal("--deploy-id", deploy_id);
+        }
+        _ => {}
+    }
+
+    if let Some(oid) = operator_id_used {
+        hint = hint.literal("--operator-id", oid);
+    }
+
+    if args.operator_seed.is_some() {
+        hint = hint.redacted("--operator-seed", "<PATH>");
+    }
+
+    if args.dry_run {
+        hint = hint.flag("--dry-run");
+    }
+
+    if let Some(output) = &args.output {
+        hint = hint.literal("--output", output.display().to_string());
+    }
+
+    if args.skip_post {
+        hint = hint.flag("--skip-post");
+    }
+
+    hint = hint.flag("--dangerous-skip-interactive");
+    hint.print();
 }
 
 async fn post_approval_to_api(
     args: &Args,
     approval: &Approval,
     fetched_manifest_id: Option<&str>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<String> {
     // Use fetched manifest_id (from --deploy-id) or fall back to --manifest-id arg
     let manifest_id = fetched_manifest_id
         .map(|s| s.to_string())
@@ -211,7 +265,7 @@ async fn post_approval_to_api(
     println!("Manifest ID: {manifest_id}");
     println!("Operator ID: {operator_id}");
 
-    Ok(())
+    Ok(operator_id)
 }
 
 async fn generate_approval(
@@ -257,15 +311,7 @@ fn interactive_approve(manifest: &Manifest) -> anyhow::Result<()> {
 }
 
 fn confirm(prompt: &str) -> anyhow::Result<()> {
-    print!("{prompt} [y/N]: ");
-    std::io::stdout().flush()?;
-
-    let mut input = String::new();
-    std::io::stdin().lock().read_line(&mut input)?;
-    let input = input.trim().to_lowercase();
-    let approved = input == "yes" || input == "y";
-
-    if !approved {
+    if !prompts::confirm(prompt, false)? {
         bail!("approval cancelled by user");
     }
     Ok(())

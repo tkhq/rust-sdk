@@ -4,12 +4,56 @@ use crate::config::turnkey::{
     Config, KeyCurve, OrgConfig, StoredApiKey, StoredQosOperatorKey, API_BASE_URL_DEV,
     API_BASE_URL_LOCAL, API_BASE_URL_PREPROD, API_BASE_URL_PROD,
 };
+use crate::prompts;
+use crate::replay::ReplayHint;
 use anyhow::{anyhow, bail, Context, Result};
 use clap::Args as ClapArgs;
 use qos_p256::P256Pair;
 use std::io::{BufRead, Write};
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use turnkey_client::generated::GetWhoamiRequest;
+
+/// Turnkey API environment selectable during login.
+#[derive(Debug, Clone, Copy)]
+enum ApiEnv {
+    Prod,
+    Preprod,
+    Dev,
+    Local,
+}
+
+impl ApiEnv {
+    fn url(self) -> &'static str {
+        match self {
+            ApiEnv::Prod => API_BASE_URL_PROD,
+            ApiEnv::Preprod => API_BASE_URL_PREPROD,
+            ApiEnv::Dev => API_BASE_URL_DEV,
+            ApiEnv::Local => API_BASE_URL_LOCAL,
+        }
+    }
+
+    /// Accepts "1"/"prod"/"" (prod by default), "2"/"preprod", "3"/"dev", "4"/"local".
+    fn parse(s: &str) -> Option<Self> {
+        match s.trim().to_lowercase().as_str() {
+            "" | "1" | "prod" => Some(ApiEnv::Prod),
+            "2" | "preprod" => Some(ApiEnv::Preprod),
+            "3" | "dev" => Some(ApiEnv::Dev),
+            "4" | "local" => Some(ApiEnv::Local),
+            _ => None,
+        }
+    }
+}
+
+impl std::fmt::Display for ApiEnv {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ApiEnv::Prod => write!(f, "prod     ({API_BASE_URL_PROD})"),
+            ApiEnv::Preprod => write!(f, "preprod  ({API_BASE_URL_PREPROD})"),
+            ApiEnv::Dev => write!(f, "dev      ({API_BASE_URL_DEV})"),
+            ApiEnv::Local => write!(f, "local    ({API_BASE_URL_LOCAL})"),
+        }
+    }
+}
 
 /// Authenticate with Turnkey and set up local credentials.
 #[derive(Debug, ClapArgs)]
@@ -66,6 +110,8 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     println!("API Key: {}", org_config.api_key_path.display());
     println!("Operator Key: {}", org_config.operator_key_path.display());
 
+    ReplayHint::new("login").literal("--org", alias).print();
+
     Ok(())
 }
 
@@ -82,6 +128,9 @@ async fn select_or_create_org(
         }
         bail!("Organization '{org}' not found. Run `tvc login` without --org to set up a new organization.");
     }
+
+    // No --org provided — we'd need to prompt. Honor explicit opt-out.
+    prompts::bail_if_non_interactive("--org")?;
 
     // No --org provided, check existing orgs
     let org_count = config.orgs.len();
@@ -105,7 +154,7 @@ async fn select_or_create_org(
     println!("  - [new] Add a new organization");
     println!();
 
-    let selection = prompt("Enter organization alias or 'new'")?;
+    let selection = prompts::text("Enter organization alias or 'new'", None)?;
     println!();
 
     if selection == "new" {
@@ -124,12 +173,12 @@ async fn prompt_for_new_org(config: &mut Config) -> Result<(String, OrgConfig)> 
     println!("You can find your Organization ID at: https://app.turnkey.com/dashboard/welcome");
     println!();
 
-    let org_id = prompt("Organization ID")?;
+    let org_id = prompts::text("Organization ID", None)?;
     if org_id.is_empty() {
         bail!("Organization ID is required");
     }
 
-    let alias = prompt_with_default("Organization alias", "default")?;
+    let alias = prompts::text("Organization alias", Some("default"))?;
 
     // Prompt for API base URL
     let api_base_url = prompt_for_api_url()?;
@@ -140,7 +189,20 @@ async fn prompt_for_new_org(config: &mut Config) -> Result<(String, OrgConfig)> 
 }
 
 /// Prompt the user to select a Turnkey API URL.
+///
+/// In a real TTY, uses a fluent `Select` over [`ApiEnv`]. In legacy piped-stdin mode
+/// (tests, some CI), falls back to the historical numeric menu so callers can
+/// drive the flow with piped input.
 fn prompt_for_api_url() -> Result<String> {
+    if prompts::is_interactive() {
+        let env = prompts::select(
+            "Select Turnkey API URL",
+            vec![ApiEnv::Prod, ApiEnv::Preprod, ApiEnv::Dev, ApiEnv::Local],
+        )?;
+        return Ok(env.url().to_string());
+    }
+
+    // Non-TTY fallback: numeric menu drives piped-stdin flows.
     println!();
     println!("Select Turnkey API URL:");
     println!("  1. prod (default) - {API_BASE_URL_PROD}");
@@ -149,17 +211,10 @@ fn prompt_for_api_url() -> Result<String> {
     println!("  4. local          - {API_BASE_URL_LOCAL}");
     println!();
 
-    let selection = prompt_with_default("API URL [1/2/3/4]", "1")?;
-
-    let url = match selection.as_str() {
-        "1" | "prod" | "" => API_BASE_URL_PROD,
-        "2" | "preprod" => API_BASE_URL_PREPROD,
-        "3" | "dev" => API_BASE_URL_DEV,
-        "4" | "local" => API_BASE_URL_LOCAL,
-        _ => bail!("Invalid selection: {selection}"),
-    };
-
-    Ok(url.to_string())
+    let selection = prompts::text("API URL [1/2/3/4]", Some("1"))?;
+    ApiEnv::parse(&selection)
+        .map(|env| env.url().to_string())
+        .ok_or_else(|| anyhow!("Invalid selection: {selection}"))
 }
 
 /// Get an existing API key or generate a new one.
@@ -259,37 +314,17 @@ fn find_org<'a>(config: &'a Config, org: &str) -> Option<(&'a String, &'a OrgCon
     None
 }
 
-/// Prompt the user for input and return the trimmed response.
-fn prompt(message: &str) -> Result<String> {
-    print!("{message}: ");
-    std::io::stdout().flush()?;
-
-    let mut input = String::new();
-    std::io::stdin().lock().read_line(&mut input)?;
-    Ok(input.trim().to_string())
-}
-
-/// Prompt the user for input with a default value.
-/// If the user enters nothing, returns the default.
-fn prompt_with_default(message: &str, default: &str) -> Result<String> {
-    print!("{message} [{default}]: ");
-    std::io::stdout().flush()?;
-
-    let mut input = String::new();
-    std::io::stdin().lock().read_line(&mut input)?;
-    let input = input.trim();
-
-    if input.is_empty() {
-        Ok(default.to_string())
-    } else {
-        Ok(input.to_string())
-    }
-}
-
-/// Wait for the user to press Enter.
+/// Wait for the user to press Enter. Skips the blocking read when
+/// `TVC_NON_INTERACTIVE` is set so non-interactive callers don't stall after
+/// the dashboard-registration instructions.
 fn wait_for_enter(message: &str) -> Result<()> {
     print!("{message}");
     std::io::stdout().flush()?;
+
+    if prompts::non_interactive_forced() {
+        println!();
+        return Ok(());
+    }
 
     let mut input = String::new();
     std::io::stdin().lock().read_line(&mut input)?;

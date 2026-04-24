@@ -28,6 +28,7 @@ fn dangerous_approve_with_file() {
         .success();
 }
 
+//TODO(daniil): refactor this to be more realistic and kill piped-stdin. Refactor and optionally test units
 #[test]
 fn approve_interactive_prompts() {
     // Simulate user typing "yes" or "y" for each of the 5 prompts:
