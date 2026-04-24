@@ -51,6 +51,42 @@ fn approve_without_skip_interactive_errors_when_non_interactive_forced() {
         .stderr(predicate::str::contains(NON_INTERACTIVE_ENV));
 }
 
+#[test]
+fn deploy_init_interactive_conflicts_with_non_interactive_env() {
+    let temp = TempDir::new().unwrap();
+
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env(NON_INTERACTIVE_ENV, "1")
+        .current_dir(temp.path())
+        .arg("deploy")
+        .arg("init")
+        .arg("--interactive")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--interactive conflicts with TVC_NON_INTERACTIVE",
+        ));
+}
+
+#[test]
+fn app_init_interactive_conflicts_with_non_interactive_env() {
+    let temp = TempDir::new().unwrap();
+
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env(NON_INTERACTIVE_ENV, "1")
+        .current_dir(temp.path())
+        .arg("app")
+        .arg("init")
+        .arg("--interactive")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--interactive conflicts with TVC_NON_INTERACTIVE",
+        ));
+}
+
 /// Guardrail: `--dangerous-skip-interactive` continues to bypass prompts
 /// cleanly even with `TVC_NON_INTERACTIVE=1` set.
 #[test]

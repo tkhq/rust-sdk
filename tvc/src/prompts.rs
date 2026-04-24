@@ -50,6 +50,16 @@ pub fn bail_if_non_interactive(flag_hint: &str) -> Result<()> {
     Ok(())
 }
 
+/// Prompt for a non-empty line of text. Bails with `{message} cannot be empty`
+/// if the user submits an empty (or whitespace-only) value.
+pub fn required_text(message: &str, default: Option<&str>) -> Result<String> {
+    let value = text(message, default)?;
+    if value.trim().is_empty() {
+        bail!("{message} cannot be empty");
+    }
+    Ok(value)
+}
+
 /// Prompt for a line of text, optionally with a default value.
 pub fn text(message: &str, default: Option<&str>) -> Result<String> {
     if std::io::stdin().is_terminal() {

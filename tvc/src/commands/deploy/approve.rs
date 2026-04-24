@@ -210,7 +210,6 @@ async fn post_approval_to_api(
     let operator_id = match &args.operator_id {
         Some(id) => id.clone(),
         None => {
-            // Try to load from config
             let config = Config::load().await?;
             let saved_ids = config.get_last_operator_ids().ok_or_else(|| {
                 anyhow!(
@@ -220,11 +219,18 @@ async fn post_approval_to_api(
                 )
             })?;
 
-            // Use the first operator Id from the list
-            saved_ids
-                .first()
-                .ok_or_else(|| anyhow!("No operator IDs available"))?
-                .clone()
+            match saved_ids.len() {
+                0 => bail!("No operator IDs available"),
+                1 => saved_ids[0].clone(),
+                _ if prompts::is_interactive() => prompts::select(
+                    "Select approving operator",
+                    saved_ids.clone(),
+                )?,
+                // Non-interactive with multiple saved IDs: keep legacy behavior
+                // of picking the first entry. Users who want a specific operator
+                // should pass --operator-id.
+                _ => saved_ids[0].clone(),
+            }
         }
     };
 
