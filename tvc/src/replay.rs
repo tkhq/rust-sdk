@@ -63,15 +63,6 @@ impl ReplayHint {
         self
     }
 
-    // TODO(Daniil): remove ne if arg is changed to remove positional and be a flag
-    /// Add a positional argument (e.g. the config-file path on
-    /// `tvc deploy create`). Rendered without a leading `--` token.
-    pub fn positional(mut self, value: impl Into<String>) -> Self {
-        self.flags
-            .push((String::new(), ReplayValue::Literal(value.into())));
-        self
-    }
-
     /// Render the banner as a string without printing it.
     pub fn render(&self) -> String {
         let mut out = String::new();
@@ -86,7 +77,6 @@ impl ReplayHint {
             for (i, (name, value)) in self.flags.iter().enumerate() {
                 let tail = if i == last { "" } else { " \\" };
                 let rendered = match value {
-                    ReplayValue::Literal(v) if name.is_empty() => shell_quote(v),
                     ReplayValue::Literal(v) => format!("{name} {}", shell_quote(v)),
                     ReplayValue::Flag => name.clone(),
                     ReplayValue::Redacted(placeholder) => format!("{name} {placeholder}"),
@@ -220,21 +210,6 @@ mod tests {
         let hint = ReplayHint::new("login").literal("--org", "my org with spaces");
         let output = hint.render();
         assert!(output.contains("--org 'my org with spaces'"));
-    }
-
-    #[test]
-    fn render_positional_argument_without_flag_prefix() {
-        let hint = ReplayHint::new("deploy create")
-            .positional("my-deploy.json")
-            .redacted("--pivot-pull-secret", "<PATH>");
-        let output = hint.render();
-        // Positional appears as bare value, not prefixed with --something.
-        let positional_line = output
-            .lines()
-            .find(|l| l.contains("my-deploy.json"))
-            .unwrap();
-        assert_eq!(positional_line.trim(), "my-deploy.json \\");
-        assert!(output.contains("--pivot-pull-secret <PATH>"));
     }
 
     #[test]

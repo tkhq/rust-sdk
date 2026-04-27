@@ -16,6 +16,7 @@ use turnkey_client::generated::{CreateTvcAppIntent, TvcOperatorParams, TvcOperat
 #[command(about, long_about = None)]
 pub struct Args {
     /// Path to the app configuration file (JSON).
+    #[arg(short = 'c', long, value_name = "PATH")]
     pub config_file: PathBuf,
 }
 
@@ -114,7 +115,7 @@ pub async fn run(args: Args) -> Result<()> {
     );
 
     ReplayHint::new("app create")
-        .positional(args.config_file.display().to_string())
+        .literal("--config-file", args.config_file.display().to_string())
         .print();
 
     Ok(())

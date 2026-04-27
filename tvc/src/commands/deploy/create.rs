@@ -17,6 +17,7 @@ use turnkey_client::generated::{CreateTvcDeploymentIntent, ValidateTvcImageReque
 #[command(about, long_about = None)]
 pub struct Args {
     /// Path to the deployment configuration file (JSON).
+    #[arg(short = 'c', long, value_name = "PATH")]
     pub config_file: PathBuf,
 
     /// Path to an unencrypted pivot container pull secret file.
@@ -152,7 +153,8 @@ pub async fn run(args: Args) -> Result<()> {
         result.result.deployment_id
     );
 
-    let mut hint = ReplayHint::new("deploy create").positional(args.config_file.display().to_string());
+    let mut hint = ReplayHint::new("deploy create")
+        .literal("--config-file", args.config_file.display().to_string());
     if args.pivot_pull_secret.is_some() {
         hint = hint.redacted("--pivot-pull-secret", "<PATH>");
     }

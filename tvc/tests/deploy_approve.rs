@@ -28,53 +28,6 @@ fn dangerous_approve_with_file() {
         .success();
 }
 
-//TODO(daniil): refactor this to be more realistic and kill piped-stdin. Refactor and optionally test units
-#[test]
-fn approve_interactive_prompts() {
-    // Simulate user typing "yes" or "y" for each of the 5 prompts:
-    // namespace, enclave, pivot, manifest set, share set
-    let input = "yes\nyes\ny\nyes\ny\n";
-
-    cargo_bin_cmd!("tvc")
-        .arg("deploy")
-        .arg("approve")
-        .arg("--manifest")
-        .arg("fixtures/manifest.json")
-        .arg("--operator-seed")
-        .arg("fixtures/seed.hex")
-        .arg("--skip-post")
-        .write_stdin(input)
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("MANIFEST APPROVAL"))
-        .stdout(predicate::str::contains("NAMESPACE"))
-        .stdout(predicate::str::contains("turnkey-prod"))
-        .stdout(predicate::str::contains("ENCLAVE (AWS Nitro)"))
-        .stdout(predicate::str::contains("PIVOT BINARY"))
-        .stdout(predicate::str::contains("MANIFEST SET"))
-        .stdout(predicate::str::contains("operator-alice"))
-        .stdout(predicate::str::contains("SHARE SET"))
-        .stdout(predicate::str::contains("ALL SECTIONS APPROVED"))
-        .stdout(predicate::str::contains("\"signature\""));
-}
-
-#[test]
-fn approve_interactive_reject() {
-    // User rejects at first prompt
-    let input = "no\n";
-
-    cargo_bin_cmd!("tvc")
-        .arg("deploy")
-        .arg("approve")
-        .arg("--manifest")
-        .arg("fixtures/manifest.json")
-        .arg("--operator-seed")
-        .arg("fixtures/seed.hex")
-        .write_stdin(input)
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("approval cancelled by user"));
-}
 
 #[test]
 fn manifest_and_deploy_id_are_mutually_exclusive() {

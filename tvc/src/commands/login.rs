@@ -31,17 +31,6 @@ impl ApiEnv {
             ApiEnv::Local => API_BASE_URL_LOCAL,
         }
     }
-
-    /// Accepts "1"/"prod"/"" (prod by default), "2"/"preprod", "3"/"dev", "4"/"local".
-    fn parse(s: &str) -> Option<Self> {
-        match s.trim().to_lowercase().as_str() {
-            "" | "1" | "prod" => Some(ApiEnv::Prod),
-            "2" | "preprod" => Some(ApiEnv::Preprod),
-            "3" | "dev" => Some(ApiEnv::Dev),
-            "4" | "local" => Some(ApiEnv::Local),
-            _ => None,
-        }
-    }
 }
 
 impl std::fmt::Display for ApiEnv {
@@ -190,31 +179,14 @@ async fn prompt_for_new_org(config: &mut Config) -> Result<(String, OrgConfig)> 
 
 /// Prompt the user to select a Turnkey API URL.
 ///
-/// In a real TTY, uses a fluent `Select` over [`ApiEnv`]. In legacy piped-stdin mode
-/// (tests, some CI), falls back to the historical numeric menu so callers can
-/// drive the flow with piped input.
+/// Only reachable in TTY mode — `select_or_create_org` calls
+/// `bail_if_non_interactive` upstream before we get here.
 fn prompt_for_api_url() -> Result<String> {
-    if prompts::is_interactive() {
-        let env = prompts::select(
-            "Select Turnkey API URL",
-            vec![ApiEnv::Prod, ApiEnv::Preprod, ApiEnv::Dev, ApiEnv::Local],
-        )?;
-        return Ok(env.url().to_string());
-    }
-
-    // Non-TTY fallback: numeric menu drives piped-stdin flows.
-    println!();
-    println!("Select Turnkey API URL:");
-    println!("  1. prod (default) - {API_BASE_URL_PROD}");
-    println!("  2. preprod        - {API_BASE_URL_PREPROD}");
-    println!("  3. dev            - {API_BASE_URL_DEV}");
-    println!("  4. local          - {API_BASE_URL_LOCAL}");
-    println!();
-
-    let selection = prompts::text("API URL [1/2/3/4]", Some("1"))?;
-    ApiEnv::parse(&selection)
-        .map(|env| env.url().to_string())
-        .ok_or_else(|| anyhow!("Invalid selection: {selection}"))
+    let env = prompts::select(
+        "Select Turnkey API URL",
+        vec![ApiEnv::Prod, ApiEnv::Preprod, ApiEnv::Dev, ApiEnv::Local],
+    )?;
+    Ok(env.url().to_string())
 }
 
 /// Get an existing API key or generate a new one.

@@ -36,4 +36,5 @@ assert_cmd = { workspace = true }
 hpke = { workspace = true }
 predicates = { workspace = true }
 qos_nsm = { workspace = true, features = ["mock"] }
+rexpect = { workspace = true }
 tempfile = { workspace = true }

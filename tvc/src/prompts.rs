@@ -1,24 +1,23 @@
 //! Interactive prompts for the TVC CLI.
 //!
-//! Each primitive has two code paths:
-//!
-//! - **Real TTY** — delegates to `inquire` for a polished rendering.
-//! - **Piped stdin** — falls back to a plain `read_line` so tests with
-//!   `assert_cmd::Command::write_stdin` and other piped flows keep working.
+//! Thin wrappers over [`inquire`]. Every primitive requires a real TTY; callers
+//! that expect to drive prompts from CI or scripts must use the corresponding
+//! flag, set `TVC_NON_INTERACTIVE=1`, or both.
 //!
 //! Non-interactive awareness:
 //!
 //! - [`is_interactive`] — true only when stdin is a TTY **and**
-//!   `TVC_NON_INTERACTIVE` is unset. Used by [`require_or_prompt`] to decide
-//!   whether to prompt for a missing flag value or fail fast.
-//! - [`bail_if_non_interactive`] — errors only when the user has explicitly
-//!   set `TVC_NON_INTERACTIVE`. Used by callers that want piped-stdin tests to
-//!   keep working but still respect an explicit opt-out.
+//!   `TVC_NON_INTERACTIVE` is unset.
+//! - [`bail_if_non_interactive`] — errors with a clear message naming the
+//!   flag the caller should set instead. Used at the top of any function
+//!   that's about to prompt.
+//! - [`require_or_prompt`] — single-value variant: take the flag if set,
+//!   prompt if interactive, otherwise error.
 
 use anyhow::{bail, Result};
 use inquire::{Confirm, Password, Select, Text};
 use std::fmt::Display;
-use std::io::{BufRead, IsTerminal, Write};
+use std::io::IsTerminal;
 
 /// Env var that forces non-interactive mode.
 pub const NON_INTERACTIVE_ENV: &str = "TVC_NON_INTERACTIVE";
@@ -37,14 +36,15 @@ pub fn non_interactive_forced() -> bool {
     std::env::var_os(NON_INTERACTIVE_ENV).is_some()
 }
 
-/// Error with a clear message when `TVC_NON_INTERACTIVE` is set.
+/// Error with a clear message when we cannot prompt — either the env var is
+/// set, or stdin is not a TTY.
 ///
 /// `flag_hint` is the flag the user should set instead (e.g. `"--org"`).
 pub fn bail_if_non_interactive(flag_hint: &str) -> Result<()> {
-    if non_interactive_forced() {
+    if !is_interactive() {
         bail!(
             "{flag_hint} is required in non-interactive mode \
-             (set {flag_hint} or unset {NON_INTERACTIVE_ENV})"
+             (set {flag_hint} or run in a TTY without {NON_INTERACTIVE_ENV})"
         );
     }
     Ok(())
@@ -62,64 +62,26 @@ pub fn required_text(message: &str, default: Option<&str>) -> Result<String> {
 
 /// Prompt for a line of text, optionally with a default value.
 pub fn text(message: &str, default: Option<&str>) -> Result<String> {
-    if std::io::stdin().is_terminal() {
-        let mut prompt = Text::new(message);
-        if let Some(d) = default {
-            prompt = prompt.with_default(d);
-        }
-        return Ok(prompt.prompt()?);
+    let mut prompt = Text::new(message);
+    if let Some(d) = default {
+        prompt = prompt.with_default(d);
     }
-
-    // Piped-stdin fallback.
-    match default {
-        Some(d) => print!("{message} [{d}]: "),
-        None => print!("{message}: "),
-    }
-    std::io::stdout().flush()?;
-    let input = read_trimmed_line()?;
-    Ok(match (input.is_empty(), default) {
-        (true, Some(d)) => d.to_string(),
-        (_, _) => input,
-    })
+    Ok(prompt.prompt()?)
 }
 
 /// Prompt for a yes/no confirmation with a default.
 pub fn confirm(message: &str, default: bool) -> Result<bool> {
-    if std::io::stdin().is_terminal() {
-        return Ok(Confirm::new(message).with_default(default).prompt()?);
-    }
-
-    // TODO(daniil): remove piped-stdin fallback after team consensus
-    // Piped-stdin fallback. Matches the legacy `[y/N]` prompt style so
-    // existing tests that pipe "yes\n" / "y\n" / "no\n" keep working.
-    let label = if default { "[Y/n]" } else { "[y/N]" };
-    print!("{message} {label}: ");
-    std::io::stdout().flush()?;
-    let input = read_trimmed_line()?.to_lowercase();
-    Ok(match input.as_str() {
-        "y" | "yes" => true,
-        "n" | "no" => false,
-        "" => default,
-        _ => default,
-    })
+    Ok(Confirm::new(message).with_default(default).prompt()?)
 }
 
-/// Prompt for a selection from a list. Requires a real TTY — piped stdin
-/// will fail because `Select` drives the terminal in raw mode.
+/// Prompt for a selection from a list.
 pub fn select<T: Display>(message: &str, options: Vec<T>) -> Result<T> {
     Ok(Select::new(message, options).prompt()?)
 }
 
 /// Prompt for a secret value with masked input.
 pub fn password(message: &str) -> Result<String> {
-    if std::io::stdin().is_terminal() {
-        return Ok(Password::new(message).without_confirmation().prompt()?);
-    }
-
-    // Piped-stdin fallback (no masking — stdin is already a pipe).
-    print!("{message}: ");
-    std::io::stdout().flush()?;
-    read_trimmed_line()
+    Ok(Password::new(message).without_confirmation().prompt()?)
 }
 
 /// Returns the flag value if set; otherwise prompts the user when interactive;
@@ -151,12 +113,6 @@ fn require_or_prompt_impl<T>(
         );
     }
     prompt_fn()
-}
-
-fn read_trimmed_line() -> Result<String> {
-    let mut input = String::new();
-    std::io::stdin().lock().read_line(&mut input)?;
-    Ok(input.trim().to_string())
 }
 
 #[cfg(test)]
