@@ -2,10 +2,12 @@
 
 use crate::client::build_client;
 use crate::config::app::AppConfig;
-use crate::config::turnkey;
-use anyhow::{Context, Result};
+use crate::config::turnkey::{self, StoredQosOperatorKey};
+use crate::prompts;
+use crate::replay::ReplayHint;
+use anyhow::{anyhow, Context, Result};
 use clap::Args as ClapArgs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::{CreateTvcAppIntent, TvcOperatorParams, TvcOperatorSetParams};
 
@@ -14,30 +16,13 @@ use turnkey_client::generated::{CreateTvcAppIntent, TvcOperatorParams, TvcOperat
 #[command(about, long_about = None)]
 pub struct Args {
     /// Path to the app configuration file (JSON).
+    #[arg(short = 'c', long, value_name = "PATH")]
     pub config_file: PathBuf,
 }
 
 /// Run the app create command.
 pub async fn run(args: Args) -> Result<()> {
-    // Read and parse config file
-    let config_content = std::fs::read_to_string(&args.config_file)
-        .with_context(|| format!("failed to read config file: {}", args.config_file.display()))?;
-
-    let app_config: AppConfig = serde_json::from_str(&config_content).with_context(|| {
-        format!(
-            "failed to parse config file: {}",
-            args.config_file.display()
-        )
-    })?;
-
-    // Validate config
-    if app_config.has_placeholders() {
-        anyhow::bail!(
-            "Config file contains placeholder values (<FILL_IN_...>). \
-             Please edit {} and fill in all required values.",
-            args.config_file.display()
-        );
-    }
+    let app_config = load_or_fill_app_config(&args.config_file).await?;
 
     // Validate operator set config
     if app_config.manifest_set_id.is_some() && app_config.manifest_set_params.is_some() {
@@ -129,5 +114,63 @@ pub async fn run(args: Args) -> Result<()> {
         "Use one of the Manifest Set Operator IDs above with `tvc deploy approve --operator-id`"
     );
 
+    ReplayHint::new("app create")
+        .literal("--config-file", args.config_file.display().to_string())
+        .print();
+
     Ok(())
+}
+
+/// Load the app config, walking placeholders interactively when allowed.
+async fn load_or_fill_app_config(path: &Path) -> Result<AppConfig> {
+    let read = std::fs::read_to_string(path);
+    let (config, file_existed) = match read {
+        Ok(content) => {
+            let config: AppConfig = serde_json::from_str(&content)
+                .with_context(|| format!("failed to parse config file: {}", path.display()))?;
+            (config, true)
+        }
+        Err(_) if prompts::is_interactive() => (AppConfig::template(None), false),
+        Err(e) => {
+            return Err(anyhow!(e))
+                .with_context(|| format!("failed to read config file: {}", path.display()));
+        }
+    };
+
+    if file_existed && !config.has_placeholders() {
+        return Ok(config);
+    }
+
+    if !prompts::is_interactive() {
+        anyhow::bail!(
+            "Config file contains placeholder values (<FILL_IN_...>). \
+             Please edit {} and fill in all required values.",
+            path.display()
+        );
+    }
+
+    let saved_operator_public_key = load_saved_operator_public_key().await;
+    let filled = config.fill_interactively(saved_operator_public_key.as_deref())?;
+
+    let save = prompts::confirm(
+        &format!("Save filled config to {}?", path.display()),
+        true,
+    )?;
+    if save {
+        let json = serde_json::to_string_pretty(&filled).context("failed to serialize config")?;
+        std::fs::write(path, json)
+            .with_context(|| format!("failed to write config file: {}", path.display()))?;
+        println!("Wrote {}", path.display());
+    }
+
+    Ok(filled)
+}
+
+/// Best-effort load of the operator public key from the active org's config
+/// so we can offer it as the default for new-operator prompts.
+async fn load_saved_operator_public_key() -> Option<String> {
+    let config = turnkey::Config::load().await.ok()?;
+    let (_, org_config) = config.active_org_config()?;
+    let operator_key = StoredQosOperatorKey::load(org_config).await.ok()??;
+    Some(operator_key.public_key)
 }

@@ -2,10 +2,13 @@
 
 use crate::client::build_client;
 use crate::config::deploy::DeployConfig;
+use crate::config::turnkey::Config;
+use crate::prompts;
 use crate::pull_secret::encrypt_pivot_pull_secret;
-use anyhow::{Context, Result};
+use crate::replay::ReplayHint;
+use anyhow::{anyhow, Context, Result};
 use clap::Args as ClapArgs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::{CreateTvcDeploymentIntent, ValidateTvcImageRequest};
 
@@ -14,6 +17,7 @@ use turnkey_client::generated::{CreateTvcDeploymentIntent, ValidateTvcImageReque
 #[command(about, long_about = None)]
 pub struct Args {
     /// Path to the deployment configuration file (JSON).
+    #[arg(short = 'c', long, value_name = "PATH")]
     pub config_file: PathBuf,
 
     /// Path to an unencrypted pivot container pull secret file.
@@ -67,25 +71,7 @@ fn pin_image_url(image_url: &str, resolved_digest: &str) -> String {
 
 /// Run the deploy create command.
 pub async fn run(args: Args) -> Result<()> {
-    // Read and parse config file
-    let config_content = std::fs::read_to_string(&args.config_file)
-        .with_context(|| format!("failed to read config file: {}", args.config_file.display()))?;
-
-    let deploy_config: DeployConfig = serde_json::from_str(&config_content).with_context(|| {
-        format!(
-            "failed to parse config file: {}",
-            args.config_file.display()
-        )
-    })?;
-
-    // Validate config
-    if deploy_config.has_placeholders() {
-        anyhow::bail!(
-            "Config file contains placeholder values (<FILL_IN_...>). \
-             Please edit {} and fill in all required values.",
-            args.config_file.display()
-        );
-    }
+    let deploy_config = load_or_fill_deploy_config(&args.config_file).await?;
 
     println!("Creating deployment for app '{}'...", deploy_config.app_id);
 
@@ -167,7 +153,69 @@ pub async fn run(args: Args) -> Result<()> {
         result.result.deployment_id
     );
 
+    let mut hint = ReplayHint::new("deploy create")
+        .literal("--config-file", args.config_file.display().to_string());
+    if args.pivot_pull_secret.is_some() {
+        hint = hint.redacted("--pivot-pull-secret", "<PATH>");
+    }
+    hint.print();
+
     Ok(())
+}
+
+/// Load the deployment config, walking placeholders interactively when allowed.
+///
+/// Behavior matrix:
+/// - file exists, no placeholders → use as-is (today's path)
+/// - file exists, placeholders + interactive → walk prompts, offer to save back
+/// - file exists, placeholders + non-interactive → today's "contains placeholders" error
+/// - file missing + interactive → walk full template, offer to save
+/// - file missing + non-interactive → today's read error
+async fn load_or_fill_deploy_config(path: &Path) -> Result<DeployConfig> {
+    let read = std::fs::read_to_string(path);
+    let (config, file_existed) = match read {
+        Ok(content) => {
+            let config: DeployConfig = serde_json::from_str(&content).with_context(|| {
+                format!("failed to parse config file: {}", path.display())
+            })?;
+            (config, true)
+        }
+        Err(_) if prompts::is_interactive() => (DeployConfig::template(None), false),
+        Err(e) => {
+            return Err(anyhow!(e))
+                .with_context(|| format!("failed to read config file: {}", path.display()));
+        }
+    };
+
+    if file_existed && !config.has_placeholders() {
+        return Ok(config);
+    }
+
+    if !prompts::is_interactive() {
+        // file_existed must be true here (the !is_interactive missing-file path
+        // already returned above), so this is the "contains placeholders" case.
+        anyhow::bail!(
+            "Config file contains placeholder values (<FILL_IN_...>). \
+             Please edit {} and fill in all required values.",
+            path.display()
+        );
+    }
+
+    let saved_app_id = Config::load().await.ok().and_then(|c| c.get_last_app_id());
+    let filled = config.fill_interactively(saved_app_id.as_deref())?;
+
+    let save = prompts::confirm(
+        &format!("Save filled config to {}?", path.display()),
+        true,
+    )?;
+    if save {
+        let json = serde_json::to_string_pretty(&filled).context("failed to serialize config")?;
+        std::fs::write(path, json)
+            .with_context(|| format!("failed to write config file: {}", path.display()))?;
+        println!("Wrote {}", path.display());
+    }
+
+    Ok(filled)
 }
 
 #[cfg(test)]

@@ -1,5 +1,7 @@
 //! App configuration file format for `tvc app create`.
 
+use crate::prompts;
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 /// App configuration loaded from JSON file.
@@ -82,6 +84,33 @@ impl AppConfig {
         }
     }
 
+    /// Walk the user through any placeholder fields and fill them in.
+    /// Non-placeholder fields are preserved unchanged so partial edits work.
+    ///
+    /// `saved_operator_public_key` is offered as the default when prompting
+    /// for a `<FILL_IN>` operator public key.
+    pub fn fill_interactively(
+        mut self,
+        saved_operator_public_key: Option<&str>,
+    ) -> Result<Self> {
+        if self.name.starts_with("<FILL_IN") {
+            self.name = prompts::required_text("App name", None)?;
+        }
+        if let Some(set_params) = self.manifest_set_params.as_mut() {
+            if set_params.name.starts_with("<FILL_IN") {
+                set_params.name = prompts::required_text("Manifest set name", None)?;
+            }
+            for op in set_params.new_operators.iter_mut() {
+                if op.public_key.starts_with("<FILL_IN") {
+                    let prompt = format!("Operator '{}' public key", op.name);
+                    op.public_key =
+                        prompts::required_text(&prompt, saved_operator_public_key)?;
+                }
+            }
+        }
+        Ok(self)
+    }
+
     /// Check if config contains placeholder values.
     pub fn has_placeholders(&self) -> bool {
         self.name.starts_with("<FILL_IN")
@@ -91,5 +120,45 @@ impl AppConfig {
                         .iter()
                         .any(|o| o.public_key.starts_with("<FILL_IN"))
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fresh_template_is_all_placeholders() {
+        let config = AppConfig::template(None);
+        assert!(config.has_placeholders());
+    }
+
+    #[test]
+    fn template_with_operator_key_still_has_name_placeholder() {
+        // Operator key prefilled but app name + manifest set name still placeholders.
+        let config = AppConfig::template(Some("04deadbeef"));
+        assert!(config.has_placeholders());
+    }
+
+    #[test]
+    fn fill_interactively_is_noop_when_config_has_no_placeholders() {
+        // If every field is already set, fill_interactively must not attempt
+        // to prompt.
+        let mut config = AppConfig::template(None);
+        config.name = "my-app".into();
+        if let Some(p) = config.manifest_set_params.as_mut() {
+            p.name = "my-set".into();
+            for op in p.new_operators.iter_mut() {
+                op.public_key = "04abcd".into();
+            }
+        }
+        assert!(!config.has_placeholders());
+
+        let filled = config.clone().fill_interactively(None).unwrap();
+        assert_eq!(filled.name, "my-app");
+        assert_eq!(
+            filled.manifest_set_params.as_ref().unwrap().name,
+            "my-set"
+        );
     }
 }

@@ -4,12 +4,45 @@ use crate::config::turnkey::{
     Config, KeyCurve, OrgConfig, StoredApiKey, StoredQosOperatorKey, API_BASE_URL_DEV,
     API_BASE_URL_LOCAL, API_BASE_URL_PREPROD, API_BASE_URL_PROD,
 };
+use crate::prompts;
+use crate::replay::ReplayHint;
 use anyhow::{anyhow, bail, Context, Result};
 use clap::Args as ClapArgs;
 use qos_p256::P256Pair;
 use std::io::{BufRead, Write};
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use turnkey_client::generated::GetWhoamiRequest;
+
+/// Turnkey API environment selectable during login.
+#[derive(Debug, Clone, Copy)]
+enum ApiEnv {
+    Prod,
+    Preprod,
+    Dev,
+    Local,
+}
+
+impl ApiEnv {
+    fn url(self) -> &'static str {
+        match self {
+            ApiEnv::Prod => API_BASE_URL_PROD,
+            ApiEnv::Preprod => API_BASE_URL_PREPROD,
+            ApiEnv::Dev => API_BASE_URL_DEV,
+            ApiEnv::Local => API_BASE_URL_LOCAL,
+        }
+    }
+}
+
+impl std::fmt::Display for ApiEnv {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ApiEnv::Prod => write!(f, "prod     ({API_BASE_URL_PROD})"),
+            ApiEnv::Preprod => write!(f, "preprod  ({API_BASE_URL_PREPROD})"),
+            ApiEnv::Dev => write!(f, "dev      ({API_BASE_URL_DEV})"),
+            ApiEnv::Local => write!(f, "local    ({API_BASE_URL_LOCAL})"),
+        }
+    }
+}
 
 /// Authenticate with Turnkey and set up local credentials.
 #[derive(Debug, ClapArgs)]
@@ -66,6 +99,8 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     println!("API Key: {}", org_config.api_key_path.display());
     println!("Operator Key: {}", org_config.operator_key_path.display());
 
+    ReplayHint::new("login").literal("--org", alias).print();
+
     Ok(())
 }
 
@@ -83,6 +118,9 @@ async fn select_or_create_org(
         bail!("Organization '{org}' not found. Run `tvc login` without --org to set up a new organization.");
     }
 
+    // No --org provided — we'd need to prompt. Honor explicit opt-out.
+    prompts::bail_if_non_interactive("--org")?;
+
     // No --org provided, check existing orgs
     let org_count = config.orgs.len();
 
@@ -92,31 +130,46 @@ async fn select_or_create_org(
         return prompt_for_new_org(config).await;
     }
 
-    // Show existing orgs and let user select or add new
-    println!("Organization choices:");
-    for (alias, org) in &config.orgs {
-        let active = if config.active_org.as_ref() == Some(alias) {
-            " (active)"
-        } else {
-            ""
-        };
-        println!("  - {} ({}){}", alias, org.id, active);
+    // Show existing orgs in a `Select` list
+    let mut options: Vec<OrgChoice> = config
+        .orgs
+        .iter()
+        .map(|(alias, org)| {
+            let suffix = if config.active_org.as_ref() == Some(alias) {
+                " (active)"
+            } else {
+                ""
+            };
+            OrgChoice::Existing {
+                display: format!("{alias} ({}){suffix}", org.id),
+                alias: alias.clone(),
+            }
+        })
+        .collect();
+    options.push(OrgChoice::New);
+
+    match prompts::select("Select organization", options)? {
+        OrgChoice::Existing { alias, .. } => {
+            let org_config = config.orgs.get(&alias).unwrap().clone();
+            Ok((alias, org_config))
+        }
+        OrgChoice::New => prompt_for_new_org(config).await,
     }
-    println!("  - [new] Add a new organization");
-    println!();
+}
 
-    let selection = prompt("Enter organization alias or 'new'")?;
-    println!();
+/// Choices rendered by the org-selection `Select` widget.
+enum OrgChoice {
+    Existing { display: String, alias: String },
+    New,
+}
 
-    if selection == "new" {
-        return prompt_for_new_org(config).await;
+impl std::fmt::Display for OrgChoice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OrgChoice::Existing { display, .. } => write!(f, "{display}"),
+            OrgChoice::New => write!(f, "[new] Add a new organization"),
+        }
     }
-
-    if let Some(org_config) = config.orgs.get(&selection) {
-        return Ok((selection, org_config.clone()));
-    }
-
-    bail!("Organization '{}' not found", selection)
 }
 
 /// Prompt the user to enter a new organization ID and alias.
@@ -124,12 +177,12 @@ async fn prompt_for_new_org(config: &mut Config) -> Result<(String, OrgConfig)> 
     println!("You can find your Organization ID at: https://app.turnkey.com/dashboard/welcome");
     println!();
 
-    let org_id = prompt("Organization ID")?;
+    let org_id = prompts::text("Organization ID", None)?;
     if org_id.is_empty() {
         bail!("Organization ID is required");
     }
 
-    let alias = prompt_with_default("Organization alias", "default")?;
+    let alias = prompts::text("Organization alias", Some("default"))?;
 
     // Prompt for API base URL
     let api_base_url = prompt_for_api_url()?;
@@ -140,26 +193,15 @@ async fn prompt_for_new_org(config: &mut Config) -> Result<(String, OrgConfig)> 
 }
 
 /// Prompt the user to select a Turnkey API URL.
+///
+/// Only reachable in TTY mode — `select_or_create_org` calls
+/// `bail_if_non_interactive` upstream before we get here.
 fn prompt_for_api_url() -> Result<String> {
-    println!();
-    println!("Select Turnkey API URL:");
-    println!("  1. prod (default) - {API_BASE_URL_PROD}");
-    println!("  2. preprod        - {API_BASE_URL_PREPROD}");
-    println!("  3. dev            - {API_BASE_URL_DEV}");
-    println!("  4. local          - {API_BASE_URL_LOCAL}");
-    println!();
-
-    let selection = prompt_with_default("API URL [1/2/3/4]", "1")?;
-
-    let url = match selection.as_str() {
-        "1" | "prod" | "" => API_BASE_URL_PROD,
-        "2" | "preprod" => API_BASE_URL_PREPROD,
-        "3" | "dev" => API_BASE_URL_DEV,
-        "4" | "local" => API_BASE_URL_LOCAL,
-        _ => bail!("Invalid selection: {selection}"),
-    };
-
-    Ok(url.to_string())
+    let env = prompts::select(
+        "Select Turnkey API URL",
+        vec![ApiEnv::Prod, ApiEnv::Preprod, ApiEnv::Dev, ApiEnv::Local],
+    )?;
+    Ok(env.url().to_string())
 }
 
 /// Get an existing API key or generate a new one.
@@ -259,37 +301,17 @@ fn find_org<'a>(config: &'a Config, org: &str) -> Option<(&'a String, &'a OrgCon
     None
 }
 
-/// Prompt the user for input and return the trimmed response.
-fn prompt(message: &str) -> Result<String> {
-    print!("{message}: ");
-    std::io::stdout().flush()?;
-
-    let mut input = String::new();
-    std::io::stdin().lock().read_line(&mut input)?;
-    Ok(input.trim().to_string())
-}
-
-/// Prompt the user for input with a default value.
-/// If the user enters nothing, returns the default.
-fn prompt_with_default(message: &str, default: &str) -> Result<String> {
-    print!("{message} [{default}]: ");
-    std::io::stdout().flush()?;
-
-    let mut input = String::new();
-    std::io::stdin().lock().read_line(&mut input)?;
-    let input = input.trim();
-
-    if input.is_empty() {
-        Ok(default.to_string())
-    } else {
-        Ok(input.to_string())
-    }
-}
-
-/// Wait for the user to press Enter.
+/// Wait for the user to press Enter. Skips the blocking read when
+/// `TVC_NON_INTERACTIVE` is set so non-interactive callers don't stall after
+/// the dashboard-registration instructions.
 fn wait_for_enter(message: &str) -> Result<()> {
     print!("{message}");
     std::io::stdout().flush()?;
+
+    if prompts::non_interactive_forced() {
+        println!();
+        return Ok(());
+    }
 
     let mut input = String::new();
     std::io::stdin().lock().read_line(&mut input)?;

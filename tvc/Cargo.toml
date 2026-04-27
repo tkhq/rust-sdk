@@ -24,6 +24,7 @@ base64 = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["env"] }
 hex = { workspace = true }
+inquire = { workspace = true }
 p256 = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -35,4 +36,5 @@ assert_cmd = { workspace = true }
 hpke = { workspace = true }
 predicates = { workspace = true }
 qos_nsm = { workspace = true, features = ["mock"] }
+rexpect = { workspace = true }
 tempfile = { workspace = true }
