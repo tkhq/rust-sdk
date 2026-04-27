@@ -13,8 +13,8 @@ cargo install tvc
 `tvc` is interactive by default. Most commands prompt for missing inputs when
 stdin is a TTY, walk you through filling out config files, and print a
 copy-pasteable replay command at the end so you can re-run the same flow
-non-interactively. Every prompt has a corresponding flag, so scripts and CI
-never have to deal with prompts.
+non-interactively. Every prompt has a corresponding flag so that scripts 
+and CI don't deal with prompts.
 
 ## Quick start (interactive)
 
@@ -31,7 +31,7 @@ tvc app create -c my-app.json
 tvc deploy init --interactive --output my-deploy.json
 tvc deploy create -c my-deploy.json
 
-# Approve the deployment's manifest. Walks the four sections of the manifest
+# Approve the deployment's manifest. Walks the sections of the manifest
 # and asks for confirmation on each.
 tvc deploy approve --deploy-id <DEPLOYMENT_UUID>
 ```
@@ -65,12 +65,8 @@ tvc deploy approve \
 
 With `TVC_NON_INTERACTIVE=1`:
 
-- Every command that would otherwise prompt errors immediately with a clear
-  `flag X is required in non-interactive mode` message — instead of stalling
-  on a prompt that nobody will answer.
-- `--interactive` on `tvc deploy init` / `tvc app init` is rejected (would
-  conflict).
-- Existing flag-driven invocations behave identically to before.
+- Every command that would otherwise prompt will instead error.
+- `--interactive` on `tvc deploy init` / `tvc app init` is rejected as it conflicts.
 
 ## Replay command banner
 
@@ -88,12 +84,9 @@ equivalent flag-based command:
 ─────────────────────────────────────
 ```
 
-Contract:
+Notes:
 
 - **Scalar flags are always printed**, even when the value matched the default.
-  This future-proofs your saved command against default changes.
-- **Boolean flags** appear when `true`, are omitted when `false` (matches Unix
-  CLI conventions).
 - **Secret values** (e.g. `--operator-seed`) appear as `<PATH>` placeholders;
   the real value is never echoed.
 
@@ -140,24 +133,11 @@ tvc deploy provisioning-details \
 
 The `tvc` test suite has three layers:
 
-- **Unit tests** in `src/` modules — fast, deterministic checks for pure
-  logic: config validation (`has_placeholders`), replay-banner rendering,
-  manifest section rendering, shell quoting.
+- **Unit tests** in `src/` modules
 - **Integration tests** in `tests/*.rs` driven by `assert_cmd` — exercise
   flag-driven paths end-to-end through the binary without a TTY.
 - **PTY tests** in `tests/pty.rs` — drive the real `tvc` binary inside a
-  pseudo-terminal via [`rexpect`](https://crates.io/crates/rexpect). This is
-  how we test the actual interactive code path: inquire's TTY rendering, raw
-  key handling, and `Select` widgets that piped stdin can't drive.
-
-PTY tests cover:
-
-- `approve_walks_all_four_sections_with_yeses` — full manifest-approval flow
-  with section-by-section confirmation and the replay banner.
-- `approve_bails_when_user_rejects_pivot` — early-bail behavior when the user
-  says "no" mid-approval.
-- `login_with_empty_org_id_bails` — empty Organization ID is rejected with the
-  expected error.
+  pseudo-terminal via [`rexpect`](https://crates.io/crates/rexpect) dev dependency to test the interactive code path
 
 Run all tests:
 
@@ -166,6 +146,5 @@ cargo test -p tvc
 ```
 
 PTY tests are gated `#[cfg(unix)]` because `rexpect` uses Unix PTYs. On
-Windows, `tvc` itself works fine (inquire uses ConPTY under the hood), but
-our test harness doesn't cover that platform. CI runs on `ubuntu-latest` and
-exercises the full suite there.
+Windows, `tvc` itself still works on Windows (`inquire` uses ConPTY under the hood) 
+

@@ -71,7 +71,7 @@ fn pin_image_url(image_url: &str, resolved_digest: &str) -> String {
 
 /// Run the deploy create command.
 pub async fn run(args: Args) -> Result<()> {
-    let deploy_config = load_or_fill_config(&args.config_file).await?;
+    let deploy_config = load_or_fill_deploy_config(&args.config_file).await?;
 
     println!("Creating deployment for app '{}'...", deploy_config.app_id);
 
@@ -171,7 +171,7 @@ pub async fn run(args: Args) -> Result<()> {
 /// - file exists, placeholders + non-interactive → today's "contains placeholders" error
 /// - file missing + interactive → walk full template, offer to save
 /// - file missing + non-interactive → today's read error
-async fn load_or_fill_config(path: &Path) -> Result<DeployConfig> {
+async fn load_or_fill_deploy_config(path: &Path) -> Result<DeployConfig> {
     let read = std::fs::read_to_string(path);
     let (config, file_existed) = match read {
         Ok(content) => {

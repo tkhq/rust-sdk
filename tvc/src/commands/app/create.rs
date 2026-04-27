@@ -22,7 +22,7 @@ pub struct Args {
 
 /// Run the app create command.
 pub async fn run(args: Args) -> Result<()> {
-    let app_config = load_or_fill_config(&args.config_file).await?;
+    let app_config = load_or_fill_app_config(&args.config_file).await?;
 
     // Validate operator set config
     if app_config.manifest_set_id.is_some() && app_config.manifest_set_params.is_some() {
@@ -122,8 +122,7 @@ pub async fn run(args: Args) -> Result<()> {
 }
 
 /// Load the app config, walking placeholders interactively when allowed.
-/// Mirrors the helper in `deploy/create.rs`.
-async fn load_or_fill_config(path: &Path) -> Result<AppConfig> {
+async fn load_or_fill_app_config(path: &Path) -> Result<AppConfig> {
     let read = std::fs::read_to_string(path);
     let (config, file_existed) = match read {
         Ok(content) => {

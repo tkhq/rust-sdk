@@ -6,8 +6,7 @@
 //! ## Rules
 //!
 //! - Scalar flags are always printed — even when the user's answer matched
-//!   the default — so the rendered command is future-proof against default
-//!   changes.
+//!   the default
 //! - Boolean flags are printed when true and omitted when false, matching
 //!   standard Unix CLI conventions.
 //! - Secret values are never echoed; use [`ReplayValue::Redacted`] to show a
