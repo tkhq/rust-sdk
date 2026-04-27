@@ -130,31 +130,46 @@ async fn select_or_create_org(
         return prompt_for_new_org(config).await;
     }
 
-    // Show existing orgs and let user select or add new
-    println!("Organization choices:");
-    for (alias, org) in &config.orgs {
-        let active = if config.active_org.as_ref() == Some(alias) {
-            " (active)"
-        } else {
-            ""
-        };
-        println!("  - {} ({}){}", alias, org.id, active);
+    // Show existing orgs in a `Select` list
+    let mut options: Vec<OrgChoice> = config
+        .orgs
+        .iter()
+        .map(|(alias, org)| {
+            let suffix = if config.active_org.as_ref() == Some(alias) {
+                " (active)"
+            } else {
+                ""
+            };
+            OrgChoice::Existing {
+                display: format!("{alias} ({}){suffix}", org.id),
+                alias: alias.clone(),
+            }
+        })
+        .collect();
+    options.push(OrgChoice::New);
+
+    match prompts::select("Select organization", options)? {
+        OrgChoice::Existing { alias, .. } => {
+            let org_config = config.orgs.get(&alias).unwrap().clone();
+            Ok((alias, org_config))
+        }
+        OrgChoice::New => prompt_for_new_org(config).await,
     }
-    println!("  - [new] Add a new organization");
-    println!();
+}
 
-    let selection = prompts::text("Enter organization alias or 'new'", None)?;
-    println!();
+/// Choices rendered by the org-selection `Select` widget.
+enum OrgChoice {
+    Existing { display: String, alias: String },
+    New,
+}
 
-    if selection == "new" {
-        return prompt_for_new_org(config).await;
+impl std::fmt::Display for OrgChoice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OrgChoice::Existing { display, .. } => write!(f, "{display}"),
+            OrgChoice::New => write!(f, "[new] Add a new organization"),
+        }
     }
-
-    if let Some(org_config) = config.orgs.get(&selection) {
-        return Ok((selection, org_config.clone()));
-    }
-
-    bail!("Organization '{}' not found", selection)
 }
 
 /// Prompt the user to enter a new organization ID and alias.
