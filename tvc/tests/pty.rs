@@ -56,6 +56,10 @@ fn approve_walks_all_four_sections_with_yeses() {
 
     session.exp_string("ALL SECTIONS APPROVED").unwrap();
     session.exp_string("\"signature\"").unwrap();
+    // Replay banner fires after success. Check it shows up and includes the
+    // canonical flag form so users can copy-paste a non-interactive replay.
+    session.exp_string("To skip prompts next time").unwrap();
+    session.exp_string("--dangerous-skip-interactive").unwrap();
     session.exp_eof().unwrap();
 }
 
