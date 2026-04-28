@@ -8,3 +8,4 @@ pub mod app;
 pub mod app_status;
 pub mod deploy;
 pub mod login;
+pub mod re_encrypt_share;
