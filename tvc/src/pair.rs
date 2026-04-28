@@ -14,6 +14,12 @@ pub trait Pair: Send + Sync {
         message: Vec<u8>,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<Vec<u8>>> + Send + '_>>;
 
+    /// Decrypt the given ciphertext.
+    fn decrypt(
+        &self,
+        ciphertext: Vec<u8>,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Vec<u8>>> + Send + '_>>;
+
     /// The public key for this pair.
     fn public_key(&self) -> Vec<u8>;
 }
@@ -65,5 +71,21 @@ impl Pair for LocalPair {
 
     fn public_key(&self) -> Vec<u8> {
         self.pair.public_key().to_bytes()
+    }
+
+    fn decrypt(
+        &self,
+        ciphertext: Vec<u8>,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Vec<u8>>> + Send + '_>> {
+        let pair2 = Arc::clone(&self.pair);
+
+        Box::pin(async move {
+            tokio::task::spawn_blocking(move || {
+                pair2
+                    .decrypt(&ciphertext)
+                    .map_err(|_| anyhow!("failed to decrypt with local signer"))
+            })
+            .await?
+        })
     }
 }

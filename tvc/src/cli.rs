@@ -40,6 +40,9 @@ impl Cli {
                 KeysCommands::InitQuorumKey(args) => {
                     commands::keys::init_quorum_key::run(args).await
                 }
+                KeysCommands::ReEncryptShare(args) => {
+                    commands::keys::re_encrypt_share::run(args).await
+                }
             },
             Commands::Login(args) => commands::login::run(args).await,
         }
@@ -101,4 +104,6 @@ enum KeysCommands {
     GenerateQuorumKey(commands::keys::generate_quorum_key::Args),
     /// Generate a template quorum key configuration file.
     InitQuorumKey(commands::keys::init_quorum_key::Args),
+    /// Re-encrypt a share for enclave provisioning.
+    ReEncryptShare(commands::keys::re_encrypt_share::Args),
 }

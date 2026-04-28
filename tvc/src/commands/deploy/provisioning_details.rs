@@ -1,14 +1,13 @@
 //! Deploy provisioning-details command.
 
+use crate::provisioning::{
+    extract_ephemeral_public_key_bytes, verify_provisioning_details, ProvisionBundle,
+};
 use crate::util::write_file;
-use anyhow::{anyhow, bail, Context};
-use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
+use anyhow::{bail, Context};
 use clap::Args as ClapArgs;
 use qos_core::protocol::services::boot::{Approval, ManifestEnvelope};
-use qos_core::protocol::QosHash;
 use qos_nsm::types::NsmDigest;
-use qos_p256::P256Public;
-use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::{
@@ -30,15 +29,6 @@ pub struct Args {
     /// Write provisioning details to a local json bundle usable during re-encryption.
     #[arg(long, value_name = "PATH")]
     pub provision_bundle_out: Option<PathBuf>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct ProvisionBundle {
-    attestation_document_cose_sign1_base64: String,
-    manifest_envelope: ManifestEnvelope,
-    fetched_at_unix_ms: u64,
-    deployment_id: String,
-    ephemeral_public_key_hex: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -108,7 +98,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     )?;
 
     if let Some(path) = args.provision_bundle_out.as_ref() {
-        let bundle = build_provision_bundle(
+        let bundle = ProvisionBundle::new(
             args.deploy_id.clone(),
             &attestation_document,
             manifest_envelope.clone(),
@@ -129,57 +119,11 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn build_provision_bundle(
-    deployment_id: String,
-    attestation_document: &[u8],
-    manifest_envelope: ManifestEnvelope,
-    fetched_at_unix_ms: u64,
-    ephemeral_public_key: &[u8],
-) -> ProvisionBundle {
-    ProvisionBundle {
-        attestation_document_cose_sign1_base64: BASE64_STANDARD.encode(attestation_document),
-        manifest_envelope,
-        fetched_at_unix_ms,
-        deployment_id,
-        ephemeral_public_key_hex: hex::encode(ephemeral_public_key),
-    }
-}
-
 async fn write_provision_bundle(path: &Path, bundle: &ProvisionBundle) -> anyhow::Result<()> {
     let contents =
         serde_json::to_vec_pretty(bundle).context("failed to serialize provision bundle")?;
     write_file(path, &contents).await?;
     println!("Provision bundle written to: {}", path.display());
-    Ok(())
-}
-
-fn verify_provisioning_details(
-    cose_sign1_der: &[u8],
-    manifest_envelope: &ManifestEnvelope,
-    validation_time_override: Option<u64>,
-) -> anyhow::Result<()> {
-    manifest_envelope
-        .check_approvals()
-        .context("failed to verify manifest approvals")?;
-
-    let attestation_doc = qos_nsm::nitro::attestation_doc_from_der(
-        cose_sign1_der,
-        &qos_nsm::nitro::cert_from_pem(qos_nsm::nitro::AWS_ROOT_CERT_PEM)
-            .context("failed to parse AWS Nitro root certificate")?,
-        validation_time_secs(validation_time_override)?,
-    )
-    .context("failed to parse and verify attestation document")?;
-
-    qos_nsm::nitro::verify_attestation_doc_against_user_input(
-        &attestation_doc,
-        &manifest_envelope.manifest.qos_hash(),
-        &manifest_envelope.manifest.enclave.pcr0,
-        &manifest_envelope.manifest.enclave.pcr1,
-        &manifest_envelope.manifest.enclave.pcr2,
-        &manifest_envelope.manifest.enclave.pcr3,
-    )
-    .context("attestation document did not match manifest expectations")?;
-
     Ok(())
 }
 
@@ -197,7 +141,7 @@ fn build_summary_with_optional_verify(
         .context("failed to parse attestation document")?;
 
     Ok(AttestationSummary {
-        ephemeral_key: extract_ephemeral_key(
+        ephemeral_key: extract_ephemeral_public_key_bytes(
             attestation_doc
                 .public_key
                 .as_ref()
@@ -232,25 +176,6 @@ fn approval_summaries(approvals: &[Approval]) -> Vec<ApprovalSummary> {
             public_key: approval.member.pub_key.clone(),
         })
         .collect()
-}
-
-fn validation_time_secs(validation_time_override: Option<u64>) -> anyhow::Result<u64> {
-    match validation_time_override {
-        Some(time) => Ok(time),
-        None => Ok(SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .context("system time before unix epoch")?
-            .as_secs()),
-    }
-}
-
-fn extract_ephemeral_key(public_key: Option<&[u8]>) -> anyhow::Result<Vec<u8>> {
-    let public_key =
-        public_key.ok_or_else(|| anyhow!("attestation document missing ephemeral public key"))?;
-
-    P256Public::from_bytes(public_key)
-        .map(|ephemeral_key| ephemeral_key.to_bytes())
-        .map_err(|err| anyhow!("invalid ephemeral public key: {err:?}"))
 }
 
 fn print_summary(deploy_id: &str, verification_status: &str, summary: &AttestationSummary) {
@@ -308,11 +233,10 @@ fn print_approval_summary_entries(approvals: &[ApprovalSummary]) {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_provision_bundle, extract_ephemeral_key, verify_provisioning_details};
+    use super::build_summary_with_optional_verify;
     use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
     use qos_core::protocol::services::boot::ManifestEnvelope;
     use serde::Deserialize;
-    use serde_json::json;
 
     #[derive(Debug, Deserialize)]
     struct ValidProvisioningDetailsFixture {
@@ -328,116 +252,34 @@ mod tests {
         .unwrap()
     }
 
-    fn sample_manifest_envelope() -> ManifestEnvelope {
-        serde_json::from_value(json!({
-            "manifest": {
-                "namespace": {
-                    "name": "test-namespace",
-                    "nonce": 7,
-                    "quorumKey": "0102"
-                },
-                "pivot": {
-                    "hash": "0000000000000000000000000000000000000000000000000000000000000000",
-                    "restart": "Never",
-                    "bridgeConfig": [],
-                    "debugMode": false,
-                    "args": ["--serve"]
-                },
-                "manifestSet": {
-                    "threshold": 1,
-                    "members": [{
-                        "alias": "member-1",
-                        "pubKey": "aabbcc"
-                    }]
-                },
-                "shareSet": {
-                    "threshold": 0,
-                    "members": []
-                },
-                "enclave": {
-                    "pcr0": "00",
-                    "pcr1": "11",
-                    "pcr2": "22",
-                    "pcr3": "33",
-                    "awsRootCertificate": "44",
-                    "qosCommit": "test-commit"
-                },
-                "patchSet": {
-                    "threshold": 0,
-                    "members": []
-                }
-            },
-            "manifestSetApprovals": [{
-                "signature": "beef",
-                "member": {
-                    "alias": "member-1",
-                    "pubKey": "aabbcc"
-                }
-            }],
-            "shareSetApprovals": []
-        }))
-        .unwrap()
-    }
-
     #[test]
-    fn extract_ephemeral_key_requires_key() {
-        let err = extract_ephemeral_key(None).unwrap_err();
-
-        assert!(err
-            .to_string()
-            .contains("attestation document missing ephemeral public key"));
-    }
-
-    #[test]
-    fn extract_ephemeral_key_rejects_malformed_key() {
-        let err = extract_ephemeral_key(Some(&[1, 2, 3])).unwrap_err();
-
-        assert!(err.to_string().contains("invalid ephemeral public key"));
-    }
-
-    #[test]
-    fn provision_bundle_serializes_expected_fields() {
-        let manifest_envelope = sample_manifest_envelope();
-        let bundle = build_provision_bundle(
-            "deploy-123".to_string(),
-            &[1, 2, 3, 4],
-            manifest_envelope.clone(),
-            1_712_345_678_901,
-            &[0x04, 0xab, 0xcd],
-        );
-
-        let value = serde_json::to_value(&bundle).unwrap();
-
-        assert_eq!(
-            value["attestation_document_cose_sign1_base64"],
-            json!(BASE64_STANDARD.encode([1, 2, 3, 4])),
-        );
-        assert_eq!(value["fetched_at_unix_ms"], json!(1_712_345_678_901_u64));
-        assert_eq!(value["deployment_id"], json!("deploy-123"));
-        assert_eq!(value["ephemeral_public_key_hex"], json!("04abcd"));
-        assert_eq!(
-            value["manifest_envelope"],
-            serde_json::to_value(&manifest_envelope).unwrap()
-        );
-    }
-
-    #[test]
-    fn verify_provisioning_details_accepts_real_fixture() {
+    fn build_summary_accepts_real_fixture() {
         let fixture = valid_provisioning_details_fixture();
         let attestation_document = BASE64_STANDARD
             .decode(&fixture.attestation_document_cose_sign1_base64)
             .unwrap();
 
-        verify_provisioning_details(
+        let summary = build_summary_with_optional_verify(
             &attestation_document,
             &fixture.manifest_envelope,
+            false,
             Some(fixture.validation_time_secs),
         )
         .unwrap();
+
+        assert!(!summary.ephemeral_key.is_empty());
+        assert_eq!(
+            summary.manifest_set_threshold,
+            fixture.manifest_envelope.manifest.manifest_set.threshold
+        );
+        assert_eq!(
+            summary.manifest_set_approvals.len(),
+            fixture.manifest_envelope.manifest_set_approvals.len()
+        );
     }
 
     #[test]
-    fn verify_provisioning_details_rejects_real_fixture_with_missing_manifest_approval() {
+    fn build_summary_rejects_real_fixture_with_missing_manifest_approval() {
         let fixture = valid_provisioning_details_fixture();
         let attestation_document = BASE64_STANDARD
             .decode(&fixture.attestation_document_cose_sign1_base64)
@@ -445,9 +287,10 @@ mod tests {
         let mut manifest_envelope = fixture.manifest_envelope;
         manifest_envelope.manifest_set_approvals.clear();
 
-        assert!(verify_provisioning_details(
+        assert!(build_summary_with_optional_verify(
             &attestation_document,
             &manifest_envelope,
+            false,
             Some(fixture.validation_time_secs),
         )
         .is_err());

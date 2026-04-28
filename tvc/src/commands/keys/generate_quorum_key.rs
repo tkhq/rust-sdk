@@ -1,12 +1,14 @@
 //! Generate quorum key command - generates and encrypts a quorum key from a given config.
 
 use crate::config::quorum_key::QuorumKeyConfig;
+use crate::quorum_key_metadata::{
+    decode_p256_public_key_hex, EncryptedShareMetadata, QuorumKeyMetadata,
+};
 use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
 use qos_p256::{P256Pair, P256Public};
-use serde::Serialize;
 use std::collections::HashSet;
-use std::fs::{self, File};
+use std::fs;
 use std::path::PathBuf;
 use zeroize::Zeroize;
 
@@ -23,21 +25,6 @@ pub struct Args {
         env = "QUORUM_KEY_OUT"
     )]
     pub quorum_key_out: PathBuf,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct QuorumKeyMetadata {
-    quorum_key_public: String,
-    threshold: u32,
-    shares: Vec<EncryptedShareMetadata>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct EncryptedShareMetadata {
-    operator_public_key: String,
-    share: String,
 }
 
 struct OperatorPublicKey {
@@ -57,14 +44,14 @@ impl Drop for PlaintextShares {
 
 /// Run the quorum key generation command.
 pub async fn run(args: Args) -> Result<()> {
-    let config_file = File::open(&args.config_file).with_context(|| {
+    let config_file = fs::read_to_string(&args.config_file).with_context(|| {
         format!(
             "failed to read quorum key config file: {}",
             args.config_file.display()
         )
     })?;
 
-    let config: QuorumKeyConfig = serde_json::from_reader(config_file).with_context(|| {
+    let config: QuorumKeyConfig = serde_json::from_str(&config_file).with_context(|| {
         format!(
             "failed to parse quorum key config file: {}",
             args.config_file.display()
@@ -118,9 +105,7 @@ fn parse_operator_public_keys(operator_public_keys: &[String]) -> Result<Vec<Ope
 }
 
 fn parse_operator_public_key(operator_public_key: &str) -> Result<(String, P256Public)> {
-    let bytes = hex::decode(operator_public_key).context("public key must be bare hex encoded")?;
-    let public = P256Public::from_bytes(&bytes)
-        .map_err(|e| anyhow::anyhow!("invalid QOS P-256 key: {e:?}"))?;
+    let public = decode_p256_public_key_hex(operator_public_key)?;
 
     Ok((hex::encode(public.to_bytes()), public))
 }
