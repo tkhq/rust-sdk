@@ -33,6 +33,7 @@ impl Cli {
                 AppCommands::Create(args) => commands::app::create::run(args).await,
                 AppCommands::Init(args) => commands::app::init::run(args).await,
             },
+            Commands::ReEncryptShare(args) => commands::re_encrypt_share::run(args).await,
             Commands::Login(args) => commands::login::run(args).await,
         }
     }
@@ -52,6 +53,8 @@ enum Commands {
         #[command(subcommand)]
         command: AppCommands,
     },
+    /// Re-encrypt a share for enclave provisioning.
+    ReEncryptShare(commands::re_encrypt_share::Args),
 }
 
 #[derive(Debug, Subcommand)]
