@@ -7,4 +7,5 @@
 pub mod app;
 pub mod app_status;
 pub mod deploy;
+pub mod keys;
 pub mod login;

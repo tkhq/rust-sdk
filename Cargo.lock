@@ -3946,6 +3946,7 @@ dependencies = [
  "p256 0.13.2",
  "predicates",
  "qos_core",
+ "qos_crypto",
  "qos_nsm",
  "qos_p256",
  "serde",
@@ -3956,6 +3957,7 @@ dependencies = [
  "turnkey_api_key_stamper",
  "turnkey_client",
  "turnkey_enclave_encrypt",
+ "zeroize",
 ]
 
 [[package]]
