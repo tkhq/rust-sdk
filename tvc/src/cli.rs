@@ -100,7 +100,7 @@ enum AppCommands {
 
 #[derive(Debug, Subcommand)]
 enum KeysCommands {
-    /// Generate and encrypt a quorum key from a config file.
+    /// Generate and shamir-split a quorum key, encrypting each share to an operator key.
     GenerateQuorumKey(commands::keys::generate_quorum_key::Args),
     /// Generate a template quorum key configuration file.
     InitQuorumKey(commands::keys::init_quorum_key::Args),

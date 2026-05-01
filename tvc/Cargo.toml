@@ -21,6 +21,7 @@ turnkey_client = { workspace = true }
 turnkey_enclave_encrypt = { workspace = true }
 
 anyhow = { workspace = true }
+aws-nitro-enclaves-nsm-api = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["env"] }

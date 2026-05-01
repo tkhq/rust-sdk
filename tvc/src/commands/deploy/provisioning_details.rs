@@ -133,12 +133,12 @@ fn build_summary_with_optional_verify(
     dangerous_skip_verification: bool,
     validation_time_override: Option<u64>,
 ) -> anyhow::Result<AttestationSummary> {
-    if !dangerous_skip_verification {
-        verify_provisioning_details(cose_sign1_der, manifest_envelope, validation_time_override)?;
-    }
-
-    let mut attestation_doc = qos_nsm::nitro::unsafe_attestation_doc_from_der(cose_sign1_der)
-        .context("failed to parse attestation document")?;
+    let mut attestation_doc = if dangerous_skip_verification {
+        qos_nsm::nitro::unsafe_attestation_doc_from_der(cose_sign1_der)
+            .context("failed to parse attestation document")?
+    } else {
+        verify_provisioning_details(cose_sign1_der, manifest_envelope, validation_time_override)?
+    };
 
     Ok(AttestationSummary {
         ephemeral_key: extract_ephemeral_public_key_bytes(

@@ -133,6 +133,6 @@ fn keys_help_lists_generate_quorum_key() {
         .success()
         .stdout(predicate::str::contains("generate-quorum-key"))
         .stdout(predicate::str::contains(
-            "Generate and encrypt a quorum key from a config file",
+            "Generate and shamir-split a quorum key, encrypting each share to an operator key",
         ));
 }

@@ -4,10 +4,10 @@ use crate::config::quorum_key::QuorumKeyConfig;
 use crate::quorum_key_metadata::{
     decode_p256_public_key_hex, EncryptedShareMetadata, QuorumKeyMetadata,
 };
+use crate::util::read_json_file;
 use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
 use qos_p256::{P256Pair, P256Public};
-use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 use zeroize::Zeroize;
@@ -44,19 +44,8 @@ impl Drop for PlaintextShares {
 
 /// Run the quorum key generation command.
 pub async fn run(args: Args) -> Result<()> {
-    let config_file = fs::read_to_string(&args.config_file).with_context(|| {
-        format!(
-            "failed to read quorum key config file: {}",
-            args.config_file.display()
-        )
-    })?;
-
-    let config: QuorumKeyConfig = serde_json::from_str(&config_file).with_context(|| {
-        format!(
-            "failed to parse quorum key config file: {}",
-            args.config_file.display()
-        )
-    })?;
+    let config: QuorumKeyConfig =
+        read_json_file(&args.config_file, "quorum key config file").await?;
     config.validate()?;
 
     if args.quorum_key_out.exists() {
@@ -87,27 +76,18 @@ pub async fn run(args: Args) -> Result<()> {
 }
 
 fn parse_operator_public_keys(operator_public_keys: &[String]) -> Result<Vec<OperatorPublicKey>> {
-    let mut parsed = Vec::with_capacity(operator_public_keys.len());
-    let mut seen = HashSet::new();
-
-    for (index, key) in operator_public_keys.iter().enumerate() {
-        let (normalized, public) = parse_operator_public_key(key)
-            .with_context(|| format!("invalid operator public key at index {index}"))?;
-
-        if !seen.insert(normalized.clone()) {
-            anyhow::bail!("duplicate operator public key at index {index}");
-        }
-
-        parsed.push(OperatorPublicKey { normalized, public });
-    }
-
-    Ok(parsed)
-}
-
-fn parse_operator_public_key(operator_public_key: &str) -> Result<(String, P256Public)> {
-    let public = decode_p256_public_key_hex(operator_public_key)?;
-
-    Ok((hex::encode(public.to_bytes()), public))
+    operator_public_keys
+        .iter()
+        .enumerate()
+        .map(|(index, key)| {
+            let public = decode_p256_public_key_hex(key)
+                .with_context(|| format!("invalid operator public key at index {index}"))?;
+            Ok(OperatorPublicKey {
+                normalized: hex::encode(public.to_bytes()),
+                public,
+            })
+        })
+        .collect()
 }
 
 fn generate_and_encrypt_shares(
@@ -134,30 +114,26 @@ fn generate_and_encrypt_shares(
     .map_err(|e| anyhow::anyhow!("failed to generate quorum key shares: {e:?}"))?;
     let plaintext_shares = PlaintextShares(plaintext_shares);
 
-    let encrypted_shares = operator_publics
+    let shares = operator_publics
         .iter()
         .zip(plaintext_shares.0.iter())
         .map(|(operator_public, share)| {
-            operator_public
+            let encrypted_share = operator_public
                 .public
                 .encrypt(share)
-                .map_err(|e| anyhow::anyhow!("failed to encrypt quorum key share: {e:?}"))
+                .map_err(|e| anyhow::anyhow!("failed to encrypt quorum key share: {e:?}"))?;
+
+            Ok(EncryptedShareMetadata {
+                operator_public_key: operator_public.normalized.clone(),
+                share: hex::encode(encrypted_share),
+            })
         })
-        .collect::<Result<Vec<_>>>()?;
+        .collect::<Result<Vec<EncryptedShareMetadata>>>()?;
 
     Ok(QuorumKeyMetadata {
         quorum_key_public,
         threshold,
-        shares: operator_publics
-            .iter()
-            .zip(encrypted_shares.iter())
-            .map(
-                |(operator_public, encrypted_share)| EncryptedShareMetadata {
-                    operator_public_key: operator_public.normalized.clone(),
-                    share: hex::encode(encrypted_share),
-                },
-            )
-            .collect(),
+        shares,
     })
 }
 
@@ -174,18 +150,9 @@ mod tests {
         hex::encode(operator_pair().public_key().to_bytes())
     }
 
-    fn err_string<T>(result: Result<T>) -> String {
-        match result {
-            Ok(_) => panic!("expected error"),
-            Err(error) => error.to_string(),
-        }
-    }
-
     #[test]
     fn parse_operator_public_keys_rejects_malformed_key() {
-        let err = err_string(parse_operator_public_keys(&["not-hex".to_string()]));
-
-        assert!(err.contains("invalid operator public key at index 0"));
+        assert!(parse_operator_public_keys(&["not-hex".to_string()]).is_err());
     }
 
     #[test]
@@ -194,17 +161,6 @@ mod tests {
         let parsed = parse_operator_public_keys(&[key.to_uppercase()]).unwrap();
 
         assert_eq!(parsed[0].normalized, key);
-    }
-
-    #[test]
-    fn parse_operator_public_keys_rejects_duplicate_after_canonicalization() {
-        let key = operator_key();
-        let err = err_string(parse_operator_public_keys(&[
-            key.clone(),
-            key.to_uppercase(),
-        ]));
-
-        assert!(err.contains("duplicate operator public key at index 1"));
     }
 
     #[test]

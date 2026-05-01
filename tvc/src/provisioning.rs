@@ -1,6 +1,7 @@
 //! Shared provisioning bundle and attestation verification helpers.
 
 use anyhow::{anyhow, bail, Context};
+use aws_nitro_enclaves_nsm_api::api::AttestationDoc;
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use qos_core::protocol::services::boot::ManifestEnvelope;
 use qos_core::protocol::QosHash;
@@ -61,15 +62,12 @@ impl ProvisionBundle {
             .decode(&self.attestation_document_cose_sign1_base64)
             .context("failed to decode attestation document in provision bundle")?;
 
-        verify_provisioning_details(
+        let attestation_doc = verify_provisioning_details(
             &attestation_document,
             &self.manifest_envelope,
             validation_time_override,
         )?;
 
-        let attestation_doc =
-            qos_nsm::nitro::unsafe_attestation_doc_from_der(&attestation_document)
-                .context("failed to parse attestation document")?;
         let attested_public_key = extract_ephemeral_public_key_bytes(
             attestation_doc
                 .public_key
@@ -89,7 +87,7 @@ pub(crate) fn verify_provisioning_details(
     cose_sign1_der: &[u8],
     manifest_envelope: &ManifestEnvelope,
     validation_time_override: Option<u64>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<AttestationDoc> {
     manifest_envelope
         .check_approvals()
         .context("failed to verify manifest approvals")?;
@@ -112,7 +110,7 @@ pub(crate) fn verify_provisioning_details(
     )
     .context("attestation document did not match manifest expectations")?;
 
-    Ok(())
+    Ok(attestation_doc)
 }
 
 pub(crate) fn extract_ephemeral_public_key_bytes(

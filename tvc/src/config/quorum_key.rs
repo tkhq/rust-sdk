@@ -1,6 +1,9 @@
 //! Quorum key configuration file format for `tvc keys generate-quorum-key`.
 
+use crate::quorum_key_metadata::normalize_p256_public_key_hex;
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 
 /// Maximum number of shares and minimum threshold. Limits come from
 /// `qos_crypto::shamir::shares_generate` (see qos_crypto/src/shamir.rs).
@@ -75,6 +78,15 @@ impl QuorumKeyConfig {
             );
         }
 
+        let mut seen = HashSet::new();
+        for (index, key) in self.operator_public_keys.iter().enumerate() {
+            let normalized = normalize_p256_public_key_hex(key)
+                .with_context(|| format!("invalid operator public key at index {index}"))?;
+            if !seen.insert(normalized.clone()) {
+                anyhow::bail!("duplicate operator public key {normalized} at index {index}");
+            }
+        }
+
         Ok(())
     }
 }
@@ -112,6 +124,27 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("must equal shares"));
+    }
+
+    #[test]
+    fn validate_rejects_duplicate_operator_public_keys() {
+        let key = hex::encode(
+            qos_p256::P256Pair::generate()
+                .unwrap()
+                .public_key()
+                .to_bytes(),
+        );
+        let config = QuorumKeyConfig {
+            shares: 2,
+            threshold: 2,
+            operator_public_keys: vec![key.clone(), key.to_uppercase()],
+        };
+
+        assert!(config
+            .validate()
+            .unwrap_err()
+            .to_string()
+            .contains("duplicate operator public key"));
     }
 
     #[test]
