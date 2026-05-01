@@ -33,6 +33,17 @@ impl Cli {
                 AppCommands::Create(args) => commands::app::create::run(args).await,
                 AppCommands::Init(args) => commands::app::init::run(args).await,
             },
+            Commands::Keys { command } => match command {
+                KeysCommands::GenerateQuorumKey(args) => {
+                    commands::keys::generate_quorum_key::run(args).await
+                }
+                KeysCommands::InitQuorumKey(args) => {
+                    commands::keys::init_quorum_key::run(args).await
+                }
+                KeysCommands::ReEncryptShare(args) => {
+                    commands::keys::re_encrypt_share::run(args).await
+                }
+            },
             Commands::Login(args) => commands::login::run(args).await,
         }
     }
@@ -51,6 +62,11 @@ enum Commands {
     App {
         #[command(subcommand)]
         command: AppCommands,
+    },
+    /// Manage cryptographic keys.
+    Keys {
+        #[command(subcommand)]
+        command: KeysCommands,
     },
 }
 
@@ -80,4 +96,14 @@ enum AppCommands {
     Create(commands::app::create::Args),
     /// Generate a template app configuration file.
     Init(commands::app::init::Args),
+}
+
+#[derive(Debug, Subcommand)]
+enum KeysCommands {
+    /// Generate and shamir-split a quorum key, encrypting each share to an operator key.
+    GenerateQuorumKey(commands::keys::generate_quorum_key::Args),
+    /// Generate a template quorum key configuration file.
+    InitQuorumKey(commands::keys::init_quorum_key::Args),
+    /// Re-encrypt a share for enclave provisioning.
+    ReEncryptShare(commands::keys::re_encrypt_share::Args),
 }

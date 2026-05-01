@@ -1,8 +1,8 @@
 //! Approve deploy command - cryptographically approve a QOS manifest.
 
 use crate::config::app::KNOWN_SHARE_SET_KEYS;
-use crate::config::turnkey::{Config, StoredQosOperatorKey};
-use crate::pair::LocalPair;
+use crate::config::turnkey::Config;
+use crate::operator_key::load_operator_pair;
 use crate::util::{read_file_to_string, write_file};
 use anyhow::{anyhow, bail, Context};
 use clap::{ArgGroup, Args as ClapArgs};
@@ -95,28 +95,8 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    // Get operator key - from --operator-seed or from logged-in config
-    let pair: Box<dyn crate::pair::Pair> = match &args.operator_seed {
-        Some(path) => Box::new(LocalPair::from_master_seed(path).await?),
-        None => {
-            // Default to operator key from logged-in org config
-            let tvc_config = Config::load().await?;
-            let (alias, org_config) = tvc_config.active_org_config().ok_or_else(|| {
-                anyhow!("No active organization. Run `tvc login` first or provide --operator-seed.")
-            })?;
-
-            let operator_key = StoredQosOperatorKey::load(org_config)
-                .await?
-                .ok_or_else(|| {
-                    anyhow!(
-                        "No operator key found for org '{alias}'. \
-                     Run `tvc login` first or provide --operator-seed."
-                    )
-                })?;
-
-            Box::new(LocalPair::from_hex_seed(&operator_key.private_key)?)
-        }
-    };
+    let pair: Box<dyn crate::pair::Pair> =
+        Box::new(load_operator_pair(args.operator_seed.as_deref()).await?);
 
     let approval = generate_approval(pair, &manifest).await?;
     let json = serde_json::to_string_pretty(&approval)?;

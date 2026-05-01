@@ -208,7 +208,7 @@ dependencies = [
  "aes",
  "aes-gcm",
  "aws-nitro-enclaves-cose",
- "aws-nitro-enclaves-nsm-api 0.4.0",
+ "aws-nitro-enclaves-nsm-api",
  "base64 0.21.7",
  "chrono",
  "der 0.6.1",
@@ -244,20 +244,6 @@ dependencies = [
  "serde_cbor",
  "serde_repr",
  "serde_with 3.14.0",
-]
-
-[[package]]
-name = "aws-nitro-enclaves-nsm-api"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36097332580c65ddaac1ad9686ffb58ea531bf3b2d4b3cef7ccb9b7271045d4b"
-dependencies = [
- "libc",
- "log",
- "nix 0.26.4",
- "serde",
- "serde_bytes",
- "serde_cbor",
 ]
 
 [[package]]
@@ -2600,7 +2586,7 @@ version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "893f63fac0ccdb1dd5f66da2d2b463b8c5c23763a61f440c2c3cdc4e6a481323"
 dependencies = [
- "aws-nitro-enclaves-nsm-api 0.4.0",
+ "aws-nitro-enclaves-nsm-api",
  "borsh",
  "futures",
  "libc",
@@ -2644,7 +2630,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6d91112b30ca87b38b0e54e2a88a3395b47e755d35dc88abe9d41a1bd3576be2"
 dependencies = [
  "aws-nitro-enclaves-cose",
- "aws-nitro-enclaves-nsm-api 0.4.0",
+ "aws-nitro-enclaves-nsm-api",
  "borsh",
  "p384 0.13.1",
  "qos_hex",
@@ -3910,7 +3896,7 @@ version = "0.6.2"
 dependencies = [
  "attestation-doc-validation",
  "aws-nitro-enclaves-cose",
- "aws-nitro-enclaves-nsm-api 0.3.0",
+ "aws-nitro-enclaves-nsm-api",
  "base64 0.13.1",
  "borsh",
  "ciborium",
@@ -3938,6 +3924,7 @@ version = "0.6.2"
 dependencies = [
  "anyhow",
  "assert_cmd",
+ "aws-nitro-enclaves-nsm-api",
  "base64 0.22.1",
  "chrono",
  "clap",
@@ -3946,6 +3933,7 @@ dependencies = [
  "p256 0.13.2",
  "predicates",
  "qos_core",
+ "qos_crypto",
  "qos_nsm",
  "qos_p256",
  "serde",
@@ -3956,6 +3944,7 @@ dependencies = [
  "turnkey_api_key_stamper",
  "turnkey_client",
  "turnkey_enclave_encrypt",
+ "zeroize",
 ]
 
 [[package]]
