@@ -22,7 +22,7 @@ tvc app init --name my-app --output my-app.json
 # Edit my-app.json to fill in required values (quorumPublicKey, operator keys, etc.)
 
 # Create the app
-tvc app create my-app.json
+tvc app create --config-file my-app.json
 ```
 
 ### Create and Approve a Deployment
@@ -34,7 +34,7 @@ tvc deploy init --output my-deploy.json
 # Edit my-deploy.json to fill in required values (appId, container images, etc.)
 
 # Create the deployment
-tvc deploy create my-deploy.json
+tvc deploy create --config-file my-deploy.json
 
 # Recommended: uses GetTvcDeployment to fetch manifest and manifest_id automatically
 tvc deploy approve \

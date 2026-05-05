@@ -11,7 +11,7 @@ use std::path::PathBuf;
 #[command(about, long_about = None)]
 pub struct Args {
     /// Output file path.
-    #[arg(short, long, value_name = "PATH", default_value = "app.json", env = "TVC_OUTPUT")]
+    #[arg(short, long, value_name = "PATH", default_value = "app.json", env = "TVC_APP_CONFIG_OUT")]
     pub output: PathBuf,
 }
 
@@ -36,7 +36,7 @@ pub async fn run(args: Args) -> Result<()> {
     println!("Created app config template: {}", args.output.display());
     println!();
     println!("Edit the file to fill in your values, then run:");
-    println!("  tvc app create {}", args.output.display());
+    println!("  tvc app create --config-file {}", args.output.display());
 
     Ok(())
 }

@@ -16,6 +16,7 @@ use zeroize::Zeroize;
 #[command(about, long_about = None)]
 pub struct Args {
     /// Path to the quorum key config file.
+    #[arg(short = 'c', long, value_name = "PATH", env = "TVC_QUORUM_KEY_CONFIG")]
     pub config_file: PathBuf,
 
     /// Output file path for the generated quorum key metadata.
@@ -23,9 +24,9 @@ pub struct Args {
         long,
         value_name = "PATH",
         default_value = "quorum_key_metadata.json",
-        env = "TVC_QUORUM_KEY_OUT"
+        env = "TVC_QUORUM_KEY_METADATA_OUT"
     )]
-    pub quorum_key_out: PathBuf,
+    pub quorum_key_metadata_out: PathBuf,
 }
 
 struct OperatorPublicKey {
@@ -49,10 +50,10 @@ pub async fn run(args: Args) -> Result<()> {
         read_json_file(&args.config_file, "quorum key config file").await?;
     config.validate()?;
 
-    if args.quorum_key_out.exists() {
+    if args.quorum_key_metadata_out.exists() {
         anyhow::bail!(
             "quorum key metadata file already exists: {}",
-            args.quorum_key_out.display()
+            args.quorum_key_metadata_out.display()
         );
     }
 
@@ -62,12 +63,12 @@ pub async fn run(args: Args) -> Result<()> {
 
     let metadata_json =
         serde_json::to_vec_pretty(&metadata).context("failed to serialize quorum key metadata")?;
-    fs::write(&args.quorum_key_out, &metadata_json)
-        .with_context(|| format!("failed to write file: {}", args.quorum_key_out.display()))?;
+    fs::write(&args.quorum_key_metadata_out, &metadata_json)
+        .with_context(|| format!("failed to write file: {}", args.quorum_key_metadata_out.display()))?;
 
     println!(
         "Quorum key metadata written to: {}",
-        args.quorum_key_out.display()
+        args.quorum_key_metadata_out.display()
     );
 
     println!("Quorum Public Key: {quorum_key_public}");

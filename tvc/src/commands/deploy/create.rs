@@ -14,6 +14,7 @@ use turnkey_client::generated::{CreateTvcDeploymentIntent, ValidateTvcImageReque
 #[command(about, long_about = None)]
 pub struct Args {
     /// Path to the deployment configuration file (JSON).
+    #[arg(short = 'c', long, value_name = "PATH", env = "TVC_DEPLOY_CONFIG")]
     pub config_file: PathBuf,
 
     /// Path to an unencrypted pivot container pull secret file.
