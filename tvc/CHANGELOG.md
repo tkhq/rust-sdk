@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- `tvc deploy create --dangerous-deploy-insecure` flag to enable debug
+  mode on a TVC deployment. Overrides the `debugMode` field from the JSON
+  config when set; cannot downgrade an explicit `debugMode: true` in the
+  config to false. A deployment created with debug mode is permanently
+  considered insecure (enclave logs forwarded to the host and attestation
+  PCRs zeroed).
+
 ## 0.6.2 - 2026-04-09
 
 ### Other
