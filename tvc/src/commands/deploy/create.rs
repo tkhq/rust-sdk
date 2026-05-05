@@ -28,7 +28,9 @@ Required deployment fields:
 
 Special rules:
   --pivot-args replaces the config file's list entirely (does not append).
-  --debug-mode can enable debug mode but cannot disable a true config value.
+  --dangerous-deploy-debug-mode requires an app created with
+  `--dangerous-enable-debug-mode-deployments`; the server rejects debug-mode
+  deployments for apps without it.
   --pivot-pull-secret reads an unencrypted pull secret file, encrypts it for the
   active org's API environment, and overrides the encrypted secret in the config.
 
@@ -90,10 +92,6 @@ pub struct Args {
     )]
     pub pivot_args: Vec<String>,
 
-    /// Enable debug mode. One-way: cannot disable a `true` set earlier via the file.
-    #[arg(long, env = "TVC_DEBUG_MODE")]
-    pub debug_mode: bool,
-
     /// Override the healthCheckPort field.
     #[arg(long, env = "TVC_HEALTH_CHECK_PORT")]
     pub health_check_port: Option<u16>,
@@ -108,6 +106,19 @@ pub struct Args {
     /// override `pivotContainerEncryptedPullSecret` from the config file.
     #[arg(long, value_name = "PATH", env = "TVC_PIVOT_PULL_SECRET")]
     pub pivot_pull_secret: Option<PathBuf>,
+
+    /// Deploy in debug mode, which forwards secure enclave logs to the host and
+    /// zeroes attestation PCRs. This defeats the purpose of a secure enclave,
+    /// so it should only be used to debug non-prod applications and view application
+    /// logs.
+    ///
+    /// Only valid for apps created with `--dangerous-enable-debug-mode-deployments`.
+    /// Debug-mode deployments permanently mark the app's quorum key as insecure;
+    /// to return to a secure posture, create a new app with a fresh quorum key.
+    ///
+    /// Overrides `debugMode` in the config file when set.
+    #[arg(long, env = "TVC_DANGEROUS_DEPLOY_DEBUG_MODE")]
+    pub dangerous_deploy_debug_mode: bool,
 }
 
 fn build_validate_image_request(
@@ -135,7 +146,7 @@ fn build_create_intent(
         pivot_args: deploy_config.pivot_args.clone(),
         expected_pivot_digest: deploy_config.expected_pivot_digest.clone(),
         pivot_container_encrypted_pull_secret,
-        debug_mode: deploy_config.debug_mode,
+        debug_mode: Some(deploy_config.debug_mode),
         nonce: None,
         health_check_type: deploy_config.health_check_type,
         health_check_port: deploy_config.health_check_port as u32,
@@ -170,10 +181,7 @@ fn apply_overrides(config: &mut DeployConfig, args: &Args) {
     if !args.pivot_args.is_empty() {
         config.pivot_args = args.pivot_args.clone();
     }
-    // One-way: only ever flips false -> true.
-    if args.debug_mode {
-        config.debug_mode = Some(true);
-    }
+    config.debug_mode = args.dangerous_deploy_debug_mode;
     if let Some(v) = args.health_check_port {
         config.health_check_port = v;
     }
@@ -393,10 +401,10 @@ mod tests {
             expected_pivot_digest: None,
             pivot_path: None,
             pivot_args: vec![],
-            debug_mode: false,
             health_check_port: None,
             public_ingress_port: None,
             pivot_pull_secret: None,
+            dangerous_deploy_debug_mode: false,
         }
     }
 
@@ -419,7 +427,7 @@ mod tests {
         c.pivot_path = "file-path".into();
         c.pivot_args = vec!["a".into(), "b".into()];
         c.expected_pivot_digest = "file-digest".into();
-        c.debug_mode = Some(false);
+        c.debug_mode = false;
         c.pivot_container_encrypted_pull_secret = None;
         c.health_check_port = 4000;
         c.public_ingress_port = 5000;
@@ -484,7 +492,7 @@ mod tests {
         // Optional fields fall back to template defaults.
         assert_eq!(resolved.health_check_port, 3000);
         assert_eq!(resolved.public_ingress_port, 3000);
-        assert_eq!(resolved.debug_mode, Some(false));
+        assert!(!resolved.debug_mode);
         assert!(resolved.pivot_args.is_empty());
         // Pull-secret placeholder cleared in flag-only mode.
         assert_eq!(resolved.pivot_container_encrypted_pull_secret, None);
@@ -541,6 +549,30 @@ mod tests {
             err.contains("--pivot-pull-secret"),
             "error should point the user at the resolution flag: {err}"
         );
+    }
+
+    /// `--dangerous-deploy-debug-mode` flips the resolved `debug_mode` from
+    /// the file's `false` to `true`.
+    #[test]
+    fn dangerous_debug_mode_flag_enables_debug_mode() {
+        let file = write_config(&file_config()); // file has debug_mode = false
+        let args = Args {
+            config_file: Some(file.path().to_path_buf()),
+            dangerous_deploy_debug_mode: true,
+            ..empty_args()
+        };
+        let resolved = run_resolve(&args).unwrap();
+        assert!(resolved.debug_mode);
+    }
+
+    /// The intent builder wraps the resolved config's debug_mode in `Some(...)`
+    /// when constructing the outgoing `CreateTvcDeploymentIntent`.
+    #[test]
+    fn build_intent_forwards_debug_mode() {
+        let mut cfg = file_config();
+        cfg.debug_mode = true;
+        let intent = build_create_intent(&cfg, "image-url".to_string(), None);
+        assert_eq!(intent.debug_mode, Some(true));
     }
 
     /// Sets `TVC_NON_INTERACTIVE=1` for the lifetime of the value so a test

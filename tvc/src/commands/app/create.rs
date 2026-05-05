@@ -17,11 +17,19 @@ pub struct Args {
     /// Path to the app configuration file (JSON).
     #[arg(short = 'c', long, value_name = "PATH", env = "TVC_APP_CONFIG")]
     pub config_file: PathBuf,
+
+    /// Permit debug-mode deployments for this app. Debug-mode deployments expose
+    /// secure-enclave logs and emit zero'd attestation PCRs, so remote
+    /// attestation cannot succeed. Cannot be changed after app creation; setting
+    /// this true means the app's quorum key is considered permanently insecure.
+    #[arg(long, env = "TVC_DANGEROUS_ENABLE_DEBUG_MODE_DEPLOYMENTS")]
+    pub dangerous_enable_debug_mode_deployments: bool,
 }
 
 /// Run the app create command.
 pub async fn run(args: Args) -> Result<()> {
-    let app_config = load_or_fill_app_config(&args.config_file).await?;
+    let mut app_config = load_or_fill_app_config(&args.config_file).await?;
+    apply_overrides(&mut app_config, &args);
 
     app_config
         .validate()
@@ -140,8 +148,12 @@ fn build_create_tvc_app_intent(app_config: &AppConfig) -> CreateTvcAppIntent {
         share_set_id: app_config.share_set_id.clone(),
         share_set_params: share_set_params.as_ref().map(to_tvc_operator_set_params),
         enable_egress: app_config.external_connectivity,
-        enable_debug_mode_deployments: None,
+        enable_debug_mode_deployments: Some(app_config.enable_debug_mode_deployments),
     }
+}
+
+fn apply_overrides(config: &mut AppConfig, args: &Args) {
+    config.enable_debug_mode_deployments = args.dangerous_enable_debug_mode_deployments;
 }
 
 fn to_tvc_operator_set_params(params: &OperatorSetParams) -> TvcOperatorSetParams {
@@ -182,6 +194,7 @@ mod tests {
             }),
             share_set_id: None,
             share_set_params: None,
+            enable_debug_mode_deployments: false,
         }
     }
 
@@ -219,6 +232,39 @@ mod tests {
             share_set_params.existing_operator_ids,
             vec!["existing-operator-id".to_string()]
         );
+    }
+
+    /// Default config has debug-mode disabled, and the intent reports `false`
+    /// — explicit so the server doesn't have to fall back to a proto default.
+    #[test]
+    fn build_intent_sends_false_debug_mode_by_default() {
+        let intent = build_create_tvc_app_intent(&valid_config());
+        assert_eq!(intent.enable_debug_mode_deployments, Some(false));
+    }
+
+    /// An explicit `enableDebugModeDeployments: true` in the config flows into
+    /// the intent so the server records the app's debug-mode capability.
+    #[test]
+    fn build_intent_forwards_debug_mode_from_config() {
+        let mut config = valid_config();
+        config.enable_debug_mode_deployments = true;
+
+        let intent = build_create_tvc_app_intent(&config);
+        assert_eq!(intent.enable_debug_mode_deployments, Some(true));
+    }
+
+    /// CLI flag flips a default `false` config to `true` — the user opted in
+    /// via the command line rather than the config file.
+    #[test]
+    fn dangerous_flag_enables_debug_mode_when_config_unset() {
+        let mut config = valid_config();
+        let args = Args {
+            config_file: PathBuf::new(),
+            dangerous_enable_debug_mode_deployments: true,
+        };
+
+        apply_overrides(&mut config, &args);
+        assert!(config.enable_debug_mode_deployments);
     }
 
     #[test]
