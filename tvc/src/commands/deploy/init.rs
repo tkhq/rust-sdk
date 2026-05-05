@@ -12,7 +12,7 @@ use std::path::PathBuf;
 #[command(about, long_about = None)]
 pub struct Args {
     /// Output file path.
-    #[arg(short, long)]
+    #[arg(short, long, value_name = "PATH", env = "TVC_OUTPUT")]
     pub output: Option<PathBuf>,
 }
 

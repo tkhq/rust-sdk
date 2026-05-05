@@ -21,8 +21,9 @@ pub struct Args {
     /// Output file path for the generated quorum key metadata.
     #[arg(
         long,
+        value_name = "PATH",
         default_value = "quorum_key_metadata.json",
-        env = "QUORUM_KEY_OUT"
+        env = "TVC_QUORUM_KEY_OUT"
     )]
     pub quorum_key_out: PathBuf,
 }

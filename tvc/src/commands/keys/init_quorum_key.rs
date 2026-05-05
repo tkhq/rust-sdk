@@ -11,7 +11,7 @@ use std::path::PathBuf;
 #[command(about, long_about = None)]
 pub struct Args {
     /// Output file path.
-    #[arg(short, long, default_value = "quorum_key.json")]
+    #[arg(short, long, value_name = "PATH", default_value = "quorum_key.json", env = "TVC_OUTPUT")]
     pub output: PathBuf,
 }
 

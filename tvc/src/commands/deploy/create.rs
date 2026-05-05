@@ -20,7 +20,7 @@ pub struct Args {
     ///
     /// The content will be encrypted based on the active org's API environment and
     /// override `pivotContainerEncryptedPullSecret` from the config file.
-    #[arg(long, alias = "pull-secret", value_name = "PATH")]
+    #[arg(long, value_name = "PATH", env = "TVC_PIVOT_PULL_SECRET")]
     pub pivot_pull_secret: Option<PathBuf>,
 }
 

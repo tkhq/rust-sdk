@@ -28,8 +28,9 @@ pub struct Args {
     #[arg(
         short,
         long,
-        help_heading = "Manifest source (pick one)",
-        value_name = "PATH"
+        value_name = "PATH",
+        env = "TVC_MANIFEST",
+        help_heading = "Manifest source (pick one)"
     )]
     pub manifest: Option<PathBuf>,
 
@@ -37,8 +38,8 @@ pub struct Args {
     #[arg(
         short,
         long,
-        help_heading = "Manifest source (pick one)",
-        env = "TVC_DEPLOY_ID"
+        env = "TVC_DEPLOY_ID",
+        help_heading = "Manifest source (pick one)"
     )]
     pub deploy_id: Option<String>,
 
@@ -54,23 +55,23 @@ pub struct Args {
 
     /// Path to the file containing the master seed for the operator key.
     /// If not provided, uses the operator key from the logged-in org config.
-    #[arg(long, help_heading = "Operator signing key", value_name = "PATH")]
+    #[arg(long, value_name = "PATH", env = "TVC_OPERATOR_SEED")]
     pub operator_seed: Option<PathBuf>,
 
     /// Walk through manifest approval prompts but do not generate an approval.
-    #[arg(long)]
+    #[arg(long, env = "TVC_DRY_RUN")]
     pub dry_run: bool,
 
     /// DANGEROUS: skip interactive prompts for approving each aspect of manifest.
-    #[arg(long)]
+    #[arg(long, env = "TVC_DANGEROUS_SKIP_INTERACTIVE")]
     pub dangerous_skip_interactive: bool,
 
     /// Write approval to file instead of stdout.
-    #[arg(short, long, value_name = "PATH")]
-    pub output: Option<PathBuf>,
+    #[arg(short = 'o', long, value_name = "PATH", env = "TVC_APPROVAL_OUT")]
+    pub approval_out: Option<PathBuf>,
 
     /// Don't post approval to the API.
-    #[arg(long)]
+    #[arg(long, env = "TVC_SKIP_POST")]
     pub skip_post: bool,
 }
 
@@ -102,7 +103,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     let json = serde_json::to_string_pretty(&approval)?;
 
     // Write to file or stdout
-    if let Some(ref path) = args.output {
+    if let Some(ref path) = args.approval_out {
         write_file(path, &json).await?;
         println!("Approval written to: {}", path.display());
     } else {

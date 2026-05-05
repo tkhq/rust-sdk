@@ -17,7 +17,7 @@ use turnkey_client::generated::GetWhoamiRequest;
 pub struct Args {
     /// Organization alias or ID to log in with.
     /// If not provided, will prompt interactively.
-    #[arg(long)]
+    #[arg(long, env = "TVC_ORG")]
     pub org: Option<String>,
 }
 
