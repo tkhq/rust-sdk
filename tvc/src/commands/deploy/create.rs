@@ -27,7 +27,7 @@ pub struct Args {
     /// attestation PCRs. This defeats the purpose of a secure enclave, so it should only
     /// be used to debug non-prod applications.
     ///
-    /// **WARNING**: This compromises the quorum key for the app, so a single insecure deployment
+    /// WARNING: This compromises the quorum key for the app, so a single insecure deployment
     /// will permanently mark the app and all subsequent deployments as insecure and cannot be
     /// undone. You will need to create a new secure app deployment.
     ///
