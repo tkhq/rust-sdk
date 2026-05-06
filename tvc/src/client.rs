@@ -5,11 +5,14 @@ use anyhow::{anyhow, bail, Context, Result};
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use turnkey_client::TurnkeyClient;
 
-const NUM_AUTH_ENV_VARS: usize = 4;
+/// Number of *required* auth env vars: org_id, api_key_public, api_key_private.
+/// `TVC_API_BASE_URL` is optional and defaults to `DEFAULT_API_BASE_URL`.
+const NUM_AUTH_ENV_VARS: usize = 3;
 const ENV_ORG_ID: &str = "TVC_ORG_ID";
 const ENV_API_BASE_URL: &str = "TVC_API_BASE_URL";
 const ENV_API_KEY_PUBLIC: &str = "TVC_API_KEY_PUBLIC";
 const ENV_API_KEY_PRIVATE: &str = "TVC_API_KEY_PRIVATE";
+const DEFAULT_API_BASE_URL: &str = "https://api.turnkey.com";
 
 /// An authenticated Turnkey client with organization context.
 pub struct AuthenticatedClient {
@@ -23,13 +26,14 @@ pub struct AuthenticatedClient {
 
 /// Build an authenticated Turnkey client.
 ///
-/// Prefers env auth (CI use case): if all required env vars are set, builds the
-/// client from env vars
+/// Prefers env auth (CI use case): if `TVC_ORG_ID`, `TVC_API_KEY_PUBLIC`, and
+/// `TVC_API_KEY_PRIVATE` are all set, builds the client from env vars.
+/// `TVC_API_BASE_URL` is optional and defaults to `https://api.turnkey.com`.
 ///
 /// Otherwise, falls back to loading from `~/.config/turnkey/` (after `tvc login`).
 ///
-/// If only some of the four env vars are set, errors with the list of missing
-/// names — no merged resolve between env and disk vars
+/// If only some of the three required env vars are set, errors with the list of
+/// missing names — no merged resolve between env and disk vars.
 pub async fn build_client() -> Result<AuthenticatedClient> {
     let (org_id, api_base_url, api_key_public, api_key_private) = match load_credentials_from_env_vars()? {
         Some(creds) => creds,
@@ -87,21 +91,21 @@ fn read_env_var(name: &str) -> Option<String> {
 
 /// Parse auth env vars for building client.
 ///
-/// - `Ok(None)`: none set; caller should fall back to disk.
-/// - `Ok(Some((org_id, api_base_url, api_key_public, api_key_private)))`: all four set.
-/// - `Err`: only some are set; the error names which.
+/// - `Ok(None)`: none of the required env vars set; caller should fall back to disk.
+/// - `Ok(Some((org_id, api_base_url, api_key_public, api_key_private)))`: all three
+///   required vars set; `api_base_url` falls back to the default if unset.
+/// - `Err`: only some of the required vars are set; the error names which.
 fn load_credentials_from_env_vars() -> Result<Option<(String, String, String, String)>> {
     let org_id = read_env_var(ENV_ORG_ID);
-    let api_base_url = read_env_var(ENV_API_BASE_URL);
     let api_key_public = read_env_var(ENV_API_KEY_PUBLIC);
     let api_key_private = read_env_var(ENV_API_KEY_PRIVATE);
+    // Optional; defaults to prod if unset.
+    let api_base_url =
+        read_env_var(ENV_API_BASE_URL).unwrap_or_else(|| DEFAULT_API_BASE_URL.to_string());
 
     let mut missing: Vec<&str> = Vec::new();
     if org_id.is_none() {
         missing.push(ENV_ORG_ID);
-    }
-    if api_base_url.is_none() {
-        missing.push(ENV_API_BASE_URL);
     }
     if api_key_public.is_none() {
         missing.push(ENV_API_KEY_PUBLIC);
@@ -118,10 +122,9 @@ fn load_credentials_from_env_vars() -> Result<Option<(String, String, String, St
     // Partial: bail with the list of missing names.
     if !missing.is_empty() {
         bail!(
-            "partial env var auth: missing {}. Set all four ({}, {}, {}, {}) env vars or none.",
+            "partial env var auth: missing {}. Set all three ({}, {}, {}) env vars or none.",
             missing.join(", "),
             ENV_ORG_ID,
-            ENV_API_BASE_URL,
             ENV_API_KEY_PUBLIC,
             ENV_API_KEY_PRIVATE,
         );
@@ -129,7 +132,7 @@ fn load_credentials_from_env_vars() -> Result<Option<(String, String, String, St
 
     Ok(Some((
         org_id.unwrap(),
-        api_base_url.unwrap(),
+        api_base_url,
         api_key_public.unwrap(),
         api_key_private.unwrap(),
     )))

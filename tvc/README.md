@@ -27,16 +27,17 @@ Special rules:
 
 For **local use**, run `tvc login` once and the CLI will read `~/.config/turnkey/` thereafter.
 
-For **programmatic use** (GitHub Actions, etc.), set these four env vars to authenticate directly without touching disk:
+For **programmatic use** (GitHub Actions, etc.), set these three env vars to authenticate directly without touching disk:
 
 | Env | Source |
 |---|---|
 | `TVC_ORG_ID` | your Turnkey organization UUID |
-| `TVC_API_BASE_URL` | e.g. `https://api.turnkey.com` |
 | `TVC_API_KEY_PUBLIC` | hex-encoded compressed P256 public key |
 | `TVC_API_KEY_PRIVATE` | hex-encoded P256 private key |
 
-When all four are present, every command authenticates directly from env. Setting some but not all is rejected.
+`TVC_API_BASE_URL` is optional and defaults to `https://api.turnkey.com`.
+
+When all three required vars are present, every command authenticates directly from env. Setting some but not all is rejected.
 
 The typical flow: run `tvc login` once locally to generate an API key, register the public key in the Turnkey dashboard, then store the values in your CI's secret store (e.g. `TVC_API_KEY_PRIVATE` as a GitHub Secret, the rest as GitHub Variables).
 
@@ -44,7 +45,6 @@ The typical flow: run `tvc login` once locally to generate an API key, register 
 
 ```bash
 TVC_ORG_ID=...                      \
-TVC_API_BASE_URL=...                \
 TVC_API_KEY_PUBLIC=...              \
 TVC_API_KEY_PRIVATE=...             \
 TVC_APP_ID=...                      \
