@@ -23,15 +23,14 @@ pub struct AuthenticatedClient {
 
 /// Build an authenticated Turnkey client.
 ///
-/// Prefers direct env auth (CI use case): if all required env vars are set, builds the
-/// client from env
+/// Prefers env auth (CI use case): if all required env vars are set, builds the
+/// client from env vars
 ///
-/// Otherwise falls back to loading from `~/.config/turnkey/` (after `tvc login`).
+/// Otherwise, falls back to loading from `~/.config/turnkey/` (after `tvc login`).
 ///
 /// If only some of the four env vars are set, errors with the list of missing
-/// names — no silent fallback to disk.
+/// names — no merged resolve between env and disk vars
 pub async fn build_client() -> Result<AuthenticatedClient> {
-    // Try env first; fall back to disk config.
     let (org_id, api_base_url, api_key_public, api_key_private) = match load_credentials_from_env_vars()? {
         Some(creds) => creds,
         None => load_credentials_from_config().await?,
