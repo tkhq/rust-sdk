@@ -14,13 +14,14 @@ use turnkey_client::generated::{CreateTvcDeploymentIntent, ValidateTvcImageReque
 #[command(about, long_about = None)]
 pub struct Args {
     /// Path to the deployment configuration file (JSON).
+    #[arg(short = 'c', long, value_name = "PATH", env = "TVC_DEPLOY_CONFIG")]
     pub config_file: PathBuf,
 
     /// Path to an unencrypted pivot container pull secret file.
     ///
     /// The content will be encrypted based on the active org's API environment and
     /// override `pivotContainerEncryptedPullSecret` from the config file.
-    #[arg(long, alias = "pull-secret", value_name = "PATH")]
+    #[arg(long, value_name = "PATH", env = "TVC_PIVOT_PULL_SECRET")]
     pub pivot_pull_secret: Option<PathBuf>,
 }
 

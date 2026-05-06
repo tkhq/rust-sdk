@@ -7,7 +7,7 @@ use clap::Args as ClapArgs;
 #[command(about, long_about = None)]
 pub struct Args {
     /// Filter by app name.
-    #[arg(short, long)]
+    #[arg(short, long, env = "TVC_APP_NAME")]
     pub name: Option<String>,
 }
 

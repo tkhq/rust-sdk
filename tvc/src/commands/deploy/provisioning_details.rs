@@ -23,11 +23,11 @@ pub struct Args {
     pub deploy_id: String,
 
     /// Never use for sensitive applications! Skip attestation and approval verification.
-    #[arg(long)]
+    #[arg(long, env = "TVC_DANGEROUS_SKIP_VERIFICATION")]
     pub dangerous_skip_verification: bool,
 
     /// Write provisioning details to a local json bundle usable during re-encryption.
-    #[arg(long, value_name = "PATH")]
+    #[arg(long, value_name = "PATH", env = "TVC_PROVISION_BUNDLE_OUT")]
     pub provision_bundle_out: Option<PathBuf>,
 }
 

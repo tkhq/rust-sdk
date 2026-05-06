@@ -11,7 +11,7 @@ use std::path::PathBuf;
 #[command(about, long_about = None)]
 pub struct Args {
     /// Output file path.
-    #[arg(short, long, default_value = "quorum_key.json")]
+    #[arg(short, long, value_name = "PATH", default_value = "quorum_key.json", env = "TVC_QUORUM_KEY_CONFIG_OUT")]
     pub output: PathBuf,
 }
 
@@ -40,7 +40,7 @@ pub async fn run(args: Args) -> Result<()> {
     println!("  threshold : >= 2 and <= shares");
     println!();
     println!("Edit the file to fill in your values, then run:");
-    println!("  tvc keys generate-quorum-key {}", args.output.display());
+    println!("  tvc keys generate-quorum-key --config-file {}", args.output.display());
 
     Ok(())
 }

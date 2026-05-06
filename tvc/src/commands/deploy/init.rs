@@ -12,7 +12,7 @@ use std::path::PathBuf;
 #[command(about, long_about = None)]
 pub struct Args {
     /// Output file path.
-    #[arg(short, long)]
+    #[arg(short, long, value_name = "PATH", env = "TVC_DEPLOY_CONFIG_OUT")]
     pub output: Option<PathBuf>,
 }
 
@@ -44,7 +44,7 @@ pub async fn run(args: Args) -> Result<()> {
     println!("Created deployment config template: {}", output.display());
     println!();
     println!("Edit the file to fill in your values, then run:");
-    println!("  tvc deploy create {}", output.display());
+    println!("  tvc deploy create --config-file {}", output.display());
 
     Ok(())
 }

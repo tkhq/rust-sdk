@@ -14,6 +14,7 @@ use turnkey_client::generated::{CreateTvcAppIntent, TvcOperatorParams, TvcOperat
 #[command(about, long_about = None)]
 pub struct Args {
     /// Path to the app configuration file (JSON).
+    #[arg(short = 'c', long, value_name = "PATH", env = "TVC_APP_CONFIG")]
     pub config_file: PathBuf,
 }
 
