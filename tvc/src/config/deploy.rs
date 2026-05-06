@@ -14,6 +14,9 @@ pub struct DeployConfig {
     #[serde(default)]
     pub pivot_args: Vec<String>,
     pub expected_pivot_digest: String,
+    /// Deploy in debug mode. A deployment with debug enabled is permanently
+    /// marked insecure: enclave logs are forwarded to the host and attestation
+    /// PCRs are zeroed, so anything the enclave processed may have leaked.
     #[serde(default)]
     pub debug_mode: Option<bool>,
     #[serde(default)]

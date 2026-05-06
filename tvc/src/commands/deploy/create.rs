@@ -23,6 +23,18 @@ pub struct Args {
     /// override `pivotContainerEncryptedPullSecret` from the config file.
     #[arg(long, value_name = "PATH", env = "TVC_PIVOT_PULL_SECRET")]
     pub pivot_pull_secret: Option<PathBuf>,
+
+    /// Deploy insecurely in debug mode, which forwards secure enclave logs to the host and zeroes
+    /// attestation PCRs. This defeats the purpose of a secure enclave, so it should only
+    /// be used to debug non-prod applications.
+    ///
+    /// WARNING: This compromises the quorum key for the app, so a single insecure deployment
+    /// will permanently mark the app and all subsequent deployments as insecure and cannot be
+    /// undone. You will need to create a new secure app deployment.
+    ///
+    /// Overrides `debugMode` in the config file when set.
+    #[arg(long)]
+    pub dangerous_deploy_insecure: bool,
 }
 
 fn build_validate_image_request(
@@ -72,12 +84,18 @@ pub async fn run(args: Args) -> Result<()> {
     let config_content = std::fs::read_to_string(&args.config_file)
         .with_context(|| format!("failed to read config file: {}", args.config_file.display()))?;
 
-    let deploy_config: DeployConfig = serde_json::from_str(&config_content).with_context(|| {
+    let mut deploy_config: DeployConfig = serde_json::from_str(&config_content).with_context(|| {
         format!(
             "failed to parse config file: {}",
             args.config_file.display()
         )
     })?;
+
+    // CLI flag is an asymmetric override: it can only upgrade the config to
+    // debug=true, never downgrade.
+    if args.dangerous_deploy_insecure {
+        deploy_config.debug_mode = Some(true);
+    }
 
     // Validate config
     if deploy_config.has_placeholders() {
@@ -173,7 +191,8 @@ pub async fn run(args: Args) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::pin_image_url;
+    use super::{build_create_intent, pin_image_url};
+    use crate::config::deploy::DeployConfig;
 
     #[test]
     fn pin_image_url_appends_digest_to_tagged_reference() {
@@ -189,5 +208,54 @@ mod tests {
         let pinned = pin_image_url(image_url, "sha256:abc123");
 
         assert_eq!(pinned, "ghcr.io/team/app@sha256:abc123");
+    }
+
+    #[test]
+    fn debug_mode_flag_upgrades_config_when_false() {
+        let mut cfg = DeployConfig::template(None);
+        cfg.debug_mode = Some(false);
+
+        let cli_flag = true;
+        if cli_flag {
+            cfg.debug_mode = Some(true);
+        }
+
+        assert_eq!(cfg.debug_mode, Some(true));
+    }
+
+    #[test]
+    fn debug_mode_flag_absent_preserves_config_true() {
+        let mut cfg = DeployConfig::template(None);
+        cfg.debug_mode = Some(true);
+
+        let cli_flag = false;
+        if cli_flag {
+            cfg.debug_mode = Some(true);
+        }
+
+        assert_eq!(cfg.debug_mode, Some(true));
+    }
+
+    #[test]
+    fn build_create_intent_propagates_debug_mode() {
+        let mut cfg = DeployConfig::template(None);
+        cfg.debug_mode = Some(true);
+
+        let intent = build_create_intent(&cfg, "img@sha256:abc".to_string(), None);
+
+        assert_eq!(intent.debug_mode, Some(true));
+    }
+
+    #[test]
+    fn debug_mode_serializes_camel_case() {
+        let mut cfg = DeployConfig::template(None);
+        cfg.debug_mode = Some(true);
+
+        let json = serde_json::to_string(&cfg).unwrap();
+
+        assert!(
+            json.contains("\"debugMode\":true"),
+            "expected camelCase debugMode in {json}"
+        );
     }
 }
