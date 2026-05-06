@@ -23,6 +23,38 @@ Special rules:
 
 `tvc deploy create` accepts `--config-file` *or* the equivalent flags (`--app-id`, `--qos-version`, `--pivot-image-url`, `--pivot-path`, `--expected-pivot-digest`, plus optional fields). `tvc app create` and `tvc keys generate-quorum-key` require `--config-file` because their configs include nested arrays.
 
+## Authentication
+
+For **local use**, run `tvc login` once and the CLI will read `~/.config/turnkey/` thereafter.
+
+For **programmatic use** (GitHub Actions, etc.), set these four env vars to authenticate directly without touching disk:
+
+| Env | Source |
+|---|---|
+| `TVC_ORG_ID` | your Turnkey organization UUID |
+| `TVC_API_BASE_URL` | e.g. `https://api.turnkey.com` |
+| `TVC_API_KEY_PUBLIC` | hex-encoded compressed P256 public key |
+| `TVC_API_KEY_PRIVATE` | hex-encoded P256 private key |
+
+When all four are present, every command authenticates directly from env. Setting some but not all is rejected.
+
+The typical flow: run `tvc login` once locally to generate an API key, register the public key in the Turnkey dashboard, then store the values in your CI's secret store (e.g. `TVC_API_KEY_PRIVATE` as a GitHub Secret, the rest as GitHub Variables).
+
+### Example: CI deploy with no config file
+
+```bash
+TVC_ORG_ID=...                      \
+TVC_API_BASE_URL=...                \
+TVC_API_KEY_PUBLIC=...              \
+TVC_API_KEY_PRIVATE=...             \
+TVC_APP_ID=...                      \
+TVC_QOS_VERSION=...                 \
+TVC_PIVOT_PATH=...                  \
+TVC_PIVOT_IMAGE_URL=...             \
+TVC_EXPECTED_PIVOT_DIGEST=...       \
+  tvc deploy create
+```
+
 ## Usage
 
 ### Create an App

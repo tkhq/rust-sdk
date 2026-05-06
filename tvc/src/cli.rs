@@ -13,7 +13,13 @@ Configuration values are resolved in this order, highest priority first:
   4. Built-in default
 
 Special rules:
-  --pivot-args replaces the config file's list entirely (does not append)";
+  --pivot-args replaces the config file's list entirely (does not append)
+
+Authentication:
+  Local: run `tvc login` once; commands then read ~/.config/turnkey/.
+  CI:    set TVC_ORG_ID, TVC_API_BASE_URL, TVC_API_KEY_PUBLIC, and
+         TVC_API_KEY_PRIVATE env vars to authenticate without files.
+         Setting some but not all four will fail to avoid unexpected operations";
 
 /// CLI command parsing and dispatch.
 #[derive(Debug, Parser)]
