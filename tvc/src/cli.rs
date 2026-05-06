@@ -6,6 +6,7 @@ use clap::{Parser, Subcommand};
 const LONG_ABOUT: &str = "\
 CLI for building with Turnkey Verifiable Cloud.
 
+Some commands accept multiple configuration input types.
 Configuration values are resolved in this order, highest priority first:
   1. Command-line flag (e.g. --app-id)
   2. Environment variable (e.g. TVC_APP_ID)
@@ -19,7 +20,7 @@ Authentication:
   Local: run `tvc login` once; commands then read ~/.config/turnkey/.
   CI:    set TVC_ORG_ID, TVC_API_BASE_URL, TVC_API_KEY_PUBLIC, and
          TVC_API_KEY_PRIVATE env vars to authenticate without files.
-         Setting some but not all four will fail to avoid unexpected operations";
+         Setting some but not all four will error.";
 
 /// CLI command parsing and dispatch.
 #[derive(Debug, Parser)]

@@ -260,21 +260,137 @@ pub async fn run(args: Args) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::pin_image_url;
+    use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
 
     #[test]
     fn pin_image_url_appends_digest_to_tagged_reference() {
-        let image_url = "ghcr.io/team/app:latest";
-        let pinned = pin_image_url(image_url, "sha256:abc123");
-
+        let pinned = pin_image_url("ghcr.io/team/app:latest", "sha256:abc123");
         assert_eq!(pinned, "ghcr.io/team/app:latest@sha256:abc123");
     }
 
     #[test]
     fn pin_image_url_appends_digest_to_untagged_reference() {
-        let image_url = "ghcr.io/team/app";
-        let pinned = pin_image_url(image_url, "sha256:abc123");
-
+        let pinned = pin_image_url("ghcr.io/team/app", "sha256:abc123");
         assert_eq!(pinned, "ghcr.io/team/app@sha256:abc123");
+    }
+
+    fn empty_args() -> Args {
+        Args {
+            config_file: None,
+            app_id: None,
+            qos_version: None,
+            pivot_image_url: None,
+            expected_pivot_digest: None,
+            pivot_path: None,
+            pivot_args: vec![],
+            debug_mode: false,
+            health_check_port: None,
+            public_ingress_port: None,
+            pivot_pull_secret: None,
+        }
+    }
+
+    fn all_required_flags() -> Args {
+        Args {
+            app_id: Some("flag-app-id".into()),
+            qos_version: Some("flag-qos".into()),
+            pivot_image_url: Some("flag-image".into()),
+            expected_pivot_digest: Some("flag-digest".into()),
+            pivot_path: Some("flag-path".into()),
+            ..empty_args()
+        }
+    }
+
+    fn file_config() -> DeployConfig {
+        let mut c = DeployConfig::template(None);
+        c.app_id = "file-app-id".into();
+        c.qos_version = "file-qos".into();
+        c.pivot_container_image_url = "file-image".into();
+        c.pivot_path = "file-path".into();
+        c.pivot_args = vec!["a".into(), "b".into()];
+        c.expected_pivot_digest = "file-digest".into();
+        c.debug_mode = Some(false);
+        c.pivot_container_encrypted_pull_secret = None;
+        c.health_check_port = 4000;
+        c.public_ingress_port = 5000;
+        c
+    }
+
+    fn write_config(config: &DeployConfig) -> NamedTempFile {
+        let mut f = NamedTempFile::new().unwrap();
+        f.write_all(serde_json::to_string(config).unwrap().as_bytes())
+            .unwrap();
+        f
+    }
+
+    #[test]
+    fn flag_overrides_file_value() {
+        let file = write_config(&file_config());
+        let args = Args {
+            config_file: Some(file.path().to_path_buf()),
+            app_id: Some("flag-app-id".into()),
+            ..empty_args()
+        };
+        let resolved = resolve_deploy_config(&args).unwrap();
+        assert_eq!(resolved.app_id, "flag-app-id");
+        // Untouched fields keep their file values.
+        assert_eq!(resolved.qos_version, "file-qos");
+        assert_eq!(resolved.health_check_port, 4000);
+    }
+
+    #[test]
+    fn file_value_used_when_flag_absent() {
+        let file = write_config(&file_config());
+        let args = Args {
+            config_file: Some(file.path().to_path_buf()),
+            ..empty_args()
+        };
+        let resolved = resolve_deploy_config(&args).unwrap();
+        assert_eq!(resolved.app_id, "file-app-id");
+        assert_eq!(resolved.qos_version, "file-qos");
+        assert_eq!(resolved.health_check_port, 4000);
+    }
+
+    #[test]
+    fn no_file_uses_flag_only_with_template_defaults() {
+        let resolved = resolve_deploy_config(&all_required_flags()).unwrap();
+        // Required fields come from flags.
+        assert_eq!(resolved.app_id, "flag-app-id");
+        assert_eq!(resolved.qos_version, "flag-qos");
+        assert_eq!(resolved.pivot_container_image_url, "flag-image");
+        assert_eq!(resolved.pivot_path, "flag-path");
+        assert_eq!(resolved.expected_pivot_digest, "flag-digest");
+        // Optional fields fall back to template defaults.
+        assert_eq!(resolved.health_check_port, 3000);
+        assert_eq!(resolved.public_ingress_port, 3000);
+        assert_eq!(resolved.debug_mode, Some(false));
+        assert!(resolved.pivot_args.is_empty());
+        // Pull-secret placeholder cleared in flag-only mode.
+        assert_eq!(resolved.pivot_container_encrypted_pull_secret, None);
+    }
+
+    #[test]
+    fn no_file_no_required_flags_bails_naming_each_flag() {
+        let err = resolve_deploy_config(&empty_args()).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("--app-id"), "{msg}");
+        assert!(msg.contains("--qos-version"), "{msg}");
+        assert!(msg.contains("--pivot-image-url"), "{msg}");
+        assert!(msg.contains("--pivot-path"), "{msg}");
+        assert!(msg.contains("--expected-pivot-digest"), "{msg}");
+    }
+
+    #[test]
+    fn pivot_args_flag_replaces_file_list() {
+        let file = write_config(&file_config()); // file has ["a", "b"]
+        let args = Args {
+            config_file: Some(file.path().to_path_buf()),
+            pivot_args: vec!["c".into()],
+            ..empty_args()
+        };
+        let resolved = resolve_deploy_config(&args).unwrap();
+        assert_eq!(resolved.pivot_args, vec!["c"]);
     }
 }
