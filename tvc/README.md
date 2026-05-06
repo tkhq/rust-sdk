@@ -8,6 +8,21 @@ CLI for [Turnkey Verifiable Cloud](https://turnkey.com) - see [this guide](https
 cargo install tvc
 ```
 
+## Configuration precedence
+
+Configuration values are resolved in this order, highest priority first:
+
+1. Command-line flag (e.g. `--app-id`)
+2. Environment variable (e.g. `TVC_APP_ID`)
+3. Config file value (`--config-file`)
+4. Built-in default
+
+Special rules:
+
+- `--pivot-args` replaces the config file's list entirely (does not append).
+
+`tvc deploy create` accepts `--config-file` *or* the equivalent flags (`--app-id`, `--qos-version`, `--pivot-image-url`, `--pivot-path`, `--expected-pivot-digest`, plus optional fields). `tvc app create` and `tvc keys generate-quorum-key` require `--config-file` because their configs include nested arrays.
+
 ## Usage
 
 ### Create an App

@@ -1,21 +1,58 @@
-//! Deploy create command - creates a deployment from a config file.
+//! Deploy create command - creates a deployment from a config file or CLI flags.
 
 use crate::client::build_client;
 use crate::config::deploy::DeployConfig;
 use crate::pull_secret::encrypt_pivot_pull_secret;
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use clap::Args as ClapArgs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::{CreateTvcDeploymentIntent, ValidateTvcImageRequest};
 
-/// Create a new TVC deployment from a config file.
+/// Create a new TVC deployment from a config file or CLI flags.
 #[derive(Debug, ClapArgs)]
 #[command(about, long_about = None)]
 pub struct Args {
     /// Path to the deployment configuration file (JSON).
+    /// Optional when all required fields are provided via flags or env.
     #[arg(short = 'c', long, value_name = "PATH", env = "TVC_DEPLOY_CONFIG")]
-    pub config_file: PathBuf,
+    pub config_file: Option<PathBuf>,
+
+    /// Override the appId field.
+    #[arg(long, env = "TVC_APP_ID")]
+    pub app_id: Option<String>,
+
+    /// Override the qosVersion field.
+    #[arg(long, env = "TVC_QOS_VERSION")]
+    pub qos_version: Option<String>,
+
+    /// Override the pivotContainerImageUrl field.
+    #[arg(long, env = "TVC_PIVOT_IMAGE_URL")]
+    pub pivot_image_url: Option<String>,
+
+    /// Override the expectedPivotDigest field.
+    #[arg(long, env = "TVC_EXPECTED_PIVOT_DIGEST")]
+    pub expected_pivot_digest: Option<String>,
+
+    /// Override the pivotPath field.
+    #[arg(long, env = "TVC_PIVOT_PATH")]
+    pub pivot_path: Option<String>,
+
+    /// Override pivotArgs (replaces the file's list entirely; not appended).
+    #[arg(long, value_name = "ARG", value_delimiter = ',', env = "TVC_PIVOT_ARGS")]
+    pub pivot_args: Vec<String>,
+
+    /// Enable debug mode. One-way: cannot disable a `true` set earlier via the file.
+    #[arg(long, env = "TVC_DEBUG_MODE")]
+    pub debug_mode: bool,
+
+    /// Override the healthCheckPort field.
+    #[arg(long, env = "TVC_HEALTH_CHECK_PORT")]
+    pub health_check_port: Option<u16>,
+
+    /// Override the publicIngressPort field.
+    #[arg(long, env = "TVC_PUBLIC_INGRESS_PORT")]
+    pub public_ingress_port: Option<u16>,
 
     /// Path to an unencrypted pivot container pull secret file.
     ///
@@ -66,27 +103,75 @@ fn pin_image_url(image_url: &str, resolved_digest: &str) -> String {
     }
 }
 
-/// Run the deploy create command.
-pub async fn run(args: Args) -> Result<()> {
-    // Read and parse config file
-    let config_content = std::fs::read_to_string(&args.config_file)
-        .with_context(|| format!("failed to read config file: {}", args.config_file.display()))?;
+fn apply_overrides(config: &mut DeployConfig, args: &Args) {
+    if let Some(v) = &args.app_id {
+        config.app_id = v.clone();
+    }
+    if let Some(v) = &args.qos_version {
+        config.qos_version = v.clone();
+    }
+    if let Some(v) = &args.pivot_image_url {
+        config.pivot_container_image_url = v.clone();
+    }
+    if let Some(v) = &args.expected_pivot_digest {
+        config.expected_pivot_digest = v.clone();
+    }
+    if let Some(v) = &args.pivot_path {
+        config.pivot_path = v.clone();
+    }
+    if !args.pivot_args.is_empty() {
+        config.pivot_args = args.pivot_args.clone();
+    }
+    // One-way: only ever flips false -> true.
+    if args.debug_mode {
+        config.debug_mode = Some(true);
+    }
+    if let Some(v) = args.health_check_port {
+        config.health_check_port = v;
+    }
+    if let Some(v) = args.public_ingress_port {
+        config.public_ingress_port = v;
+    }
+}
 
-    let deploy_config: DeployConfig = serde_json::from_str(&config_content).with_context(|| {
-        format!(
-            "failed to parse config file: {}",
-            args.config_file.display()
-        )
-    })?;
+fn resolve_deploy_config(args: &Args) -> Result<DeployConfig> {
+    let mut config = match &args.config_file {
+        Some(path) => {
+            let content = std::fs::read_to_string(path)
+                .with_context(|| format!("failed to read config file: {}", path.display()))?;
+            serde_json::from_str(&content)
+                .with_context(|| format!("failed to parse config file: {}", path.display()))?
+        }
+        None => {
+            let mut t = DeployConfig::template(None);
+            // Strip the template's "<REMOVE_ME...>" hint so flag-only mode
+            // doesn't ship it to the API for public images.
+            t.pivot_container_encrypted_pull_secret = None;
+            t
+        }
+    };
 
-    // Validate config
-    if deploy_config.has_placeholders() {
-        anyhow::bail!(
-            "Config file contains placeholder values (<FILL_IN_...>). \
-             Please edit {} and fill in all required values.",
-            args.config_file.display()
+    apply_overrides(&mut config, args);
+
+    let missing = config.missing_required_fields();
+    if !missing.is_empty() {
+        let suggestion = if args.config_file.is_some() {
+            "Edit the config file or override via flag/TVC_* env."
+        } else {
+            "Provide via flag, TVC_* env, or --config-file."
+        };
+        bail!(
+            "missing required values: {}. {suggestion}",
+            missing.join(", ")
         );
     }
+
+    Ok(config)
+}
+
+/// Run the deploy create command.
+pub async fn run(args: Args) -> Result<()> {
+    let deploy_config = resolve_deploy_config(&args)?;
 
     println!("Creating deployment for app '{}'...", deploy_config.app_id);
 
@@ -100,7 +185,7 @@ pub async fn run(args: Args) -> Result<()> {
             })?;
 
             if pull_secret.trim().is_empty() {
-                anyhow::bail!(
+                bail!(
                     "pivot pull secret file is empty after trimming whitespace: {}",
                     path.display()
                 );
@@ -156,7 +241,9 @@ pub async fn run(args: Args) -> Result<()> {
     println!();
     println!("Deployment ID: {}", result.result.deployment_id);
     println!("App ID: {}", deploy_config.app_id);
-    println!("Config: {}", args.config_file.display());
+    if let Some(path) = &args.config_file {
+        println!("Config: {}", path.display());
+    }
     println!();
     println!("Next steps:");
     println!(
