@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+pub const MIN_SHARE_SET_THRESHOLD: u32 = 2;
+
 /// App configuration loaded from JSON file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -14,6 +16,10 @@ pub struct AppConfig {
     pub manifest_set_id: Option<String>,
     #[serde(default)]
     pub manifest_set_params: Option<OperatorSetParams>,
+    #[serde(default)]
+    pub share_set_id: Option<String>,
+    #[serde(default)]
+    pub share_set_params: Option<OperatorSetParams>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -63,6 +69,8 @@ impl AppConfig {
                 }],
                 existing_operator_ids: vec![],
             }),
+            share_set_id: None,
+            share_set_params: None,
         }
     }
 
@@ -91,5 +99,126 @@ impl AppConfig {
                         .iter()
                         .any(|o| o.public_key.starts_with("<FILL_IN"))
             })
+            || self.share_set_params.as_ref().is_some_and(|p| {
+                p.name.starts_with("<FILL_IN")
+                    || p.new_operators
+                        .iter()
+                        .any(|o| o.public_key.starts_with("<FILL_IN"))
+            })
+    }
+
+    pub fn validate(&self) -> anyhow::Result<()> {
+        if self.has_placeholders() {
+            anyhow::bail!("config contains placeholder values (<FILL_IN_...)");
+        }
+
+        if self.manifest_set_id.is_some() && self.manifest_set_params.is_some() {
+            anyhow::bail!("Cannot specify both manifestSetId and manifestSetParams");
+        }
+        if self.manifest_set_id.is_none() && self.manifest_set_params.is_none() {
+            anyhow::bail!("Must specify either manifestSetId or manifestSetParams");
+        }
+        if self.share_set_id.is_some() && self.share_set_params.is_some() {
+            anyhow::bail!("Cannot specify both shareSetId and shareSetParams");
+        }
+        // It is fine if both share set id and params are none since we support a default dev share set
+
+        if let Some(params) = &self.share_set_params {
+            if params.threshold < MIN_SHARE_SET_THRESHOLD {
+                anyhow::bail!(
+                    "shareSetParams.threshold must be >= {MIN_SHARE_SET_THRESHOLD}, got {}",
+                    params.threshold
+                );
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn effective_share_set_params(&self) -> Option<OperatorSetParams> {
+        if self.share_set_id.is_some() {
+            None
+        } else {
+            Some(
+                self.share_set_params
+                    .clone()
+                    .unwrap_or_else(Self::share_set_params),
+            )
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn valid_config_json() -> serde_json::Value {
+        json!({
+            "name": "test-app",
+            "quorumPublicKey": KNOWN_QUORUM_KEY,
+            "manifestSetParams": {
+                "name": "manifest-set",
+                "threshold": 1,
+                "newOperators": [{
+                    "name": "operator-1",
+                    "publicKey": "operator-public-key"
+                }]
+            }
+        })
+    }
+
+    #[test]
+    fn validate_accepts_omitted_share_set_params() {
+        let config: AppConfig = serde_json::from_value(valid_config_json()).unwrap();
+
+        config.validate().unwrap();
+        assert_eq!(config.effective_share_set_params().unwrap().threshold, 2);
+    }
+
+    #[test]
+    fn validate_accepts_share_set_id() {
+        let mut json = valid_config_json();
+        json["shareSetId"] = json!("share-set-id");
+        let config: AppConfig = serde_json::from_value(json).unwrap();
+
+        config.validate().unwrap();
+        assert_eq!(config.share_set_id.as_deref(), Some("share-set-id"));
+        assert!(config.effective_share_set_params().is_none());
+    }
+
+    #[test]
+    fn validate_rejects_share_set_id_and_params() {
+        let mut json = valid_config_json();
+        json["shareSetId"] = json!("share-set-id");
+        json["shareSetParams"] = json!({
+            "name": "custom-share-set",
+            "threshold": 2,
+            "newOperators": []
+        });
+        let config: AppConfig = serde_json::from_value(json).unwrap();
+
+        assert!(config
+            .validate()
+            .unwrap_err()
+            .to_string()
+            .contains("Cannot specify both shareSetId and shareSetParams"));
+    }
+
+    #[test]
+    fn validate_rejects_low_share_set_threshold() {
+        let mut json = valid_config_json();
+        json["shareSetParams"] = json!({
+            "name": "custom-share-set",
+            "threshold": 1,
+            "newOperators": []
+        });
+        let config: AppConfig = serde_json::from_value(json).unwrap();
+
+        assert!(config
+            .validate()
+            .unwrap_err()
+            .to_string()
+            .contains("shareSetParams.threshold must be"));
     }
 }
