@@ -63,8 +63,12 @@ pub async fn run(args: Args) -> Result<()> {
 
     let metadata_json =
         serde_json::to_vec_pretty(&metadata).context("failed to serialize quorum key metadata")?;
-    fs::write(&args.quorum_key_metadata_out, &metadata_json)
-        .with_context(|| format!("failed to write file: {}", args.quorum_key_metadata_out.display()))?;
+    fs::write(&args.quorum_key_metadata_out, &metadata_json).with_context(|| {
+        format!(
+            "failed to write file: {}",
+            args.quorum_key_metadata_out.display()
+        )
+    })?;
 
     println!(
         "Quorum key metadata written to: {}",

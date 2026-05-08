@@ -1,7 +1,7 @@
 //! App create command - creates an app from a config file.
 
 use crate::client::build_client;
-use crate::config::app::AppConfig;
+use crate::config::app::{AppConfig, OperatorSetParams};
 use crate::config::turnkey;
 use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
@@ -31,22 +31,9 @@ pub async fn run(args: Args) -> Result<()> {
         )
     })?;
 
-    // Validate config
-    if app_config.has_placeholders() {
-        anyhow::bail!(
-            "Config file contains placeholder values (<FILL_IN_...>). \
-             Please edit {} and fill in all required values.",
-            args.config_file.display()
-        );
-    }
-
-    // Validate operator set config
-    if app_config.manifest_set_id.is_some() && app_config.manifest_set_params.is_some() {
-        anyhow::bail!("Cannot specify both manifestSetId and manifestSetParams");
-    }
-    if app_config.manifest_set_id.is_none() && app_config.manifest_set_params.is_none() {
-        anyhow::bail!("Must specify either manifestSetId or manifestSetParams");
-    }
+    app_config
+        .validate()
+        .with_context(|| format!("invalid config file: {}", args.config_file.display()))?;
 
     println!("Creating app '{}'...", app_config.name);
 
@@ -54,44 +41,7 @@ pub async fn run(args: Args) -> Result<()> {
     let auth = build_client().await?;
 
     // Convert config to API intent
-    let intent = CreateTvcAppIntent {
-        name: app_config.name.clone(),
-        quorum_public_key: app_config.quorum_public_key.clone(),
-        manifest_set_id: app_config.manifest_set_id.clone(),
-        manifest_set_params: app_config.manifest_set_params.as_ref().map(|p| {
-            TvcOperatorSetParams {
-                name: p.name.clone(),
-                threshold: p.threshold,
-                new_operators: p
-                    .new_operators
-                    .iter()
-                    .map(|o| TvcOperatorParams {
-                        name: o.name.clone(),
-                        public_key: o.public_key.clone(),
-                    })
-                    .collect(),
-                existing_operator_ids: p.existing_operator_ids.clone(),
-            }
-        }),
-        share_set_id: None,
-        share_set_params: {
-            let p = AppConfig::share_set_params();
-            Some(TvcOperatorSetParams {
-                name: p.name,
-                threshold: p.threshold,
-                new_operators: p
-                    .new_operators
-                    .into_iter()
-                    .map(|o| TvcOperatorParams {
-                        name: o.name,
-                        public_key: o.public_key,
-                    })
-                    .collect(),
-                existing_operator_ids: p.existing_operator_ids,
-            })
-        },
-        enable_egress: app_config.external_connectivity,
-    };
+    let intent = build_create_tvc_app_intent(&app_config);
 
     // Get timestamp
     let timestamp_ms = SystemTime::now()
@@ -131,4 +81,110 @@ pub async fn run(args: Args) -> Result<()> {
     );
 
     Ok(())
+}
+
+fn build_create_tvc_app_intent(app_config: &AppConfig) -> CreateTvcAppIntent {
+    let share_set_params = app_config.effective_share_set_params();
+
+    CreateTvcAppIntent {
+        name: app_config.name.clone(),
+        quorum_public_key: app_config.quorum_public_key.clone(),
+        manifest_set_id: app_config.manifest_set_id.clone(),
+        manifest_set_params: app_config
+            .manifest_set_params
+            .as_ref()
+            .map(to_tvc_operator_set_params),
+        share_set_id: app_config.share_set_id.clone(),
+        share_set_params: share_set_params.as_ref().map(to_tvc_operator_set_params),
+        enable_egress: app_config.external_connectivity,
+    }
+}
+
+fn to_tvc_operator_set_params(params: &OperatorSetParams) -> TvcOperatorSetParams {
+    TvcOperatorSetParams {
+        name: params.name.clone(),
+        threshold: params.threshold,
+        new_operators: params
+            .new_operators
+            .iter()
+            .map(|o| TvcOperatorParams {
+                name: o.name.clone(),
+                public_key: o.public_key.clone(),
+            })
+            .collect(),
+        existing_operator_ids: params.existing_operator_ids.clone(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::app::{OperatorParams, KNOWN_QUORUM_KEY};
+
+    fn valid_config() -> AppConfig {
+        AppConfig {
+            name: "test-app".to_string(),
+            quorum_public_key: KNOWN_QUORUM_KEY.to_string(),
+            external_connectivity: Some(false),
+            manifest_set_id: None,
+            manifest_set_params: Some(OperatorSetParams {
+                name: "manifest-set".to_string(),
+                threshold: 1,
+                new_operators: vec![OperatorParams {
+                    name: "manifest-operator".to_string(),
+                    public_key: "manifest-public-key".to_string(),
+                }],
+                existing_operator_ids: vec![],
+            }),
+            share_set_id: None,
+            share_set_params: None,
+        }
+    }
+
+    #[test]
+    fn build_intent_uses_default_share_set_params_when_omitted() {
+        let intent = build_create_tvc_app_intent(&valid_config());
+        let share_set_params = intent.share_set_params.unwrap();
+
+        assert_eq!(share_set_params.name, "dev-known-share-set");
+        assert_eq!(share_set_params.threshold, 2);
+        assert_eq!(share_set_params.new_operators.len(), 2);
+        assert!(share_set_params.existing_operator_ids.is_empty());
+    }
+
+    #[test]
+    fn build_intent_uses_custom_share_set_params_when_configured() {
+        let mut config = valid_config();
+        config.share_set_params = Some(OperatorSetParams {
+            name: "custom-share-set".to_string(),
+            threshold: 2,
+            new_operators: vec![OperatorParams {
+                name: "share-operator".to_string(),
+                public_key: "share-public-key".to_string(),
+            }],
+            existing_operator_ids: vec!["existing-operator-id".to_string()],
+        });
+
+        let intent = build_create_tvc_app_intent(&config);
+        let share_set_params = intent.share_set_params.unwrap();
+
+        assert_eq!(share_set_params.name, "custom-share-set");
+        assert_eq!(share_set_params.threshold, 2);
+        assert_eq!(share_set_params.new_operators[0].name, "share-operator");
+        assert_eq!(
+            share_set_params.existing_operator_ids,
+            vec!["existing-operator-id".to_string()]
+        );
+    }
+
+    #[test]
+    fn build_intent_uses_share_set_id_when_configured() {
+        let mut config = valid_config();
+        config.share_set_id = Some("share-set-id".to_string());
+
+        let intent = build_create_tvc_app_intent(&config);
+
+        assert_eq!(intent.share_set_id.as_deref(), Some("share-set-id"));
+        assert!(intent.share_set_params.is_none());
+    }
 }

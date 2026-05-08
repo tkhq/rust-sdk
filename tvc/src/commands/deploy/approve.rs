@@ -1,6 +1,5 @@
 //! Approve deploy command - cryptographically approve a QOS manifest.
 
-use crate::config::app::KNOWN_SHARE_SET_KEYS;
 use crate::config::turnkey::Config;
 use crate::operator_key::load_operator_pair;
 use crate::util::{read_file_to_string, write_file};
@@ -308,37 +307,14 @@ fn review_manifest_set(set: &ManifestSet) -> anyhow::Result<()> {
 }
 
 fn review_share_set(set: &ShareSet) -> anyhow::Result<()> {
-    // Verify the share set matches the known keys (no interactive prompt)
-    let expected_keys: std::collections::HashSet<Vec<u8>> = KNOWN_SHARE_SET_KEYS
-        .iter()
-        .map(|(_, key)| hex::decode(key).expect("known key should be valid hex"))
-        .collect();
-
-    let actual_keys: std::collections::HashSet<Vec<u8>> =
-        set.members.iter().map(|m| m.pub_key.clone()).collect();
-
-    if expected_keys != actual_keys {
-        bail!(
-            "Share set public keys do not match known keys.\n\
-             Expected keys defined in KNOWN_SHARE_SET_KEYS (config/app.rs).\n\
-             Found: {:?}",
-            set.members
-                .iter()
-                .map(|m| hex::encode(&m.pub_key))
-                .collect::<Vec<_>>()
-        );
-    }
-
-    if set.threshold != 2 {
-        bail!("Share set threshold must be 2, found: {}", set.threshold);
-    }
-
     println!("SHARE SET");
     println!("─────────────────────────────────────");
-    println!("  ✓ Keys and threshold match dev known share set operators");
+    println!("  Threshold: {} of {}", set.threshold, set.members.len());
+    println!("  Members:");
+    print_quorum_members(&set.members);
     println!();
 
-    Ok(())
+    confirm("Approve share set?")
 }
 
 async fn read_manifest_from_path(path: &Path) -> anyhow::Result<Manifest> {
@@ -374,7 +350,6 @@ async fn fetch_manifest_from_deploy(deploy_id: &str) -> anyhow::Result<(Manifest
         .manifest
         .ok_or_else(|| anyhow!("manifest not found in deployment"))?;
 
-    // Deserialize manifest from bytes
     let manifest: Manifest = serde_json::from_slice(&tvc_manifest.manifest)
         .context("failed to parse manifest from deployment")?;
 
