@@ -9,6 +9,41 @@ use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::{CreateTvcDeploymentIntent, ValidateTvcImageRequest};
 
+pub(crate) const LONG_ABOUT: &str = "\
+Create a new TVC deployment.
+
+Use --config-file, flags, env vars, or a mix of them. Command-line flags
+override env vars; env vars override config file values. If --config-file is
+omitted, all required deployment fields must be provided by flags or env vars.
+
+Required deployment fields:
+  --app-id / TVC_APP_ID
+  --qos-version / TVC_QOS_VERSION
+  --pivot-image-url / TVC_PIVOT_IMAGE_URL
+  --pivot-path / TVC_PIVOT_PATH
+  --expected-pivot-digest / TVC_EXPECTED_PIVOT_DIGEST
+
+Special rules:
+  --pivot-args replaces the config file's list entirely (does not append).
+  --debug-mode can enable debug mode but cannot disable a true config value.
+  --pivot-pull-secret reads an unencrypted pull secret file, encrypts it for the
+  active org's API environment, and overrides the encrypted secret in the config.
+
+Examples:
+  tvc deploy create --config-file deploy.json
+
+  # OR
+
+  TVC_ORG_ID=... \\
+  TVC_API_KEY_PUBLIC=... \\
+  TVC_API_KEY_PRIVATE=... \\
+  TVC_APP_ID=... \\
+  TVC_QOS_VERSION=... \\
+  TVC_PIVOT_PATH=... \\
+  TVC_PIVOT_IMAGE_URL=... \\
+  TVC_EXPECTED_PIVOT_DIGEST=... \\
+    tvc deploy create";
+
 /// Create a new TVC deployment from a config file or CLI flags.
 #[derive(Debug, ClapArgs)]
 #[command(about, long_about = None)]

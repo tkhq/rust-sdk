@@ -8,21 +8,6 @@ CLI for [Turnkey Verifiable Cloud](https://turnkey.com) - see [this guide](https
 cargo install tvc
 ```
 
-## Configuration precedence
-
-Configuration values are resolved in this order, highest priority first:
-
-1. Command-line flag (e.g. `--app-id`)
-2. Environment variable (e.g. `TVC_APP_ID`)
-3. Config file value (`--config-file`)
-4. Built-in default
-
-Special rules:
-
-- `--pivot-args` replaces the config file's list entirely (does not append).
-
-`tvc deploy create` accepts `--config-file` *or* the equivalent flags (`--app-id`, `--qos-version`, `--pivot-image-url`, `--pivot-path`, `--expected-pivot-digest`, plus optional fields). `tvc app create` and `tvc keys generate-quorum-key` require `--config-file` because their configs include nested arrays.
-
 ## Authentication
 
 For **local use**, run `tvc login` once and the CLI will read `~/.config/turnkey/` thereafter.
@@ -35,25 +20,13 @@ For **programmatic use** (GitHub Actions, etc.), set these three env vars to aut
 | `TVC_API_KEY_PUBLIC` | hex-encoded compressed P256 public key |
 | `TVC_API_KEY_PRIVATE` | hex-encoded P256 private key |
 
-`TVC_API_BASE_URL` is optional and defaults to `https://api.turnkey.com`.
-
-When all three required vars are present, every command authenticates directly from env. Setting some but not all is rejected.
+When all three required vars are present, every command authenticates directly from env. Env vars take precedence over local config files. Setting some but not all is rejected.
 
 The typical flow: run `tvc login` once locally to generate an API key, register the public key in the Turnkey dashboard, then store the values in your CI's secret store (e.g. `TVC_API_KEY_PRIVATE` as a GitHub Secret, the rest as GitHub Variables).
 
-### Example: CI deploy with no config file
-
-```bash
-TVC_ORG_ID=...                      \
-TVC_API_KEY_PUBLIC=...              \
-TVC_API_KEY_PRIVATE=...             \
-TVC_APP_ID=...                      \
-TVC_QOS_VERSION=...                 \
-TVC_PIVOT_PATH=...                  \
-TVC_PIVOT_IMAGE_URL=...             \
-TVC_EXPECTED_PIVOT_DIGEST=...       \
-  tvc deploy create
-```
+Some commands support environment variables and command-line flags for
+programmatic use. Run command help, such as `tvc deploy create --help`, to see
+the supported inputs and precedence for that command.
 
 ## Usage
 
@@ -82,6 +55,9 @@ tvc deploy init --output my-deploy.json
 
 # Create the deployment
 tvc deploy create --config-file my-deploy.json
+
+# To create a deployment without a config file, see:
+tvc deploy create --help
 
 # Recommended: uses GetTvcDeployment to fetch manifest and manifest_id automatically
 tvc deploy approve \

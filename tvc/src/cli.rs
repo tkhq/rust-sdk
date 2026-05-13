@@ -19,8 +19,8 @@ Special rules:
 Authentication:
   Local: run `tvc login` once; commands then read ~/.config/turnkey/.
   CI:    set TVC_ORG_ID, TVC_API_KEY_PUBLIC, and TVC_API_KEY_PRIVATE
-         env vars to authenticate without files. Setting some but not all
-         three required vars will error.";
+         to authenticate without files. Env vars take precedence over local
+         config files. Setting some but not all three required vars will error.";
 
 /// CLI command parsing and dispatch.
 #[derive(Debug, Parser)]
@@ -100,6 +100,7 @@ enum DeployCommands {
     /// Get the status of a deployment.
     Status(commands::deploy::status::Args),
     /// Create a new deployment from a config file.
+    #[command(long_about = commands::deploy::create::LONG_ABOUT)]
     Create(commands::deploy::create::Args),
     /// Generate a template deployment configuration file.
     Init(commands::deploy::init::Args),
