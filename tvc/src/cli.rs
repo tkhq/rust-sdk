@@ -19,9 +19,8 @@ Special rules:
 Authentication:
   Local: run `tvc login` once; commands then read ~/.config/turnkey/.
   CI:    set TVC_ORG_ID, TVC_API_KEY_PUBLIC, and TVC_API_KEY_PRIVATE
-         env vars to authenticate without files. TVC_API_BASE_URL is
-         optional (defaults to https://api.turnkey.com). Setting some
-         but not all three required vars will error.";
+         env vars to authenticate without files. Setting some but not all
+         three required vars will error.";
 
 /// CLI command parsing and dispatch.
 #[derive(Debug, Parser)]
