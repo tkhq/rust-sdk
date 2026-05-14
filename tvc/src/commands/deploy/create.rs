@@ -1,21 +1,93 @@
-//! Deploy create command - creates a deployment from a config file.
+//! Deploy create command - creates a deployment from a config file or CLI flags.
 
 use crate::client::build_client;
 use crate::config::deploy::DeployConfig;
 use crate::pull_secret::encrypt_pivot_pull_secret;
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use clap::Args as ClapArgs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::{CreateTvcDeploymentIntent, ValidateTvcImageRequest};
 
-/// Create a new TVC deployment from a config file.
+pub(crate) const LONG_ABOUT: &str = "\
+Create a new TVC deployment.
+
+Use --config-file, flags, env vars, or a mix of them. Command-line flags
+override env vars; env vars override config file values. If --config-file is
+omitted, all required deployment fields must be provided by flags or env vars.
+
+Required deployment fields:
+  --app-id / TVC_APP_ID
+  --qos-version / TVC_QOS_VERSION
+  --pivot-image-url / TVC_PIVOT_IMAGE_URL
+  --pivot-path / TVC_PIVOT_PATH
+  --expected-pivot-digest / TVC_EXPECTED_PIVOT_DIGEST
+
+Special rules:
+  --pivot-args replaces the config file's list entirely (does not append).
+  --debug-mode can enable debug mode but cannot disable a true config value.
+  --pivot-pull-secret reads an unencrypted pull secret file, encrypts it for the
+  active org's API environment, and overrides the encrypted secret in the config.
+
+Examples:
+  tvc deploy create --config-file deploy.json
+
+  # OR
+
+  TVC_ORG_ID=... \\
+  TVC_API_KEY_PUBLIC=... \\
+  TVC_API_KEY_PRIVATE=... \\
+  TVC_APP_ID=... \\
+  TVC_QOS_VERSION=... \\
+  TVC_PIVOT_PATH=... \\
+  TVC_PIVOT_IMAGE_URL=... \\
+  TVC_EXPECTED_PIVOT_DIGEST=... \\
+    tvc deploy create";
+
+/// Create a new TVC deployment from a config file or CLI flags.
 #[derive(Debug, ClapArgs)]
 #[command(about, long_about = None)]
 pub struct Args {
     /// Path to the deployment configuration file (JSON).
+    /// Optional when all required fields are provided via flags or env.
     #[arg(short = 'c', long, value_name = "PATH", env = "TVC_DEPLOY_CONFIG")]
-    pub config_file: PathBuf,
+    pub config_file: Option<PathBuf>,
+
+    /// Override the appId field.
+    #[arg(long, env = "TVC_APP_ID")]
+    pub app_id: Option<String>,
+
+    /// Override the qosVersion field.
+    #[arg(long, env = "TVC_QOS_VERSION")]
+    pub qos_version: Option<String>,
+
+    /// Override the pivotContainerImageUrl field.
+    #[arg(long, env = "TVC_PIVOT_IMAGE_URL")]
+    pub pivot_image_url: Option<String>,
+
+    /// Override the expectedPivotDigest field.
+    #[arg(long, env = "TVC_EXPECTED_PIVOT_DIGEST")]
+    pub expected_pivot_digest: Option<String>,
+
+    /// Override the pivotPath field.
+    #[arg(long, env = "TVC_PIVOT_PATH")]
+    pub pivot_path: Option<String>,
+
+    /// Override pivotArgs (replaces the file's list entirely; not appended).
+    #[arg(long, value_name = "ARG", value_delimiter = ',', env = "TVC_PIVOT_ARGS")]
+    pub pivot_args: Vec<String>,
+
+    /// Enable debug mode. One-way: cannot disable a `true` set earlier via the file.
+    #[arg(long, env = "TVC_DEBUG_MODE")]
+    pub debug_mode: bool,
+
+    /// Override the healthCheckPort field.
+    #[arg(long, env = "TVC_HEALTH_CHECK_PORT")]
+    pub health_check_port: Option<u16>,
+
+    /// Override the publicIngressPort field.
+    #[arg(long, env = "TVC_PUBLIC_INGRESS_PORT")]
+    pub public_ingress_port: Option<u16>,
 
     /// Path to an unencrypted pivot container pull secret file.
     ///
@@ -66,27 +138,75 @@ fn pin_image_url(image_url: &str, resolved_digest: &str) -> String {
     }
 }
 
-/// Run the deploy create command.
-pub async fn run(args: Args) -> Result<()> {
-    // Read and parse config file
-    let config_content = std::fs::read_to_string(&args.config_file)
-        .with_context(|| format!("failed to read config file: {}", args.config_file.display()))?;
+fn apply_overrides(config: &mut DeployConfig, args: &Args) {
+    if let Some(v) = &args.app_id {
+        config.app_id = v.clone();
+    }
+    if let Some(v) = &args.qos_version {
+        config.qos_version = v.clone();
+    }
+    if let Some(v) = &args.pivot_image_url {
+        config.pivot_container_image_url = v.clone();
+    }
+    if let Some(v) = &args.expected_pivot_digest {
+        config.expected_pivot_digest = v.clone();
+    }
+    if let Some(v) = &args.pivot_path {
+        config.pivot_path = v.clone();
+    }
+    if !args.pivot_args.is_empty() {
+        config.pivot_args = args.pivot_args.clone();
+    }
+    // One-way: only ever flips false -> true.
+    if args.debug_mode {
+        config.debug_mode = Some(true);
+    }
+    if let Some(v) = args.health_check_port {
+        config.health_check_port = v;
+    }
+    if let Some(v) = args.public_ingress_port {
+        config.public_ingress_port = v;
+    }
+}
 
-    let deploy_config: DeployConfig = serde_json::from_str(&config_content).with_context(|| {
-        format!(
-            "failed to parse config file: {}",
-            args.config_file.display()
-        )
-    })?;
+fn resolve_deploy_config(args: &Args) -> Result<DeployConfig> {
+    let mut config = match &args.config_file {
+        Some(path) => {
+            let content = std::fs::read_to_string(path)
+                .with_context(|| format!("failed to read config file: {}", path.display()))?;
+            serde_json::from_str(&content)
+                .with_context(|| format!("failed to parse config file: {}", path.display()))?
+        }
+        None => {
+            let mut t = DeployConfig::template(None);
+            // Strip the template's "<REMOVE_ME...>" hint so flag-only mode
+            // doesn't ship it to the API for public images.
+            t.pivot_container_encrypted_pull_secret = None;
+            t
+        }
+    };
 
-    // Validate config
-    if deploy_config.has_placeholders() {
-        anyhow::bail!(
-            "Config file contains placeholder values (<FILL_IN_...>). \
-             Please edit {} and fill in all required values.",
-            args.config_file.display()
+    apply_overrides(&mut config, args);
+
+    let missing = config.missing_required_fields();
+    if !missing.is_empty() {
+        let suggestion = if args.config_file.is_some() {
+            "Edit the config file or override via flag/TVC_* env."
+        } else {
+            "Provide via flag, TVC_* env, or --config-file."
+        };
+        bail!(
+            "missing required values: {}. {suggestion}",
+            missing.join(", ")
         );
     }
+
+    Ok(config)
+}
+
+/// Run the deploy create command.
+pub async fn run(args: Args) -> Result<()> {
+    let deploy_config = resolve_deploy_config(&args)?;
 
     println!("Creating deployment for app '{}'...", deploy_config.app_id);
 
@@ -100,7 +220,7 @@ pub async fn run(args: Args) -> Result<()> {
             })?;
 
             if pull_secret.trim().is_empty() {
-                anyhow::bail!(
+                bail!(
                     "pivot pull secret file is empty after trimming whitespace: {}",
                     path.display()
                 );
@@ -156,7 +276,9 @@ pub async fn run(args: Args) -> Result<()> {
     println!();
     println!("Deployment ID: {}", result.result.deployment_id);
     println!("App ID: {}", deploy_config.app_id);
-    println!("Config: {}", args.config_file.display());
+    if let Some(path) = &args.config_file {
+        println!("Config: {}", path.display());
+    }
     println!();
     println!("Next steps:");
     println!(
@@ -173,21 +295,137 @@ pub async fn run(args: Args) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::pin_image_url;
+    use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
 
     #[test]
     fn pin_image_url_appends_digest_to_tagged_reference() {
-        let image_url = "ghcr.io/team/app:latest";
-        let pinned = pin_image_url(image_url, "sha256:abc123");
-
+        let pinned = pin_image_url("ghcr.io/team/app:latest", "sha256:abc123");
         assert_eq!(pinned, "ghcr.io/team/app:latest@sha256:abc123");
     }
 
     #[test]
     fn pin_image_url_appends_digest_to_untagged_reference() {
-        let image_url = "ghcr.io/team/app";
-        let pinned = pin_image_url(image_url, "sha256:abc123");
-
+        let pinned = pin_image_url("ghcr.io/team/app", "sha256:abc123");
         assert_eq!(pinned, "ghcr.io/team/app@sha256:abc123");
+    }
+
+    fn empty_args() -> Args {
+        Args {
+            config_file: None,
+            app_id: None,
+            qos_version: None,
+            pivot_image_url: None,
+            expected_pivot_digest: None,
+            pivot_path: None,
+            pivot_args: vec![],
+            debug_mode: false,
+            health_check_port: None,
+            public_ingress_port: None,
+            pivot_pull_secret: None,
+        }
+    }
+
+    fn all_required_flags() -> Args {
+        Args {
+            app_id: Some("flag-app-id".into()),
+            qos_version: Some("flag-qos".into()),
+            pivot_image_url: Some("flag-image".into()),
+            expected_pivot_digest: Some("flag-digest".into()),
+            pivot_path: Some("flag-path".into()),
+            ..empty_args()
+        }
+    }
+
+    fn file_config() -> DeployConfig {
+        let mut c = DeployConfig::template(None);
+        c.app_id = "file-app-id".into();
+        c.qos_version = "file-qos".into();
+        c.pivot_container_image_url = "file-image".into();
+        c.pivot_path = "file-path".into();
+        c.pivot_args = vec!["a".into(), "b".into()];
+        c.expected_pivot_digest = "file-digest".into();
+        c.debug_mode = Some(false);
+        c.pivot_container_encrypted_pull_secret = None;
+        c.health_check_port = 4000;
+        c.public_ingress_port = 5000;
+        c
+    }
+
+    fn write_config(config: &DeployConfig) -> NamedTempFile {
+        let mut f = NamedTempFile::new().unwrap();
+        f.write_all(serde_json::to_string(config).unwrap().as_bytes())
+            .unwrap();
+        f
+    }
+
+    #[test]
+    fn flag_overrides_file_value() {
+        let file = write_config(&file_config());
+        let args = Args {
+            config_file: Some(file.path().to_path_buf()),
+            app_id: Some("flag-app-id".into()),
+            ..empty_args()
+        };
+        let resolved = resolve_deploy_config(&args).unwrap();
+        assert_eq!(resolved.app_id, "flag-app-id");
+        // Untouched fields keep their file values.
+        assert_eq!(resolved.qos_version, "file-qos");
+        assert_eq!(resolved.health_check_port, 4000);
+    }
+
+    #[test]
+    fn file_value_used_when_flag_absent() {
+        let file = write_config(&file_config());
+        let args = Args {
+            config_file: Some(file.path().to_path_buf()),
+            ..empty_args()
+        };
+        let resolved = resolve_deploy_config(&args).unwrap();
+        assert_eq!(resolved.app_id, "file-app-id");
+        assert_eq!(resolved.qos_version, "file-qos");
+        assert_eq!(resolved.health_check_port, 4000);
+    }
+
+    #[test]
+    fn no_file_uses_flag_only_with_template_defaults() {
+        let resolved = resolve_deploy_config(&all_required_flags()).unwrap();
+        // Required fields come from flags.
+        assert_eq!(resolved.app_id, "flag-app-id");
+        assert_eq!(resolved.qos_version, "flag-qos");
+        assert_eq!(resolved.pivot_container_image_url, "flag-image");
+        assert_eq!(resolved.pivot_path, "flag-path");
+        assert_eq!(resolved.expected_pivot_digest, "flag-digest");
+        // Optional fields fall back to template defaults.
+        assert_eq!(resolved.health_check_port, 3000);
+        assert_eq!(resolved.public_ingress_port, 3000);
+        assert_eq!(resolved.debug_mode, Some(false));
+        assert!(resolved.pivot_args.is_empty());
+        // Pull-secret placeholder cleared in flag-only mode.
+        assert_eq!(resolved.pivot_container_encrypted_pull_secret, None);
+    }
+
+    #[test]
+    fn no_file_no_required_flags_bails_naming_each_flag() {
+        let err = resolve_deploy_config(&empty_args()).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("--app-id"), "{msg}");
+        assert!(msg.contains("--qos-version"), "{msg}");
+        assert!(msg.contains("--pivot-image-url"), "{msg}");
+        assert!(msg.contains("--pivot-path"), "{msg}");
+        assert!(msg.contains("--expected-pivot-digest"), "{msg}");
+    }
+
+    #[test]
+    fn pivot_args_flag_replaces_file_list() {
+        let file = write_config(&file_config()); // file has ["a", "b"]
+        let args = Args {
+            config_file: Some(file.path().to_path_buf()),
+            pivot_args: vec!["c".into()],
+            ..empty_args()
+        };
+        let resolved = resolve_deploy_config(&args).unwrap();
+        assert_eq!(resolved.pivot_args, vec!["c"]);
     }
 }

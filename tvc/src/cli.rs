@@ -3,9 +3,28 @@
 use crate::commands;
 use clap::{Parser, Subcommand};
 
+const LONG_ABOUT: &str = "\
+CLI for building with Turnkey Verifiable Cloud.
+
+Some commands accept multiple configuration input types.
+Configuration values are resolved in this order, highest priority first:
+  1. Command-line flag (e.g. --app-id)
+  2. Environment variable (e.g. TVC_APP_ID)
+  3. Config file value (--config-file)
+  4. Built-in default
+
+Special rules:
+  --pivot-args replaces the config file's list entirely (does not append)
+
+Authentication:
+  Local: run `tvc login` once; commands then read ~/.config/turnkey/.
+  CI:    set TVC_ORG_ID, TVC_API_KEY_PUBLIC, and TVC_API_KEY_PRIVATE
+         to authenticate without files. Env vars take precedence over local
+         config files. Setting some but not all three required vars will error.";
+
 /// CLI command parsing and dispatch.
 #[derive(Debug, Parser)]
-#[command(about = "CLI for building with Turnkey Verifiable Cloud", long_about = None)]
+#[command(about = "CLI for building with Turnkey Verifiable Cloud", long_about = LONG_ABOUT)]
 pub struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -81,6 +100,7 @@ enum DeployCommands {
     /// Get the status of a deployment.
     Status(commands::deploy::status::Args),
     /// Create a new deployment from a config file.
+    #[command(long_about = commands::deploy::create::LONG_ABOUT)]
     Create(commands::deploy::create::Args),
     /// Generate a template deployment configuration file.
     Init(commands::deploy::init::Args),

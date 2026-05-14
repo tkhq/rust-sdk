@@ -44,12 +44,25 @@ impl DeployConfig {
         }
     }
 
-    /// Check if config contains placeholder values.
-    pub fn has_placeholders(&self) -> bool {
-        self.app_id.starts_with("<FILL_IN")
-            || self.qos_version.starts_with("<FILL_IN")
-            || self.pivot_container_image_url.starts_with("<FILL_IN")
-            || self.pivot_path.starts_with("<FILL_IN")
-            || self.expected_pivot_digest.starts_with("<FILL_IN")
+    /// Return the user-facing flag names of fields still containing
+    /// `<FILL_IN...>` placeholders, in struct order. Empty if complete.
+    pub fn missing_required_fields(&self) -> Vec<&'static str> {
+        let mut missing = Vec::new();
+        if self.app_id.starts_with("<FILL_IN") {
+            missing.push("--app-id");
+        }
+        if self.qos_version.starts_with("<FILL_IN") {
+            missing.push("--qos-version");
+        }
+        if self.pivot_container_image_url.starts_with("<FILL_IN") {
+            missing.push("--pivot-image-url");
+        }
+        if self.pivot_path.starts_with("<FILL_IN") {
+            missing.push("--pivot-path");
+        }
+        if self.expected_pivot_digest.starts_with("<FILL_IN") {
+            missing.push("--expected-pivot-digest");
+        }
+        missing
     }
 }
