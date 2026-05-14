@@ -1,7 +1,6 @@
 //! App delete command - marks an app and all deployments for deletion.
 
 use crate::client::build_client;
-use crate::commands::confirmation::{confirm_typed, confirm_yes_no};
 use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -14,22 +13,10 @@ pub struct Args {
     /// ID of the app to delete.
     #[arg(long, value_name = "APP_ID", env = "TVC_APP_ID")]
     pub app_id: String,
-
-    /// DANGEROUS: skip both deletion confirmation prompts.
-    #[arg(long, env = "TVC_DANGEROUS_SKIP_CONFIRMATION")]
-    pub dangerous_skip_confirmation: bool,
 }
 
 /// Run the app delete command.
 pub async fn run(args: Args) -> Result<()> {
-    if !args.dangerous_skip_confirmation {
-        confirm_yes_no(&format!(
-            "Delete TVC app '{}' and all of its deployments?",
-            args.app_id
-        ))?;
-        confirm_typed("Type the app ID to confirm deletion", &args.app_id)?;
-    }
-
     let auth = build_client().await?;
 
     let intent = DeleteTvcAppAndDeploymentsIntent {

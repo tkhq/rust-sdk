@@ -72,7 +72,7 @@ fn approve_interactive_reject() {
         .write_stdin(input)
         .assert()
         .failure()
-        .stderr(predicate::str::contains("approval cancelled by user"));
+        .stderr(predicate::str::contains("operation cancelled by user"));
 }
 
 #[test]

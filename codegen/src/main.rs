@@ -355,9 +355,9 @@ fn build_generate_app_proofs_field(
     }
 }
 
-// Scan the external activity proto for `message Foo { ... generate_app_proofs ... }` blocks
-// and return the set of message names that contain the field.
 fn requests_with_generate_app_proofs(proto: &str) -> HashSet<String> {
+    // Find proto `message` definitions and return the message names whose bodies
+    // contain `generate_app_proofs`.
     let message_re = Regex::new(r"(?ms)^message\s+(\w+)\s*\{(.*?)^\}").unwrap();
     message_re
         .captures_iter(proto)

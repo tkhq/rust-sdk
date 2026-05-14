@@ -33,8 +33,10 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         .await
         .context("failed to restore TVC deployment")?;
 
-    println!("Activity ID: {}", result.activity_id);
-    println!("Activity Status: {:?}", result.status);
+    print!(
+        "\nDeployment restore accepted; deployment is no longer marked for deletion.\n\nDeployment ID: {}\nActivity ID: {}\nActivity Status: {:?}\n",
+        result.result.deployment_id, result.activity_id, result.status
+    );
 
     Ok(())
 }

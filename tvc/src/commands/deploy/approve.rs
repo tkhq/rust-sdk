@@ -1,5 +1,6 @@
 //! Approve deploy command - cryptographically approve a QOS manifest.
 
+use crate::commands::confirmation::confirm_yes_no;
 use crate::config::turnkey::Config;
 use crate::operator_key::load_operator_pair;
 use crate::util::{read_file_to_string, write_file};
@@ -10,7 +11,6 @@ use qos_core::protocol::services::boot::{
     Manifest, ManifestSet, Namespace, NitroConfig, PivotConfig, QuorumMember, ShareSet,
 };
 use qos_core::protocol::QosHash;
-use std::io::{BufRead, Write};
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -236,21 +236,6 @@ fn interactive_approve(manifest: &Manifest) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn confirm(prompt: &str) -> anyhow::Result<()> {
-    print!("{prompt} [y/N]: ");
-    std::io::stdout().flush()?;
-
-    let mut input = String::new();
-    std::io::stdin().lock().read_line(&mut input)?;
-    let input = input.trim().to_lowercase();
-    let approved = input == "yes" || input == "y";
-
-    if !approved {
-        bail!("approval cancelled by user");
-    }
-    Ok(())
-}
-
 fn review_namespace(namespace: &Namespace) -> anyhow::Result<()> {
     println!("NAMESPACE");
     println!("─────────────────────────────────────");
@@ -259,7 +244,7 @@ fn review_namespace(namespace: &Namespace) -> anyhow::Result<()> {
     println!("  Quorum Key: {}", hex::encode(&namespace.quorum_key));
     println!();
 
-    confirm("Approve namespace?")
+    confirm_yes_no("Approve namespace?")
 }
 
 fn review_enclave(enclave: &NitroConfig) -> anyhow::Result<()> {
@@ -272,7 +257,7 @@ fn review_enclave(enclave: &NitroConfig) -> anyhow::Result<()> {
     // Skip the QOS commit since its not cryptographically linked
     println!();
 
-    confirm("Approve enclave configuration?")
+    confirm_yes_no("Approve enclave configuration?")
 }
 
 fn review_pivot(pivot: &PivotConfig) -> anyhow::Result<()> {
@@ -286,7 +271,7 @@ fn review_pivot(pivot: &PivotConfig) -> anyhow::Result<()> {
     }
     println!();
 
-    confirm("Approve pivot binary?")
+    confirm_yes_no("Approve pivot binary?")
 }
 
 fn print_quorum_members(members: &[QuorumMember]) {
@@ -303,7 +288,7 @@ fn review_manifest_set(set: &ManifestSet) -> anyhow::Result<()> {
     print_quorum_members(&set.members);
     println!();
 
-    confirm("Approve manifest set?")
+    confirm_yes_no("Approve manifest set?")
 }
 
 fn review_share_set(set: &ShareSet) -> anyhow::Result<()> {
@@ -314,7 +299,7 @@ fn review_share_set(set: &ShareSet) -> anyhow::Result<()> {
     print_quorum_members(&set.members);
     println!();
 
-    confirm("Approve share set?")
+    confirm_yes_no("Approve share set?")
 }
 
 async fn read_manifest_from_path(path: &Path) -> anyhow::Result<Manifest> {
