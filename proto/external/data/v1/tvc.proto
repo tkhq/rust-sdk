@@ -84,10 +84,8 @@ message TvcDeployment {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The pivot container spec for this deployment"}
   ];
-  immutable.common.v1.TvcDeploymentStage stage = 11 [
-    (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Current stage for this deployment"}
-  ];
+  reserved 11;
+  reserved "stage";
   Timestamp created_at = 12 [(google.api.field_behavior) = REQUIRED];
   Timestamp updated_at = 13 [(google.api.field_behavior) = REQUIRED];
   bool delete = 14 [

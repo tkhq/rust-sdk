@@ -40,7 +40,6 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     println!("App ID: {}", deployment.app_id);
     println!("Manifest ID: {}", manifest.id);
     println!("QOS Version: {}", deployment.qos_version);
-    println!("Stage: {:?}", deployment.stage);
 
     if let Some(pivot) = &deployment.pivot_container {
         println!();

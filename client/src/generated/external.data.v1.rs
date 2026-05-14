@@ -551,7 +551,6 @@ pub struct TvcDeployment {
     pub qos_version: ::prost::alloc::string::String,
     #[serde(default)]
     pub pivot_container: ::core::option::Option<TvcContainerSpec>,
-    pub stage: super::super::super::immutable::common::v1::TvcDeploymentStage,
     #[serde(default)]
     pub created_at: ::core::option::Option<Timestamp>,
     #[serde(default)]

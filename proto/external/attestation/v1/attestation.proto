@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package external.attestation.v1;
+
+import "vendor/google/api/field_behavior.proto";
+import "vendor/protoc-gen-openapiv2/options/annotations.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/external/attestation/v1";
+
+enum StampAttestedScheme {
+  STAMP_ATTESTED_SCHEME_UNSPECIFIED = 0;
+  STAMP_ATTESTED_SCHEME_P256_OIDC = 1;
+  STAMP_ATTESTED_SCHEME_P256_VERIFICATION_TOKEN = 2;
+}
+
+// We expect this to be passed in as a JSON-encoded, then base64-encoded string within a X-Stamp-Attested header
+message AttestedStamp {
+  StampAttestedScheme scheme = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The attestation scheme used. Determines how `public_key_attestation` is interpreted (OIDC token or enclave-signed verification token) and the signature algorithm."}
+  ];
+  string public_key_attestation = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A JWT string (OIDC token or enclave-signed verification token) that attests ownership of the public key."}
+  ];
+  string public_key = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The public key used to verify the signature."}
+  ];
+  string signature = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The signature over the request body."}
+  ];
+}

@@ -19,6 +19,7 @@ message ActivateBillingTierIntent {
       title: ""
     }
   ];
+  optional string orb_plan_id = 2 [(google.api.field_behavior) = OPTIONAL];
 }
 
 message ActivateBillingTierResult {

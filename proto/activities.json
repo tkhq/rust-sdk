@@ -390,15 +390,40 @@
       "intentType": "CreateTvcAppIntent",
       "resultType": "CreateTvcAppResult"
     },
+    "/public/v1/submit/delete_tvc_app_and_deployments": {
+      "type": "ACTIVITY_TYPE_DELETE_TVC_APP_AND_DEPLOYMENTS",
+      "intentType": "DeleteTvcAppAndDeploymentsIntent",
+      "resultType": "DeleteTvcAppAndDeploymentsResult"
+    },
     "/public/v1/submit/create_tvc_deployment": {
       "type": "ACTIVITY_TYPE_CREATE_TVC_DEPLOYMENT",
       "intentType": "CreateTvcDeploymentIntent",
       "resultType": "CreateTvcDeploymentResult"
     },
+    "/public/v1/submit/delete_tvc_deployment": {
+      "type": "ACTIVITY_TYPE_DELETE_TVC_DEPLOYMENT",
+      "intentType": "DeleteTvcDeploymentIntent",
+      "resultType": "DeleteTvcDeploymentResult"
+    },
+    "/public/v1/submit/restore_tvc_deployment": {
+      "type": "ACTIVITY_TYPE_RESTORE_TVC_DEPLOYMENT",
+      "intentType": "RestoreTvcDeploymentIntent",
+      "resultType": "RestoreTvcDeploymentResult"
+    },
+    "/public/v1/submit/set_tvc_app_live_deployment": {
+      "type": "ACTIVITY_TYPE_UPDATE_TVC_APP_LIVE_DEPLOYMENT",
+      "intentType": "UpdateTvcAppLiveDeploymentIntent",
+      "resultType": "UpdateTvcAppLiveDeploymentResult"
+    },
     "/public/v1/submit/create_tvc_manifest_approvals": {
       "type": "ACTIVITY_TYPE_CREATE_TVC_MANIFEST_APPROVALS",
       "intentType": "CreateTvcManifestApprovalsIntent",
       "resultType": "CreateTvcManifestApprovalsResult"
+    },
+    "/public/v1/submit/post_tvc_quorum_key_share": {
+      "type": "ACTIVITY_TYPE_POST_TVC_QUORUM_KEY_SHARE",
+      "intentType": "PostTvcQuorumKeyShareIntent",
+      "resultType": "PostTvcQuorumKeyShareResult"
     },
     "/public/v1/submit/create_webhook_endpoint": {
       "type": "ACTIVITY_TYPE_CREATE_WEBHOOK_ENDPOINT",
