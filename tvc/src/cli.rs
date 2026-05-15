@@ -45,12 +45,16 @@ impl Cli {
                 DeployCommands::Status(args) => commands::deploy::status::run(args).await,
                 DeployCommands::Create(args) => commands::deploy::create::run(args).await,
                 DeployCommands::Init(args) => commands::deploy::init::run(args).await,
+                DeployCommands::Delete(args) => commands::deploy::delete::run(args).await,
+                DeployCommands::Restore(args) => commands::deploy::restore::run(args).await,
             },
             Commands::App { command } => match command {
                 AppCommands::Status(args) => commands::app::status::run(args).await,
                 AppCommands::List(args) => commands::app::list::run(args).await,
                 AppCommands::Create(args) => commands::app::create::run(args).await,
                 AppCommands::Init(args) => commands::app::init::run(args).await,
+                AppCommands::SetLiveDeploy(args) => commands::app::set_live_deploy::run(args).await,
+                AppCommands::Delete(args) => commands::app::delete::run(args).await,
             },
             Commands::Keys { command } => match command {
                 KeysCommands::GenerateQuorumKey(args) => {
@@ -104,6 +108,10 @@ enum DeployCommands {
     Create(commands::deploy::create::Args),
     /// Generate a template deployment configuration file.
     Init(commands::deploy::init::Args),
+    /// Delete a deployment by marking it for deletion.
+    Delete(commands::deploy::delete::Args),
+    /// Restore a deleted deployment.
+    Restore(commands::deploy::restore::Args),
 }
 
 #[derive(Debug, Subcommand)]
@@ -116,6 +124,10 @@ enum AppCommands {
     Create(commands::app::create::Args),
     /// Generate a template app configuration file.
     Init(commands::app::init::Args),
+    /// Set the live deployment for an app.
+    SetLiveDeploy(commands::app::set_live_deploy::Args),
+    /// Delete an app and all of its deployments.
+    Delete(commands::app::delete::Args),
 }
 
 #[derive(Debug, Subcommand)]

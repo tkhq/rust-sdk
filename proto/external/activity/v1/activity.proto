@@ -557,6 +557,7 @@ message UpdateOrganizationNameRequest {
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   immutable.activity.v1.UpdateOrganizationNameIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
 }
 
 message DeleteUsersRequest {
@@ -1845,6 +1846,25 @@ message CreateTvcDeploymentRequest {
   immutable.activity.v1.CreateTvcDeploymentIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
 }
 
+message DeleteTvcAppAndDeploymentsRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_DELETE_TVC_APP_AND_DEPLOYMENTS"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.DeleteTvcAppAndDeploymentsIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
+}
+
 message CreateTvcManifestApprovalsRequest {
   string type = 1 [
     (google.api.field_behavior) = REQUIRED,
@@ -1861,6 +1881,24 @@ message CreateTvcManifestApprovalsRequest {
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   immutable.activity.v1.CreateTvcManifestApprovalsIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+}
+
+message PostTvcQuorumKeyShareRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_POST_TVC_QUORUM_KEY_SHARE"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.PostTvcQuorumKeyShareIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
 }
 
 message CreateWebhookEndpointRequest {
@@ -1936,6 +1974,7 @@ message SetIpAllowlistRequest {
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   immutable.activity.v1.SetIpAllowlistIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
 }
 
 message RemoveIpAllowlistRequest {
@@ -1954,4 +1993,81 @@ message RemoveIpAllowlistRequest {
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   immutable.activity.v1.RemoveIpAllowlistIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
+}
+
+message DeleteTvcDeploymentRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_DELETE_TVC_DEPLOYMENT"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.DeleteTvcDeploymentIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
+}
+
+message DeleteAppRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_DELETE_TVC_APP_AND_DEPLOYMENTS"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.DeleteTvcAppAndDeploymentsIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
+}
+
+message UpdateTvcAppLiveDeploymentRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_UPDATE_TVC_APP_LIVE_DEPLOYMENT"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.UpdateTvcAppLiveDeploymentIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
+}
+
+message RestoreTvcDeploymentRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_RESTORE_TVC_DEPLOYMENT"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.RestoreTvcDeploymentIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
 }

@@ -1882,6 +1882,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(
@@ -3620,6 +3621,51 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
+    /// Delete a TVC App and all of its deployments
+    ///
+    /// Delete a TVC App and all of its deployments
+    pub async fn delete_tvc_app_and_deployments(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::DeleteTvcAppAndDeploymentsIntent,
+    ) -> Result<
+        ActivityResult<immutable_activity::DeleteTvcAppAndDeploymentsResult>,
+        TurnkeyClientError,
+    > {
+        let request = external_activity::DeleteTvcAppAndDeploymentsRequest {
+            r#type: "ACTIVITY_TYPE_DELETE_TVC_APP_AND_DEPLOYMENTS".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/delete_tvc_app_and_deployments".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::DeleteTvcAppAndDeploymentsResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
     /// List TVC Apps
     ///
     /// List all TVC Apps within an organization.
@@ -3669,6 +3715,137 @@ impl<S: Stamp> TurnkeyClient<S> {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         let result = match inner {
             immutable_activity::result::Inner::CreateTvcDeploymentResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Set TVC App live deployment
+    ///
+    /// Set the live deployment for a TVC App
+    pub async fn update_tvc_app_live_deployment(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::UpdateTvcAppLiveDeploymentIntent,
+    ) -> Result<
+        ActivityResult<immutable_activity::UpdateTvcAppLiveDeploymentResult>,
+        TurnkeyClientError,
+    > {
+        let request = external_activity::UpdateTvcAppLiveDeploymentRequest {
+            r#type: "ACTIVITY_TYPE_UPDATE_TVC_APP_LIVE_DEPLOYMENT".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/set_tvc_app_live_deployment".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::UpdateTvcAppLiveDeploymentResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Delete a TVC Deployment
+    ///
+    /// Delete a TVC Deployment
+    pub async fn delete_tvc_deployment(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::DeleteTvcDeploymentIntent,
+    ) -> Result<ActivityResult<immutable_activity::DeleteTvcDeploymentResult>, TurnkeyClientError>
+    {
+        let request = external_activity::DeleteTvcDeploymentRequest {
+            r#type: "ACTIVITY_TYPE_DELETE_TVC_DEPLOYMENT".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/delete_tvc_deployment".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::DeleteTvcDeploymentResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Restore a TVC Deployment
+    ///
+    /// Restore a deleted TVC Deployment
+    pub async fn restore_tvc_deployment(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::RestoreTvcDeploymentIntent,
+    ) -> Result<ActivityResult<immutable_activity::RestoreTvcDeploymentResult>, TurnkeyClientError>
+    {
+        let request = external_activity::RestoreTvcDeploymentRequest {
+            r#type: "ACTIVITY_TYPE_RESTORE_TVC_DEPLOYMENT".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/restore_tvc_deployment".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::RestoreTvcDeploymentResult(res) => res,
             other => {
                 return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
                     serde_json::to_string(&other)?,
@@ -3772,6 +3949,48 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
+    /// Post TVC Quorum Key Share
+    ///
+    /// Post re-encrypted quorum key share for a TVC deployment.
+    pub async fn post_tvc_quorum_key_share(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::PostTvcQuorumKeyShareIntent,
+    ) -> Result<ActivityResult<immutable_activity::PostTvcQuorumKeyShareResult>, TurnkeyClientError>
+    {
+        let request = external_activity::PostTvcQuorumKeyShareRequest {
+            r#type: "ACTIVITY_TYPE_POST_TVC_QUORUM_KEY_SHARE".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/post_tvc_quorum_key_share".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::PostTvcQuorumKeyShareResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
     /// Get TVC App status
     ///
     /// Get live runtime status for a TVC App from the cluster.
@@ -3822,6 +4041,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(&request, "/public/v1/submit/set_ip_allowlist".to_string())
@@ -3861,6 +4081,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
             .process_activity(

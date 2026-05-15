@@ -322,16 +322,6 @@ enum Oauth2Provider {
   OAUTH2_PROVIDER_DISCORD = 2;
 }
 
-// The current stage of a TVC deployment
-// (note: leaving some space in the numbering to account for potential future stages)
-enum TvcDeploymentStage {
-  TVC_DEPLOYMENT_STAGE_UNSPECIFIED = 0;
-  TVC_DEPLOYMENT_STAGE_APPROVE = 10;
-  TVC_DEPLOYMENT_STAGE_PROVISION = 20;
-  TVC_DEPLOYMENT_STAGE_LIVE = 30;
-  TVC_DEPLOYMENT_STAGE_DELETE = 40;
-}
-
 // Types of health checks supported for customer TVC apps
 enum TvcHealthCheckType {
   TVC_HEALTH_CHECK_TYPE_UNSPECIFIED = 0;

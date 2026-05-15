@@ -148,6 +148,8 @@ enum SignatureScheme {
   SIGNATURE_SCHEME_TK_API_ED25519 = 5;
   // Scheme used for Ethereum wallet signatures
   SIGNATURE_SCHEME_TK_API_SECP256K1_EIP191 = 6;
+
+  SIGNATURE_SCHEME_TK_ATTESTED_P256 = 7;
 }
 
 message Signature {

@@ -2,6 +2,7 @@
 
 use anyhow::Context;
 use clap::Args as ClapArgs;
+use turnkey_client::generated::external::data::v1::TvcDeployment;
 use turnkey_client::generated::GetTvcDeploymentRequest;
 
 /// Get the status of a deployment.
@@ -34,13 +35,14 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
 
     let manifest = deployment
         .manifest
+        .as_ref()
         .ok_or_else(|| anyhow::anyhow!("manifest not found in deployment"))?;
 
     println!("Deployment: {}", deployment.id);
     println!("App ID: {}", deployment.app_id);
     println!("Manifest ID: {}", manifest.id);
     println!("QOS Version: {}", deployment.qos_version);
-    println!("Stage: {:?}", deployment.stage);
+    println!("{}", format_marked_for_deletion(&deployment));
 
     if let Some(pivot) = &deployment.pivot_container {
         println!();
@@ -62,4 +64,50 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+fn format_marked_for_deletion(deployment: &TvcDeployment) -> String {
+    format!(
+        "Marked for deletion: {}",
+        if deployment.delete { "yes" } else { "no" }
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::format_marked_for_deletion;
+    use turnkey_client::generated::external::data::v1::TvcDeployment;
+
+    fn deployment(delete: bool) -> TvcDeployment {
+        TvcDeployment {
+            id: "deploy-123".to_string(),
+            organization_id: "org-123".to_string(),
+            app_id: "app-123".to_string(),
+            manifest_set: None,
+            share_set: None,
+            manifest: None,
+            manifest_approvals: vec![],
+            qos_version: "qos-v1".to_string(),
+            pivot_container: None,
+            created_at: None,
+            updated_at: None,
+            delete,
+        }
+    }
+
+    #[test]
+    fn marked_for_deletion_formats_yes_when_delete_is_true() {
+        assert_eq!(
+            format_marked_for_deletion(&deployment(true)),
+            "Marked for deletion: yes"
+        );
+    }
+
+    #[test]
+    fn marked_for_deletion_formats_no_when_delete_is_false() {
+        assert_eq!(
+            format_marked_for_deletion(&deployment(false)),
+            "Marked for deletion: no"
+        );
+    }
 }

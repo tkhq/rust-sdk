@@ -5,6 +5,8 @@
 pub struct ActivateBillingTierIntent {
     /// @inject_tag: validate:"required"
     pub product_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub orb_plan_id: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]

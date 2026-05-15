@@ -280,6 +280,8 @@ pub enum SignatureScheme {
     /// Scheme used for Ethereum wallet signatures
     #[serde(rename = "SIGNATURE_SCHEME_TK_API_SECP256K1_EIP191")]
     TkApiSecp256k1Eip191 = 6,
+    #[serde(rename = "SIGNATURE_SCHEME_TK_ATTESTED_P256")]
+    TkAttestedP256 = 7,
 }
 impl SignatureScheme {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -295,6 +297,7 @@ impl SignatureScheme {
             Self::TkApiSecp256k1 => "SIGNATURE_SCHEME_TK_API_SECP256K1",
             Self::TkApiEd25519 => "SIGNATURE_SCHEME_TK_API_ED25519",
             Self::TkApiSecp256k1Eip191 => "SIGNATURE_SCHEME_TK_API_SECP256K1_EIP191",
+            Self::TkAttestedP256 => "SIGNATURE_SCHEME_TK_ATTESTED_P256",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -309,6 +312,7 @@ impl SignatureScheme {
             "SIGNATURE_SCHEME_TK_API_SECP256K1_EIP191" => {
                 Some(Self::TkApiSecp256k1Eip191)
             }
+            "SIGNATURE_SCHEME_TK_ATTESTED_P256" => Some(Self::TkAttestedP256),
             _ => None,
         }
     }

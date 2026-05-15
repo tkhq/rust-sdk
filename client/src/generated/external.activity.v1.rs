@@ -408,6 +408,8 @@ pub struct UpdateOrganizationNameRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::UpdateOrganizationNameIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -1419,6 +1421,21 @@ pub struct CreateTvcDeploymentRequest {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct DeleteTvcAppAndDeploymentsRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::DeleteTvcAppAndDeploymentsIntent,
+    >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct CreateTvcManifestApprovalsRequest {
     pub r#type: ::prost::alloc::string::String,
     pub timestamp_ms: ::prost::alloc::string::String,
@@ -1426,6 +1443,19 @@ pub struct CreateTvcManifestApprovalsRequest {
     #[serde(default)]
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::CreateTvcManifestApprovalsIntent,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct PostTvcQuorumKeyShareRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::PostTvcQuorumKeyShareIntent,
     >,
 }
 #[derive(Debug)]
@@ -1485,6 +1515,8 @@ pub struct SetIpAllowlistRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::SetIpAllowlistIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -1498,4 +1530,66 @@ pub struct RemoveIpAllowlistRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::RemoveIpAllowlistIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeleteTvcDeploymentRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::DeleteTvcDeploymentIntent,
+    >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeleteAppRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::DeleteTvcAppAndDeploymentsIntent,
+    >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct UpdateTvcAppLiveDeploymentRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::UpdateTvcAppLiveDeploymentIntent,
+    >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct RestoreTvcDeploymentRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::RestoreTvcDeploymentIntent,
+    >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }

@@ -74,7 +74,12 @@ pub struct Args {
     pub pivot_path: Option<String>,
 
     /// Override pivotArgs (replaces the file's list entirely; not appended).
-    #[arg(long, value_name = "ARG", value_delimiter = ',', env = "TVC_PIVOT_ARGS")]
+    #[arg(
+        long,
+        value_name = "ARG",
+        value_delimiter = ',',
+        env = "TVC_PIVOT_ARGS"
+    )]
     pub pivot_args: Vec<String>,
 
     /// Enable debug mode. One-way: cannot disable a `true` set earlier via the file.

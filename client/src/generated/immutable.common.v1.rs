@@ -1331,48 +1331,6 @@ impl Oauth2Provider {
         }
     }
 }
-/// The current stage of a TVC deployment
-/// (note: leaving some space in the numbering to account for potential future stages)
-#[derive(::serde::Serialize, ::serde::Deserialize)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum TvcDeploymentStage {
-    #[serde(rename = "TVC_DEPLOYMENT_STAGE_UNSPECIFIED")]
-    Unspecified = 0,
-    #[serde(rename = "TVC_DEPLOYMENT_STAGE_APPROVE")]
-    Approve = 10,
-    #[serde(rename = "TVC_DEPLOYMENT_STAGE_PROVISION")]
-    Provision = 20,
-    #[serde(rename = "TVC_DEPLOYMENT_STAGE_LIVE")]
-    Live = 30,
-    #[serde(rename = "TVC_DEPLOYMENT_STAGE_DELETE")]
-    Delete = 40,
-}
-impl TvcDeploymentStage {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Self::Unspecified => "TVC_DEPLOYMENT_STAGE_UNSPECIFIED",
-            Self::Approve => "TVC_DEPLOYMENT_STAGE_APPROVE",
-            Self::Provision => "TVC_DEPLOYMENT_STAGE_PROVISION",
-            Self::Live => "TVC_DEPLOYMENT_STAGE_LIVE",
-            Self::Delete => "TVC_DEPLOYMENT_STAGE_DELETE",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "TVC_DEPLOYMENT_STAGE_UNSPECIFIED" => Some(Self::Unspecified),
-            "TVC_DEPLOYMENT_STAGE_APPROVE" => Some(Self::Approve),
-            "TVC_DEPLOYMENT_STAGE_PROVISION" => Some(Self::Provision),
-            "TVC_DEPLOYMENT_STAGE_LIVE" => Some(Self::Live),
-            "TVC_DEPLOYMENT_STAGE_DELETE" => Some(Self::Delete),
-            _ => None,
-        }
-    }
-}
 /// Types of health checks supported for customer TVC apps
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]

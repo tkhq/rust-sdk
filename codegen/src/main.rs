@@ -1,5 +1,5 @@
 use regex::Regex;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
@@ -8,6 +8,7 @@ use walkdir::WalkDir;
 mod transform;
 
 const PUBLIC_API_PROTO_PATH: &str = "proto/services/coordinator/public/v1/public_api.proto";
+const EXTERNAL_ACTIVITY_PROTO_PATH: &str = "proto/external/activity/v1/activity.proto";
 const INCLUDE_PROTO_PATH: &str = "proto";
 const ACTIVITIES_MAPPING_PATH: &str = "proto/activities.json";
 const GENERATED_CLIENT_DIR: &str = "client/src/generated";
@@ -117,6 +118,12 @@ fn main() {
     let parsed_activities: ActivitiesFile =
         serde_json::from_str(&activities_mapping_data).expect("cannot parse activities.json");
 
+    // Collect the set of external activity request types that carry a `generate_app_proofs`
+    // field in the proto, so we know which struct initializers need to populate it.
+    let external_activity_proto = fs::read_to_string(EXTERNAL_ACTIVITY_PROTO_PATH)
+        .expect("Failed to read external activity proto");
+    let requests_with_app_proofs = requests_with_generate_app_proofs(&external_activity_proto);
+
     for service_caps in service_re.captures_iter(&proto) {
         // Remember: this capture group has the inside of "service Foo {...}" block,
         // and contains many "rpc Foo(input) returns (output) {...}" blocks
@@ -183,7 +190,8 @@ fn main() {
                     let short_req_type = req_type.rsplit(".").next().unwrap();
                     let activity_intent = activities_details.intent_type.clone();
                     let activity_result = activities_details.result_type.clone();
-                    let app_proofs_field = build_generate_app_proofs_field(short_req_type, is_tvc);
+                    let app_proofs_field =
+                        build_generate_app_proofs_field(short_req_type, &requests_with_app_proofs);
 
                     // Approve and Reject activity functions are a bit different than the rest
                     // In the mapping they have a resultType set to "*" (because they can indeed reference ANY activity.
@@ -336,16 +344,33 @@ fn to_snake_case(name: &str) -> String {
     }
     result
 }
-fn build_generate_app_proofs_field(req_type: &str, is_tvc: bool) -> String {
-    if is_tvc
-        || req_type == "UpdateOrganizationNameRequest"
-        || req_type == "SetIpAllowlistRequest"
-        || req_type == "RemoveIpAllowlistRequest"
-    {
-        String::new()
-    } else {
+fn build_generate_app_proofs_field(
+    req_type: &str,
+    requests_with_app_proofs: &HashSet<String>,
+) -> String {
+    if requests_with_app_proofs.contains(req_type) {
         "generate_app_proofs: self.generate_app_proofs(),".to_string()
+    } else {
+        String::new()
     }
+}
+
+fn requests_with_generate_app_proofs(proto: &str) -> HashSet<String> {
+    // Find proto `message` definitions and return the message names whose bodies
+    // contain `generate_app_proofs`.
+    let message_re = Regex::new(r"(?ms)^message\s+(\w+)\s*\{(.*?)^\}").unwrap();
+    message_re
+        .captures_iter(proto)
+        .filter_map(|caps| {
+            let name = caps[1].to_string();
+            let body = &caps[2];
+            if body.contains("generate_app_proofs") {
+                Some(name)
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -354,23 +379,59 @@ mod tests {
 
     #[test]
     fn generate_app_proofs_field_is_emitted_only_when_request_supports_it() {
-        assert!(build_generate_app_proofs_field("CreateUsersRequest", false)
-            .contains("generate_app_proofs"));
-        assert_eq!(
-            build_generate_app_proofs_field("UpdateOrganizationNameRequest", false),
-            ""
+        let mut requests = HashSet::new();
+        requests.insert("CreateUsersRequest".to_string());
+        requests.insert("UpdateOrganizationNameRequest".to_string());
+        requests.insert("SetIpAllowlistRequest".to_string());
+        requests.insert("RemoveIpAllowlistRequest".to_string());
+        requests.insert("DeleteTvcAppAndDeploymentsRequest".to_string());
+
+        assert!(
+            build_generate_app_proofs_field("CreateUsersRequest", &requests)
+                .contains("generate_app_proofs")
+        );
+        assert!(
+            build_generate_app_proofs_field("UpdateOrganizationNameRequest", &requests)
+                .contains("generate_app_proofs")
+        );
+        assert!(
+            build_generate_app_proofs_field("SetIpAllowlistRequest", &requests)
+                .contains("generate_app_proofs")
+        );
+        assert!(
+            build_generate_app_proofs_field("RemoveIpAllowlistRequest", &requests)
+                .contains("generate_app_proofs")
+        );
+        assert!(
+            build_generate_app_proofs_field("DeleteTvcAppAndDeploymentsRequest", &requests)
+                .contains("generate_app_proofs")
         );
         assert_eq!(
-            build_generate_app_proofs_field("SetIpAllowlistRequest", false),
+            build_generate_app_proofs_field("CreateTvcAppRequest", &requests),
             ""
         );
-        assert_eq!(
-            build_generate_app_proofs_field("RemoveIpAllowlistRequest", false),
-            ""
-        );
-        assert_eq!(
-            build_generate_app_proofs_field("CreateTvcAppRequest", true),
-            ""
-        );
+    }
+
+    #[test]
+    fn requests_with_generate_app_proofs_parses_proto() {
+        let proto = r#"
+message FooRequest {
+  string type = 1;
+  optional bool generate_app_proofs = 5;
+}
+
+message BarRequest {
+  string type = 1;
+}
+
+message BazRequest {
+  string type = 1;
+  optional bool generate_app_proofs = 5;
+}
+"#;
+        let set = requests_with_generate_app_proofs(proto);
+        assert!(set.contains("FooRequest"));
+        assert!(!set.contains("BarRequest"));
+        assert!(set.contains("BazRequest"));
     }
 }

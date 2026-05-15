@@ -144,6 +144,15 @@ pub mod intent {
         DeleteWebhookEndpointIntent(super::DeleteWebhookEndpointIntent),
         SetIpAllowlistIntent(super::SetIpAllowlistIntent),
         RemoveIpAllowlistIntent(super::RemoveIpAllowlistIntent),
+        UpdateTvcAppLiveDeploymentIntent(super::UpdateTvcAppLiveDeploymentIntent),
+        DeleteTvcDeploymentIntent(super::DeleteTvcDeploymentIntent),
+        DeleteTvcAppAndDeploymentsIntent(super::DeleteTvcAppAndDeploymentsIntent),
+        RestoreTvcDeploymentIntent(super::RestoreTvcDeploymentIntent),
+        SparkSignFrostIntent(super::SparkSignFrostIntent),
+        SparkPrepareTransferIntent(super::SparkPrepareTransferIntent),
+        SparkClaimTransferIntent(super::SparkClaimTransferIntent),
+        SparkPrepareLightningReceiveIntent(super::SparkPrepareLightningReceiveIntent),
+        PostTvcQuorumKeyShareIntent(super::PostTvcQuorumKeyShareIntent),
     }
 }
 #[derive(Debug)]
@@ -841,6 +850,8 @@ pub struct EthSendTransactionIntent {
     pub max_fee_per_gas: ::core::option::Option<::prost::alloc::string::String>,
     #[serde(default)]
     pub max_priority_fee_per_gas: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub deadline: ::core::option::Option<::prost::alloc::string::String>,
     #[serde(default)]
     pub gas_station_nonce: ::core::option::Option<::prost::alloc::string::String>,
 }
@@ -2242,6 +2253,31 @@ pub struct TvcManifestApproval {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct PostTvcQuorumKeyShareIntent {
+    /// @inject_tag: validate:"required,uuid"
+    pub deployment_id: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub ephemeral_public_key_hex: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    #[serde(default)]
+    pub share_approval_bundle: ::core::option::Option<QuorumKeyShareApprovalBundle>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct QuorumKeyShareApprovalBundle {
+    /// @inject_tag: validate:"required,uuid"
+    pub operator_id: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub re_encrypted_share_hex: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub signature: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct CreateWebhookEndpointIntent {
     /// @inject_tag: validate:"required"
     pub url: ::prost::alloc::string::String,
@@ -2399,6 +2435,15 @@ pub mod result {
         DeleteWebhookEndpointResult(super::DeleteWebhookEndpointResult),
         SetIpAllowlistResult(super::SetIpAllowlistResult),
         RemoveIpAllowlistResult(super::RemoveIpAllowlistResult),
+        UpdateTvcAppLiveDeploymentResult(super::UpdateTvcAppLiveDeploymentResult),
+        DeleteTvcDeploymentResult(super::DeleteTvcDeploymentResult),
+        DeleteTvcAppAndDeploymentsResult(super::DeleteTvcAppAndDeploymentsResult),
+        RestoreTvcDeploymentResult(super::RestoreTvcDeploymentResult),
+        SparkSignFrostResult(super::SparkSignFrostResult),
+        SparkPrepareTransferResult(super::SparkPrepareTransferResult),
+        SparkClaimTransferResult(super::SparkClaimTransferResult),
+        SparkPrepareLightningReceiveResult(super::SparkPrepareLightningReceiveResult),
+        PostTvcQuorumKeyShareResult(super::PostTvcQuorumKeyShareResult),
     }
 }
 #[derive(Debug)]
@@ -3182,6 +3227,13 @@ pub struct CreateTvcManifestApprovalsResult {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct PostTvcQuorumKeyShareResult {
+    pub provisioning_share_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct EthSendRawTransactionResult {
     pub transaction_hash: ::prost::alloc::string::String,
 }
@@ -3631,6 +3683,300 @@ pub struct SetIpAllowlistResult {}
 #[derive(Clone, Copy, PartialEq)]
 pub struct RemoveIpAllowlistResult {}
 #[derive(Debug)]
+/// A FROST commitment pair contributed by one participant in a signing session.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SparkFrostCommitment {
+    /// @inject_tag: validate:"required"
+    pub id: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub hiding: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub binding: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+/// A Spark operator's identity and ECIES encryption pubkey.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SparkOperatorRecipient {
+    /// @inject_tag: validate:"required"
+    pub operator_id: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub encryption_public_key: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+/// One leaf participating in a transfer.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SparkTransferLeaf {
+    /// @inject_tag: validate:"required"
+    pub leaf_id: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    #[serde(default)]
+    pub old_leaf_derivation: ::core::option::Option<SparkKeyDerivation>,
+    /// @inject_tag: validate:"required"
+    #[serde(default)]
+    pub new_leaf_derivation: ::core::option::Option<SparkKeyDerivation>,
+    /// @inject_tag: validate:"omitempty"
+    #[serde(default)]
+    pub refund_signature: ::core::option::Option<::prost::alloc::string::String>,
+    /// @inject_tag: validate:"omitempty"
+    #[serde(default)]
+    pub direct_refund_signature: ::core::option::Option<::prost::alloc::string::String>,
+    /// @inject_tag: validate:"omitempty"
+    #[serde(default)]
+    pub direct_from_cpfp_refund_signature: ::core::option::Option<
+        ::prost::alloc::string::String,
+    >,
+}
+#[derive(Debug)]
+/// One leaf being claimed (inbound transfer that delivered an ECIES ciphertext).
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SparkClaimLeaf {
+    /// @inject_tag: validate:"required"
+    pub leaf_id: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub ciphertext: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub sender_signature: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+/// Build a transfer: for each leaf, derive the new leaf private key via HD
+/// (SIGNING_HD on new_leaf_derivation), compute the claim tweak scalar
+/// = old_priv - new_priv (mod n), Feldman-split the tweak across operators,
+/// and ECIES-encrypt the new leaf private key to receiver_public_key as
+/// the per-leaf secret_cipher carried inside each per-operator package.
+/// The enclave also computes the outer TransferPackage user_signature
+/// (ECDSA-DER over GetTransferPackageSigningPayload), returned as
+/// transfer_user_signature in the response - the client cannot see the
+/// encrypted operator payloads so it cannot hash them itself.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SparkTransferPackage {
+    /// @inject_tag: validate:"required"
+    pub transfer_id: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required,dive"
+    #[serde(default)]
+    pub leaves: ::prost::alloc::vec::Vec<SparkTransferLeaf>,
+    /// @inject_tag: validate:"required,gt=0"
+    #[serde(default)]
+    pub threshold: u32,
+    /// @inject_tag: validate:"required,dive"
+    #[serde(default)]
+    pub operator_recipients: ::prost::alloc::vec::Vec<SparkOperatorRecipient>,
+    /// @inject_tag: validate:"required"
+    pub receiver_public_key: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+/// Claim an inbound transfer by verifying the sender's per-leaf signatures,
+/// ECIES-decrypting each leaf ciphertext using the wallet's Identity key,
+/// computing the claim tweak, and building Shamir shares for the operators.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SparkClaimPackage {
+    /// @inject_tag: validate:"required,dive"
+    #[serde(default)]
+    pub leaves: ::prost::alloc::vec::Vec<SparkClaimLeaf>,
+    /// @inject_tag: validate:"required,gt=0"
+    #[serde(default)]
+    pub threshold: u32,
+    /// @inject_tag: validate:"required,dive"
+    #[serde(default)]
+    pub operator_recipients: ::prost::alloc::vec::Vec<SparkOperatorRecipient>,
+    /// @inject_tag: validate:"required"
+    pub transfer_id: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub sender_identity_public_key: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+/// Prepare a Lightning receive: generate a 32-byte preimage, publish
+/// payment_hash = sha256(preimage), and Feldman-split the preimage to operators.
+/// Does not generate FROST nonces; the eventual claim flow calls
+/// SPARK_SIGN_FROST with signatures.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SparkLightningReceivePackage {
+    /// @inject_tag: validate:"required,gt=0"
+    #[serde(default)]
+    pub threshold: u32,
+    /// @inject_tag: validate:"required,dive"
+    #[serde(default)]
+    pub operator_recipients: ::prost::alloc::vec::Vec<SparkOperatorRecipient>,
+}
+#[derive(Debug)]
+/// An ECIES-encrypted package destined for one operator.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SparkEncryptedOperatorPackage {
+    pub operator_id: ::prost::alloc::string::String,
+    pub encrypted_package: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+/// Per-signature input for SPARK_SIGN_FROST. Specifies the key,
+/// message, and operator commitments for one FROST partial signature.
+/// The enclave generates a fresh nonce internally and signs in a single
+/// invocation — the nonce never leaves the enclave boundary.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SparkSignatureRequest {
+    /// @inject_tag: validate:"required"
+    #[serde(default)]
+    pub derivation: ::core::option::Option<SparkKeyDerivation>,
+    /// @inject_tag: validate:"required"
+    pub message: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub verifying_key: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required,dive"
+    #[serde(default)]
+    pub operator_commitments: ::prost::alloc::vec::Vec<SparkFrostCommitment>,
+    /// @inject_tag: validate:"omitempty"
+    #[serde(default)]
+    pub adaptor_public_key: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+/// Per-signature output from SPARK_SIGN_FROST: Turnkey's FROST partial
+/// signature plus the public nonce commitments the client must forward to the
+/// Spark Operator so it can produce its own partial signature.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SparkPartialSignature {
+    pub signature_share: ::prost::alloc::string::String,
+    pub hiding: ::prost::alloc::string::String,
+    pub binding: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+/// Request to derive the public key at a specific Spark key path.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SparkDerivePublicKeyRequest {
+    /// @inject_tag: validate:"required"
+    #[serde(default)]
+    pub derivation: ::core::option::Option<SparkKeyDerivation>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SparkDerivedPublicKey {
+    pub public_key: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+/// Pairs a Spark leaf_id with its derived SIGNING_HD public key.
+/// Returned by transfer and claim flows so callers can avoid a follow-up
+/// per-leaf SIGNING_HD pubkey-derivation round-trip.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SparkLeafPublicKey {
+    pub leaf_id: ::prost::alloc::string::String,
+    pub public_key: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+/// Pure FROST partial signing — nonce generation and partial signature in one
+/// enclave invocation, without any operator package construction.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SparkSignFrostIntent {
+    /// @inject_tag: validate:"required"
+    pub sign_with: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required,dive"
+    #[serde(default)]
+    pub signatures: ::prost::alloc::vec::Vec<SparkSignatureRequest>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SparkSignFrostResult {
+    #[serde(default)]
+    pub signatures: ::prost::alloc::vec::Vec<SparkPartialSignature>,
+}
+#[derive(Debug)]
+/// Sender-side Spark package construction (transfer or lightning_receive).
+/// Does not include FROST signing — use SIGN_FROST_SPARK for that.
+/// Sender-side BTC transfer package construction.
+/// Does not include FROST signing — use SIGN_FROST_SPARK for that.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SparkPrepareTransferIntent {
+    /// @inject_tag: validate:"required"
+    pub sign_with: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    #[serde(default)]
+    pub transfer: ::core::option::Option<SparkTransferPackage>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SparkPrepareTransferResult {
+    #[serde(default)]
+    pub operator_packages: ::prost::alloc::vec::Vec<SparkEncryptedOperatorPackage>,
+    pub transfer_user_signature: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub new_leaf_public_keys: ::prost::alloc::vec::Vec<SparkLeafPublicKey>,
+}
+#[derive(Debug)]
+/// Receiver-side Spark claim package construction.
+/// Does not include FROST signing — use SIGN_FROST_SPARK for that.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SparkClaimTransferIntent {
+    /// @inject_tag: validate:"required"
+    pub sign_with: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    #[serde(default)]
+    pub claim: ::core::option::Option<SparkClaimPackage>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SparkClaimTransferResult {
+    #[serde(default)]
+    pub operator_packages: ::prost::alloc::vec::Vec<SparkEncryptedOperatorPackage>,
+    #[serde(default)]
+    pub new_leaf_public_keys: ::prost::alloc::vec::Vec<SparkLeafPublicKey>,
+}
+#[derive(Debug)]
+/// Lightning receive preimage splitting — generates a random preimage, hashes
+/// it to produce a payment_hash, and distributes Feldman shares to operators.
+/// Does not include FROST signing — use SIGN_FROST_SPARK for that.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SparkPrepareLightningReceiveIntent {
+    /// @inject_tag: validate:"required"
+    pub sign_with: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    #[serde(default)]
+    pub lightning_receive: ::core::option::Option<SparkLightningReceivePackage>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SparkPrepareLightningReceiveResult {
+    #[serde(default)]
+    pub operator_packages: ::prost::alloc::vec::Vec<SparkEncryptedOperatorPackage>,
+    pub payment_hash: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -3640,6 +3986,135 @@ pub struct ClientSignature {
     pub message: ::prost::alloc::string::String,
     pub signature: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
+/// UpdateTvcAppLiveDeploymentIntent updates the app's live_deployment field to this deployment_id.
+/// Deployments must be delete=false in order to be set as the live deployment of an app.
+/// This action is also gated on deployment health.
+/// Under the hood, the transducer will update the enclave-set accordingly, and the enclave-controller
+/// will shift traffic immediately. This will not be gated on any preconditions around the health of the
+/// deployment - these gates are enforced by the activity.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct UpdateTvcAppLiveDeploymentIntent {
+    /// @inject_tag: validate:"required,uuid"
+    pub deployment_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, Copy, PartialEq)]
+pub struct UpdateTvcAppLiveDeploymentResult {}
+#[derive(Debug)]
+/// DeleteTvcDeploymentIntent deletes a TVC deployment by setting the deployment's delete field to true. This can be undone via RestoreTvcDeployment.
+/// Under the hood, the transducer will remove it from the enclave-set's spec and the enclave-controller will clean up all its k8s resources.
+/// A deployment that is the app's live deployment cannot be deleted. In order to delete the live deployment, must either:
+/// 1) Set a different deployment as the live deployment for the app first.
+/// 2) Delete the app itself, which will delete all deployments under it.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeleteTvcDeploymentIntent {
+    /// @inject_tag: validate:"required,uuid"
+    pub deployment_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeleteTvcDeploymentResult {
+    pub deployment_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeleteTvcAppAndDeploymentsIntent {
+    /// @inject_tag: validate:"required,uuid"
+    pub app_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeleteTvcAppAndDeploymentsResult {
+    pub app_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+/// This restores a previously deleted TVC deployment by setting the deployment's delete field back to false from true.
+/// Could also be named UndeleteTvcDeploymentIntent, but RestoreTvcDeploymentIntent sounded better to me. Very down to bikeshed this.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct RestoreTvcDeploymentIntent {
+    /// @inject_tag: validate:"required,uuid"
+    pub deployment_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct RestoreTvcDeploymentResult {
+    pub deployment_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SparkKeyDerivation {
+    #[serde(default)]
+    pub key: ::core::option::Option<spark_key_derivation::Key>,
+}
+/// Nested message and enum types in `SparkKeyDerivation`.
+pub mod spark_key_derivation {
+    #[derive(::serde::Serialize, ::serde::Deserialize)]
+    #[derive(Clone, PartialEq)]
+    #[derive(Debug)]
+    pub enum Key {
+        #[serde(rename = "KEY_IDENTITY")]
+        Identity(super::SparkIdentityDerivation),
+        #[serde(rename = "KEY_SIGNING_LEAF")]
+        SigningLeaf(super::SparkSigningLeafDerivation),
+        #[serde(rename = "KEY_DEPOSIT")]
+        Deposit(super::SparkDepositDerivation),
+        #[serde(rename = "KEY_STATIC_DEPOSIT")]
+        StaticDeposit(super::SparkStaticDepositDerivation),
+        #[serde(rename = "KEY_HTLC_PREIMAGE")]
+        HtlcPreimage(super::SparkHtlcPreimageDerivation),
+    }
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, Copy, PartialEq)]
+pub struct SparkIdentityDerivation {}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SparkSigningLeafDerivation {
+    /// @inject_tag: validate:"required"
+    pub leaf_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, Copy, PartialEq)]
+pub struct SparkDepositDerivation {}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, Copy, PartialEq)]
+pub struct SparkStaticDepositDerivation {
+    /// @inject_tag: validate:"required"
+    #[serde(default)]
+    pub index: u32,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, Copy, PartialEq)]
+pub struct SparkHtlcPreimageDerivation {}
 /// Type of Activity, such as Add User, or Sign Transaction.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -3904,6 +4379,22 @@ pub enum ActivityType {
     SetIpAllowlist = 128,
     #[serde(rename = "ACTIVITY_TYPE_REMOVE_IP_ALLOWLIST")]
     RemoveIpAllowlist = 129,
+    #[serde(rename = "ACTIVITY_TYPE_UPDATE_TVC_APP_LIVE_DEPLOYMENT")]
+    UpdateTvcAppLiveDeployment = 130,
+    #[serde(rename = "ACTIVITY_TYPE_DELETE_TVC_DEPLOYMENT")]
+    DeleteTvcDeployment = 131,
+    #[serde(rename = "ACTIVITY_TYPE_DELETE_TVC_APP_AND_DEPLOYMENTS")]
+    DeleteTvcAppAndDeployments = 132,
+    #[serde(rename = "ACTIVITY_TYPE_RESTORE_TVC_DEPLOYMENT")]
+    RestoreTvcDeployment = 133,
+    /// Reserving the following for now to preserve ordering with Intent enum.
+    ///
+    /// ACTIVITY_TYPE_SPARK_SIGN_FROST = 134;
+    /// ACTIVITY_TYPE_SPARK_PREPARE_TRANSFER = 135;
+    /// ACTIVITY_TYPE_SPARK_CLAIM_TRANSFER = 136;
+    /// ACTIVITY_TYPE_SPARK_PREPARE_LIGHTNING_RECEIVE = 137;
+    #[serde(rename = "ACTIVITY_TYPE_POST_TVC_QUORUM_KEY_SHARE")]
+    PostTvcQuorumKeyShare = 138,
 }
 impl ActivityType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4058,6 +4549,15 @@ impl ActivityType {
             Self::DeleteWebhookEndpoint => "ACTIVITY_TYPE_DELETE_WEBHOOK_ENDPOINT",
             Self::SetIpAllowlist => "ACTIVITY_TYPE_SET_IP_ALLOWLIST",
             Self::RemoveIpAllowlist => "ACTIVITY_TYPE_REMOVE_IP_ALLOWLIST",
+            Self::UpdateTvcAppLiveDeployment => {
+                "ACTIVITY_TYPE_UPDATE_TVC_APP_LIVE_DEPLOYMENT"
+            }
+            Self::DeleteTvcDeployment => "ACTIVITY_TYPE_DELETE_TVC_DEPLOYMENT",
+            Self::DeleteTvcAppAndDeployments => {
+                "ACTIVITY_TYPE_DELETE_TVC_APP_AND_DEPLOYMENTS"
+            }
+            Self::RestoreTvcDeployment => "ACTIVITY_TYPE_RESTORE_TVC_DEPLOYMENT",
+            Self::PostTvcQuorumKeyShare => "ACTIVITY_TYPE_POST_TVC_QUORUM_KEY_SHARE",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4241,6 +4741,17 @@ impl ActivityType {
             "ACTIVITY_TYPE_DELETE_WEBHOOK_ENDPOINT" => Some(Self::DeleteWebhookEndpoint),
             "ACTIVITY_TYPE_SET_IP_ALLOWLIST" => Some(Self::SetIpAllowlist),
             "ACTIVITY_TYPE_REMOVE_IP_ALLOWLIST" => Some(Self::RemoveIpAllowlist),
+            "ACTIVITY_TYPE_UPDATE_TVC_APP_LIVE_DEPLOYMENT" => {
+                Some(Self::UpdateTvcAppLiveDeployment)
+            }
+            "ACTIVITY_TYPE_DELETE_TVC_DEPLOYMENT" => Some(Self::DeleteTvcDeployment),
+            "ACTIVITY_TYPE_DELETE_TVC_APP_AND_DEPLOYMENTS" => {
+                Some(Self::DeleteTvcAppAndDeployments)
+            }
+            "ACTIVITY_TYPE_RESTORE_TVC_DEPLOYMENT" => Some(Self::RestoreTvcDeployment),
+            "ACTIVITY_TYPE_POST_TVC_QUORUM_KEY_SHARE" => {
+                Some(Self::PostTvcQuorumKeyShare)
+            }
             _ => None,
         }
     }
@@ -4362,6 +4873,57 @@ impl ActivityProtectedCategory {
             "ACTIVITY_PROTECTED_CATEGORY_SIGN" => Some(Self::Sign),
             "ACTIVITY_PROTECTED_CATEGORY_SMS" => Some(Self::Sms),
             "ACTIVITY_PROTECTED_CATEGORY_FIAT_ON_RAMP" => Some(Self::FiatOnRamp),
+            _ => None,
+        }
+    }
+}
+/// The key type addressed within a Spark wallet. Values correspond to the
+/// per-account child index in the derivation path m/8797555'/{account}'/{N}'.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum SparkKeyType {
+    #[serde(rename = "SPARK_KEY_TYPE_UNSPECIFIED")]
+    Unspecified = 0,
+    /// N = 0
+    #[serde(rename = "SPARK_KEY_TYPE_IDENTITY")]
+    Identity = 1,
+    /// N = 1; per-leaf BIP32 hardened child at u32_be(sha256(leaf_id_utf8)\[0..4\]) % 2^31
+    #[serde(rename = "SPARK_KEY_TYPE_SIGNING_HD")]
+    SigningHd = 2,
+    /// N = 2
+    #[serde(rename = "SPARK_KEY_TYPE_DEPOSIT")]
+    Deposit = 3,
+    /// N = 3
+    #[serde(rename = "SPARK_KEY_TYPE_STATIC_DEPOSIT_HD")]
+    StaticDepositHd = 4,
+    /// N = 4
+    #[serde(rename = "SPARK_KEY_TYPE_HTLC_PREIMAGE_HD")]
+    HtlcPreimageHd = 5,
+}
+impl SparkKeyType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "SPARK_KEY_TYPE_UNSPECIFIED",
+            Self::Identity => "SPARK_KEY_TYPE_IDENTITY",
+            Self::SigningHd => "SPARK_KEY_TYPE_SIGNING_HD",
+            Self::Deposit => "SPARK_KEY_TYPE_DEPOSIT",
+            Self::StaticDepositHd => "SPARK_KEY_TYPE_STATIC_DEPOSIT_HD",
+            Self::HtlcPreimageHd => "SPARK_KEY_TYPE_HTLC_PREIMAGE_HD",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "SPARK_KEY_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+            "SPARK_KEY_TYPE_IDENTITY" => Some(Self::Identity),
+            "SPARK_KEY_TYPE_SIGNING_HD" => Some(Self::SigningHd),
+            "SPARK_KEY_TYPE_DEPOSIT" => Some(Self::Deposit),
+            "SPARK_KEY_TYPE_STATIC_DEPOSIT_HD" => Some(Self::StaticDepositHd),
+            "SPARK_KEY_TYPE_HTLC_PREIMAGE_HD" => Some(Self::HtlcPreimageHd),
             _ => None,
         }
     }

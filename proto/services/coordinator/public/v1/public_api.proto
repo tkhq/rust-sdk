@@ -52,6 +52,14 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
           in: IN_HEADER
           name: "X-Stamp-WebAuthn"
         }
+      },
+      {
+        key: "AttestedAuth"
+        value: {
+          type: TYPE_API_KEY
+          in: IN_HEADER
+          name: "X-Stamp-Attested"
+        }
       }
     ]
   }
@@ -1719,6 +1727,18 @@ service PublicApiService {
     };
   }
 
+  rpc DeleteTvcAppAndDeployments(external.activity.v1.DeleteTvcAppAndDeploymentsRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/delete_tvc_app_and_deployments"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Delete a TVC App and all of its deployments"
+      summary: "Delete a TVC App and all of its deployments"
+      tags: "TVC"
+    };
+  }
+
   rpc GetTvcApps(GetTvcAppsRequest) returns (GetTvcAppsResponse) {
     option (google.api.http) = {
       post: "/public/v1/query/list_tvc_apps"
@@ -1751,6 +1771,42 @@ service PublicApiService {
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Create a new TVC Deployment"
       summary: "Create a TVC Deployment"
+      tags: "TVC"
+    };
+  }
+
+  rpc UpdateTvcAppLiveDeployment(external.activity.v1.UpdateTvcAppLiveDeploymentRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/set_tvc_app_live_deployment"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Set the live deployment for a TVC App"
+      summary: "Set TVC App live deployment"
+      tags: "TVC"
+    };
+  }
+
+  rpc DeleteTvcDeployment(external.activity.v1.DeleteTvcDeploymentRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/delete_tvc_deployment"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Delete a TVC Deployment"
+      summary: "Delete a TVC Deployment"
+      tags: "TVC"
+    };
+  }
+
+  rpc RestoreTvcDeployment(external.activity.v1.RestoreTvcDeploymentRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/restore_tvc_deployment"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Restore a deleted TVC Deployment"
+      summary: "Restore a TVC Deployment"
       tags: "TVC"
     };
   }
@@ -1813,6 +1869,20 @@ service PublicApiService {
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Post one or more manifest approvals for a TVC Manifest"
       summary: "Create TVC Manifest Approvals"
+      tags: "TVC"
+    };
+  }
+
+  rpc PostTvcQuorumKeyShare(external.activity.v1.PostTvcQuorumKeyShareRequest) returns (ActivityResponse) {
+    // TODO(tvc): remove when provisioning flow is fully usable
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/submit/post_tvc_quorum_key_share"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Post re-encrypted quorum key share for a TVC deployment."
+      summary: "Post TVC Quorum Key Share"
       tags: "TVC"
     };
   }

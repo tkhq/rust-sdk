@@ -35,10 +35,11 @@ pub struct AuthenticatedClient {
 /// If only some of the three required env vars are set, errors with the list of
 /// missing names — no merged resolve between env and disk vars.
 pub async fn build_client() -> Result<AuthenticatedClient> {
-    let (org_id, api_base_url, api_key_public, api_key_private) = match load_credentials_from_env_vars()? {
-        Some(creds) => creds,
-        None => load_credentials_from_config().await?,
-    };
+    let (org_id, api_base_url, api_key_public, api_key_private) =
+        match load_credentials_from_env_vars()? {
+            Some(creds) => creds,
+            None => load_credentials_from_config().await?,
+        };
     build_authed_client(&org_id, &api_base_url, &api_key_public, &api_key_private)
 }
 

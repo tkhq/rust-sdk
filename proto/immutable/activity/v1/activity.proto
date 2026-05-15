@@ -154,6 +154,17 @@ enum ActivityType {
   ACTIVITY_TYPE_DELETE_WEBHOOK_ENDPOINT = 127;
   ACTIVITY_TYPE_SET_IP_ALLOWLIST = 128;
   ACTIVITY_TYPE_REMOVE_IP_ALLOWLIST = 129;
+  ACTIVITY_TYPE_UPDATE_TVC_APP_LIVE_DEPLOYMENT = 130;
+  ACTIVITY_TYPE_DELETE_TVC_DEPLOYMENT = 131;
+  ACTIVITY_TYPE_DELETE_TVC_APP_AND_DEPLOYMENTS = 132;
+  ACTIVITY_TYPE_RESTORE_TVC_DEPLOYMENT = 133;
+  // Reserving the following for now to preserve ordering with Intent enum.
+  //
+  // ACTIVITY_TYPE_SPARK_SIGN_FROST = 134;
+  // ACTIVITY_TYPE_SPARK_PREPARE_TRANSFER = 135;
+  // ACTIVITY_TYPE_SPARK_CLAIM_TRANSFER = 136;
+  // ACTIVITY_TYPE_SPARK_PREPARE_LIGHTNING_RECEIVE = 137;
+  ACTIVITY_TYPE_POST_TVC_QUORUM_KEY_SHARE = 138;
 }
 
 // The current processing status of an Activity.
@@ -313,6 +324,15 @@ message Intent {
     DeleteWebhookEndpointIntent delete_webhook_endpoint_intent = 128;
     SetIpAllowlistIntent set_ip_allowlist_intent = 129;
     RemoveIpAllowlistIntent remove_ip_allowlist_intent = 130;
+    UpdateTvcAppLiveDeploymentIntent update_tvc_app_live_deployment_intent = 131;
+    DeleteTvcDeploymentIntent delete_tvc_deployment_intent = 132;
+    DeleteTvcAppAndDeploymentsIntent delete_tvc_app_and_deployments_intent = 133;
+    RestoreTvcDeploymentIntent restore_tvc_deployment_intent = 134;
+    SparkSignFrostIntent spark_sign_frost_intent = 135;
+    SparkPrepareTransferIntent spark_prepare_transfer_intent = 136;
+    SparkClaimTransferIntent spark_claim_transfer_intent = 137;
+    SparkPrepareLightningReceiveIntent spark_prepare_lightning_receive_intent = 138;
+    PostTvcQuorumKeyShareIntent post_tvc_quorum_key_share_intent = 139;
   }
 }
 
@@ -1155,7 +1175,7 @@ message CreateReadWriteSessionIntentV2 {
   optional string user_id = 2 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      description: "Unique identifier for a given User."
+      description: "Optional unique identifier for a given User. If none provided, the read write session will be created for the user who is making the request."
       title: ""
     }
   ];
@@ -1493,11 +1513,14 @@ message SolSendTransactionIntent {
   string caip2 = 4 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      description: "CAIP-2 chain ID (e.g., 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp' for Solana mainnet)."
+      description: "CAIP-2 chain ID (e.g., 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp' for Solana mainnet). Human-readable Solana aliases ('solana:mainnet', 'solana:devnet') are also accepted and normalized to canonical CAIP-2 values."
       enum: [
+        "solana:mainnet",
         "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
-        "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG",
-        "solana:4uhcVJyU9pJkvQyS88uRDiswHXSCkY3zQawwpjk2NsNY"
+        "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d",
+        "solana:devnet",
+        "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
+        "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG"
       ]
     }
   ];
@@ -1599,6 +1622,14 @@ message EthSendTransactionIntent {
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
       description: "Maximum priority fee (tip) per gas unit in wei. Required for non-sponsored (EIP-1559) transactions. Not used for sponsored transactions."
+      title: ""
+    }
+  ];
+
+  optional string deadline = 11 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Unix timestamp in seconds for EIP-712 execution deadline. Only used when sponsor=true."
       title: ""
     }
   ];
@@ -3317,7 +3348,7 @@ message UpsertGasUsageConfigIntent {
   // @inject_tag: validate:"required,numeric"
   string window_duration_minutes = 3 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Rolling sponsorship window duration, expressed in minutes."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Rolling sponsorship window duration, expressed in minutes. This value can't exceed 30 days (43200 minutes)."}
   ];
 
   optional bool enabled = 4 [
@@ -4242,6 +4273,42 @@ message TvcManifestApproval {
   ];
 }
 
+message PostTvcQuorumKeyShareIntent {
+  // @inject_tag: validate:"required,uuid"
+  string deployment_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier of the TVC deployment receiving quorum key share"}
+  ];
+  // @inject_tag: validate:"required"
+  string ephemeral_public_key_hex = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Hex-encoded ephemeral public key used to encrypt the quorum key share"}
+  ];
+  // @inject_tag: validate:"required"
+  QuorumKeyShareApprovalBundle share_approval_bundle = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Re-encrypted quorum key share and approval"}
+  ];
+}
+
+message QuorumKeyShareApprovalBundle {
+  // @inject_tag: validate:"required,uuid"
+  string operator_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier of the operator providing this quorum key share"}
+  ];
+  // @inject_tag: validate:"required"
+  string re_encrypted_share_hex = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Hex-encoded re-encrypted quorum key share"}
+  ];
+  // @inject_tag: validate:"required"
+  string signature = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Signature from the share set operator approving the manifest"}
+  ];
+}
+
 message CreateWebhookEndpointIntent {
   // @inject_tag: validate:"required"
   string url = 1 [
@@ -4400,6 +4467,15 @@ message Result {
     DeleteWebhookEndpointResult delete_webhook_endpoint_result = 107;
     SetIpAllowlistResult set_ip_allowlist_result = 108;
     RemoveIpAllowlistResult remove_ip_allowlist_result = 109;
+    UpdateTvcAppLiveDeploymentResult update_tvc_app_live_deployment_result = 110;
+    DeleteTvcDeploymentResult delete_tvc_deployment_result = 111;
+    DeleteTvcAppAndDeploymentsResult delete_tvc_app_and_deployments_result = 112;
+    RestoreTvcDeploymentResult restore_tvc_deployment_result = 113;
+    SparkSignFrostResult spark_sign_frost_result = 114;
+    SparkPrepareTransferResult spark_prepare_transfer_result = 115;
+    SparkClaimTransferResult spark_claim_transfer_result = 116;
+    SparkPrepareLightningReceiveResult spark_prepare_lightning_receive_result = 117;
+    PostTvcQuorumKeyShareResult post_tvc_quorum_key_share_result = 118;
   }
 }
 
@@ -5243,6 +5319,13 @@ message CreateTvcManifestApprovalsResult {
   ];
 }
 
+message PostTvcQuorumKeyShareResult {
+  string provisioning_share_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The unique identifier for the provisioning quorum key share"}
+  ];
+}
+
 message EthSendRawTransactionResult {
   string transaction_hash = 1 [
     (google.api.field_behavior) = REQUIRED,
@@ -6006,6 +6089,395 @@ message SetIpAllowlistResult {}
 
 message RemoveIpAllowlistResult {}
 
+// Spark (Bitcoin L2) uses a 2-of-2 model: Turnkey holds the user-side key;
+// Spark Operators hold the other side via a FROST threshold quorum.
+// SPARK_SIGN_FROST runs both FROST rounds (nonce generation and partial
+// signing) in a single enclave invocation; the package-construction
+// activities (SPARK_PREPARE_TRANSFER, SPARK_CLAIM_TRANSFER,
+// SPARK_PREPARE_LIGHTNING_RECEIVE) build the encrypted operator
+// packages that those FROST signatures attach to.
+
+// The key type addressed within a Spark wallet. Values correspond to the
+// per-account child index in the derivation path m/8797555'/{account}'/{N}'.
+enum SparkKeyType {
+  SPARK_KEY_TYPE_UNSPECIFIED = 0;
+  SPARK_KEY_TYPE_IDENTITY = 1; // N = 0
+  SPARK_KEY_TYPE_SIGNING_HD = 2; // N = 1; per-leaf BIP32 hardened child at u32_be(sha256(leaf_id_utf8)[0..4]) % 2^31
+  SPARK_KEY_TYPE_DEPOSIT = 3; // N = 2
+  SPARK_KEY_TYPE_STATIC_DEPOSIT_HD = 4; // N = 3
+  SPARK_KEY_TYPE_HTLC_PREIMAGE_HD = 5; // N = 4
+}
+
+// A FROST commitment pair contributed by one participant in a signing session.
+message SparkFrostCommitment {
+  // @inject_tag: validate:"required"
+  string id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "FROST participant identifier, hex-encoded (32-byte scalar)."}
+  ];
+  // @inject_tag: validate:"required"
+  string hiding = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Hiding commitment D, hex-encoded compressed secp256k1 point."}
+  ];
+  // @inject_tag: validate:"required"
+  string binding = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Binding commitment E, hex-encoded compressed secp256k1 point."}
+  ];
+}
+
+// A Spark operator's identity and ECIES encryption pubkey.
+message SparkOperatorRecipient {
+  // @inject_tag: validate:"required"
+  string operator_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Spark operator identifier (UUID)."}
+  ];
+  // @inject_tag: validate:"required"
+  string encryption_public_key = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Operator's ECIES encryption pubkey (hex-encoded compressed secp256k1 point)."}
+  ];
+}
+
+// One leaf participating in a transfer.
+message SparkTransferLeaf {
+  // @inject_tag: validate:"required"
+  string leaf_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Leaf identifier (UUID)."}
+  ];
+  // @inject_tag: validate:"required"
+  SparkKeyDerivation old_leaf_derivation = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Derivation for the existing (pre-transfer) leaf key. Always a SIGNING_HD derivation."}
+  ];
+  // @inject_tag: validate:"required"
+  SparkKeyDerivation new_leaf_derivation = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Derivation for the new (post-transfer) leaf key. Always a SIGNING_HD derivation. The enclave ECIES-encrypts this private key to receiver_public_key as the per-leaf secret_cipher; HD-derived rather than random so the sender can re-derive on retry (Turnkey's enclave is stateless)."}
+  ];
+  // @inject_tag: validate:"omitempty"
+  optional string refund_signature = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Client-produced CPFP refund signature (hex-encoded), passed through verbatim into the per-operator SendLeafKeyTweak. Empty omits the field from the operator package."}
+  ];
+  // @inject_tag: validate:"omitempty"
+  optional string direct_refund_signature = 5 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Client-produced direct refund signature (hex-encoded). Passed through verbatim."}
+  ];
+  // @inject_tag: validate:"omitempty"
+  optional string direct_from_cpfp_refund_signature = 6 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Client-produced direct-from-CPFP refund signature (hex-encoded). Passed through verbatim."}
+  ];
+}
+
+// One leaf being claimed (inbound transfer that delivered an ECIES ciphertext).
+message SparkClaimLeaf {
+  // @inject_tag: validate:"required"
+  string leaf_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Leaf identifier (UUID)."}
+  ];
+  // @inject_tag: validate:"required"
+  string ciphertext = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "ECIES ciphertext (hex-encoded) containing the inbound transfer secret. Decrypted inside the enclave using the wallet's Identity key."}
+  ];
+  // @inject_tag: validate:"required"
+  string sender_signature = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Hex-encoded 64-byte compact ECDSA signature binding (leaf_id, transfer_id, ciphertext) to the sender's identity key. Verified inside the enclave before decryption."}
+  ];
+}
+
+// Build a transfer: for each leaf, derive the new leaf private key via HD
+// (SIGNING_HD on new_leaf_derivation), compute the claim tweak scalar
+// = old_priv - new_priv (mod n), Feldman-split the tweak across operators,
+// and ECIES-encrypt the new leaf private key to receiver_public_key as
+// the per-leaf secret_cipher carried inside each per-operator package.
+// The enclave also computes the outer TransferPackage user_signature
+// (ECDSA-DER over GetTransferPackageSigningPayload), returned as
+// transfer_user_signature in the response - the client cannot see the
+// encrypted operator payloads so it cannot hash them itself.
+message SparkTransferPackage {
+  // @inject_tag: validate:"required"
+  string transfer_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Spark transfer identifier (UUID)."}
+  ];
+  // @inject_tag: validate:"required,dive"
+  repeated SparkTransferLeaf leaves = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Leaves being transferred."}
+  ];
+  // @inject_tag: validate:"required,gt=0"
+  uint32 threshold = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Feldman VSS threshold for reconstructing the per-leaf tweak scalar."}
+  ];
+  // @inject_tag: validate:"required,dive"
+  repeated SparkOperatorRecipient operator_recipients = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Operators that will receive Feldman shares of the per-leaf tweak. Order must match the operators' numeric IDs in the Spark operator config - share index is the 1-based position in this list."}
+  ];
+  // @inject_tag: validate:"required"
+  string receiver_public_key = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Recipient's identity pubkey (hex-encoded compressed secp256k1 point). Each leaf's new_priv is ECIES-encrypted to this key and embedded in the per-operator package for claim-time delivery."}
+  ];
+}
+
+// Claim an inbound transfer by verifying the sender's per-leaf signatures,
+// ECIES-decrypting each leaf ciphertext using the wallet's Identity key,
+// computing the claim tweak, and building Shamir shares for the operators.
+message SparkClaimPackage {
+  // @inject_tag: validate:"required,dive"
+  repeated SparkClaimLeaf leaves = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Leaves being claimed."}
+  ];
+  // @inject_tag: validate:"required,gt=0"
+  uint32 threshold = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Shamir threshold for reconstructing the per-leaf claim secret."}
+  ];
+  // @inject_tag: validate:"required,dive"
+  repeated SparkOperatorRecipient operator_recipients = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Operators that will receive Shamir shares."}
+  ];
+  // @inject_tag: validate:"required"
+  string transfer_id = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Spark transfer identifier (UUID). Used together with each leaf's sender_signature to verify the sender bound this ciphertext to this transfer."}
+  ];
+  // @inject_tag: validate:"required"
+  string sender_identity_public_key = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Sender's compressed secp256k1 identity public key (hex-encoded, 33 bytes). Used to verify the per-leaf sender_signature fields."}
+  ];
+}
+
+// Prepare a Lightning receive: generate a 32-byte preimage, publish
+// payment_hash = sha256(preimage), and Feldman-split the preimage to operators.
+// Does not generate FROST nonces; the eventual claim flow calls
+// SPARK_SIGN_FROST with signatures.
+message SparkLightningReceivePackage {
+  // @inject_tag: validate:"required,gt=0"
+  uint32 threshold = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Feldman VSS threshold for reconstructing the preimage."}
+  ];
+  // @inject_tag: validate:"required,dive"
+  repeated SparkOperatorRecipient operator_recipients = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Operators that will receive Feldman shares of the preimage. Order must match the operators' numeric IDs in the Spark operator config - share index is the 1-based position in this list."}
+  ];
+}
+
+// An ECIES-encrypted package destined for one operator.
+message SparkEncryptedOperatorPackage {
+  string operator_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Spark operator identifier (UUID)."}
+  ];
+  string encrypted_package = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "ECIES ciphertext (hex-encoded) opaque to Turnkey after emission."}
+  ];
+}
+
+// Per-signature input for SPARK_SIGN_FROST. Specifies the key,
+// message, and operator commitments for one FROST partial signature.
+// The enclave generates a fresh nonce internally and signs in a single
+// invocation — the nonce never leaves the enclave boundary.
+message SparkSignatureRequest {
+  // @inject_tag: validate:"required"
+  SparkKeyDerivation derivation = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Which key to sign with."}
+  ];
+  // @inject_tag: validate:"required"
+  string message = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Hex-encoded 32-byte sighash to sign."}
+  ];
+  // @inject_tag: validate:"required"
+  string verifying_key = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Aggregate group verifying key (hex-encoded compressed secp256k1 point), computed as P_ops + P_user. Bound into the nonce HMAC."}
+  ];
+  // @inject_tag: validate:"required,dive"
+  repeated SparkFrostCommitment operator_commitments = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Commitments for every non-Turnkey participant. MUST NOT include an entry under Turnkey's identifier. Bound into the nonce HMAC."}
+  ];
+  // @inject_tag: validate:"omitempty"
+  optional string adaptor_public_key = 5 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional per-signature adaptor point T (hex-encoded 33-byte compressed secp256k1 pubkey). When set, the result is a Schnorr adaptor pre-signature. Bound into the nonce HMAC."}
+  ];
+}
+
+// Per-signature output from SPARK_SIGN_FROST: Turnkey's FROST partial
+// signature plus the public nonce commitments the client must forward to the
+// Spark Operator so it can produce its own partial signature.
+message SparkPartialSignature {
+  string signature_share = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Hex-encoded FROST partial signature."}
+  ];
+  string hiding = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Turnkey's hiding commitment D (hex-encoded compressed secp256k1 point). Forward to the Spark Operator."}
+  ];
+  string binding = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Turnkey's binding commitment E (hex-encoded compressed secp256k1 point). Forward to the Spark Operator."}
+  ];
+}
+
+// Request to derive the public key at a specific Spark key path.
+message SparkDerivePublicKeyRequest {
+  // @inject_tag: validate:"required"
+  SparkKeyDerivation derivation = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Which key type and optional leaf_id/index to derive."}
+  ];
+}
+
+message SparkDerivedPublicKey {
+  string public_key = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Hex-encoded compressed secp256k1 point (33 bytes)."}
+  ];
+}
+
+// Pairs a Spark leaf_id with its derived SIGNING_HD public key.
+// Returned by transfer and claim flows so callers can avoid a follow-up
+// per-leaf SIGNING_HD pubkey-derivation round-trip.
+message SparkLeafPublicKey {
+  string leaf_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The Spark leaf_id this public key was derived for."}
+  ];
+  string public_key = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Hex-encoded compressed secp256k1 point (33 bytes) for the SIGNING_HD derivation at leaf_id."}
+  ];
+}
+
+// Pure FROST partial signing — nonce generation and partial signature in one
+// enclave invocation, without any operator package construction.
+message SparkSignFrostIntent {
+  // @inject_tag: validate:"required"
+  string sign_with = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A Spark wallet account address identifying the wallet to sign with."}
+  ];
+  // @inject_tag: validate:"required,dive"
+  repeated SparkSignatureRequest signatures = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Batched sign requests. Each produces a partial signature plus Turnkey's public commitments."}
+  ];
+}
+
+message SparkSignFrostResult {
+  repeated SparkPartialSignature signatures = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Partial signatures plus Turnkey commitments, one per request, in order."}
+  ];
+}
+
+// Sender-side Spark package construction (transfer or lightning_receive).
+// Does not include FROST signing — use SIGN_FROST_SPARK for that.
+// Sender-side BTC transfer package construction.
+// Does not include FROST signing — use SIGN_FROST_SPARK for that.
+message SparkPrepareTransferIntent {
+  // @inject_tag: validate:"required"
+  string sign_with = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A Spark wallet account address identifying the wallet."}
+  ];
+  // @inject_tag: validate:"required"
+  SparkTransferPackage transfer = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Transfer package parameters for HD key tweak splitting."}
+  ];
+}
+
+message SparkPrepareTransferResult {
+  repeated SparkEncryptedOperatorPackage operator_packages = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Per-operator ECIES-encrypted packages."}
+  ];
+  string transfer_user_signature = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Hex-encoded ECDSA-DER signature of the TransferPackage signing payload, signed with the wallet's IDENTITY key."}
+  ];
+  repeated SparkLeafPublicKey new_leaf_public_keys = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Newly-derived SIGNING_HD public keys, one per leaf, in input order."}
+  ];
+}
+
+// Receiver-side Spark claim package construction.
+// Does not include FROST signing — use SIGN_FROST_SPARK for that.
+message SparkClaimTransferIntent {
+  // @inject_tag: validate:"required"
+  string sign_with = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A Spark wallet account address identifying the wallet."}
+  ];
+  // @inject_tag: validate:"required"
+  SparkClaimPackage claim = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Claim package parameters."}
+  ];
+}
+
+message SparkClaimTransferResult {
+  repeated SparkEncryptedOperatorPackage operator_packages = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Per-operator ECIES-encrypted packages."}
+  ];
+  repeated SparkLeafPublicKey new_leaf_public_keys = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Newly-derived SIGNING_HD public keys, one per leaf, in input order."}
+  ];
+}
+
+// Lightning receive preimage splitting — generates a random preimage, hashes
+// it to produce a payment_hash, and distributes Feldman shares to operators.
+// Does not include FROST signing — use SIGN_FROST_SPARK for that.
+message SparkPrepareLightningReceiveIntent {
+  // @inject_tag: validate:"required"
+  string sign_with = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A Spark wallet account address identifying the wallet."}
+  ];
+  // @inject_tag: validate:"required"
+  SparkLightningReceivePackage lightning_receive = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Lightning receive package parameters: threshold and operator recipients."}
+  ];
+}
+
+message SparkPrepareLightningReceiveResult {
+  repeated SparkEncryptedOperatorPackage operator_packages = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Per-operator ECIES-encrypted Feldman share packages."}
+  ];
+  string payment_hash = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Hex-encoded SHA256(preimage). Forward to the Lightning node."}
+  ];
+}
+
 message ClientSignature {
   string public_key = 1 [
     (google.api.field_behavior) = REQUIRED,
@@ -6027,3 +6499,124 @@ message ClientSignature {
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The cryptographic signature over the message."}
   ];
 }
+
+// UpdateTvcAppLiveDeploymentIntent updates the app's live_deployment field to this deployment_id.
+// Deployments must be delete=false in order to be set as the live deployment of an app.
+// This action is also gated on deployment health.
+// Under the hood, the transducer will update the enclave-set accordingly, and the enclave-controller
+// will shift traffic immediately. This will not be gated on any preconditions around the health of the
+// deployment - these gates are enforced by the activity.
+message UpdateTvcAppLiveDeploymentIntent {
+  // @inject_tag: validate:"required,uuid"
+  string deployment_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The unique identifier of the TVC deployment to set as live for the app."}
+  ];
+}
+
+message UpdateTvcAppLiveDeploymentResult {}
+
+// DeleteTvcDeploymentIntent deletes a TVC deployment by setting the deployment's delete field to true. This can be undone via RestoreTvcDeployment.
+// Under the hood, the transducer will remove it from the enclave-set's spec and the enclave-controller will clean up all its k8s resources.
+// A deployment that is the app's live deployment cannot be deleted. In order to delete the live deployment, must either:
+// 1) Set a different deployment as the live deployment for the app first.
+// 2) Delete the app itself, which will delete all deployments under it.
+message DeleteTvcDeploymentIntent {
+  // @inject_tag: validate:"required,uuid"
+  string deployment_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The unique identifier of the TVC deployment to delete."}
+  ];
+}
+
+message DeleteTvcDeploymentResult {
+  string deployment_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The unique identifier of the deleted TVC deployment."}
+  ];
+}
+
+message DeleteTvcAppAndDeploymentsIntent {
+  // @inject_tag: validate:"required,uuid"
+  string app_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The unique identifier of the TVC app to delete. The app and all associated deployments will be removed."}
+  ];
+}
+
+message DeleteTvcAppAndDeploymentsResult {
+  string app_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The unique identifier of the deleted TVC app."}
+  ];
+}
+
+// This restores a previously deleted TVC deployment by setting the deployment's delete field back to false from true.
+// Could also be named UndeleteTvcDeploymentIntent, but RestoreTvcDeploymentIntent sounded better to me. Very down to bikeshed this.
+message RestoreTvcDeploymentIntent {
+  // @inject_tag: validate:"required,uuid"
+  string deployment_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The unique identifier of the TVC deployment to restore."}
+  ];
+}
+
+message RestoreTvcDeploymentResult {
+  string deployment_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The unique identifier of the restored TVC deployment."}
+  ];
+}
+
+message SparkKeyDerivation {
+  oneof key {
+    SparkIdentityDerivation identity = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Spark identity key derivation."
+      title: ""
+    }];
+    SparkSigningLeafDerivation signing_leaf = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Spark signing leaf key derivation, identified by leaf ID."
+      title: ""
+    }];
+    SparkDepositDerivation deposit = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Spark deposit key derivation."
+      title: ""
+    }];
+    SparkStaticDepositDerivation static_deposit = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Spark static deposit key derivation, identified by index."
+      title: ""
+    }];
+    SparkHtlcPreimageDerivation htlc_preimage = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Spark HTLC preimage key derivation."
+      title: ""
+    }];
+  }
+}
+
+message SparkIdentityDerivation {}
+
+message SparkSigningLeafDerivation {
+  // @inject_tag: validate:"required"
+  string leaf_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Unique identifier for the Spark signing leaf."
+      title: ""
+    }
+  ];
+}
+
+message SparkDepositDerivation {}
+
+message SparkStaticDepositDerivation {
+  // @inject_tag: validate:"required"
+  uint32 index = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Index used to derive the static deposit key."
+      title: ""
+    }
+  ];
+}
+
+message SparkHtlcPreimageDerivation {}
