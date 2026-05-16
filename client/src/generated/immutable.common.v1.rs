@@ -4,12 +4,15 @@
 #[derive(Clone, PartialEq)]
 pub struct PolicyEvaluation {
     pub policy_id: ::prost::alloc::string::String,
+    #[serde(default)]
     pub outcome: Outcome,
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum PathFormat {
     #[serde(rename = "PATH_FORMAT_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     #[serde(rename = "PATH_FORMAT_BIP32")]
     Bip32 = 1,
@@ -37,8 +40,10 @@ impl PathFormat {
 /// Cryptographic Curve used to generate a given API key
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum ApiKeyCurve {
     #[serde(rename = "API_KEY_CURVE_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     #[serde(rename = "API_KEY_CURVE_P256")]
     P256 = 2,
@@ -73,8 +78,10 @@ impl ApiKeyCurve {
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum ClientSignatureScheme {
     #[serde(rename = "CLIENT_SIGNATURE_SCHEME_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     #[serde(rename = "CLIENT_SIGNATURE_SCHEME_API_P256")]
     ApiP256 = 1,
@@ -102,8 +109,10 @@ impl ClientSignatureScheme {
 /// Cryptographic Curve used to generate a given Private Key.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum Curve {
     #[serde(rename = "CURVE_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     /// Curve SECP256K1 as defined in <https://www.secg.org/sec2-v2.pdf>
     #[serde(rename = "CURVE_SECP256K1")]
@@ -141,8 +150,10 @@ impl Curve {
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum AddressFormat {
     #[serde(rename = "ADDRESS_FORMAT_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     /// 04<X_COORDINATE><Y_COORDINATE>
     #[serde(rename = "ADDRESS_FORMAT_UNCOMPRESSED")]
@@ -326,8 +337,10 @@ impl AddressFormat {
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum HashFunction {
     #[serde(rename = "HASH_FUNCTION_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     #[serde(rename = "HASH_FUNCTION_NO_OP")]
     NoOp = 1,
@@ -366,9 +379,11 @@ impl HashFunction {
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum PayloadEncoding {
     /// Default value if payload encoding is not set explicitly
     #[serde(rename = "PAYLOAD_ENCODING_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     /// Payload is encoded in hexadecimal
     /// We accept 0x-prefixed or non-0x prefixed payloads.
@@ -418,8 +433,10 @@ impl PayloadEncoding {
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum MnemonicLanguage {
     #[serde(rename = "MNEMONIC_LANGUAGE_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     #[serde(rename = "MNEMONIC_LANGUAGE_ENGLISH")]
     English = 1,
@@ -478,8 +495,10 @@ impl MnemonicLanguage {
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum Effect {
     #[serde(rename = "EFFECT_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     #[serde(rename = "EFFECT_ALLOW")]
     Allow = 1,
@@ -510,8 +529,10 @@ impl Effect {
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum AccessType {
     #[serde(rename = "ACCESS_TYPE_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     #[serde(rename = "ACCESS_TYPE_WEB")]
     Web = 1,
@@ -546,8 +567,10 @@ impl AccessType {
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum CredentialType {
     #[serde(rename = "CREDENTIAL_TYPE_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     #[serde(rename = "CREDENTIAL_TYPE_WEBAUTHN_AUTHENTICATOR")]
     WebauthnAuthenticator = 1,
@@ -614,8 +637,10 @@ impl CredentialType {
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum FeatureName {
     #[serde(rename = "FEATURE_NAME_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     /// to be deprecated in favor of rename: `FEATURE_NAME_EMAIL_RECOVERY`
     #[serde(rename = "FEATURE_NAME_ROOT_USER_EMAIL_RECOVERY")]
@@ -678,8 +703,10 @@ impl FeatureName {
 /// The supported Fiat On Ramp Providers.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum FiatOnRampProvider {
     #[serde(rename = "FIAT_ON_RAMP_PROVIDER_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     #[serde(rename = "FIAT_ON_RAMP_PROVIDER_COINBASE")]
     Coinbase = 1,
@@ -710,9 +737,11 @@ impl FiatOnRampProvider {
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum FiatOnRampCryptoCurrency {
     /// Unspecified
     #[serde(rename = "FIAT_ON_RAMP_CRYPTO_CURRENCY_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     /// Bitcoin
     #[serde(rename = "FIAT_ON_RAMP_CRYPTO_CURRENCY_BTC")]
@@ -755,9 +784,11 @@ impl FiatOnRampCryptoCurrency {
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum FiatOnRampCurrency {
     /// Unspecified
     #[serde(rename = "FIAT_ON_RAMP_CURRENCY_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     /// Australian Dollar
     #[serde(rename = "FIAT_ON_RAMP_CURRENCY_AUD")]
@@ -950,9 +981,11 @@ impl FiatOnRampCurrency {
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum FiatOnRampBlockchainNetwork {
     /// Unspecified
     #[serde(rename = "FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     /// bitcoin
     #[serde(rename = "FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_BITCOIN")]
@@ -995,9 +1028,11 @@ impl FiatOnRampBlockchainNetwork {
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum FiatOnRampPaymentMethod {
     /// Unspecified
     #[serde(rename = "FIAT_ON_RAMP_PAYMENT_METHOD_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     /// Shared methods (supported by both MoonPay and Coinbase)
     ///
@@ -1103,8 +1138,10 @@ impl FiatOnRampPaymentMethod {
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum TransactionType {
     #[serde(rename = "TRANSACTION_TYPE_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     /// Unsigned Ethereum transaction, RLP-encoded and hex-encoded
     #[serde(rename = "TRANSACTION_TYPE_ETHEREUM")]
@@ -1152,8 +1189,10 @@ impl TransactionType {
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum SmartContractInterfaceType {
     #[serde(rename = "SMART_CONTRACT_INTERFACE_TYPE_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     #[serde(rename = "SMART_CONTRACT_INTERFACE_TYPE_ETHEREUM")]
     Ethereum = 1,
@@ -1184,8 +1223,10 @@ impl SmartContractInterfaceType {
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum Outcome {
     #[serde(rename = "OUTCOME_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     #[serde(rename = "OUTCOME_ALLOW")]
     Allow = 1,
@@ -1232,8 +1273,10 @@ impl Outcome {
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum Operator {
     #[serde(rename = "OPERATOR_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     #[serde(rename = "OPERATOR_EQUAL")]
     Equal = 1,
@@ -1301,8 +1344,10 @@ impl Operator {
 /// A list of OAuth 2.0 providers that are supported
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum Oauth2Provider {
     #[serde(rename = "OAUTH2_PROVIDER_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     #[serde(rename = "OAUTH2_PROVIDER_X")]
     X = 1,
@@ -1334,8 +1379,10 @@ impl Oauth2Provider {
 /// Types of health checks supported for customer TVC apps
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum TvcHealthCheckType {
     #[serde(rename = "TVC_HEALTH_CHECK_TYPE_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     #[serde(rename = "TVC_HEALTH_CHECK_TYPE_HTTP")]
     Http = 1,

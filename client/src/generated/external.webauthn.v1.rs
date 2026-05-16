@@ -12,9 +12,11 @@ pub struct WebAuthnStamp {
 /// buf:lint:ignore ENUM_VALUE_PREFIX
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum AuthenticatorType {
     /// buf:lint:ignore ENUM_ZERO_VALUE_SUFFIX
     #[serde(rename = "AUTHENTICATOR_TYPE_UNKNOWN")]
+    #[default]
     Unknown = 0,
     #[serde(rename = "AUTHENTICATOR_TYPE_CROSS_PLATFORM")]
     CrossPlatform = 1,

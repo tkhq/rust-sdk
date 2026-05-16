@@ -6,7 +6,9 @@
 pub struct Activity {
     pub id: ::prost::alloc::string::String,
     pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
     pub status: super::super::super::immutable::activity::v1::ActivityStatus,
+    #[serde(default)]
     pub r#type: super::super::super::immutable::activity::v1::ActivityType,
     #[serde(default)]
     pub intent: ::core::option::Option<

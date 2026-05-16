@@ -127,6 +127,7 @@ pub struct Authenticator {
 pub struct Credential {
     pub public_key: ::prost::alloc::string::String,
     /// To distinguish the credential type (webauthn, API key)
+    #[serde(default)]
     pub r#type: super::super::super::immutable::common::v1::CredentialType,
 }
 #[derive(Debug)]
@@ -136,6 +137,7 @@ pub struct Credential {
 pub struct Policy {
     pub policy_id: ::prost::alloc::string::String,
     pub policy_name: ::prost::alloc::string::String,
+    #[serde(default)]
     pub effect: super::super::super::immutable::common::v1::Effect,
     #[serde(default)]
     pub created_at: ::core::option::Option<Timestamp>,
@@ -155,6 +157,7 @@ pub struct PrivateKey {
     pub private_key_id: ::prost::alloc::string::String,
     pub public_key: ::prost::alloc::string::String,
     pub private_key_name: ::prost::alloc::string::String,
+    #[serde(default)]
     pub curve: super::super::super::immutable::common::v1::Curve,
     #[serde(default)]
     pub addresses: ::prost::alloc::vec::Vec<Address>,
@@ -174,6 +177,7 @@ pub struct PrivateKey {
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct Address {
+    #[serde(default)]
     pub format: super::super::super::immutable::common::v1::AddressFormat,
     pub address: ::prost::alloc::string::String,
 }
@@ -187,7 +191,9 @@ pub struct Invitation {
     pub receiver_email: ::prost::alloc::string::String,
     #[serde(default)]
     pub receiver_user_tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[serde(default)]
     pub access_type: super::super::super::immutable::common::v1::AccessType,
+    #[serde(default)]
     pub status: InvitationStatus,
     #[serde(default)]
     pub created_at: ::core::option::Option<Timestamp>,
@@ -202,6 +208,7 @@ pub struct Invitation {
 pub struct Tag {
     pub tag_id: ::prost::alloc::string::String,
     pub tag_name: ::prost::alloc::string::String,
+    #[serde(default)]
     pub tag_type: TagType,
     #[serde(default)]
     pub created_at: ::core::option::Option<Timestamp>,
@@ -253,6 +260,7 @@ pub struct Config {
 pub struct Oauth2Credential {
     pub oauth2_credential_id: ::prost::alloc::string::String,
     pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
     pub provider: super::super::super::immutable::common::v1::Oauth2Provider,
     pub client_id: ::prost::alloc::string::String,
     pub encrypted_client_secret: ::prost::alloc::string::String,
@@ -268,6 +276,7 @@ pub struct Oauth2Credential {
 pub struct FiatOnRampCredential {
     pub fiat_onramp_credential_id: ::prost::alloc::string::String,
     pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
     pub onramp_provider: super::super::super::immutable::common::v1::FiatOnRampProvider,
     /// @inject_tag: validate:"omitempty"
     #[serde(default)]
@@ -291,8 +300,10 @@ pub struct FiatOnRampCredential {
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum InvitationStatus {
     #[serde(rename = "INVITATION_STATUS_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     #[serde(rename = "INVITATION_STATUS_CREATED")]
     Created = 1,
@@ -327,8 +338,10 @@ impl InvitationStatus {
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum TagType {
     #[serde(rename = "TAG_TYPE_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     #[serde(rename = "TAG_TYPE_USER")]
     User = 1,
@@ -377,6 +390,7 @@ pub struct BootProof {
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct AppProof {
+    #[serde(default)]
     pub scheme: SignatureScheme,
     pub public_key: ::prost::alloc::string::String,
     pub proof_payload: ::prost::alloc::string::String,
@@ -387,6 +401,7 @@ pub struct AppProof {
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct AppProofPayload {
+    #[serde(default)]
     pub r#type: AppProofType,
     pub timestamp_ms: ::prost::alloc::string::String,
     #[serde(default)]
@@ -422,6 +437,7 @@ pub struct AddressDerivationProofPayload {
 #[derive(Clone, PartialEq)]
 pub struct PolicyOutcomeProofPayload {
     pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
     pub outcome: super::super::super::immutable::common::v1::Outcome,
     pub decision_context_digest: ::prost::alloc::string::String,
     pub organization_data_digest: ::prost::alloc::string::String,
@@ -433,8 +449,10 @@ pub struct PolicyOutcomeProofPayload {
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum SignatureScheme {
     #[serde(rename = "SIGNATURE_SCHEME_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     /// Scheme used by our enclave applications
     #[serde(rename = "SIGNATURE_SCHEME_EPHEMERAL_KEY_P256")]
@@ -462,8 +480,10 @@ impl SignatureScheme {
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum AppProofType {
     #[serde(rename = "APP_PROOF_TYPE_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     #[serde(rename = "APP_PROOF_TYPE_ADDRESS_DERIVATION")]
     AddressDerivation = 1,
@@ -569,6 +589,7 @@ pub struct TvcContainerSpec {
     pub args: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[serde(default)]
     pub has_pull_secret: bool,
+    #[serde(default)]
     pub health_check_type: super::super::super::immutable::common::v1::TvcHealthCheckType,
     #[serde(default)]
     pub health_check_port: u32,
@@ -670,9 +691,12 @@ pub struct WalletAccount {
     pub wallet_account_id: ::prost::alloc::string::String,
     pub organization_id: ::prost::alloc::string::String,
     pub wallet_id: ::prost::alloc::string::String,
+    #[serde(default)]
     pub curve: super::super::super::immutable::common::v1::Curve,
+    #[serde(default)]
     pub path_format: super::super::super::immutable::common::v1::PathFormat,
     pub path: ::prost::alloc::string::String,
+    #[serde(default)]
     pub address_format: super::super::super::immutable::common::v1::AddressFormat,
     pub address: ::prost::alloc::string::String,
     #[serde(default)]

@@ -95,9 +95,12 @@ pub struct MerkleLeafNotarization {
 pub struct AccountPayloadV0 {
     pub organization_id: ::prost::alloc::string::String,
     pub wallet_id: ::prost::alloc::string::String,
+    #[serde(default)]
     pub curve: super::super::common::v1::Curve,
+    #[serde(default)]
     pub path_format: super::super::common::v1::PathFormat,
     pub path: ::prost::alloc::string::String,
+    #[serde(default)]
     pub address_format: super::super::common::v1::AddressFormat,
     pub address: ::prost::alloc::string::String,
 }
@@ -110,9 +113,12 @@ pub struct AccountPayloadV0 {
 pub struct AccountPayloadV1 {
     pub organization_id: ::prost::alloc::string::String,
     pub wallet_id: ::prost::alloc::string::String,
+    #[serde(default)]
     pub curve: super::super::common::v1::Curve,
+    #[serde(default)]
     pub path_format: super::super::common::v1::PathFormat,
     pub path: ::prost::alloc::string::String,
+    #[serde(default)]
     pub address_format: super::super::common::v1::AddressFormat,
     pub address: ::prost::alloc::string::String,
     #[serde(default)]
@@ -128,9 +134,12 @@ pub struct AccountPayloadV1 {
 pub struct AccountPayloadV2 {
     pub organization_id: ::prost::alloc::string::String,
     pub wallet_id: ::prost::alloc::string::String,
+    #[serde(default)]
     pub curve: super::super::common::v1::Curve,
+    #[serde(default)]
     pub path_format: super::super::common::v1::PathFormat,
     pub path: ::prost::alloc::string::String,
+    #[serde(default)]
     pub address_format: super::super::common::v1::AddressFormat,
     pub address: ::prost::alloc::string::String,
     #[serde(default)]
@@ -201,6 +210,7 @@ pub struct NotarizedOrganization {
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct Signature {
+    #[serde(default)]
     pub scheme: SignatureScheme,
     pub public_key: ::prost::alloc::string::String,
     pub message: ::prost::alloc::string::String,
@@ -217,6 +227,7 @@ pub struct SmartContractInterfacePayload {
     pub smart_contract_address: ::prost::alloc::string::String,
     /// JSON string for an ABI or IDL
     pub smart_contract_interface: ::prost::alloc::string::String,
+    #[serde(default)]
     pub r#type: super::super::common::v1::SmartContractInterfaceType,
     pub label: ::prost::alloc::string::String,
     pub notes: ::prost::alloc::string::String,
@@ -258,8 +269,10 @@ pub struct PolicyEvaluationMetrics {
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum SignatureScheme {
     #[serde(rename = "SIGNATURE_SCHEME_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     /// Scheme used for Turnkey's public API
     #[serde(rename = "SIGNATURE_SCHEME_TK_API_P256")]

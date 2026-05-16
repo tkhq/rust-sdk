@@ -3,6 +3,7 @@
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct TokenUsage {
+    #[serde(default)]
     pub r#type: UsageType,
     pub token_id: ::prost::alloc::string::String,
     #[serde(default)]
@@ -71,8 +72,10 @@ pub struct LoginUsage {
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum UsageType {
     #[serde(rename = "USAGE_TYPE_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     #[serde(rename = "USAGE_TYPE_SIGNUP")]
     Signup = 1,
