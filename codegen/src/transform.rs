@@ -94,6 +94,31 @@ fn mutate_enum(enum_item: &syn::ItemEnum) -> TokenStream {
     });
 
     let enum_name_upper = ident.to_string().to_shouty_snake_case();
+    let is_simple_enum = ident != "Inner" && ident != "TokenOrClaims";
+
+    // Identify the variant whose explicit discriminant is `0` (the proto3
+    // unspecified default). It becomes the `#[default]` for `Default`.
+    // Skip the flatten-style sum enums; they aren't simple discriminated enums.
+    let zero_variant_ident: Option<syn::Ident> = if is_simple_enum {
+        enum_item.variants.iter().find_map(|v| {
+            let (_, expr) = v.discriminant.as_ref()?;
+            let syn::Expr::Lit(syn::ExprLit {
+                lit: syn::Lit::Int(li),
+                ..
+            }) = expr
+            else {
+                return None;
+            };
+            let val: i64 = li.base10_parse().ok()?;
+            if val == 0 {
+                Some(v.ident.clone())
+            } else {
+                None
+            }
+        })
+    } else {
+        None
+    };
 
     let variants = enum_item.variants.iter().map(|v| {
         let mut v = v.clone();
@@ -111,11 +136,17 @@ fn mutate_enum(enum_item: &syn::ItemEnum) -> TokenStream {
         // which are complex enums we flatten at serialization/parsing time.
         // TODO: would be nice to filter this in a more generic way: basically if the enum isn't a "simple" enum, we shouldn't
         // have to individually rename the variants
-        if ident != "Inner" && ident != "TokenOrClaims" {
+        if is_simple_enum {
             let rename_attr: syn::Attribute = syn::parse_quote!(
                 #[serde(rename = #full_name)]
             );
             v.attrs.push(rename_attr);
+        }
+
+        // Mark the zero-discriminant variant as `#[default]` so that
+        // `#[derive(Default)]` (added below) picks it as the default.
+        if zero_variant_ident.as_ref() == Some(&v.ident) {
+            v.attrs.push(syn::parse_quote!(#[default]));
         }
 
         quote! { #v }
@@ -138,6 +169,16 @@ fn mutate_enum(enum_item: &syn::ItemEnum) -> TokenStream {
     if !has_debug {
         attrs.push(quote! {
             #[derive(Debug)]
+        });
+    }
+
+    // Simple enums get `#[derive(Default)]` keyed off the zero-discriminant
+    // variant marked `#[default]` above. This pairs with the field-level
+    // `#[serde(default)]` added in `mutate_struct` so missing enum fields in
+    // proto JSON deserialize to the unspecified variant rather than erroring.
+    if zero_variant_ident.is_some() {
+        attrs.push(quote! {
+            #[derive(Default)]
         });
     }
 
@@ -183,6 +224,16 @@ fn mutate_struct(struct_value: &syn::ItemStruct) -> TokenStream {
                 };
 
                 field.ty = rewritten_ty;
+
+                // Bare enum scalars need `#[serde(default)]` because protobuf
+                // canonical JSON omits enum fields whose value is the zero/
+                // unspecified variant. The `should_add_default` check below
+                // only matches Option/Vec/primitive type names, so bare enum
+                // fields fall through. Push the attribute here while we know
+                // we just rewrote an enum scalar.
+                if !enum_type.repeated && !enum_type.optional {
+                    field.attrs.push(syn::parse_quote!(#[serde(default)]));
+                }
             }
 
             // Remove all #[prost(...)] attributes from the field
