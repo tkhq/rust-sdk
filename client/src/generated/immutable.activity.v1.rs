@@ -511,7 +511,9 @@ pub struct SignRawPayloadIntent {
     /// @inject_tag: validate:"required"
     pub payload: ::prost::alloc::string::String,
     /// @inject_tag: validate:"required"
+    #[serde(default)]
     pub encoding: super::super::common::v1::PayloadEncoding,
+    #[serde(default)]
     pub hash_function: super::super::common::v1::HashFunction,
 }
 #[derive(Debug)]
@@ -524,7 +526,9 @@ pub struct SignRawPayloadIntentV2 {
     /// @inject_tag: validate:"required"
     pub payload: ::prost::alloc::string::String,
     /// @inject_tag: validate:"required"
+    #[serde(default)]
     pub encoding: super::super::common::v1::PayloadEncoding,
+    #[serde(default)]
     pub hash_function: super::super::common::v1::HashFunction,
 }
 #[derive(Debug)]
@@ -538,7 +542,9 @@ pub struct SignRawPayloadsIntent {
     #[serde(default)]
     pub payloads: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     /// @inject_tag: validate:"required"
+    #[serde(default)]
     pub encoding: super::super::common::v1::PayloadEncoding,
+    #[serde(default)]
     pub hash_function: super::super::common::v1::HashFunction,
 }
 #[derive(Debug)]
@@ -551,6 +557,7 @@ pub struct CreatePolicyIntent {
     /// @inject_tag: validate:"required,dive,required"
     #[serde(default)]
     pub selectors: ::prost::alloc::vec::Vec<Selector>,
+    #[serde(default)]
     pub effect: super::super::common::v1::Effect,
     pub notes: ::prost::alloc::string::String,
 }
@@ -564,6 +571,7 @@ pub struct CreatePolicyIntentV2 {
     /// @inject_tag: validate:"required,dive,required"
     #[serde(default)]
     pub selectors: ::prost::alloc::vec::Vec<SelectorV2>,
+    #[serde(default)]
     pub effect: super::super::common::v1::Effect,
     pub notes: ::prost::alloc::string::String,
 }
@@ -575,6 +583,7 @@ pub struct CreatePolicyIntentV3 {
     /// @inject_tag: validate:"required,tk_label,tk_label_length"
     pub policy_name: ::prost::alloc::string::String,
     /// @inject_tag: validate:"required"
+    #[serde(default)]
     pub effect: super::super::common::v1::Effect,
     #[serde(default)]
     pub condition: ::core::option::Option<::prost::alloc::string::String>,
@@ -633,6 +642,7 @@ pub struct CreateReadWriteSessionIntentV2 {
 #[derive(Clone, PartialEq)]
 pub struct Selector {
     pub subject: ::prost::alloc::string::String,
+    #[serde(default)]
     pub operator: super::super::common::v1::Operator,
     pub target: ::prost::alloc::string::String,
 }
@@ -642,6 +652,7 @@ pub struct Selector {
 #[derive(Clone, PartialEq)]
 pub struct SelectorV2 {
     pub subject: ::prost::alloc::string::String,
+    #[serde(default)]
     pub operator: super::super::common::v1::Operator,
     #[serde(default)]
     pub targets: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
@@ -793,6 +804,7 @@ pub struct SignTransactionIntent {
     /// @inject_tag: validate:"required"
     pub unsigned_transaction: ::prost::alloc::string::String,
     /// @inject_tag: validate:"required"
+    #[serde(default)]
     pub r#type: super::super::common::v1::TransactionType,
 }
 #[derive(Debug)]
@@ -805,6 +817,7 @@ pub struct SignTransactionIntentV2 {
     /// @inject_tag: validate:"required"
     pub unsigned_transaction: ::prost::alloc::string::String,
     /// @inject_tag: validate:"required"
+    #[serde(default)]
     pub r#type: super::super::common::v1::TransactionType,
 }
 #[derive(Debug)]
@@ -902,6 +915,7 @@ pub struct CreateSmartContractInterfaceIntent {
     /// @inject_tag: validate:"required,tk_max_length=400000"
     pub smart_contract_interface: ::prost::alloc::string::String,
     /// @inject_tag: validate:"required"
+    #[serde(default)]
     pub r#type: super::super::common::v1::SmartContractInterfaceType,
     /// @inject_tag: validate:"required,tk_label,tk_label_length"
     pub label: ::prost::alloc::string::String,
@@ -1144,6 +1158,7 @@ pub struct RecoverUserIntent {
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct SetOrganizationFeatureIntent {
+    #[serde(default)]
     pub name: super::super::common::v1::FeatureName,
     #[serde(default)]
     pub value: ::core::option::Option<::prost::alloc::string::String>,
@@ -1153,6 +1168,7 @@ pub struct SetOrganizationFeatureIntent {
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, Copy, PartialEq)]
 pub struct RemoveOrganizationFeatureIntent {
+    #[serde(default)]
     pub name: super::super::common::v1::FeatureName,
 }
 #[derive(Debug)]
@@ -1898,12 +1914,15 @@ pub struct EmailAuthIntentV3 {
 #[derive(Clone, PartialEq)]
 pub struct InitFiatOnRampIntent {
     /// @inject_tag: validate:"required"
+    #[serde(default)]
     pub onramp_provider: super::super::common::v1::FiatOnRampProvider,
     /// @inject_tag: validate:"required"
     pub wallet_address: ::prost::alloc::string::String,
     /// @inject_tag: validate:"required"
+    #[serde(default)]
     pub network: super::super::common::v1::FiatOnRampBlockchainNetwork,
     /// @inject_tag: validate:"required"
+    #[serde(default)]
     pub crypto_currency_code: super::super::common::v1::FiatOnRampCryptoCurrency,
     #[serde(default)]
     pub fiat_currency_code: Option<super::super::common::v1::FiatOnRampCurrency>,
@@ -1947,6 +1966,7 @@ pub struct ImportPrivateKeyIntent {
     /// @inject_tag: validate:"required"
     pub encrypted_bundle: ::prost::alloc::string::String,
     /// @inject_tag: validate:"required"
+    #[serde(default)]
     pub curve: super::super::common::v1::Curve,
     /// @inject_tag: validate:"dive"
     #[serde(default)]
@@ -2021,6 +2041,7 @@ pub struct DeleteSubOrganizationIntent {
 #[derive(Clone, PartialEq)]
 pub struct CreateOauth2CredentialIntent {
     /// @inject_tag: validate:"required"
+    #[serde(default)]
     pub provider: super::super::common::v1::Oauth2Provider,
     /// @inject_tag: validate:"required"
     pub client_id: ::prost::alloc::string::String,
@@ -2035,6 +2056,7 @@ pub struct UpdateOauth2CredentialIntent {
     /// @inject_tag: validate:"required"
     pub oauth2_credential_id: ::prost::alloc::string::String,
     /// @inject_tag: validate:"required"
+    #[serde(default)]
     pub provider: super::super::common::v1::Oauth2Provider,
     /// @inject_tag: validate:"required"
     pub client_id: ::prost::alloc::string::String,
@@ -2105,6 +2127,7 @@ pub struct EthSendRawTransactionIntent {
 #[derive(Clone, PartialEq)]
 pub struct CreateFiatOnRampCredentialIntent {
     /// @inject_tag: validate:"required"
+    #[serde(default)]
     pub onramp_provider: super::super::common::v1::FiatOnRampProvider,
     /// @inject_tag: validate:"omitempty"
     #[serde(default)]
@@ -2130,6 +2153,7 @@ pub struct UpdateFiatOnRampCredentialIntent {
     /// @inject_tag: validate:"required"
     pub fiat_onramp_credential_id: ::prost::alloc::string::String,
     /// @inject_tag: validate:"required"
+    #[serde(default)]
     pub onramp_provider: super::super::common::v1::FiatOnRampProvider,
     /// @inject_tag: validate:"omitempty"
     #[serde(default)]
@@ -2222,6 +2246,7 @@ pub struct CreateTvcDeploymentIntent {
     >,
     #[serde(default)]
     pub debug_mode: ::core::option::Option<bool>,
+    #[serde(default)]
     pub health_check_type: super::super::common::v1::TvcHealthCheckType,
     #[serde(default)]
     pub health_check_port: u32,
@@ -2586,6 +2611,7 @@ pub struct PrivateKeyResult {
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct Address {
+    #[serde(default)]
     pub format: super::super::common::v1::AddressFormat,
     pub address: ::prost::alloc::string::String,
 }
@@ -3374,6 +3400,7 @@ pub struct ApiKeyParamsV2 {
     pub api_key_name: ::prost::alloc::string::String,
     /// @inject_tag: validate:"hexadecimal,tk_api_key"
     pub public_key: ::prost::alloc::string::String,
+    #[serde(default)]
     pub curve_type: super::super::common::v1::ApiKeyCurve,
     #[serde(default)]
     pub expiration_seconds: ::core::option::Option<::prost::alloc::string::String>,
@@ -3389,6 +3416,7 @@ pub struct UserParams {
     #[serde(default)]
     pub user_email: ::core::option::Option<::prost::alloc::string::String>,
     /// @inject_tag: validate:"required"
+    #[serde(default)]
     pub access_type: super::super::common::v1::AccessType,
     /// @inject_tag: validate:"dive,uuid"
     #[serde(default)]
@@ -3528,6 +3556,7 @@ pub struct InvitationParams {
     #[serde(default)]
     pub receiver_user_tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     /// @inject_tag: validate:"required"
+    #[serde(default)]
     pub access_type: super::super::common::v1::AccessType,
     /// @inject_tag: validate:"required,uuid"
     pub sender_user_id: ::prost::alloc::string::String,
@@ -3557,6 +3586,7 @@ pub struct PrivateKeyParams {
     /// @inject_tag: validate:"required,tk_label_length,tk_label"
     pub private_key_name: ::prost::alloc::string::String,
     /// @inject_tag: validate:"required"
+    #[serde(default)]
     pub curve: super::super::common::v1::Curve,
     /// @inject_tag: validate:"dive,uuid"
     #[serde(default)]
@@ -3585,12 +3615,15 @@ pub struct WalletParams {
 #[derive(Clone, PartialEq)]
 pub struct WalletAccountParams {
     /// @inject_tag: validate:"required"
+    #[serde(default)]
     pub curve: super::super::common::v1::Curve,
     /// @inject_tag: validate:"required"
+    #[serde(default)]
     pub path_format: super::super::common::v1::PathFormat,
     /// @inject_tag: validate:"required"
     pub path: ::prost::alloc::string::String,
     /// @inject_tag: validate:"required"
+    #[serde(default)]
     pub address_format: super::super::common::v1::AddressFormat,
 }
 #[derive(Debug)]
@@ -3982,6 +4015,7 @@ pub struct SparkPrepareLightningReceiveResult {
 #[derive(Clone, PartialEq)]
 pub struct ClientSignature {
     pub public_key: ::prost::alloc::string::String,
+    #[serde(default)]
     pub scheme: super::super::common::v1::ClientSignatureScheme,
     pub message: ::prost::alloc::string::String,
     pub signature: ::prost::alloc::string::String,
@@ -4118,8 +4152,10 @@ pub struct SparkHtlcPreimageDerivation {}
 /// Type of Activity, such as Add User, or Sign Transaction.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum ActivityType {
     #[serde(rename = "ACTIVITY_TYPE_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     #[serde(rename = "ACTIVITY_TYPE_CREATE_API_KEYS")]
     CreateApiKeys = 1,
@@ -4759,8 +4795,10 @@ impl ActivityType {
 /// The current processing status of an Activity.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum ActivityStatus {
     #[serde(rename = "ACTIVITY_STATUS_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     #[serde(rename = "ACTIVITY_STATUS_CREATED")]
     Created = 1,
@@ -4807,8 +4845,10 @@ impl ActivityStatus {
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum UsageVariant {
     #[serde(rename = "USAGE_VARIANT_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     #[serde(rename = "USAGE_VARIANT_ON_RAMP_COINBASE")]
     OnRampCoinbase = 1,
@@ -4843,8 +4883,10 @@ impl UsageVariant {
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum ActivityProtectedCategory {
     #[serde(rename = "ACTIVITY_PROTECTED_CATEGORY_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     #[serde(rename = "ACTIVITY_PROTECTED_CATEGORY_SIGN")]
     Sign = 2,
@@ -4881,8 +4923,10 @@ impl ActivityProtectedCategory {
 /// per-account child index in the derivation path m/8797555'/{account}'/{N}'.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum SparkKeyType {
     #[serde(rename = "SPARK_KEY_TYPE_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     /// N = 0
     #[serde(rename = "SPARK_KEY_TYPE_IDENTITY")]

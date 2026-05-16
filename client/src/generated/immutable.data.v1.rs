@@ -12,6 +12,7 @@ pub struct Timestamp {
 #[derive(Clone, PartialEq)]
 pub struct Credential {
     pub public_key: ::prost::alloc::string::String,
+    #[serde(default)]
     pub r#type: super::super::common::v1::CredentialType,
 }
 #[derive(Debug)]
@@ -29,6 +30,7 @@ pub struct Quorum {
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct Feature {
+    #[serde(default)]
     pub name: super::super::common::v1::FeatureName,
     #[serde(default)]
     pub value: ::core::option::Option<::prost::alloc::string::String>,

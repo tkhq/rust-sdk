@@ -104,8 +104,10 @@ pub struct CredPropsAuthenticationExtensionsClientOutputs {
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum AuthenticatorTransport {
     #[serde(rename = "AUTHENTICATOR_TRANSPORT_UNSPECIFIED")]
+    #[default]
     Unspecified = 0,
     #[serde(rename = "AUTHENTICATOR_TRANSPORT_BLE")]
     Ble = 1,
