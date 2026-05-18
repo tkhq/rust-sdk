@@ -2489,9 +2489,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         organization_id: String,
         timestamp_ms: u128,
         params: immutable_activity::InitOtpIntentV3,
-    ) -> Result<ActivityResult<immutable_activity::InitOtpResult>, TurnkeyClientError> {
+    ) -> Result<ActivityResult<immutable_activity::InitOtpResultV2>, TurnkeyClientError> {
         let request = external_activity::InitOtpRequest {
-            r#type: "ACTIVITY_TYPE_INIT_OTP_V2".to_string(),
+            r#type: "ACTIVITY_TYPE_INIT_OTP_V3".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
@@ -2506,7 +2506,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             .inner
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         let result = match inner {
-            immutable_activity::result::Inner::InitOtpResult(res) => res,
+            immutable_activity::result::Inner::InitOtpResultV2(res) => res,
             other => {
                 return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
                     serde_json::to_string(&other)?,

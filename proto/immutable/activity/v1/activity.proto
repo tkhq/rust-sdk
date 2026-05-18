@@ -3989,9 +3989,10 @@ message Oauth2AuthenticateIntent {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The code verifier used by OAuth 2.0 PKCE providers"}
   ];
-  optional string nonce = 5 [
-    (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "An optional nonce used by the client to prevent replay/substitution of an ID token"}
+  // @inject_tag: validate:"required"
+  string nonce = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A nonce value set to sha256(publicKey), used to bind the OIDC token to a specific public key"}
   ];
   optional string bearer_token_target_public_key = 6 [
     (google.api.field_behavior) = OPTIONAL,
@@ -6315,11 +6316,6 @@ message SparkSignatureRequest {
   repeated SparkFrostCommitment operator_commitments = 4 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Commitments for every non-Turnkey participant. MUST NOT include an entry under Turnkey's identifier. Bound into the nonce HMAC."}
-  ];
-  // @inject_tag: validate:"omitempty"
-  optional string adaptor_public_key = 5 [
-    (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional per-signature adaptor point T (hex-encoded 33-byte compressed secp256k1 pubkey). When set, the result is a Schnorr adaptor pre-signature. Bound into the nonce HMAC."}
   ];
 }
 

@@ -2062,8 +2062,8 @@ pub struct Oauth2AuthenticateIntent {
     pub redirect_uri: ::prost::alloc::string::String,
     /// @inject_tag: validate:"required"
     pub code_verifier: ::prost::alloc::string::String,
-    #[serde(default)]
-    pub nonce: ::core::option::Option<::prost::alloc::string::String>,
+    /// @inject_tag: validate:"required"
+    pub nonce: ::prost::alloc::string::String,
     #[serde(default)]
     pub bearer_token_target_public_key: ::core::option::Option<
         ::prost::alloc::string::String,
@@ -3839,9 +3839,6 @@ pub struct SparkSignatureRequest {
     /// @inject_tag: validate:"required,dive"
     #[serde(default)]
     pub operator_commitments: ::prost::alloc::vec::Vec<SparkFrostCommitment>,
-    /// @inject_tag: validate:"omitempty"
-    #[serde(default)]
-    pub adaptor_public_key: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 /// Per-signature output from SPARK_SIGN_FROST: Turnkey's FROST partial

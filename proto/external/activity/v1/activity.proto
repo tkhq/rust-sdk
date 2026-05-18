@@ -1869,7 +1869,7 @@ message CreateTvcManifestApprovalsRequest {
   string type = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      enum: ["ACTIVITY_TYPE_APPROVE_TVC_DEPLOYMENT"]
+      enum: ["ACTIVITY_TYPE_CREATE_TVC_MANIFEST_APPROVALS"]
     }
   ];
   string timestamp_ms = 2 [
