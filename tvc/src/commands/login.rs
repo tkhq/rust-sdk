@@ -23,6 +23,11 @@ pub struct Args {
 
 /// Run the login command.
 pub async fn run(args: Args) -> anyhow::Result<()> {
+    tracing::debug!(
+        org_arg_present = args.org.is_some(),
+        "running login command"
+    );
+
     // Load existing config
     let mut config = Config::load().await?;
 
@@ -75,11 +80,20 @@ async fn select_or_create_org(
     config: &mut Config,
     org_arg: Option<&str>,
 ) -> Result<(String, OrgConfig)> {
+    tracing::debug!(
+        org_arg_present = org_arg.is_some(),
+        configured_org_count = config.orgs.len(),
+        active_org = ?config.active_org,
+        "selecting organization"
+    );
+
     // If --org provided, try to find it by alias or ID
     if let Some(org) = org_arg {
         if let Some((alias, org_config)) = find_org(config, org) {
+            tracing::debug!(org_alias = %alias, "selected existing organization from argument");
             return Ok((alias.clone(), org_config.clone()));
         }
+        tracing::debug!("organization argument did not match configured organizations");
         bail!("Organization '{org}' not found. Run `tvc login` without --org to set up a new organization.");
     }
 
@@ -88,6 +102,7 @@ async fn select_or_create_org(
 
     if org_count == 0 {
         // No orgs configured - prompt for new org
+        tracing::debug!("no organizations configured; prompting for new organization");
         println!("No organization configured.");
         return prompt_for_new_org(config).await;
     }
@@ -109,18 +124,23 @@ async fn select_or_create_org(
     println!();
 
     if selection == "new" {
+        tracing::debug!("user selected new organization");
         return prompt_for_new_org(config).await;
     }
 
     if let Some(org_config) = config.orgs.get(&selection) {
+        tracing::debug!(org_alias = %selection, "user selected existing organization");
         return Ok((selection, org_config.clone()));
     }
 
+    tracing::debug!("user selected unknown organization alias");
     bail!("Organization '{}' not found", selection)
 }
 
 /// Prompt the user to enter a new organization ID and alias.
 async fn prompt_for_new_org(config: &mut Config) -> Result<(String, OrgConfig)> {
+    tracing::debug!("prompting for new organization");
+
     println!("You can find your Organization ID at: https://app.turnkey.com/dashboard/welcome");
     println!();
 
@@ -133,6 +153,7 @@ async fn prompt_for_new_org(config: &mut Config) -> Result<(String, OrgConfig)> 
 
     // Prompt for API base URL
     let api_base_url = prompt_for_api_url()?;
+    tracing::debug!(org_alias = %alias, api_base_url = %api_base_url, "adding prompted organization");
 
     config.add_org(&alias, org_id, api_base_url)?;
     let org_config = config.orgs.get(&alias).unwrap().clone();
@@ -159,6 +180,8 @@ fn prompt_for_api_url() -> Result<String> {
         _ => bail!("Invalid selection: {selection}"),
     };
 
+    tracing::debug!(api_base_url = %url, "selected API base URL");
+
     Ok(url.to_string())
 }
 
@@ -166,13 +189,17 @@ fn prompt_for_api_url() -> Result<String> {
 /// If an API key exists, it's returned directly.
 /// If not, a new key is generated, saved, and the user is prompted to add it to the dashboard.
 async fn get_or_generate_api_key(org_config: &OrgConfig) -> Result<StoredApiKey> {
+    tracing::debug!(api_key_path = %org_config.api_key_path.display(), "resolving API key");
+
     // Check if API key already exists
     if let Some(api_key) = StoredApiKey::load(org_config).await? {
+        tracing::debug!("using existing API key");
         println!("Using existing API key.");
         return Ok(api_key);
     }
 
     // Generate new API key
+    tracing::debug!("generating new API key");
     println!();
     println!("Generating API key...");
 
@@ -208,13 +235,17 @@ async fn get_or_generate_api_key(org_config: &OrgConfig) -> Result<StoredApiKey>
 
 /// Get an existing operator key or generate a new one.
 async fn get_or_generate_operator_key(org_config: &OrgConfig) -> Result<StoredQosOperatorKey> {
+    tracing::debug!(operator_key_path = %org_config.operator_key_path.display(), "resolving operator key");
+
     // Check if operator key already exists
     if let Some(operator_key) = StoredQosOperatorKey::load(org_config).await? {
+        tracing::debug!("using existing operator key");
         println!("Using existing operator key.");
         return Ok(operator_key);
     }
 
     // Generate new operator key
+    tracing::debug!("generating new operator key");
     println!();
     println!("Generating operator key...");
 
@@ -311,6 +342,8 @@ async fn verify_credentials(
     org_id: &str,
     api_base_url: &str,
 ) -> Result<WhoamiResult> {
+    tracing::debug!(api_base_url = %api_base_url, "verifying credentials with whoami");
+
     // Build the API key stamper from stored keys
     let stamper = TurnkeyP256ApiKey::from_strings(&api_key.private_key, Some(&api_key.public_key))
         .context("failed to load API key")?;
@@ -331,6 +364,8 @@ async fn verify_credentials(
         .get_whoami(request)
         .await
         .context("whoami request failed")?;
+
+    tracing::debug!("whoami verification succeeded");
 
     Ok(WhoamiResult {
         organization_name: response.organization_name,

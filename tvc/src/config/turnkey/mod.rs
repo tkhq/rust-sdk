@@ -99,7 +99,9 @@ impl Config {
     /// Load config from disk, or return default if it doesn't exist
     pub async fn load() -> Result<Self> {
         let path = config_file_path()?;
+        tracing::debug!(config_path = %path.display(), "loading tvc config");
         if !path.exists() {
+            tracing::debug!(config_path = %path.display(), "tvc config not found; using defaults");
             return Ok(Config::default());
         }
 
@@ -110,12 +112,25 @@ impl Config {
         let config: Config = toml::from_str(&content)
             .with_context(|| format!("failed to parse config file: {}", path.display()))?;
 
+        tracing::debug!(
+            config_path = %path.display(),
+            active_org = ?config.active_org,
+            org_count = config.orgs.len(),
+            "loaded tvc config"
+        );
+
         Ok(config)
     }
 
     /// Save config to disk
     pub async fn save(&self) -> Result<()> {
         let path = config_file_path()?;
+        tracing::debug!(
+            config_path = %path.display(),
+            active_org = ?self.active_org,
+            org_count = self.orgs.len(),
+            "saving tvc config"
+        );
 
         // Ensure parent directory exists
         if let Some(parent) = path.parent() {
@@ -130,6 +145,8 @@ impl Config {
             .await
             .with_context(|| format!("failed to write config file: {}", path.display()))?;
 
+        tracing::debug!(config_path = %path.display(), "saved tvc config");
+
         Ok(())
     }
 
@@ -141,6 +158,7 @@ impl Config {
 
     /// Add or update an organization with default key paths
     pub fn add_org(&mut self, alias: &str, org_id: String, api_base_url: String) -> Result<()> {
+        tracing::debug!(org_alias = alias, api_base_url = %api_base_url, "adding organization config");
         let org_config = OrgConfig {
             id: org_id,
             api_key_path: default_api_key_path(alias)?,
@@ -153,6 +171,7 @@ impl Config {
 
     /// Set the active organization
     pub fn set_active_org(&mut self, alias: &str) -> Result<()> {
+        tracing::debug!(org_alias = alias, "setting active organization");
         if !self.orgs.contains_key(alias) {
             bail!("organization '{}' not found in config", alias);
         }

@@ -35,11 +35,20 @@ pub struct AuthenticatedClient {
 /// If only some of the three required env vars are set, errors with the list of
 /// missing names — no merged resolve between env and disk vars.
 pub async fn build_client() -> Result<AuthenticatedClient> {
+    tracing::debug!("building authenticated Turnkey client");
+
     let (org_id, api_base_url, api_key_public, api_key_private) =
         match load_credentials_from_env_vars()? {
-            Some(creds) => creds,
-            None => load_credentials_from_config().await?,
+            Some(creds) => {
+                tracing::debug!(auth_source = "env", "using env auth credentials");
+                creds
+            }
+            None => {
+                tracing::debug!(auth_source = "config", "using local config credentials");
+                load_credentials_from_config().await?
+            }
         };
+
     build_authed_client(&org_id, &api_base_url, &api_key_public, &api_key_private)
 }
 
@@ -49,6 +58,13 @@ async fn load_credentials_from_config() -> Result<(String, String, String, Strin
     let (alias, org_config) = config
         .active_org_config()
         .ok_or_else(|| anyhow!("No active organization. Run `tvc login` first."))?;
+
+    tracing::debug!(
+        org_alias = %alias,
+        api_base_url = %org_config.api_base_url,
+        api_key_path = %org_config.api_key_path.display(),
+        "resolved active organization config"
+    );
 
     let api_key = StoredApiKey::load(org_config)
         .await?
@@ -68,14 +84,18 @@ fn build_authed_client(
     api_key_public: &str,
     api_key_private: &str,
 ) -> Result<AuthenticatedClient> {
+    tracing::debug!("constructing API key stamper");
     let stamper = TurnkeyP256ApiKey::from_strings(api_key_private, Some(api_key_public))
         .context("failed to load API key")?;
 
+    tracing::debug!(api_base_url = %api_base_url, "building Turnkey API client");
     let client = TurnkeyClient::builder()
         .api_key(stamper)
         .base_url(api_base_url)
         .build()
         .context("failed to build Turnkey client")?;
+
+    tracing::debug!("authenticated Turnkey client ready");
 
     Ok(AuthenticatedClient {
         client,
@@ -114,6 +134,15 @@ fn load_credentials_from_env_vars() -> Result<Option<(String, String, String, St
     if api_key_private.is_none() {
         missing.push(ENV_API_KEY_PRIVATE);
     }
+
+    tracing::debug!(
+        tvc_org_id_set = org_id.is_some(),
+        tvc_api_key_public_set = api_key_public.is_some(),
+        tvc_api_key_private_set = api_key_private.is_some(),
+        tvc_api_base_url_set = read_env_var(ENV_API_BASE_URL).is_some(),
+        missing = ?missing,
+        "read auth env vars"
+    );
 
     // Acceptable to have none set: fall back to disk.
     if missing.len() == NUM_AUTH_ENV_VARS {
