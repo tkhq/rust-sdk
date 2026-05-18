@@ -3,6 +3,7 @@
 use crate::config::app::AppConfig;
 use crate::config::turnkey::{Config, StoredQosOperatorKey};
 use crate::prompts;
+use crate::replay::ReplayHint;
 use anyhow::{bail, Context, Result};
 use clap::Args as ClapArgs;
 use std::path::PathBuf;
@@ -71,6 +72,13 @@ pub async fn run(args: Args) -> Result<()> {
         println!("Edit the file to fill in your values, then run:");
         println!("  tvc app create --config-file {}", args.output.display());
     }
+
+    let mut hint =
+        ReplayHint::new("app init").literal("--output", args.output.display().to_string());
+    if args.interactive {
+        hint = hint.flag("--interactive");
+    }
+    hint.print();
 
     Ok(())
 }

@@ -4,6 +4,7 @@ use crate::client::build_client;
 use crate::config::app::{AppConfig, OperatorSetParams};
 use crate::config::turnkey::{self, StoredQosOperatorKey};
 use crate::prompts;
+use crate::replay::ReplayHint;
 use anyhow::{anyhow, Context, Result};
 use clap::Args as ClapArgs;
 use std::path::{Path, PathBuf};
@@ -71,6 +72,10 @@ pub async fn run(args: Args) -> Result<()> {
     println!(
         "Use one of the Manifest Set Operator IDs above with `tvc deploy approve --operator-id`"
     );
+
+    ReplayHint::new("app create")
+        .literal("--config-file", args.config_file.display().to_string())
+        .print();
 
     Ok(())
 }

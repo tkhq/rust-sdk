@@ -3,6 +3,7 @@
 use crate::config::deploy::DeployConfig;
 use crate::config::turnkey;
 use crate::prompts;
+use crate::replay::ReplayHint;
 use anyhow::{bail, Context, Result};
 use chrono::Local;
 use clap::Args as ClapArgs;
@@ -70,6 +71,12 @@ pub async fn run(args: Args) -> Result<()> {
         println!("Edit the file to fill in your values, then run:");
         println!("  tvc deploy create --config-file {}", output.display());
     }
+
+    let mut hint = ReplayHint::new("deploy init").literal("--output", output.display().to_string());
+    if args.interactive {
+        hint = hint.flag("--interactive");
+    }
+    hint.print();
 
     Ok(())
 }

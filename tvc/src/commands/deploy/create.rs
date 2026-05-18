@@ -5,6 +5,7 @@ use crate::config::deploy::DeployConfig;
 use crate::config::turnkey::Config;
 use crate::prompts;
 use crate::pull_secret::encrypt_pivot_pull_secret;
+use crate::replay::ReplayHint;
 use anyhow::{anyhow, bail, Context, Result};
 use clap::Args as ClapArgs;
 use std::path::{Path, PathBuf};
@@ -336,6 +337,15 @@ pub async fn run(args: Args) -> Result<()> {
         "  - Run `tvc deploy approve --deploy-id {}` to approve the manifest",
         result.result.deployment_id
     );
+
+    let mut hint = ReplayHint::new("deploy create");
+    if let Some(path) = &args.config_file {
+        hint = hint.literal("--config-file", path.display().to_string());
+    }
+    if args.pivot_pull_secret.is_some() {
+        hint = hint.redacted("--pivot-pull-secret", "<PATH>");
+    }
+    hint.print();
 
     Ok(())
 }

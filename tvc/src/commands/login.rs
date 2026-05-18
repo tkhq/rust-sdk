@@ -5,6 +5,7 @@ use crate::config::turnkey::{
     API_BASE_URL_LOCAL, API_BASE_URL_PREPROD, API_BASE_URL_PROD,
 };
 use crate::prompts;
+use crate::replay::ReplayHint;
 use anyhow::{anyhow, bail, Context, Result};
 use clap::Args as ClapArgs;
 use qos_p256::P256Pair;
@@ -97,6 +98,8 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     );
     println!("API Key: {}", org_config.api_key_path.display());
     println!("Operator Key: {}", org_config.operator_key_path.display());
+
+    ReplayHint::new("login").literal("--org", alias).print();
 
     Ok(())
 }
