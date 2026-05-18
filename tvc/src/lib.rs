@@ -6,6 +6,7 @@ pub mod config;
 pub mod logging;
 pub(crate) mod operator_key;
 pub mod pair;
+pub mod prompts;
 pub(crate) mod provisioning;
 pub mod pull_secret;
 pub(crate) mod quorum_key_metadata;
