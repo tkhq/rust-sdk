@@ -53,7 +53,7 @@ impl DeployConfig {
     /// Non-placeholder fields are preserved unchanged so partial edits work.
     ///
     /// `saved_app_id` is offered as the default for the App ID prompt when set.
-    pub fn fill_interactively(mut self, saved_app_id: Option<&str>) -> Result<Self> {
+    pub fn fill_interactively(&mut self, saved_app_id: Option<&str>) -> Result<()> {
         if self.app_id.starts_with("<FILL_IN") {
             self.app_id = prompts::required_text("App ID", saved_app_id)?;
         }
@@ -81,7 +81,7 @@ impl DeployConfig {
                 );
             }
         }
-        Ok(self)
+        Ok(())
     }
 
     /// Check if config contains placeholder values.
@@ -115,6 +115,10 @@ impl DeployConfig {
             missing.push("--expected-pivot-digest");
         }
         missing
+    }
+
+    pub fn pull_secret_is_placeholder(&self) -> bool {
+        self.pivot_container_encrypted_pull_secret.as_deref() == Some(PULL_SECRET_PLACEHOLDER)
     }
 }
 
@@ -157,13 +161,13 @@ mod tests {
         config.expected_pivot_digest = "sha256:abc".into();
         config.pivot_container_encrypted_pull_secret = None;
 
-        let filled = config.clone().fill_interactively(None).unwrap();
-        assert_eq!(filled.app_id, "app_xyz");
-        assert_eq!(filled.qos_version, "0.6.1");
-        assert_eq!(filled.pivot_container_image_url, "ghcr.io/x/y:v1");
-        assert_eq!(filled.pivot_path, "/bin/pivot");
-        assert_eq!(filled.expected_pivot_digest, "sha256:abc");
-        assert_eq!(filled.pivot_container_encrypted_pull_secret, None);
+        config.fill_interactively(None).unwrap();
+        assert_eq!(config.app_id, "app_xyz");
+        assert_eq!(config.qos_version, "0.6.1");
+        assert_eq!(config.pivot_container_image_url, "ghcr.io/x/y:v1");
+        assert_eq!(config.pivot_path, "/bin/pivot");
+        assert_eq!(config.expected_pivot_digest, "sha256:abc");
+        assert_eq!(config.pivot_container_encrypted_pull_secret, None);
     }
 
     #[test]

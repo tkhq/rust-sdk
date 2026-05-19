@@ -97,7 +97,7 @@ impl AppConfig {
     ///
     /// `saved_operator_public_key` is offered as the default when prompting
     /// for a `<FILL_IN>` operator public key.
-    pub fn fill_interactively(mut self, saved_operator_public_key: Option<&str>) -> Result<Self> {
+    pub fn fill_interactively(&mut self, saved_operator_public_key: Option<&str>) -> Result<()> {
         if self.name.starts_with("<FILL_IN") {
             self.name = prompts::required_text("App name", None)?;
         }
@@ -123,7 +123,7 @@ impl AppConfig {
                 }
             }
         }
-        Ok(self)
+        Ok(())
     }
 
     /// Check if config contains placeholder values.

@@ -77,9 +77,10 @@ pub struct Args {
 
 /// Run the approve deploy command.
 pub async fn run(args: Args) -> anyhow::Result<()> {
-    // Guard: running without --dangerous-skip-interactive means we'd prompt;
-    // refuse to stall when the user has explicitly opted out of prompts.
-    if !args.dangerous_skip_interactive {
+    let do_prompt_user = !args.dangerous_skip_interactive;
+
+    // Guard: Bail fast before fetching the manifest if we cannot prompt the user
+    if do_prompt_user {
         prompts::bail_if_non_interactive("--dangerous-skip-interactive")?;
     }
 
@@ -93,7 +94,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         (None, None) => bail!("a manifest source is required"),
     };
 
-    if !args.dangerous_skip_interactive {
+    if do_prompt_user {
         interactive_approve(&manifest)?;
     }
 
@@ -158,9 +159,8 @@ async fn post_approval_to_api(
                 _ if prompts::is_interactive() => {
                     prompts::select("Select approving operator", saved_ids.clone())?
                 }
-                // Non-interactive with multiple saved IDs: keep legacy behavior
-                // of picking the first entry. Users who want a specific operator
-                // should pass --operator-id.
+                // Non-interactive with multiple saved IDs: pick the first entry.
+                // Users who want a specific operator should pass --operator-id.
                 _ => saved_ids[0].clone(),
             }
         }
@@ -279,7 +279,7 @@ fn render_enclave(enclave: &NitroConfig) -> String {
     let _ = writeln!(s, "  PCR1 (kernel):    {}", hex::encode(&enclave.pcr1));
     let _ = writeln!(s, "  PCR2 (app):       {}", hex::encode(&enclave.pcr2));
     let _ = writeln!(s, "  PCR3 (IAM role):  {}", hex::encode(&enclave.pcr3));
-    // Skip the QOS commit since its not cryptographically linked
+    // Skip the QOS commit since it's not cryptographically linked
     let _ = writeln!(s);
     s
 }
