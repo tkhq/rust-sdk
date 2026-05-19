@@ -1,9 +1,9 @@
 //! PTY-based integration tests.
 //!
-//! Drives the real `tvc` binary through a pseudo-terminal so inquire's TTY
+//! Drives the real `tvc` binary through a pseudo-terminal so `inquire`'s TTY
 //! code path is exercised end-to-end.
 //!
-//! Gated `#[cfg(unix)]` because rexpect uses Unix PTYs; Windows users hit
+//! Gated `#[cfg(unix)]` because `rexpect` uses Unix PTYs; Windows users hit
 //! inquire via ConPTY in production, but we don't test that surface here.
 
 #![cfg(unix)]

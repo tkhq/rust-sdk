@@ -78,7 +78,7 @@ pub async fn run(args: Args) -> Result<()> {
 /// Load the app config, walking placeholders interactively when allowed.
 async fn load_or_fill_app_config(path: &Path) -> Result<AppConfig> {
     let read = std::fs::read_to_string(path);
-    let (config, file_existed) = match read {
+    let (mut config, file_existed) = match read {
         Ok(content) => {
             let config: AppConfig = serde_json::from_str(&content)
                 .with_context(|| format!("failed to parse config file: {}", path.display()))?;
@@ -104,17 +104,17 @@ async fn load_or_fill_app_config(path: &Path) -> Result<AppConfig> {
     }
 
     let saved_operator_public_key = load_saved_operator_public_key().await;
-    let filled = config.fill_interactively(saved_operator_public_key.as_deref())?;
+    config.fill_interactively(saved_operator_public_key.as_deref())?;
 
     let save = prompts::confirm(&format!("Save filled config to {}?", path.display()), true)?;
     if save {
-        let json = serde_json::to_string_pretty(&filled).context("failed to serialize config")?;
+        let json = serde_json::to_string_pretty(&config).context("failed to serialize config")?;
         std::fs::write(path, json)
             .with_context(|| format!("failed to write config file: {}", path.display()))?;
         println!("Wrote {}", path.display());
     }
 
-    Ok(filled)
+    Ok(config)
 }
 
 /// Best-effort load of the operator public key from the active org's config

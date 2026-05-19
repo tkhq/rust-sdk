@@ -11,8 +11,6 @@
 //! - [`bail_if_non_interactive`] — errors with a clear message naming the
 //!   flag the caller should set instead. Used at the top of any function
 //!   that's about to prompt.
-//! - [`require_or_prompt`] — single-value variant: take the flag if set,
-//!   prompt if interactive, otherwise error.
 
 use anyhow::{bail, Result};
 use inquire::{Confirm, Password, Select, Text};
@@ -82,73 +80,4 @@ pub fn select<T: Display>(message: &str, options: Vec<T>) -> Result<T> {
 /// Prompt for a secret value with masked input.
 pub fn password(message: &str) -> Result<String> {
     Ok(Password::new(message).without_confirmation().prompt()?)
-}
-
-/// Returns the flag value if set; otherwise prompts the user when interactive;
-/// otherwise errors with a message naming the flag to set.
-///
-/// `flag_name` is the literal CLI flag (e.g. `"--deploy-id"`) shown in the
-/// non-interactive error message.
-pub fn require_or_prompt<T>(
-    value: Option<T>,
-    flag_name: &str,
-    prompt_fn: impl FnOnce() -> Result<T>,
-) -> Result<T> {
-    require_or_prompt_impl(value, flag_name, is_interactive(), prompt_fn)
-}
-
-fn require_or_prompt_impl<T>(
-    value: Option<T>,
-    flag_name: &str,
-    interactive: bool,
-    prompt_fn: impl FnOnce() -> Result<T>,
-) -> Result<T> {
-    if let Some(v) = value {
-        return Ok(v);
-    }
-    if !interactive {
-        bail!(
-            "flag {flag_name} is required in non-interactive mode \
-             (set {flag_name} or unset {NON_INTERACTIVE_ENV})"
-        );
-    }
-    prompt_fn()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn require_or_prompt_returns_supplied_value_without_prompting() {
-        let result: Result<String> =
-            require_or_prompt_impl(Some("hello".to_string()), "--foo", false, || {
-                panic!("should not prompt when value is present")
-            });
-        assert_eq!(result.unwrap(), "hello");
-    }
-
-    #[test]
-    fn require_or_prompt_errors_when_non_interactive_and_names_flag() {
-        let result: Result<String> = require_or_prompt_impl(None, "--deploy-id", false, || {
-            panic!("should not prompt when non-interactive")
-        });
-        let err = result.unwrap_err().to_string();
-        assert!(err.contains("--deploy-id"), "error names the flag: {err}");
-        assert!(
-            err.contains("non-interactive"),
-            "error mentions non-interactive: {err}"
-        );
-        assert!(
-            err.contains(NON_INTERACTIVE_ENV),
-            "error names the env var: {err}"
-        );
-    }
-
-    #[test]
-    fn require_or_prompt_runs_prompt_when_interactive() {
-        let result: Result<String> =
-            require_or_prompt_impl(None, "--foo", true, || Ok("prompted".to_string()));
-        assert_eq!(result.unwrap(), "prompted");
-    }
 }

@@ -1,11 +1,10 @@
-//! Non-interactive regression fence.
+//! Regression tests for non-interactive mode for CI
 //!
 //! When `TVC_NON_INTERACTIVE=1` is set, every command that would otherwise
 //! prompt must fail fast with a clear "flag X is required in non-interactive
 //! mode" error instead of hanging.
 //!
-//! Commands join this fence as they gain prompting behavior. Commit 2 covers
-//! `login` and `deploy approve`.
+//! Commands join this fence as they gain prompting behavior.
 
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;

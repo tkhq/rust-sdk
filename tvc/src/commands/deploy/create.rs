@@ -4,6 +4,7 @@ use crate::client::build_client;
 use crate::config::deploy::DeployConfig;
 use crate::config::turnkey::Config;
 use crate::prompts;
+use crate::prompts::is_interactive;
 use crate::pull_secret::encrypt_pivot_pull_secret;
 use anyhow::{anyhow, bail, Context, Result};
 use clap::Args as ClapArgs;
@@ -176,7 +177,7 @@ fn apply_overrides(config: &mut DeployConfig, args: &Args) {
     }
 }
 
-/// Read a config from the given path, returning the parsed DeployConfig and
+/// Read a config from the given path, returning the parsed [`DeployConfig`] and
 /// a flag indicating whether the file existed (interactive flow may treat
 /// missing files as "start from template" when --config-file was provided).
 fn read_config_file(path: &Path) -> Result<Option<DeployConfig>> {
@@ -209,12 +210,24 @@ async fn resolve_deploy_config(args: &Args) -> Result<DeployConfig> {
 
     apply_overrides(&mut config, args);
 
-    // After flag/env overrides, anything still placeholder-shaped needs to
-    // come from somewhere. Non-interactive: bail with the flag-list. Interactive:
-    // walk prompts for the remaining holes.
-    if !config.missing_required_fields().is_empty() {
-        if !prompts::is_interactive() {
-            let missing = config.missing_required_fields();
+    let config_updated = resolve_placeholders(&mut config, args).await?;
+    if config_updated {
+        if let Some(path) = &args.config_file {
+            offer_to_save_config(path, &config, file_loaded)?;
+        }
+    }
+    Ok(config)
+}
+
+/// Address any remaining placeholders in `config`. Returns `true` iff the
+/// resolution required walking interactive prompts
+async fn resolve_placeholders(config: &mut DeployConfig, args: &Args) -> Result<bool> {
+    if !config.has_placeholders() {
+        return Ok(false);
+    }
+    if !is_interactive() {
+        let missing = config.missing_required_fields();
+        if !missing.is_empty() {
             let suggestion = if args.config_file.is_some() {
                 "Edit the config file or override via flag/TVC_* env."
             } else {
@@ -226,29 +239,34 @@ async fn resolve_deploy_config(args: &Args) -> Result<DeployConfig> {
             );
         }
 
-        let saved_app_id = Config::load().await.ok().and_then(|c| c.get_last_app_id());
-        config = config.fill_interactively(saved_app_id.as_deref())?;
-
-        // If the user passed a --config-file and we walked any prompts (either
-        // because the file was missing or had placeholders), offer to write the
-        // filled config back so the next run is hands-free.
-        if let Some(path) = &args.config_file {
-            let prompt = if file_loaded {
-                format!("Save filled config to {}?", path.display())
-            } else {
-                format!("Write a new config file at {}?", path.display())
-            };
-            if prompts::confirm(&prompt, true)? {
-                let json =
-                    serde_json::to_string_pretty(&config).context("failed to serialize config")?;
-                std::fs::write(path, json)
-                    .with_context(|| format!("failed to write config file: {}", path.display()))?;
-                println!("Wrote {}", path.display());
-            }
+        if config.pull_secret_is_placeholder() {
+            bail!("pivotContainerEncryptedPullSecret is placeholder. Set the field to null in the config file (public image), or pass --pivot-pull-secret <PATH> (private image).")
         }
+        return Ok(false);
     }
 
-    Ok(config)
+    let saved_app_id = Config::load().await.ok().and_then(|c| c.get_last_app_id());
+    config.fill_interactively(saved_app_id.as_deref())?;
+
+    Ok(true)
+}
+
+/// Ask the user whether to write the updated config back to disk.
+/// `file_loaded` distinguishes "saving over an existing file" from
+/// "creating a new file at this path" in the prompt wording.
+fn offer_to_save_config(path: &Path, config: &DeployConfig, file_loaded: bool) -> Result<()> {
+    let prompt = if file_loaded {
+        format!("Save filled config to {}?", path.display())
+    } else {
+        format!("Write a new config file at {}?", path.display())
+    };
+    if prompts::confirm(&prompt, true)? {
+        let json = serde_json::to_string_pretty(config).context("failed to serialize config")?;
+        std::fs::write(path, json)
+            .with_context(|| format!("failed to write config file: {}", path.display()))?;
+        println!("Wrote {}", path.display());
+    }
+    Ok(())
 }
 
 /// Run the deploy create command.
@@ -487,6 +505,34 @@ mod tests {
         };
         let resolved = run_resolve(&args).unwrap();
         assert_eq!(resolved.pivot_args, vec!["c"]);
+    }
+
+    /// All required fields are filled but the pull-secret sentinel is still
+    /// present. In non-interactive mode we can't prompt the user about it, so
+    /// the resolve bails rather than silently mutating the config or shipping
+    /// the sentinel to the API.
+    #[test]
+    fn pull_secret_placeholder_bails_when_non_interactive() {
+        let _guard = NonInteractiveGuard::set();
+
+        let mut cfg = file_config();
+        cfg.pivot_container_encrypted_pull_secret =
+            Some("<REMOVE_ME_IF_PIVOT_CONTAINER_URL_IS_PUBLIC>".to_string());
+        let file = write_config(&cfg);
+        let args = Args {
+            config_file: Some(file.path().to_path_buf()),
+            ..empty_args()
+        };
+
+        let err = run_resolve(&args).unwrap_err().to_string();
+        assert!(
+            err.contains("pivotContainerEncryptedPullSecret"),
+            "error should name the offending field: {err}"
+        );
+        assert!(
+            err.contains("--pivot-pull-secret"),
+            "error should point the user at the resolution flag: {err}"
+        );
     }
 
     /// Sets `TVC_NON_INTERACTIVE=1` for the lifetime of the value so a test

@@ -47,12 +47,10 @@ pub async fn run(args: Args) -> Result<()> {
     let last_app_id = config.get_last_app_id();
 
     // Generate template (optionally walking prompts to fill it in)
-    let template = DeployConfig::template(last_app_id.as_deref());
-    let config = if args.interactive {
-        template.fill_interactively(last_app_id.as_deref())?
-    } else {
-        template
-    };
+    let mut config = DeployConfig::template(last_app_id.as_deref());
+    if args.interactive {
+        config.fill_interactively(last_app_id.as_deref())?;
+    }
 
     let json = serde_json::to_string_pretty(&config).context("failed to serialize config")?;
 
