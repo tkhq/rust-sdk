@@ -21,9 +21,10 @@ const SERDE_CAMEL_CASE: &str = "#[serde(rename_all = \"camelCase\")]";
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ActivityDetails {
-    r#type: String,
     intent_type: String,
     result_type: String,
+    #[serde(default)]
+    internal: bool,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -111,17 +112,16 @@ fn main() {
 
     let mut generated_methods = String::new();
 
-    // We manually have to specify the mapping between activity types, route, intent and result type through a file
-    // Unfortunately this information isn't available in proto directly because this mapping is semantic, not structural.
+    // The activity type is read directly from the enum annotation on each request message in the external activity proto.
+    // Intent and result types are looked up from activities.json using the activity type as the key.
     let activities_mapping_data =
         fs::read_to_string(ACTIVITIES_MAPPING_PATH).expect("cannot read activities.json");
     let parsed_activities: ActivitiesFile =
         serde_json::from_str(&activities_mapping_data).expect("cannot parse activities.json");
 
-    // Collect the set of external activity request types that carry a `generate_app_proofs`
-    // field in the proto, so we know which struct initializers need to populate it.
     let external_activity_proto = fs::read_to_string(EXTERNAL_ACTIVITY_PROTO_PATH)
-        .expect("Failed to read external activity proto");
+        .expect("Failed to read external activity proto file");
+    let request_to_activity_type = request_to_activity_types(&external_activity_proto);
     let requests_with_app_proofs = requests_with_generate_app_proofs(&external_activity_proto);
 
     for service_caps in service_re.captures_iter(&proto) {
@@ -179,15 +179,21 @@ fn main() {
                     .unwrap_or_else(|| panic!("no description found for {route}"))[1];
 
                 if req_type.contains("external.activity.v1") {
-                    let activities_details = parsed_activities
-                        .activities
-                        .get(route)
-                        .unwrap_or_else(|| panic!("route {route} not found in activities.json"));
-                    let activity_type = activities_details.r#type.clone();
-
                     // If the request type is "external.activity.v1.DeletePolicyRequest" the sanitized
                     // request type will be "DeletePolicyRequest", and we'll need to import it from the external activity namespace
                     let short_req_type = req_type.rsplit(".").next().unwrap();
+                    let activity_type = request_to_activity_type
+                        .get(short_req_type)
+                        .unwrap_or_else(|| panic!("no activity type annotation found for {short_req_type} in external activity proto"));
+                    let activities_details = parsed_activities
+                        .activities
+                        .get(activity_type.as_str())
+                        .unwrap_or_else(|| {
+                            panic!("activity type {activity_type} not found in activities.json")
+                        });
+                    if activities_details.internal {
+                        continue;
+                    }
                     let activity_intent = activities_details.intent_type.clone();
                     let activity_result = activities_details.result_type.clone();
                     let app_proofs_field =
@@ -353,6 +359,21 @@ fn build_generate_app_proofs_field(
     } else {
         String::new()
     }
+}
+
+fn request_to_activity_types(proto: &str) -> HashMap<String, String> {
+    let message_re = Regex::new(r"(?ms)^message\s+(\w+)\s*\{\n(.*?)\n\}").unwrap();
+    let enum_annotation_re = Regex::new(r#"enum:\s*\["(ACTIVITY_TYPE_[^"]+)"\]"#).unwrap();
+    message_re
+        .captures_iter(proto)
+        .filter_map(|caps| {
+            let name = caps[1].to_string();
+            let body = &caps[2];
+            enum_annotation_re
+                .captures(body)
+                .map(|e| (name, e[1].to_string()))
+        })
+        .collect()
 }
 
 fn requests_with_generate_app_proofs(proto: &str) -> HashSet<String> {

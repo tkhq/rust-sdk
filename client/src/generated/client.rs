@@ -2489,9 +2489,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         organization_id: String,
         timestamp_ms: u128,
         params: immutable_activity::InitOtpIntentV3,
-    ) -> Result<ActivityResult<immutable_activity::InitOtpResult>, TurnkeyClientError> {
+    ) -> Result<ActivityResult<immutable_activity::InitOtpResultV2>, TurnkeyClientError> {
         let request = external_activity::InitOtpRequest {
-            r#type: "ACTIVITY_TYPE_INIT_OTP_V2".to_string(),
+            r#type: "ACTIVITY_TYPE_INIT_OTP_V3".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
@@ -2506,7 +2506,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             .inner
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         let result = match inner {
-            immutable_activity::result::Inner::InitOtpResult(res) => res,
+            immutable_activity::result::Inner::InitOtpResultV2(res) => res,
             other => {
                 return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
                     serde_json::to_string(&other)?,
@@ -4118,5 +4118,171 @@ impl<S: Stamp> TurnkeyClient<S> {
     ) -> Result<coordinator::GetIpAllowlistResponse, TurnkeyClientError> {
         self.process_request(&request, "/public/v1/query/get_ip_allowlist".to_string())
             .await
+    }
+    /// Sign Frost Spark
+    ///
+    /// Perform pure FROST partial signing for a Spark wallet. Produces partial signatures without constructing operator packages.
+    pub async fn spark_sign_frost(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::SparkSignFrostIntent,
+    ) -> Result<ActivityResult<immutable_activity::SparkSignFrostResult>, TurnkeyClientError> {
+        let request = external_activity::SparkSignFrostRequest {
+            r#type: "ACTIVITY_TYPE_SPARK_SIGN_FROST".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(&request, "/public/v1/submit/spark_sign_frost".to_string())
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::SparkSignFrostResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Prepare Spark transfer
+    ///
+    /// Construct sender-side encrypted operator packages for a Spark BTC transfer. Does not perform FROST signing.
+    pub async fn spark_prepare_transfer(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::SparkPrepareTransferIntent,
+    ) -> Result<ActivityResult<immutable_activity::SparkPrepareTransferResult>, TurnkeyClientError>
+    {
+        let request = external_activity::SparkPrepareTransferRequest {
+            r#type: "ACTIVITY_TYPE_SPARK_PREPARE_TRANSFER".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/spark_prepare_transfer".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::SparkPrepareTransferResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Claim Spark transfer
+    ///
+    /// Construct receiver-side encrypted operator packages to claim a Spark transfer. Does not perform FROST signing.
+    pub async fn spark_claim_transfer(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::SparkClaimTransferIntent,
+    ) -> Result<ActivityResult<immutable_activity::SparkClaimTransferResult>, TurnkeyClientError>
+    {
+        let request = external_activity::SparkClaimTransferRequest {
+            r#type: "ACTIVITY_TYPE_SPARK_CLAIM_TRANSFER".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/spark_claim_transfer".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::SparkClaimTransferResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Spark prepare Lightning receive
+    ///
+    /// Generate a Lightning preimage and distribute Feldman shares to operators for a Spark Lightning receive. Does not perform FROST signing.
+    pub async fn spark_prepare_lightning_receive(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::SparkPrepareLightningReceiveIntent,
+    ) -> Result<
+        ActivityResult<immutable_activity::SparkPrepareLightningReceiveResult>,
+        TurnkeyClientError,
+    > {
+        let request = external_activity::SparkPrepareLightningReceiveRequest {
+            r#type: "ACTIVITY_TYPE_SPARK_PREPARE_LIGHTNING_RECEIVE".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/spark_prepare_lightning_receive".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::SparkPrepareLightningReceiveResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
     }
 }

@@ -2062,8 +2062,8 @@ pub struct Oauth2AuthenticateIntent {
     pub redirect_uri: ::prost::alloc::string::String,
     /// @inject_tag: validate:"required"
     pub code_verifier: ::prost::alloc::string::String,
-    #[serde(default)]
-    pub nonce: ::core::option::Option<::prost::alloc::string::String>,
+    /// @inject_tag: validate:"required"
+    pub nonce: ::prost::alloc::string::String,
     #[serde(default)]
     pub bearer_token_target_public_key: ::core::option::Option<
         ::prost::alloc::string::String,
@@ -3747,7 +3747,7 @@ pub struct SparkClaimLeaf {
 }
 #[derive(Debug)]
 /// Build a transfer: for each leaf, derive the new leaf private key via HD
-/// (SIGNING_HD on new_leaf_derivation), compute the claim tweak scalar
+/// (SigningLeaf on new_leaf_derivation), compute the claim tweak scalar
 /// = old_priv - new_priv (mod n), Feldman-split the tweak across operators,
 /// and ECIES-encrypt the new leaf private key to receiver_public_key as
 /// the per-leaf secret_cipher carried inside each per-operator package.
@@ -3839,7 +3839,6 @@ pub struct SparkSignatureRequest {
     /// @inject_tag: validate:"required,dive"
     #[serde(default)]
     pub operator_commitments: ::prost::alloc::vec::Vec<SparkFrostCommitment>,
-    /// @inject_tag: validate:"omitempty"
     #[serde(default)]
     pub adaptor_public_key: ::core::option::Option<::prost::alloc::string::String>,
 }
@@ -3856,26 +3855,9 @@ pub struct SparkPartialSignature {
     pub binding: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
-/// Request to derive the public key at a specific Spark key path.
-#[derive(::serde::Serialize, ::serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[derive(Clone, PartialEq)]
-pub struct SparkDerivePublicKeyRequest {
-    /// @inject_tag: validate:"required"
-    #[serde(default)]
-    pub derivation: ::core::option::Option<SparkKeyDerivation>,
-}
-#[derive(Debug)]
-#[derive(::serde::Serialize, ::serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[derive(Clone, PartialEq)]
-pub struct SparkDerivedPublicKey {
-    pub public_key: ::prost::alloc::string::String,
-}
-#[derive(Debug)]
-/// Pairs a Spark leaf_id with its derived SIGNING_HD public key.
+/// Pairs a Spark leaf_id with its derived SigningLeaf public key.
 /// Returned by transfer and claim flows so callers can avoid a follow-up
-/// per-leaf SIGNING_HD pubkey-derivation round-trip.
+/// per-leaf SigningLeaf pubkey-derivation round-trip.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -4387,12 +4369,14 @@ pub enum ActivityType {
     DeleteTvcAppAndDeployments = 132,
     #[serde(rename = "ACTIVITY_TYPE_RESTORE_TVC_DEPLOYMENT")]
     RestoreTvcDeployment = 133,
-    /// Reserving the following for now to preserve ordering with Intent enum.
-    ///
-    /// ACTIVITY_TYPE_SPARK_SIGN_FROST = 134;
-    /// ACTIVITY_TYPE_SPARK_PREPARE_TRANSFER = 135;
-    /// ACTIVITY_TYPE_SPARK_CLAIM_TRANSFER = 136;
-    /// ACTIVITY_TYPE_SPARK_PREPARE_LIGHTNING_RECEIVE = 137;
+    #[serde(rename = "ACTIVITY_TYPE_SPARK_SIGN_FROST")]
+    SparkSignFrost = 134,
+    #[serde(rename = "ACTIVITY_TYPE_SPARK_PREPARE_TRANSFER")]
+    SparkPrepareTransfer = 135,
+    #[serde(rename = "ACTIVITY_TYPE_SPARK_CLAIM_TRANSFER")]
+    SparkClaimTransfer = 136,
+    #[serde(rename = "ACTIVITY_TYPE_SPARK_PREPARE_LIGHTNING_RECEIVE")]
+    SparkPrepareLightningReceive = 137,
     #[serde(rename = "ACTIVITY_TYPE_POST_TVC_QUORUM_KEY_SHARE")]
     PostTvcQuorumKeyShare = 138,
 }
@@ -4557,6 +4541,12 @@ impl ActivityType {
                 "ACTIVITY_TYPE_DELETE_TVC_APP_AND_DEPLOYMENTS"
             }
             Self::RestoreTvcDeployment => "ACTIVITY_TYPE_RESTORE_TVC_DEPLOYMENT",
+            Self::SparkSignFrost => "ACTIVITY_TYPE_SPARK_SIGN_FROST",
+            Self::SparkPrepareTransfer => "ACTIVITY_TYPE_SPARK_PREPARE_TRANSFER",
+            Self::SparkClaimTransfer => "ACTIVITY_TYPE_SPARK_CLAIM_TRANSFER",
+            Self::SparkPrepareLightningReceive => {
+                "ACTIVITY_TYPE_SPARK_PREPARE_LIGHTNING_RECEIVE"
+            }
             Self::PostTvcQuorumKeyShare => "ACTIVITY_TYPE_POST_TVC_QUORUM_KEY_SHARE",
         }
     }
@@ -4749,6 +4739,12 @@ impl ActivityType {
                 Some(Self::DeleteTvcAppAndDeployments)
             }
             "ACTIVITY_TYPE_RESTORE_TVC_DEPLOYMENT" => Some(Self::RestoreTvcDeployment),
+            "ACTIVITY_TYPE_SPARK_SIGN_FROST" => Some(Self::SparkSignFrost),
+            "ACTIVITY_TYPE_SPARK_PREPARE_TRANSFER" => Some(Self::SparkPrepareTransfer),
+            "ACTIVITY_TYPE_SPARK_CLAIM_TRANSFER" => Some(Self::SparkClaimTransfer),
+            "ACTIVITY_TYPE_SPARK_PREPARE_LIGHTNING_RECEIVE" => {
+                Some(Self::SparkPrepareLightningReceive)
+            }
             "ACTIVITY_TYPE_POST_TVC_QUORUM_KEY_SHARE" => {
                 Some(Self::PostTvcQuorumKeyShare)
             }
@@ -4873,57 +4869,6 @@ impl ActivityProtectedCategory {
             "ACTIVITY_PROTECTED_CATEGORY_SIGN" => Some(Self::Sign),
             "ACTIVITY_PROTECTED_CATEGORY_SMS" => Some(Self::Sms),
             "ACTIVITY_PROTECTED_CATEGORY_FIAT_ON_RAMP" => Some(Self::FiatOnRamp),
-            _ => None,
-        }
-    }
-}
-/// The key type addressed within a Spark wallet. Values correspond to the
-/// per-account child index in the derivation path m/8797555'/{account}'/{N}'.
-#[derive(::serde::Serialize, ::serde::Deserialize)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum SparkKeyType {
-    #[serde(rename = "SPARK_KEY_TYPE_UNSPECIFIED")]
-    Unspecified = 0,
-    /// N = 0
-    #[serde(rename = "SPARK_KEY_TYPE_IDENTITY")]
-    Identity = 1,
-    /// N = 1; per-leaf BIP32 hardened child at u32_be(sha256(leaf_id_utf8)\[0..4\]) % 2^31
-    #[serde(rename = "SPARK_KEY_TYPE_SIGNING_HD")]
-    SigningHd = 2,
-    /// N = 2
-    #[serde(rename = "SPARK_KEY_TYPE_DEPOSIT")]
-    Deposit = 3,
-    /// N = 3
-    #[serde(rename = "SPARK_KEY_TYPE_STATIC_DEPOSIT_HD")]
-    StaticDepositHd = 4,
-    /// N = 4
-    #[serde(rename = "SPARK_KEY_TYPE_HTLC_PREIMAGE_HD")]
-    HtlcPreimageHd = 5,
-}
-impl SparkKeyType {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Self::Unspecified => "SPARK_KEY_TYPE_UNSPECIFIED",
-            Self::Identity => "SPARK_KEY_TYPE_IDENTITY",
-            Self::SigningHd => "SPARK_KEY_TYPE_SIGNING_HD",
-            Self::Deposit => "SPARK_KEY_TYPE_DEPOSIT",
-            Self::StaticDepositHd => "SPARK_KEY_TYPE_STATIC_DEPOSIT_HD",
-            Self::HtlcPreimageHd => "SPARK_KEY_TYPE_HTLC_PREIMAGE_HD",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "SPARK_KEY_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
-            "SPARK_KEY_TYPE_IDENTITY" => Some(Self::Identity),
-            "SPARK_KEY_TYPE_SIGNING_HD" => Some(Self::SigningHd),
-            "SPARK_KEY_TYPE_DEPOSIT" => Some(Self::Deposit),
-            "SPARK_KEY_TYPE_STATIC_DEPOSIT_HD" => Some(Self::StaticDepositHd),
-            "SPARK_KEY_TYPE_HTLC_PREIMAGE_HD" => Some(Self::HtlcPreimageHd),
             _ => None,
         }
     }

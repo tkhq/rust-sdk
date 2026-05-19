@@ -158,12 +158,10 @@ enum ActivityType {
   ACTIVITY_TYPE_DELETE_TVC_DEPLOYMENT = 131;
   ACTIVITY_TYPE_DELETE_TVC_APP_AND_DEPLOYMENTS = 132;
   ACTIVITY_TYPE_RESTORE_TVC_DEPLOYMENT = 133;
-  // Reserving the following for now to preserve ordering with Intent enum.
-  //
-  // ACTIVITY_TYPE_SPARK_SIGN_FROST = 134;
-  // ACTIVITY_TYPE_SPARK_PREPARE_TRANSFER = 135;
-  // ACTIVITY_TYPE_SPARK_CLAIM_TRANSFER = 136;
-  // ACTIVITY_TYPE_SPARK_PREPARE_LIGHTNING_RECEIVE = 137;
+  ACTIVITY_TYPE_SPARK_SIGN_FROST = 134;
+  ACTIVITY_TYPE_SPARK_PREPARE_TRANSFER = 135;
+  ACTIVITY_TYPE_SPARK_CLAIM_TRANSFER = 136;
+  ACTIVITY_TYPE_SPARK_PREPARE_LIGHTNING_RECEIVE = 137;
   ACTIVITY_TYPE_POST_TVC_QUORUM_KEY_SHARE = 138;
 }
 
@@ -3989,9 +3987,10 @@ message Oauth2AuthenticateIntent {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The code verifier used by OAuth 2.0 PKCE providers"}
   ];
-  optional string nonce = 5 [
-    (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "An optional nonce used by the client to prevent replay/substitution of an ID token"}
+  // @inject_tag: validate:"required"
+  string nonce = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A nonce value set to sha256(publicKey), used to bind the OIDC token to a specific public key"}
   ];
   optional string bearer_token_target_public_key = 6 [
     (google.api.field_behavior) = OPTIONAL,
@@ -5427,7 +5426,7 @@ message WebhookSubscriptionParams {
   // @inject_tag: validate:"required"
   string event_type = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The event type to subscribe to (for example, ACTIVITY_UPDATES or BALANCE_CONFIRMED_UPDATES)."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The event type to subscribe to (for example, ACTIVITY_UPDATES, BALANCE_CONFIRMED_UPDATES, or BALANCE_FINALIZED_UPDATES)."}
   ];
   // @inject_tag: validate:"omitempty"
   optional string filters_json = 2 [
@@ -6097,17 +6096,6 @@ message RemoveIpAllowlistResult {}
 // SPARK_PREPARE_LIGHTNING_RECEIVE) build the encrypted operator
 // packages that those FROST signatures attach to.
 
-// The key type addressed within a Spark wallet. Values correspond to the
-// per-account child index in the derivation path m/8797555'/{account}'/{N}'.
-enum SparkKeyType {
-  SPARK_KEY_TYPE_UNSPECIFIED = 0;
-  SPARK_KEY_TYPE_IDENTITY = 1; // N = 0
-  SPARK_KEY_TYPE_SIGNING_HD = 2; // N = 1; per-leaf BIP32 hardened child at u32_be(sha256(leaf_id_utf8)[0..4]) % 2^31
-  SPARK_KEY_TYPE_DEPOSIT = 3; // N = 2
-  SPARK_KEY_TYPE_STATIC_DEPOSIT_HD = 4; // N = 3
-  SPARK_KEY_TYPE_HTLC_PREIMAGE_HD = 5; // N = 4
-}
-
 // A FROST commitment pair contributed by one participant in a signing session.
 message SparkFrostCommitment {
   // @inject_tag: validate:"required"
@@ -6151,12 +6139,12 @@ message SparkTransferLeaf {
   // @inject_tag: validate:"required"
   SparkKeyDerivation old_leaf_derivation = 2 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Derivation for the existing (pre-transfer) leaf key. Always a SIGNING_HD derivation."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Derivation for the existing (pre-transfer) leaf key. Always a SigningLeaf derivation."}
   ];
   // @inject_tag: validate:"required"
   SparkKeyDerivation new_leaf_derivation = 3 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Derivation for the new (post-transfer) leaf key. Always a SIGNING_HD derivation. The enclave ECIES-encrypts this private key to receiver_public_key as the per-leaf secret_cipher; HD-derived rather than random so the sender can re-derive on retry (Turnkey's enclave is stateless)."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Derivation for the new (post-transfer) leaf key. Always a SigningLeaf derivation. The enclave ECIES-encrypts this private key to receiver_public_key as the per-leaf secret_cipher; HD-derived rather than random so the sender can re-derive on retry (Turnkey's enclave is stateless)."}
   ];
   // @inject_tag: validate:"omitempty"
   optional string refund_signature = 4 [
@@ -6195,7 +6183,7 @@ message SparkClaimLeaf {
 }
 
 // Build a transfer: for each leaf, derive the new leaf private key via HD
-// (SIGNING_HD on new_leaf_derivation), compute the claim tweak scalar
+// (SigningLeaf on new_leaf_derivation), compute the claim tweak scalar
 // = old_priv - new_priv (mod n), Feldman-split the tweak across operators,
 // and ECIES-encrypt the new leaf private key to receiver_public_key as
 // the per-leaf secret_cipher carried inside each per-operator package.
@@ -6316,11 +6304,7 @@ message SparkSignatureRequest {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Commitments for every non-Turnkey participant. MUST NOT include an entry under Turnkey's identifier. Bound into the nonce HMAC."}
   ];
-  // @inject_tag: validate:"omitempty"
-  optional string adaptor_public_key = 5 [
-    (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional per-signature adaptor point T (hex-encoded 33-byte compressed secp256k1 pubkey). When set, the result is a Schnorr adaptor pre-signature. Bound into the nonce HMAC."}
-  ];
+  optional string adaptor_public_key = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional adaptor point T (hex-encoded 33-byte compressed secp256k1 pubkey). When set, Turnkey produces a Schnorr adaptor pre-signature with the FROST challenge bound to `R+T` (where `R` is the aggregate group nonce commitment from FROST). The party holding the discrete log `t` completes the pre-sig to a valid BIP-340 signature by adding `t` (or `-t`, for parity) to the signature scalar `s`. This is primarily used by Spark leaves-swap and other adaptor-bound flows; absent or empty leads to plain FROST signing (the typical case)."}];
 }
 
 // Per-signature output from SPARK_SIGN_FROST: Turnkey's FROST partial
@@ -6341,25 +6325,9 @@ message SparkPartialSignature {
   ];
 }
 
-// Request to derive the public key at a specific Spark key path.
-message SparkDerivePublicKeyRequest {
-  // @inject_tag: validate:"required"
-  SparkKeyDerivation derivation = 1 [
-    (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Which key type and optional leaf_id/index to derive."}
-  ];
-}
-
-message SparkDerivedPublicKey {
-  string public_key = 1 [
-    (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Hex-encoded compressed secp256k1 point (33 bytes)."}
-  ];
-}
-
-// Pairs a Spark leaf_id with its derived SIGNING_HD public key.
+// Pairs a Spark leaf_id with its derived SigningLeaf public key.
 // Returned by transfer and claim flows so callers can avoid a follow-up
-// per-leaf SIGNING_HD pubkey-derivation round-trip.
+// per-leaf SigningLeaf pubkey-derivation round-trip.
 message SparkLeafPublicKey {
   string leaf_id = 1 [
     (google.api.field_behavior) = REQUIRED,
@@ -6367,7 +6335,7 @@ message SparkLeafPublicKey {
   ];
   string public_key = 2 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Hex-encoded compressed secp256k1 point (33 bytes) for the SIGNING_HD derivation at leaf_id."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Hex-encoded compressed secp256k1 point (33 bytes) for the SigningLeaf derivation at leaf_id."}
   ];
 }
 
@@ -6421,7 +6389,7 @@ message SparkPrepareTransferResult {
   ];
   repeated SparkLeafPublicKey new_leaf_public_keys = 3 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Newly-derived SIGNING_HD public keys, one per leaf, in input order."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Newly-derived SigningLeaf public keys, one per leaf, in input order."}
   ];
 }
 
@@ -6447,7 +6415,7 @@ message SparkClaimTransferResult {
   ];
   repeated SparkLeafPublicKey new_leaf_public_keys = 2 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Newly-derived SIGNING_HD public keys, one per leaf, in input order."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Newly-derived SigningLeaf public keys, one per leaf, in input order."}
   ];
 }
 
