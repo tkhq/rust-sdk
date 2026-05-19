@@ -360,6 +360,22 @@
       "intentType": "RemoveIpAllowlistIntent",
       "resultType": "RemoveIpAllowlistResult"
     },
+    "ACTIVITY_TYPE_SPARK_SIGN_FROST": {
+      "intentType": "SparkSignFrostIntent",
+      "resultType": "SparkSignFrostResult"
+    },
+    "ACTIVITY_TYPE_SPARK_PREPARE_TRANSFER": {
+      "intentType": "SparkPrepareTransferIntent",
+      "resultType": "SparkPrepareTransferResult"
+    },
+    "ACTIVITY_TYPE_SPARK_CLAIM_TRANSFER": {
+      "intentType": "SparkClaimTransferIntent",
+      "resultType": "SparkClaimTransferResult"
+    },
+    "ACTIVITY_TYPE_SPARK_PREPARE_LIGHTNING_RECEIVE": {
+      "intentType": "SparkPrepareLightningReceiveIntent",
+      "resultType": "SparkPrepareLightningReceiveResult"
+    },
     "ACTIVITY_TYPE_CREATE_API_KEYS": {
       "intentType": "CreateApiKeysIntent",
       "resultType": "CreateApiKeysResult"
@@ -475,6 +491,86 @@
     "ACTIVITY_TYPE_VERIFY_OTP": {
       "intentType": "VerifyOtpIntent",
       "resultType": "VerifyOtpResult"
+    },
+    "ACTIVITY_TYPE_ACCEPT_INVITATION": {
+      "intentType": "AcceptInvitationIntent",
+      "resultType": "AcceptInvitationResult",
+      "internal": true
+    },
+    "ACTIVITY_TYPE_ACCEPT_INVITATION_V2": {
+      "intentType": "AcceptInvitationIntentV2",
+      "resultType": "AcceptInvitationResult",
+      "internal": true
+    },
+    "ACTIVITY_TYPE_DISABLE_PRIVATE_KEY": {
+      "intentType": "DisablePrivateKeyIntent",
+      "resultType": "DisablePrivateKeyResult",
+      "internal": true
+    },
+    "ACTIVITY_TYPE_DELETE_ORGANIZATION": {
+      "intentType": "DeleteOrganizationIntent",
+      "resultType": "DeleteOrganizationResult",
+      "internal": true
+    },
+    "ACTIVITY_TYPE_CREATE_ORGANIZATION": {
+      "intentType": "CreateOrganizationIntent",
+      "resultType": "CreateOrganizationResult",
+      "internal": true
+    },
+    "ACTIVITY_TYPE_CREATE_ORGANIZATION_V2": {
+      "intentType": "CreateOrganizationIntentV2",
+      "resultType": "CreateOrganizationResult",
+      "internal": true
+    },
+    "ACTIVITY_TYPE_SET_PAYMENT_METHOD": {
+      "intentType": "SetPaymentMethodIntent",
+      "resultType": "SetPaymentMethodResult",
+      "internal": true
+    },
+    "ACTIVITY_TYPE_SET_PAYMENT_METHOD_V2": {
+      "intentType": "SetPaymentMethodIntentV2",
+      "resultType": "SetPaymentMethodResult",
+      "internal": true
+    },
+    "ACTIVITY_TYPE_ACTIVATE_BILLING_TIER": {
+      "intentType": "ActivateBillingTierIntent",
+      "resultType": "ActivateBillingTierResult",
+      "internal": true
+    },
+    "ACTIVITY_TYPE_DELETE_PAYMENT_METHOD": {
+      "intentType": "DeletePaymentMethodIntent",
+      "resultType": "GetDeletePaymentMethodResult",
+      "internal": true
+    },
+    "ACTIVITY_TYPE_UPDATE_ALLOWED_ORIGINS": {
+      "intentType": "UpdateAllowedOriginsIntent",
+      "resultType": "UpdateAllowedOriginsResult",
+      "internal": true
+    },
+    "ACTIVITY_TYPE_ENABLE_AUTH_PROXY": {
+      "intentType": "EnableAuthProxyIntent",
+      "resultType": "EnableAuthProxyResult",
+      "internal": true
+    },
+    "ACTIVITY_TYPE_DISABLE_AUTH_PROXY": {
+      "intentType": "DisableAuthProxyIntent",
+      "resultType": "DisableAuthProxyResult",
+      "internal": true
+    },
+    "ACTIVITY_TYPE_UPDATE_AUTH_PROXY_CONFIG": {
+      "intentType": "UpdateAuthProxyConfigIntent",
+      "resultType": "UpdateAuthProxyConfigResult",
+      "internal": true
+    },
+    "ACTIVITY_TYPE_UPSERT_GAS_USAGE_CONFIG": {
+      "intentType": "UpsertGasUsageConfigIntent",
+      "resultType": "UpsertGasUsageConfigResult",
+      "internal": true
+    },
+    "ACTIVITY_TYPE_UNSPECIFIED": {
+      "intentType": "*",
+      "resultType": "*",
+      "internal": true
     }
   }
 }

@@ -1959,6 +1959,54 @@ service PublicApiService {
     };
   }
 
+  rpc SparkSignFrost(external.activity.v1.SparkSignFrostRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/spark_sign_frost"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Perform pure FROST partial signing for a Spark wallet. Produces partial signatures without constructing operator packages."
+      summary: "Sign Frost Spark"
+      tags: "Signing"
+    };
+  }
+
+  rpc SparkPrepareTransfer(external.activity.v1.SparkPrepareTransferRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/spark_prepare_transfer"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Construct sender-side encrypted operator packages for a Spark BTC transfer. Does not perform FROST signing."
+      summary: "Prepare Spark transfer"
+      tags: "Signing"
+    };
+  }
+
+  rpc SparkClaimTransfer(external.activity.v1.SparkClaimTransferRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/spark_claim_transfer"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Construct receiver-side encrypted operator packages to claim a Spark transfer. Does not perform FROST signing."
+      summary: "Claim Spark transfer"
+      tags: "Signing"
+    };
+  }
+
+  rpc SparkPrepareLightningReceive(external.activity.v1.SparkPrepareLightningReceiveRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/spark_prepare_lightning_receive"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Generate a Lightning preimage and distribute Feldman shares to operators for a Spark Lightning receive. Does not perform FROST signing."
+      summary: "Spark prepare Lightning receive"
+      tags: "Signing"
+    };
+  }
+
   // This route does nothing and does not need an implementation, but please don't remove it.
   // It's used at compile time for generating extra OpenAPI/TypeScript types
   // that are not directly referenced in requests.

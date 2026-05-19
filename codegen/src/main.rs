@@ -23,6 +23,8 @@ const SERDE_CAMEL_CASE: &str = "#[serde(rename_all = \"camelCase\")]";
 struct ActivityDetails {
     intent_type: String,
     result_type: String,
+    #[serde(default)]
+    internal: bool,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -189,6 +191,9 @@ fn main() {
                         .unwrap_or_else(|| {
                             panic!("activity type {activity_type} not found in activities.json")
                         });
+                    if activities_details.internal {
+                        continue;
+                    }
                     let activity_intent = activities_details.intent_type.clone();
                     let activity_result = activities_details.result_type.clone();
                     let app_proofs_field =
