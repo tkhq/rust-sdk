@@ -66,8 +66,8 @@ fn approve_walks_all_sections_with_yeses() {
 }
 
 /// Rejecting at the third section (pivot) bails immediately with the exact
-/// "approval cancelled by user" string and never reaches the manifest-set
-/// section.
+/// "operation cancelled by user: approval" string and never reaches the
+/// manifest-set section.
 ///
 /// Replaces the deleted `tests/deploy_approve.rs::approve_interactive_reject`.
 #[test]
@@ -88,7 +88,9 @@ fn approve_bails_when_user_rejects_pivot() {
     session.exp_string("Approve pivot binary?").unwrap();
     session.send_line("n").unwrap();
 
-    session.exp_string("approval cancelled by user").unwrap();
+    session
+        .exp_string("operation cancelled by user: approval")
+        .unwrap();
     session.exp_eof().unwrap();
 }
 

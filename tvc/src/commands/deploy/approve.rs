@@ -248,13 +248,6 @@ fn interactive_approve(manifest: &Manifest) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn confirm_or_bail(prompt: &str) -> anyhow::Result<()> {
-    if !prompts::confirm(prompt, false)? {
-        bail!("approval cancelled by user");
-    }
-    Ok(())
-}
-
 fn render_namespace(namespace: &Namespace) -> String {
     let mut s = String::new();
     let _ = writeln!(s, "NAMESPACE");
@@ -268,7 +261,7 @@ fn render_namespace(namespace: &Namespace) -> String {
 
 fn review_namespace(namespace: &Namespace) -> anyhow::Result<()> {
     print!("{}", render_namespace(namespace));
-    confirm_or_bail("Approve namespace?")
+    prompts::confirm_or_bail("Approve namespace?", "approval")
 }
 
 fn render_enclave(enclave: &NitroConfig) -> String {
@@ -286,7 +279,7 @@ fn render_enclave(enclave: &NitroConfig) -> String {
 
 fn review_enclave(enclave: &NitroConfig) -> anyhow::Result<()> {
     print!("{}", render_enclave(enclave));
-    confirm_or_bail("Approve enclave configuration?")
+    prompts::confirm_or_bail("Approve enclave configuration?", "approval")
 }
 
 fn render_pivot(pivot: &PivotConfig) -> String {
@@ -305,7 +298,7 @@ fn render_pivot(pivot: &PivotConfig) -> String {
 
 fn review_pivot(pivot: &PivotConfig) -> anyhow::Result<()> {
     print!("{}", render_pivot(pivot));
-    confirm_or_bail("Approve pivot binary?")
+    prompts::confirm_or_bail("Approve pivot binary?", "approval")
 }
 
 fn render_quorum_members(members: &[QuorumMember]) -> String {
@@ -329,7 +322,7 @@ fn render_manifest_set(set: &ManifestSet) -> String {
 
 fn review_manifest_set(set: &ManifestSet) -> anyhow::Result<()> {
     print!("{}", render_manifest_set(set));
-    confirm_or_bail("Approve manifest set?")
+    prompts::confirm_or_bail("Approve manifest set?", "approval")
 }
 
 fn render_share_set(set: &ShareSet) -> String {
@@ -345,7 +338,7 @@ fn render_share_set(set: &ShareSet) -> String {
 
 fn review_share_set(set: &ShareSet) -> anyhow::Result<()> {
     print!("{}", render_share_set(set));
-    confirm_or_bail("Approve share set?")
+    prompts::confirm_or_bail("Approve share set?", "approval")
 }
 
 async fn read_manifest_from_path(path: &Path) -> anyhow::Result<Manifest> {

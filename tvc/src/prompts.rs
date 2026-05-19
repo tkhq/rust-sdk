@@ -72,6 +72,19 @@ pub fn confirm(message: &str, default: bool) -> Result<bool> {
     Ok(Confirm::new(message).with_default(default).prompt()?)
 }
 
+/// Prompt for yes/no confirmation; bail with `"operation cancelled by user:
+/// {operation}"` on No. Default is No (safer for destructive prompts).
+///
+/// `operation` names the action being confirmed (e.g. `"approval"`,
+/// `"deletion"`) so the error string identifies which step the user backed out
+/// of when multiple confirmation prompts run in sequence.
+pub fn confirm_or_bail(message: &str, operation: &str) -> Result<()> {
+    if !confirm(message, false)? {
+        bail!("operation cancelled by user: {operation}");
+    }
+    Ok(())
+}
+
 /// Prompt for a selection from a list.
 pub fn select<T: Display>(message: &str, options: Vec<T>) -> Result<T> {
     Ok(Select::new(message, options).prompt()?)
