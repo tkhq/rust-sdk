@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.7.0](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.6.2...turnkey_client-v0.7.0) - 2026-05-19
+
+### Added
+
+- Added generated client methods for the latest public TVC, IP allowlist, and Spark APIs.
+
+### Changed
+
+- Corrected `init_otp` to submit the V3 OTP activity and return the V2 OTP result type.
+
 ## [0.6.2](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.6.1...turnkey_client-v0.6.2) - 2026-04-09
 
 ### Other
