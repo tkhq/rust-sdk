@@ -27,7 +27,9 @@ impl StoredApiKey {
     /// Load API key from the path specified in org config
     pub async fn load(org_config: &OrgConfig) -> Result<Option<Self>> {
         let path = &org_config.api_key_path;
+        tracing::debug!(api_key_path = %path.display(), "loading stored API key");
         if !path.exists() {
+            tracing::debug!(api_key_path = %path.display(), "stored API key not found");
             return Ok(None);
         }
 
@@ -38,12 +40,20 @@ impl StoredApiKey {
         let key: StoredApiKey = serde_json::from_str(&content)
             .with_context(|| format!("failed to parse API key: {}", path.display()))?;
 
+        tracing::debug!(
+            api_key_path = %path.display(),
+            curve = ?key.curve,
+            has_public_key = !key.public_key.is_empty(),
+            "loaded stored API key"
+        );
+
         Ok(Some(key))
     }
 
     /// Save API key to the path specified in org config
     pub async fn save(&self, org_config: &OrgConfig) -> Result<()> {
         let path = &org_config.api_key_path;
+        tracing::debug!(api_key_path = %path.display(), curve = ?self.curve, "saving stored API key");
 
         // Ensure parent directory exists
         if let Some(parent) = path.parent() {
@@ -57,6 +67,8 @@ impl StoredApiKey {
         tokio::fs::write(path, content)
             .await
             .with_context(|| format!("failed to write API key: {}", path.display()))?;
+
+        tracing::debug!(api_key_path = %path.display(), "saved stored API key");
 
         Ok(())
     }

@@ -34,6 +34,7 @@ impl Cli {
     /// Run the CLI.
     pub async fn run() -> anyhow::Result<()> {
         let args = Cli::parse();
+        tracing::debug!(command = args.command.name(), "dispatching command");
 
         match args.command {
             Commands::Deploy { command } => match command {
@@ -93,6 +94,17 @@ enum Commands {
     },
 }
 
+impl Commands {
+    fn name(&self) -> &'static str {
+        match self {
+            Commands::Login(_) => "login",
+            Commands::Deploy { command } => command.name(),
+            Commands::App { command } => command.name(),
+            Commands::Keys { command } => command.name(),
+        }
+    }
+}
+
 #[derive(Debug, Subcommand)]
 enum DeployCommands {
     /// Approve a deployment manifest.
@@ -112,6 +124,21 @@ enum DeployCommands {
     Delete(commands::deploy::delete::Args),
     /// Restore a deleted deployment.
     Restore(commands::deploy::restore::Args),
+}
+
+impl DeployCommands {
+    fn name(&self) -> &'static str {
+        match self {
+            DeployCommands::Approve(_) => "deploy approve",
+            DeployCommands::GetStatus(_) => "deploy get-status",
+            DeployCommands::ProvisioningDetails(_) => "deploy provisioning-details",
+            DeployCommands::Status(_) => "deploy status",
+            DeployCommands::Create(_) => "deploy create",
+            DeployCommands::Init(_) => "deploy init",
+            DeployCommands::Delete(_) => "deploy delete",
+            DeployCommands::Restore(_) => "deploy restore",
+        }
+    }
 }
 
 #[derive(Debug, Subcommand)]
@@ -138,4 +165,27 @@ enum KeysCommands {
     InitQuorumKey(commands::keys::init_quorum_key::Args),
     /// Re-encrypt a share for enclave provisioning.
     ReEncryptShare(commands::keys::re_encrypt_share::Args),
+}
+
+impl AppCommands {
+    fn name(&self) -> &'static str {
+        match self {
+            AppCommands::Status(_) => "app status",
+            AppCommands::List(_) => "app list",
+            AppCommands::Create(_) => "app create",
+            AppCommands::Init(_) => "app init",
+            AppCommands::SetLiveDeploy(_) => "app set-live-deploy",
+            AppCommands::Delete(_) => "app delete",
+        }
+    }
+}
+
+impl KeysCommands {
+    fn name(&self) -> &'static str {
+        match self {
+            KeysCommands::GenerateQuorumKey(_) => "keys generate-quorum-key",
+            KeysCommands::InitQuorumKey(_) => "keys init-quorum-key",
+            KeysCommands::ReEncryptShare(_) => "keys re-encrypt-share",
+        }
+    }
 }

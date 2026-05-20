@@ -45,6 +45,8 @@ zeroize = { version = "1.8.1", default-features = false }
 # Error handling
 thiserror = { version = "2.0.12", default-features = false }
 anyhow = { version = "1.0", default-features = false }
+tracing = { version = "0.1.41", default-features = false, features = ["std"] }
+tracing-subscriber = { version = "0.3.23", default-features = false, features = ["ansi", "env-filter", "fmt"] }
 
 # Web/HTTP
 mime = { version = "0.3.17", default-features = false }
