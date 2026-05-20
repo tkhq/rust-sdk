@@ -89,7 +89,7 @@ fn build_authed_client(
     let stamper = TurnkeyP256ApiKey::from_strings(api_key_private, Some(api_key_public))
         .context("failed to load API key")?;
 
-    debug!(api_base_url = %api_base_url, "building Turnkey API client");
+    debug!(%api_base_url, "building Turnkey API client");
     let client = TurnkeyClient::builder()
         .api_key(stamper)
         .base_url(api_base_url)

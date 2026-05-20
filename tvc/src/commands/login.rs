@@ -154,7 +154,7 @@ async fn prompt_for_new_org(config: &mut Config) -> Result<(String, OrgConfig)> 
 
     // Prompt for API base URL
     let api_base_url = prompt_for_api_url()?;
-    debug!(org_alias = %alias, api_base_url = %api_base_url, "adding prompted organization");
+    debug!(org_alias = %alias, %api_base_url, "adding prompted organization");
 
     config.add_org(&alias, org_id, api_base_url)?;
     let org_config = config.orgs.get(&alias).unwrap().clone();
@@ -343,7 +343,7 @@ async fn verify_credentials(
     org_id: &str,
     api_base_url: &str,
 ) -> Result<WhoamiResult> {
-    debug!(api_base_url = %api_base_url, "verifying credentials with whoami");
+    debug!(%api_base_url, "verifying credentials with whoami");
 
     // Build the API key stamper from stored keys
     let stamper = TurnkeyP256ApiKey::from_strings(&api_key.private_key, Some(&api_key.public_key))

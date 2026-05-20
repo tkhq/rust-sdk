@@ -159,7 +159,7 @@ impl Config {
 
     /// Add or update an organization with default key paths
     pub fn add_org(&mut self, alias: &str, org_id: String, api_base_url: String) -> Result<()> {
-        debug!(org_alias = alias, api_base_url = %api_base_url, "adding organization config");
+        debug!(org_alias = alias, %api_base_url, "adding organization config");
         let org_config = OrgConfig {
             id: org_id,
             api_key_path: default_api_key_path(alias)?,

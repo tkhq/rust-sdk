@@ -35,7 +35,7 @@ impl Cli {
     /// Run the CLI.
     pub async fn run() -> anyhow::Result<()> {
         let args = Cli::parse();
-        debug!(command = args.command.name(), "dispatching command");
+        debug!(command = args.command.name(), "dispatching");
 
         match args.command {
             Commands::Deploy { command } => match command {
