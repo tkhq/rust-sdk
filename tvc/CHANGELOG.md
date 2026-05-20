@@ -11,26 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- *(tvc)* file-less `tvc deploy create`
-- *(tvc)* file-less `tvc deploy create`
-- *(tvc)* file-less `tvc deploy create`
-- *(tvc)* file-less `tvc deploy create`
-- *(tvc)* file-less `tvc deploy create`
-- *(tvc)* add re-encrypt-share command
-- *(tvc)* add local quorum key generation
-- *(tvc)* add provisioning-details command
+- Added offline quorum-key generation and share re-encryption commands for TVC provisioning workflows.
+- Added `tvc deploy provisioning-details` to display deployment provisioning details in a human-readable format.
+- Added non-interactive `tvc deploy create` inputs through flags and environment variables for CI workflows.
+- Added TVC app and deployment lifecycle commands for deleting, restoring, and setting the live deployment.
+- Added support for custom app share sets during app creation and approval.
 
-### Other
+### Changed
 
-- review
-- add new commands
-- sync v2026.5.2
-- Merge pull request #134 from tkhq/daniil/TVC-13-n02-cli-improvements
-- update abouts and reduce readme cruft
-- add integration tests for env vars
-- *(tvc-cli)* [**breaking**] kill positional args, use flags
-- *(tvc-cli)* [**breaking**] standardize and improve UX
-- simplify tvc-keys-related file parsing and other improvements
+- **Breaking:** Updated TVC CLI commands to use named flags and consistent environment variable names.
 
 ## 0.6.2 - 2026-04-09
 

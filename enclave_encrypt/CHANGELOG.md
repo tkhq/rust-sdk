@@ -11,19 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- *(enclave_encrypt)* add persistent server key support
+- Added reusable server-side decryption support for flows that use persistent enclave encryption keys.
 
-### Other
+### Changed
 
-- Zeroize target_private_bytes
-- remove TryFrom<&p256::SecretKey> for ReusableEnclaveEncryptServerRecv
-- Add TryFrom<&qos_p256::P256Pair> for ReusableEnclaveEncryptServerRecv
-- Refactor to ReusableEnclaveEncryptClientSend
-- clarify enclave -> client forward secrecy
-- Use TryFrom for ReusableEnclaveEncryptServerRecv construction
-- Use QuorumPublicKey type as encrypt_to_server_target arg
-- Update docs; client encryption helper fn
-- rename BlobEnclaveEncryptServerRecv to ReusableEnclaveEncryptServerRecv
+- Renamed the reusable server receiver API and updated its constructors to use quorum key types.
 
 ## [0.6.0](https://github.com/tkhq/rust-sdk/compare/turnkey_enclave_encrypt-v0.5.0...turnkey_enclave_encrypt-v0.6.0) - 2026-02-20
 
