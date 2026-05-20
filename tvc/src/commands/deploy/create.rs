@@ -2,10 +2,13 @@
 
 use crate::client::build_client;
 use crate::config::deploy::DeployConfig;
+use crate::config::turnkey::Config;
+use crate::prompts;
+use crate::prompts::is_interactive;
 use crate::pull_secret::encrypt_pivot_pull_secret;
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use clap::Args as ClapArgs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::{CreateTvcDeploymentIntent, ValidateTvcImageRequest};
 
@@ -174,44 +177,101 @@ fn apply_overrides(config: &mut DeployConfig, args: &Args) {
     }
 }
 
-fn resolve_deploy_config(args: &Args) -> Result<DeployConfig> {
-    let mut config = match &args.config_file {
-        Some(path) => {
-            let content = std::fs::read_to_string(path)
-                .with_context(|| format!("failed to read config file: {}", path.display()))?;
-            serde_json::from_str(&content)
-                .with_context(|| format!("failed to parse config file: {}", path.display()))?
+/// Read a config from the given path, returning the parsed [`DeployConfig`] and
+/// a flag indicating whether the file existed (interactive flow may treat
+/// missing files as "start from template" when --config-file was provided).
+fn read_config_file(path: &Path) -> Result<Option<DeployConfig>> {
+    match std::fs::read_to_string(path) {
+        Ok(content) => {
+            let config: DeployConfig = serde_json::from_str(&content)
+                .with_context(|| format!("failed to parse config file: {}", path.display()))?;
+            Ok(Some(config))
         }
+        Err(_) if prompts::is_interactive() => Ok(None),
+        Err(e) => Err(anyhow!(e))
+            .with_context(|| format!("failed to read config file: {}", path.display())),
+    }
+}
+
+async fn resolve_deploy_config(args: &Args) -> Result<DeployConfig> {
+    let (mut config, file_loaded) = match &args.config_file {
+        Some(path) => match read_config_file(path)? {
+            Some(c) => (c, true),
+            None => (DeployConfig::template(None), false),
+        },
         None => {
             let mut t = DeployConfig::template(None);
             // Strip the template's "<REMOVE_ME...>" hint so flag-only mode
             // doesn't ship it to the API for public images.
             t.pivot_container_encrypted_pull_secret = None;
-            t
+            (t, false)
         }
     };
 
     apply_overrides(&mut config, args);
 
-    let missing = config.missing_required_fields();
-    if !missing.is_empty() {
-        let suggestion = if args.config_file.is_some() {
-            "Edit the config file or override via flag/TVC_* env."
-        } else {
-            "Provide via flag, TVC_* env, or --config-file."
-        };
-        bail!(
-            "missing required values: {}. {suggestion}",
-            missing.join(", ")
-        );
+    let config_updated = resolve_placeholders(&mut config, args).await?;
+    if config_updated {
+        if let Some(path) = &args.config_file {
+            offer_to_save_config(path, &config, file_loaded)?;
+        }
+    }
+    Ok(config)
+}
+
+/// Address any remaining placeholders in `config`. Returns `true` iff the
+/// resolution required walking interactive prompts
+async fn resolve_placeholders(config: &mut DeployConfig, args: &Args) -> Result<bool> {
+    if !config.has_placeholders() {
+        return Ok(false);
+    }
+    if !is_interactive() {
+        let missing = config.missing_required_fields();
+        if !missing.is_empty() {
+            let suggestion = if args.config_file.is_some() {
+                "Edit the config file or override via flag/TVC_* env."
+            } else {
+                "Provide via flag, TVC_* env, or --config-file."
+            };
+            bail!(
+                "missing required values: {}. {suggestion}",
+                missing.join(", ")
+            );
+        }
+
+        if config.pull_secret_is_placeholder() {
+            bail!("pivotContainerEncryptedPullSecret is placeholder. Set the field to null in the config file (public image), or pass --pivot-pull-secret <PATH> (private image).")
+        }
+        return Ok(false);
     }
 
-    Ok(config)
+    let saved_app_id = Config::load().await.ok().and_then(|c| c.get_last_app_id());
+    config.fill_interactively(saved_app_id.as_deref())?;
+
+    Ok(true)
+}
+
+/// Ask the user whether to write the updated config back to disk.
+/// `file_loaded` distinguishes "saving over an existing file" from
+/// "creating a new file at this path" in the prompt wording.
+fn offer_to_save_config(path: &Path, config: &DeployConfig, file_loaded: bool) -> Result<()> {
+    let prompt = if file_loaded {
+        format!("Save filled config to {}?", path.display())
+    } else {
+        format!("Write a new config file at {}?", path.display())
+    };
+    if prompts::confirm(&prompt, true)? {
+        let json = serde_json::to_string_pretty(config).context("failed to serialize config")?;
+        std::fs::write(path, json)
+            .with_context(|| format!("failed to write config file: {}", path.display()))?;
+        println!("Wrote {}", path.display());
+    }
+    Ok(())
 }
 
 /// Run the deploy create command.
 pub async fn run(args: Args) -> Result<()> {
-    let deploy_config = resolve_deploy_config(&args)?;
+    let deploy_config = resolve_deploy_config(&args).await?;
 
     println!("Creating deployment for app '{}'...", deploy_config.app_id);
 
@@ -365,6 +425,17 @@ mod tests {
         f
     }
 
+    // Resolution tests run inside the tokio runtime since resolve_deploy_config
+    // now reaches into Config::load(). They're wired to call .block_on() via
+    // a small helper.
+    fn run_resolve(args: &Args) -> Result<DeployConfig> {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(resolve_deploy_config(args))
+    }
+
     #[test]
     fn flag_overrides_file_value() {
         let file = write_config(&file_config());
@@ -373,7 +444,7 @@ mod tests {
             app_id: Some("flag-app-id".into()),
             ..empty_args()
         };
-        let resolved = resolve_deploy_config(&args).unwrap();
+        let resolved = run_resolve(&args).unwrap();
         assert_eq!(resolved.app_id, "flag-app-id");
         // Untouched fields keep their file values.
         assert_eq!(resolved.qos_version, "file-qos");
@@ -387,7 +458,7 @@ mod tests {
             config_file: Some(file.path().to_path_buf()),
             ..empty_args()
         };
-        let resolved = resolve_deploy_config(&args).unwrap();
+        let resolved = run_resolve(&args).unwrap();
         assert_eq!(resolved.app_id, "file-app-id");
         assert_eq!(resolved.qos_version, "file-qos");
         assert_eq!(resolved.health_check_port, 4000);
@@ -395,7 +466,7 @@ mod tests {
 
     #[test]
     fn no_file_uses_flag_only_with_template_defaults() {
-        let resolved = resolve_deploy_config(&all_required_flags()).unwrap();
+        let resolved = run_resolve(&all_required_flags()).unwrap();
         // Required fields come from flags.
         assert_eq!(resolved.app_id, "flag-app-id");
         assert_eq!(resolved.qos_version, "flag-qos");
@@ -413,7 +484,9 @@ mod tests {
 
     #[test]
     fn no_file_no_required_flags_bails_naming_each_flag() {
-        let err = resolve_deploy_config(&empty_args()).unwrap_err();
+        // Force non-interactive so the test never tries to prompt.
+        let _guard = NonInteractiveGuard::set();
+        let err = run_resolve(&empty_args()).unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("--app-id"), "{msg}");
         assert!(msg.contains("--qos-version"), "{msg}");
@@ -430,7 +503,51 @@ mod tests {
             pivot_args: vec!["c".into()],
             ..empty_args()
         };
-        let resolved = resolve_deploy_config(&args).unwrap();
+        let resolved = run_resolve(&args).unwrap();
         assert_eq!(resolved.pivot_args, vec!["c"]);
+    }
+
+    /// All required fields are filled but the pull-secret sentinel is still
+    /// present. In non-interactive mode we can't prompt the user about it, so
+    /// the resolve bails rather than silently mutating the config or shipping
+    /// the sentinel to the API.
+    #[test]
+    fn pull_secret_placeholder_bails_when_non_interactive() {
+        let _guard = NonInteractiveGuard::set();
+
+        let mut cfg = file_config();
+        cfg.pivot_container_encrypted_pull_secret =
+            Some("<REMOVE_ME_IF_PIVOT_CONTAINER_URL_IS_PUBLIC>".to_string());
+        let file = write_config(&cfg);
+        let args = Args {
+            config_file: Some(file.path().to_path_buf()),
+            ..empty_args()
+        };
+
+        let err = run_resolve(&args).unwrap_err().to_string();
+        assert!(
+            err.contains("pivotContainerEncryptedPullSecret"),
+            "error should name the offending field: {err}"
+        );
+        assert!(
+            err.contains("--pivot-pull-secret"),
+            "error should point the user at the resolution flag: {err}"
+        );
+    }
+
+    /// Sets `TVC_NON_INTERACTIVE=1` for the lifetime of the value so a test
+    /// can exercise the "non-interactive bails with flag list" branch
+    /// regardless of how the test runner is invoked.
+    struct NonInteractiveGuard;
+    impl NonInteractiveGuard {
+        fn set() -> Self {
+            std::env::set_var(prompts::NON_INTERACTIVE_ENV, "1");
+            Self
+        }
+    }
+    impl Drop for NonInteractiveGuard {
+        fn drop(&mut self) {
+            std::env::remove_var(prompts::NON_INTERACTIVE_ENV);
+        }
     }
 }
