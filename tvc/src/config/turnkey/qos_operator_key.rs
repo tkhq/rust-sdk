@@ -3,6 +3,7 @@
 use super::OrgConfig;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use tracing::debug;
 
 /// Operator key stored in operator.json
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -17,9 +18,9 @@ impl StoredQosOperatorKey {
     /// Load operator key from the path specified in org config
     pub async fn load(org_config: &OrgConfig) -> Result<Option<Self>> {
         let path = &org_config.operator_key_path;
-        tracing::debug!(operator_key_path = %path.display(), "loading stored operator key");
+        debug!(operator_key_path = %path.display(), "loading stored operator key");
         if !path.exists() {
-            tracing::debug!(operator_key_path = %path.display(), "stored operator key not found");
+            debug!(operator_key_path = %path.display(), "stored operator key not found");
             return Ok(None);
         }
 
@@ -30,7 +31,7 @@ impl StoredQosOperatorKey {
         let key: StoredQosOperatorKey = serde_json::from_str(&content)
             .with_context(|| format!("failed to parse operator key: {}", path.display()))?;
 
-        tracing::debug!(
+        debug!(
             operator_key_path = %path.display(),
             has_public_key = !key.public_key.is_empty(),
             "loaded stored operator key"
@@ -42,7 +43,7 @@ impl StoredQosOperatorKey {
     /// Save operator key to the path specified in org config
     pub async fn save(&self, org_config: &OrgConfig) -> Result<()> {
         let path = &org_config.operator_key_path;
-        tracing::debug!(operator_key_path = %path.display(), "saving stored operator key");
+        debug!(operator_key_path = %path.display(), "saving stored operator key");
 
         // Ensure parent directory exists
         if let Some(parent) = path.parent() {
@@ -58,7 +59,7 @@ impl StoredQosOperatorKey {
             .await
             .with_context(|| format!("failed to write operator key: {}", path.display()))?;
 
-        tracing::debug!(operator_key_path = %path.display(), "saved stored operator key");
+        debug!(operator_key_path = %path.display(), "saved stored operator key");
 
         Ok(())
     }

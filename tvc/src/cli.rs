@@ -2,6 +2,7 @@
 
 use crate::commands;
 use clap::{Parser, Subcommand};
+use tracing::debug;
 
 const LONG_ABOUT: &str = "\
 CLI for building with Turnkey Verifiable Cloud.
@@ -34,7 +35,7 @@ impl Cli {
     /// Run the CLI.
     pub async fn run() -> anyhow::Result<()> {
         let args = Cli::parse();
-        tracing::debug!(command = args.command.name(), "dispatching command");
+        debug!(command = args.command.name(), "dispatching");
 
         match args.command {
             Commands::Deploy { command } => match command {
