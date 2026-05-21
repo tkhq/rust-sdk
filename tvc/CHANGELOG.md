@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.7.1](https://github.com/tkhq/rust-sdk/compare/tvc-v0.7.0...tvc-v0.7.1) - 2026-05-21
+
+### Added
+
+- *(tvc)* add deploy post-share command
+
+### Other
+
+- Merge pull-request #145
+- Merge pull request #141 from tkhq/richard/tvc-58-add-client-side-debug-logging-to-tvc-cli
+
 ## [0.7.0](https://github.com/tkhq/rust-sdk/compare/tvc-v0.6.2...tvc-v0.7.0) - 2026-05-19
 
 ### Added
