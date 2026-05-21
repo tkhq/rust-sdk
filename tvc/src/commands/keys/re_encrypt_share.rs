@@ -9,7 +9,7 @@ use anyhow::{anyhow, Context};
 use clap::Args as ClapArgs;
 use qos_core::protocol::services::boot::{Approval, ManifestEnvelope, QuorumMember};
 use qos_core::protocol::QosHash;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use zeroize::Zeroizing;
 
@@ -42,11 +42,13 @@ pub struct Args {
     pub re_encrypted_out: Option<PathBuf>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ReEncryptedShareOutput {
-    re_encrypted_share: String,
-    share_approval: Approval,
+pub(crate) struct ReEncryptedShareOutput {
+    pub(crate) deployment_id: String,
+    pub(crate) ephemeral_public_key_hex: String,
+    pub(crate) re_encrypted_share: String,
+    pub(crate) share_approval: Approval,
 }
 
 /// Run the re-encrypt-share command.
@@ -114,6 +116,8 @@ async fn build_re_encrypted_share_output(
     let share_approval = Approval { signature, member };
 
     Ok(ReEncryptedShareOutput {
+        deployment_id: provision_bundle.deployment_id().to_string(),
+        ephemeral_public_key_hex: hex::encode(ephemeral_public_key.to_bytes()),
         re_encrypted_share: hex::encode(re_encrypted_share),
         share_approval,
     })
@@ -272,6 +276,8 @@ mod tests {
     #[test]
     fn output_serializes_expected_json_shape_with_hex() {
         let output = ReEncryptedShareOutput {
+            deployment_id: "deploy-123".to_string(),
+            ephemeral_public_key_hex: "04abcd".to_string(),
             re_encrypted_share: "010203".to_string(),
             share_approval: Approval {
                 signature: vec![0xde, 0xad, 0xbe, 0xef],
@@ -287,6 +293,8 @@ mod tests {
         assert_eq!(
             value,
             json!({
+                "deploymentId": "deploy-123",
+                "ephemeralPublicKeyHex": "04abcd",
                 "reEncryptedShare": "010203",
                 "shareApproval": {
                     "signature": "deadbeef",
@@ -425,6 +433,11 @@ mod tests {
                 .await
                 .unwrap();
 
+        assert_eq!(output.deployment_id, "deploy-123");
+        assert_eq!(
+            output.ephemeral_public_key_hex,
+            hex::encode(ephemeral_pair.public_key().to_bytes())
+        );
         let re_encrypted_share = hex::decode(&output.re_encrypted_share).unwrap();
         let decrypted_share = ephemeral_pair.decrypt(&re_encrypted_share).unwrap();
         assert_eq!(decrypted_share, plaintext_share);

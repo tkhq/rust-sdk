@@ -14,6 +14,8 @@ use tempfile::TempDir;
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ReEncryptedShareOutput {
+    deployment_id: String,
+    ephemeral_public_key_hex: String,
     re_encrypted_share: String,
     share_approval: Approval,
 }
@@ -183,12 +185,22 @@ fn re_encrypt_share_round_trips_metadata_share() {
 
     let value: serde_json::Value =
         serde_json::from_slice(&fs::read(&output_path).unwrap()).unwrap();
+    assert_eq!(value["deploymentId"], json!("deploy-123"));
+    assert_eq!(
+        value["ephemeralPublicKeyHex"],
+        json!(hex::encode(ephemeral_pair.public_key().to_bytes()))
+    );
     assert!(value.get("reEncryptedShare").is_some());
     assert!(value.get("shareApproval").is_some());
     assert!(value.get("re_encrypted_share").is_none());
     assert!(value.get("share_approval").is_none());
 
     let output: ReEncryptedShareOutput = serde_json::from_value(value).unwrap();
+    assert_eq!(output.deployment_id, "deploy-123");
+    assert_eq!(
+        output.ephemeral_public_key_hex,
+        hex::encode(ephemeral_pair.public_key().to_bytes())
+    );
     let re_encrypted_share = hex::decode(&output.re_encrypted_share).unwrap();
     let decrypted_share = ephemeral_pair.decrypt(&re_encrypted_share).unwrap();
     assert_eq!(decrypted_share, plaintext_share);
