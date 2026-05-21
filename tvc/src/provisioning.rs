@@ -36,6 +36,14 @@ impl ProvisionBundle {
         }
     }
 
+    pub(crate) fn deployment_id(&self) -> &str {
+        &self.deployment_id
+    }
+
+    pub(crate) fn ephemeral_public_key_hex(&self) -> &str {
+        &self.ephemeral_public_key_hex
+    }
+
     pub(crate) fn manifest_envelope(&self) -> &ManifestEnvelope {
         &self.manifest_envelope
     }
@@ -52,7 +60,7 @@ impl ProvisionBundle {
         dangerous_skip_verification: bool,
         validation_time_override: Option<u64>,
     ) -> anyhow::Result<P256Public> {
-        let bundled_public_key = decode_ephemeral_public_key_hex(&self.ephemeral_public_key_hex)?;
+        let bundled_public_key = decode_ephemeral_public_key_hex(self.ephemeral_public_key_hex())?;
 
         if dangerous_skip_verification {
             return Ok(bundled_public_key);
@@ -338,5 +346,18 @@ mod tests {
         let public_key = bundle.ephemeral_public_key(true).unwrap();
 
         assert_eq!(public_key.to_bytes(), expected_public_key.to_bytes());
+    }
+
+    #[test]
+    fn provision_bundle_rejects_missing_deployment_id() {
+        let err = serde_json::from_value::<ProvisionBundle>(json!({
+            "attestationDocumentCoseSign1Base64": "not base64",
+            "manifestEnvelope": sample_manifest_envelope(),
+            "fetchedAtUnixMs": 1_712_345_678_901_u64,
+            "ephemeralPublicKeyHex": "04abcd",
+        }))
+        .unwrap_err();
+
+        assert!(err.to_string().contains("deploymentId"));
     }
 }

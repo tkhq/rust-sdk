@@ -44,6 +44,7 @@ impl Cli {
                 DeployCommands::ProvisioningDetails(args) => {
                     commands::deploy::provisioning_details::run(args).await
                 }
+                DeployCommands::PostShare(args) => commands::deploy::post_share::run(args).await,
                 DeployCommands::Status(args) => commands::deploy::status::run(args).await,
                 DeployCommands::Create(args) => commands::deploy::create::run(args).await,
                 DeployCommands::Init(args) => commands::deploy::init::run(args).await,
@@ -114,6 +115,8 @@ enum DeployCommands {
     GetStatus(commands::deploy::get_status::Args),
     /// Get provisioning details for a deployment.
     ProvisioningDetails(commands::deploy::provisioning_details::Args),
+    /// Post a re-encrypted quorum key share for a deployment.
+    PostShare(commands::deploy::post_share::Args),
     /// Get the status of a deployment.
     Status(commands::deploy::status::Args),
     /// Create a new deployment from a config file.
@@ -133,6 +136,7 @@ impl DeployCommands {
             DeployCommands::Approve(_) => "deploy approve",
             DeployCommands::GetStatus(_) => "deploy get-status",
             DeployCommands::ProvisioningDetails(_) => "deploy provisioning-details",
+            DeployCommands::PostShare(_) => "deploy post-share",
             DeployCommands::Status(_) => "deploy status",
             DeployCommands::Create(_) => "deploy create",
             DeployCommands::Init(_) => "deploy init",
