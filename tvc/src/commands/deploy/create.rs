@@ -32,6 +32,11 @@ Special rules:
   --pivot-pull-secret reads an unencrypted pull secret file, encrypts it for the
   active org's API environment, and overrides the encrypted secret in the config.
 
+Interactive vs non-interactive:
+  By default, missing required values are filled by interactive prompts when
+  stdin is a TTY. Set TVC_NON_INTERACTIVE=1 to disable all prompts, like in CI; the command then
+  bails with a precise list of missing fields instead of waiting on input.
+
 Examples:
   tvc deploy create --config-file deploy.json
 
@@ -255,6 +260,9 @@ async fn resolve_placeholders(config: &mut DeployConfig, args: &Args) -> Result<
 /// `file_loaded` distinguishes "saving over an existing file" from
 /// "creating a new file at this path" in the prompt wording.
 fn offer_to_save_config(path: &Path, config: &DeployConfig, file_loaded: bool) -> Result<()> {
+    if !is_interactive() {
+        return Ok(());
+    }
     let prompt = if file_loaded {
         format!("Save filled config to {}?", path.display())
     } else {

@@ -68,8 +68,6 @@ fn approve_walks_all_sections_with_yeses() {
 /// Rejecting at the third section (pivot) bails immediately with the exact
 /// "operation cancelled by user: approval" string and never reaches the
 /// manifest-set section.
-///
-/// Replaces the deleted `tests/deploy_approve.rs::approve_interactive_reject`.
 #[test]
 fn approve_bails_when_user_rejects_pivot() {
     let mut session = spawn(
