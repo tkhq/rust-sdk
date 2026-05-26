@@ -1,5 +1,7 @@
 //! App configuration file format for `tvc app create`.
 
+use crate::prompts;
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 pub const MIN_SHARE_SET_THRESHOLD: u32 = 2;
@@ -88,6 +90,40 @@ impl AppConfig {
                 .collect(),
             existing_operator_ids: vec![],
         }
+    }
+
+    /// Walk the user through any placeholder fields and fill them in.
+    /// Non-placeholder fields are preserved unchanged so partial edits work.
+    ///
+    /// `saved_operator_public_key` is offered as the default when prompting
+    /// for a `<FILL_IN>` operator public key.
+    pub fn fill_interactively(&mut self, saved_operator_public_key: Option<&str>) -> Result<()> {
+        if self.name.starts_with("<FILL_IN") {
+            self.name = prompts::required_text("App name", None)?;
+        }
+        if let Some(set_params) = self.manifest_set_params.as_mut() {
+            if set_params.name.starts_with("<FILL_IN") {
+                set_params.name = prompts::required_text("Manifest set name", None)?;
+            }
+            for op in set_params.new_operators.iter_mut() {
+                if op.public_key.starts_with("<FILL_IN") {
+                    let prompt = format!("Operator '{}' public key", op.name);
+                    op.public_key = prompts::required_text(&prompt, saved_operator_public_key)?;
+                }
+            }
+        }
+        if let Some(set_params) = self.share_set_params.as_mut() {
+            if set_params.name.starts_with("<FILL_IN") {
+                set_params.name = prompts::required_text("Share set name", None)?;
+            }
+            for op in set_params.new_operators.iter_mut() {
+                if op.public_key.starts_with("<FILL_IN") {
+                    let prompt = format!("Share set operator '{}' public key", op.name);
+                    op.public_key = prompts::required_text(&prompt, None)?;
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Check if config contains placeholder values.

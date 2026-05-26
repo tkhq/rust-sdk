@@ -1,8 +1,8 @@
 //! Approve deploy command - cryptographically approve a QOS manifest.
 
-use crate::commands::confirmation::confirm_yes_no;
 use crate::config::turnkey::Config;
 use crate::operator_key::load_operator_pair;
+use crate::prompts;
 use crate::util::{read_file_to_string, write_file};
 use anyhow::{anyhow, bail, Context};
 use clap::{ArgGroup, Args as ClapArgs};
@@ -11,6 +11,7 @@ use qos_core::protocol::services::boot::{
     Manifest, ManifestSet, Namespace, NitroConfig, PivotConfig, QuorumMember, ShareSet,
 };
 use qos_core::protocol::QosHash;
+use std::fmt::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -76,6 +77,13 @@ pub struct Args {
 
 /// Run the approve deploy command.
 pub async fn run(args: Args) -> anyhow::Result<()> {
+    let do_prompt_user = !args.dangerous_skip_interactive;
+
+    // Guard: Bail fast before fetching the manifest if we cannot prompt the user
+    if do_prompt_user {
+        prompts::bail_if_non_interactive("--dangerous-skip-interactive")?;
+    }
+
     // Fetch manifest - track manifest_id if fetched from API
     let (manifest, fetched_manifest_id) = match (&args.manifest, &args.deploy_id) {
         (Some(path), _) => (read_manifest_from_path(path).await?, None),
@@ -86,7 +94,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         (None, None) => bail!("a manifest source is required"),
     };
 
-    if !args.dangerous_skip_interactive {
+    if do_prompt_user {
         interactive_approve(&manifest)?;
     }
 
@@ -136,7 +144,6 @@ async fn post_approval_to_api(
     let operator_id = match &args.operator_id {
         Some(id) => id.clone(),
         None => {
-            // Try to load from config
             let config = Config::load().await?;
             let saved_ids = config.get_last_operator_ids().ok_or_else(|| {
                 anyhow!(
@@ -146,11 +153,16 @@ async fn post_approval_to_api(
                 )
             })?;
 
-            // Use the first operator Id from the list
-            saved_ids
-                .first()
-                .ok_or_else(|| anyhow!("No operator IDs available"))?
-                .clone()
+            match saved_ids.len() {
+                0 => bail!("No operator IDs available"),
+                1 => saved_ids[0].clone(),
+                _ if prompts::is_interactive() => {
+                    prompts::select("Select approving operator", saved_ids.clone())?
+                }
+                // Non-interactive with multiple saved IDs: pick the first entry.
+                // Users who want a specific operator should pass --operator-id.
+                _ => saved_ids[0].clone(),
+            }
         }
     };
 
@@ -236,70 +248,97 @@ fn interactive_approve(manifest: &Manifest) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn review_namespace(namespace: &Namespace) -> anyhow::Result<()> {
-    println!("NAMESPACE");
-    println!("─────────────────────────────────────");
-    println!("  Name:       {}", namespace.name);
-    println!("  Nonce:      {}", namespace.nonce);
-    println!("  Quorum Key: {}", hex::encode(&namespace.quorum_key));
-    println!();
+fn render_namespace(namespace: &Namespace) -> String {
+    let mut s = String::new();
+    let _ = writeln!(s, "NAMESPACE");
+    let _ = writeln!(s, "─────────────────────────────────────");
+    let _ = writeln!(s, "  Name:       {}", namespace.name);
+    let _ = writeln!(s, "  Nonce:      {}", namespace.nonce);
+    let _ = writeln!(s, "  Quorum Key: {}", hex::encode(&namespace.quorum_key));
+    let _ = writeln!(s);
+    s
+}
 
-    confirm_yes_no("Approve namespace?")
+fn review_namespace(namespace: &Namespace) -> anyhow::Result<()> {
+    print!("{}", render_namespace(namespace));
+    prompts::confirm_or_bail("Approve namespace?", "approval")
+}
+
+fn render_enclave(enclave: &NitroConfig) -> String {
+    let mut s = String::new();
+    let _ = writeln!(s, "ENCLAVE (AWS Nitro)");
+    let _ = writeln!(s, "─────────────────────────────────────");
+    let _ = writeln!(s, "  PCR0 (image):     {}", hex::encode(&enclave.pcr0));
+    let _ = writeln!(s, "  PCR1 (kernel):    {}", hex::encode(&enclave.pcr1));
+    let _ = writeln!(s, "  PCR2 (app):       {}", hex::encode(&enclave.pcr2));
+    let _ = writeln!(s, "  PCR3 (IAM role):  {}", hex::encode(&enclave.pcr3));
+    // Skip the QOS commit since it's not cryptographically linked
+    let _ = writeln!(s);
+    s
 }
 
 fn review_enclave(enclave: &NitroConfig) -> anyhow::Result<()> {
-    println!("ENCLAVE (AWS Nitro)");
-    println!("─────────────────────────────────────");
-    println!("  PCR0 (image):     {}", hex::encode(&enclave.pcr0));
-    println!("  PCR1 (kernel):    {}", hex::encode(&enclave.pcr1));
-    println!("  PCR2 (app):       {}", hex::encode(&enclave.pcr2));
-    println!("  PCR3 (IAM role):  {}", hex::encode(&enclave.pcr3));
-    // Skip the QOS commit since its not cryptographically linked
-    println!();
+    print!("{}", render_enclave(enclave));
+    prompts::confirm_or_bail("Approve enclave configuration?", "approval")
+}
 
-    confirm_yes_no("Approve enclave configuration?")
+fn render_pivot(pivot: &PivotConfig) -> String {
+    let mut s = String::new();
+    let _ = writeln!(s, "PIVOT BINARY");
+    let _ = writeln!(s, "─────────────────────────────────────");
+    let _ = writeln!(s, "  Pivot Binary Hash: {}", hex::encode(pivot.hash));
+    if pivot.args.is_empty() {
+        let _ = writeln!(s, "  CLI Args: (none)");
+    } else {
+        let _ = writeln!(s, "  CLI Args:\n   {}", pivot.args.join("\n   "));
+    }
+    let _ = writeln!(s);
+    s
 }
 
 fn review_pivot(pivot: &PivotConfig) -> anyhow::Result<()> {
-    println!("PIVOT BINARY");
-    println!("─────────────────────────────────────");
-    println!("  Pivot Binary Hash: {}", hex::encode(pivot.hash));
-    if pivot.args.is_empty() {
-        println!("  CLI Args: (none)");
-    } else {
-        println!("  CLI Args:\n   {}", pivot.args.join("\n   "));
-    }
-    println!();
-
-    confirm_yes_no("Approve pivot binary?")
+    print!("{}", render_pivot(pivot));
+    prompts::confirm_or_bail("Approve pivot binary?", "approval")
 }
 
-fn print_quorum_members(members: &[QuorumMember]) {
+fn render_quorum_members(members: &[QuorumMember]) -> String {
+    let mut s = String::new();
     for member in members.iter() {
-        println!("    {} ({})", member.alias, hex::encode(&member.pub_key));
+        let _ = writeln!(s, "    {} ({})", member.alias, hex::encode(&member.pub_key));
     }
+    s
+}
+
+fn render_manifest_set(set: &ManifestSet) -> String {
+    let mut s = String::new();
+    let _ = writeln!(s, "MANIFEST SET");
+    let _ = writeln!(s, "─────────────────────────────────────");
+    let _ = writeln!(s, "  Threshold: {} of {}", set.threshold, set.members.len());
+    let _ = writeln!(s, "  Members:");
+    s.push_str(&render_quorum_members(&set.members));
+    let _ = writeln!(s);
+    s
 }
 
 fn review_manifest_set(set: &ManifestSet) -> anyhow::Result<()> {
-    println!("MANIFEST SET");
-    println!("─────────────────────────────────────");
-    println!("  Threshold: {} of {}", set.threshold, set.members.len());
-    println!("  Members:");
-    print_quorum_members(&set.members);
-    println!();
+    print!("{}", render_manifest_set(set));
+    prompts::confirm_or_bail("Approve manifest set?", "approval")
+}
 
-    confirm_yes_no("Approve manifest set?")
+fn render_share_set(set: &ShareSet) -> String {
+    let mut s = String::new();
+    let _ = writeln!(s, "SHARE SET");
+    let _ = writeln!(s, "─────────────────────────────────────");
+    let _ = writeln!(s, "  Threshold: {} of {}", set.threshold, set.members.len());
+    let _ = writeln!(s, "  Members:");
+    s.push_str(&render_quorum_members(&set.members));
+    let _ = writeln!(s);
+    s
 }
 
 fn review_share_set(set: &ShareSet) -> anyhow::Result<()> {
-    println!("SHARE SET");
-    println!("─────────────────────────────────────");
-    println!("  Threshold: {} of {}", set.threshold, set.members.len());
-    println!("  Members:");
-    print_quorum_members(&set.members);
-    println!();
-
-    confirm_yes_no("Approve share set?")
+    print!("{}", render_share_set(set));
+    prompts::confirm_or_bail("Approve share set?", "approval")
 }
 
 async fn read_manifest_from_path(path: &Path) -> anyhow::Result<Manifest> {
@@ -341,4 +380,56 @@ async fn fetch_manifest_from_deploy(deploy_id: &str) -> anyhow::Result<(Manifest
     println!("✓ Manifest loaded (manifest_id: {})", tvc_manifest.id);
 
     Ok((manifest, tvc_manifest.id))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fixture_manifest() -> Manifest {
+        serde_json::from_str(include_str!("../../../fixtures/manifest.json"))
+            .expect("fixture manifest should parse")
+    }
+
+    #[test]
+    fn render_namespace_includes_name_nonce_and_quorum_key() {
+        let manifest = fixture_manifest();
+        let rendered = render_namespace(&manifest.namespace);
+        assert!(rendered.contains("NAMESPACE"));
+        assert!(rendered.contains("turnkey-prod"));
+        assert!(rendered.contains("Nonce:"));
+        assert!(rendered.contains("Quorum Key:"));
+    }
+
+    #[test]
+    fn render_enclave_includes_all_four_pcrs() {
+        let manifest = fixture_manifest();
+        let rendered = render_enclave(&manifest.enclave);
+        assert!(rendered.contains("ENCLAVE (AWS Nitro)"));
+        assert!(rendered.contains("PCR0"));
+        assert!(rendered.contains("PCR1"));
+        assert!(rendered.contains("PCR2"));
+        assert!(rendered.contains("PCR3"));
+    }
+
+    #[test]
+    fn render_pivot_includes_header_and_args() {
+        let manifest = fixture_manifest();
+        let rendered = render_pivot(&manifest.pivot);
+        assert!(rendered.contains("PIVOT BINARY"));
+        assert!(rendered.contains("Pivot Binary Hash:"));
+        assert!(rendered.contains("--flag"));
+        assert!(rendered.contains("positional"));
+    }
+
+    #[test]
+    fn render_manifest_set_includes_threshold_and_each_member() {
+        let manifest = fixture_manifest();
+        let rendered = render_manifest_set(&manifest.manifest_set);
+        assert!(rendered.contains("MANIFEST SET"));
+        assert!(rendered.contains("Threshold: 2 of 3"));
+        assert!(rendered.contains("operator-alice"));
+        assert!(rendered.contains("operator-bob"));
+        assert!(rendered.contains("operator-charlie"));
+    }
 }
