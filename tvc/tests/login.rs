@@ -20,3 +20,14 @@ fn login_errors_when_provided_org_not_found() {
             "Organization 'does-not-exist' not found",
         ));
 }
+
+#[test]
+fn login_help_shows_api_base_url_override() {
+    cargo_bin_cmd!("tvc")
+        .arg("login")
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--api-base-url"))
+        .stdout(predicate::str::contains("TVC_API_BASE_URL"));
+}

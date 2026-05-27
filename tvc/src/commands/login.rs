@@ -1,8 +1,7 @@
 //! Login command for authenticating with Turnkey.
 
 use crate::config::turnkey::{
-    Config, KeyCurve, OrgConfig, StoredApiKey, StoredQosOperatorKey, API_BASE_URL_DEV,
-    API_BASE_URL_LOCAL, API_BASE_URL_PREPROD, API_BASE_URL_PROD,
+    Config, KeyCurve, OrgConfig, StoredApiKey, StoredQosOperatorKey, API_BASE_URL_PROD,
 };
 use crate::prompts;
 use anyhow::{anyhow, bail, Context, Result};
@@ -13,37 +12,6 @@ use tracing::debug;
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use turnkey_client::generated::GetWhoamiRequest;
 
-/// Turnkey API environment selectable during login.
-#[derive(Debug, Clone, Copy)]
-enum ApiEnv {
-    Prod,
-    Preprod,
-    Dev,
-    Local,
-}
-
-impl ApiEnv {
-    fn url(self) -> &'static str {
-        match self {
-            ApiEnv::Prod => API_BASE_URL_PROD,
-            ApiEnv::Preprod => API_BASE_URL_PREPROD,
-            ApiEnv::Dev => API_BASE_URL_DEV,
-            ApiEnv::Local => API_BASE_URL_LOCAL,
-        }
-    }
-}
-
-impl std::fmt::Display for ApiEnv {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ApiEnv::Prod => write!(f, "prod     ({API_BASE_URL_PROD})"),
-            ApiEnv::Preprod => write!(f, "preprod  ({API_BASE_URL_PREPROD})"),
-            ApiEnv::Dev => write!(f, "dev      ({API_BASE_URL_DEV})"),
-            ApiEnv::Local => write!(f, "local    ({API_BASE_URL_LOCAL})"),
-        }
-    }
-}
-
 /// Authenticate with Turnkey and set up local credentials.
 #[derive(Debug, ClapArgs)]
 #[command(about, long_about = None)]
@@ -52,12 +20,16 @@ pub struct Args {
     /// If not provided, will prompt interactively.
     #[arg(long, env = "TVC_ORG")]
     pub org: Option<String>,
+    /// Turnkey API base URL. Defaults to production for newly configured orgs.
+    #[arg(long, env = "TVC_API_BASE_URL", value_name = "URL")]
+    pub api_base_url: Option<String>,
 }
 
 /// Run the login command.
 pub async fn run(args: Args) -> anyhow::Result<()> {
     debug!(
         org_arg_present = args.org.is_some(),
+        api_base_url_override_present = args.api_base_url.is_some(),
         "running login command"
     );
 
@@ -65,7 +37,12 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     let mut config = Config::load().await?;
 
     // Select or create org
-    let (alias, org_config) = select_or_create_org(&mut config, args.org.as_deref()).await?;
+    let (alias, org_config) = select_or_create_org(
+        &mut config,
+        args.org.as_deref(),
+        args.api_base_url.as_deref(),
+    )
+    .await?;
 
     println!("Selected org: {} ({})", alias, org_config.id);
 
@@ -112,9 +89,11 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
 async fn select_or_create_org(
     config: &mut Config,
     org_arg: Option<&str>,
+    api_base_url_override: Option<&str>,
 ) -> Result<(String, OrgConfig)> {
     debug!(
         org_arg_present = org_arg.is_some(),
+        api_base_url_override_present = api_base_url_override.is_some(),
         configured_org_count = config.orgs.len(),
         active_org = ?config.active_org,
         "selecting organization"
@@ -122,9 +101,12 @@ async fn select_or_create_org(
 
     // If --org provided, try to find it by alias or ID
     if let Some(org) = org_arg {
-        if let Some((alias, org_config)) = find_org(config, org) {
+        if let Some((alias, _)) = find_org(config, org) {
+            let alias = alias.clone();
             debug!(org_alias = %alias, "selected existing organization from argument");
-            return Ok((alias.clone(), org_config.clone()));
+            update_api_base_url_from_override(config, &alias, api_base_url_override);
+            let org_config = config.orgs.get(&alias).unwrap().clone();
+            return Ok((alias, org_config));
         }
         debug!("organization argument did not match configured organizations");
         bail!("Organization '{org}' not found. Run `tvc login` without --org to set up a new organization.");
@@ -140,7 +122,7 @@ async fn select_or_create_org(
         // No orgs configured - prompt for new org
         debug!("no organizations configured; prompting for new organization");
         println!("No organization configured.");
-        return prompt_for_new_org(config).await;
+        return prompt_for_new_org(config, api_base_url_override).await;
     }
 
     // Show existing orgs in a `Select` list
@@ -163,10 +145,11 @@ async fn select_or_create_org(
 
     match prompts::select("Select organization", options)? {
         OrgChoice::Existing { alias, .. } => {
+            update_api_base_url_from_override(config, &alias, api_base_url_override);
             let org_config = config.orgs.get(&alias).unwrap().clone();
             Ok((alias, org_config))
         }
-        OrgChoice::New => prompt_for_new_org(config).await,
+        OrgChoice::New => prompt_for_new_org(config, api_base_url_override).await,
     }
 }
 
@@ -186,7 +169,10 @@ impl std::fmt::Display for OrgChoice {
 }
 
 /// Prompt the user to enter a new organization ID and alias.
-async fn prompt_for_new_org(config: &mut Config) -> Result<(String, OrgConfig)> {
+async fn prompt_for_new_org(
+    config: &mut Config,
+    api_base_url_override: Option<&str>,
+) -> Result<(String, OrgConfig)> {
     debug!("prompting for new organization");
 
     println!("You can find your Organization ID at: https://app.turnkey.com/dashboard/welcome");
@@ -200,8 +186,7 @@ async fn prompt_for_new_org(config: &mut Config) -> Result<(String, OrgConfig)> 
     let alias = prompts::text("Organization alias", Some("default"))?;
     debug!(org_alias = %alias, "user selected organization");
 
-    // Prompt for API base URL
-    let api_base_url = prompt_for_api_url()?;
+    let api_base_url = new_org_api_base_url(api_base_url_override);
     debug!(org_alias = %alias, %api_base_url, "adding prompted organization");
 
     config.add_org(&alias, org_id, api_base_url)?;
@@ -209,16 +194,23 @@ async fn prompt_for_new_org(config: &mut Config) -> Result<(String, OrgConfig)> 
     Ok((alias, org_config))
 }
 
-/// Prompt the user to select a Turnkey API URL.
-///
-/// Only reachable in TTY mode — `select_or_create_org` calls
-/// `bail_if_non_interactive` upstream before we get here.
-fn prompt_for_api_url() -> Result<String> {
-    let env = prompts::select(
-        "Select Turnkey API URL",
-        vec![ApiEnv::Prod, ApiEnv::Preprod, ApiEnv::Dev, ApiEnv::Local],
-    )?;
-    Ok(env.url().to_string())
+fn new_org_api_base_url(api_base_url_override: Option<&str>) -> String {
+    api_base_url_override
+        .unwrap_or(API_BASE_URL_PROD)
+        .to_string()
+}
+
+fn update_api_base_url_from_override(
+    config: &mut Config,
+    alias: &str,
+    api_base_url_override: Option<&str>,
+) {
+    if let Some(api_base_url) = api_base_url_override {
+        debug!(org_alias = alias, %api_base_url, "updating organization API base URL from override");
+        if let Some(org_config) = config.orgs.get_mut(alias) {
+            org_config.api_base_url = api_base_url.to_string();
+        }
+    }
 }
 
 /// Get an existing API key or generate a new one.
@@ -389,4 +381,61 @@ async fn verify_credentials(
         username: response.username,
         user_id: response.user_id,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+    use std::path::PathBuf;
+
+    const OVERRIDE_URL: &str = "http://127.0.0.1:8081";
+
+    #[test]
+    fn new_org_api_base_url_defaults_to_prod() {
+        assert_eq!(new_org_api_base_url(None), API_BASE_URL_PROD);
+    }
+
+    #[test]
+    fn new_org_api_base_url_uses_override() {
+        assert_eq!(new_org_api_base_url(Some(OVERRIDE_URL)), OVERRIDE_URL);
+    }
+
+    #[test]
+    fn absent_override_preserves_existing_org_api_base_url() {
+        let mut config = config_with_org("http://existing.example");
+
+        update_api_base_url_from_override(&mut config, "default", None);
+
+        assert_eq!(
+            config.orgs["default"].api_base_url,
+            "http://existing.example"
+        );
+    }
+
+    #[test]
+    fn explicit_override_updates_existing_org_api_base_url() {
+        let mut config = config_with_org(API_BASE_URL_PROD);
+
+        update_api_base_url_from_override(&mut config, "default", Some(OVERRIDE_URL));
+
+        assert_eq!(config.orgs["default"].api_base_url, OVERRIDE_URL);
+    }
+
+    fn config_with_org(api_base_url: &str) -> Config {
+        Config {
+            active_org: Some("default".to_string()),
+            orgs: HashMap::from([(
+                "default".to_string(),
+                OrgConfig {
+                    id: "org-test".to_string(),
+                    api_key_path: PathBuf::from("api_key.json"),
+                    operator_key_path: PathBuf::from("operator.json"),
+                    api_base_url: api_base_url.to_string(),
+                },
+            )]),
+            last_created_app_id: HashMap::new(),
+            last_operator_ids: HashMap::new(),
+        }
+    }
 }
