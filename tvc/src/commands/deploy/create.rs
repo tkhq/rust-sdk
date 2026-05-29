@@ -278,7 +278,7 @@ fn offer_to_save_config(path: &Path, config: &DeployConfig, file_loaded: bool) -
 }
 
 /// Run the deploy create command.
-pub async fn run(args: Args) -> Result<()> {
+pub async fn run(args: Args, _out: &crate::output::Emitter) -> Result<()> {
     let deploy_config = resolve_deploy_config(&args).await?;
 
     println!("Creating deployment for app '{}'...", deploy_config.app_id);

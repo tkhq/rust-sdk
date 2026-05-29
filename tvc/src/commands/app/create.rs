@@ -20,7 +20,7 @@ pub struct Args {
 }
 
 /// Run the app create command.
-pub async fn run(args: Args) -> Result<()> {
+pub async fn run(args: Args, _out: &crate::output::Emitter) -> Result<()> {
     let app_config = load_or_fill_app_config(&args.config_file).await?;
 
     app_config

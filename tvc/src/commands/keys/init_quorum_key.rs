@@ -22,7 +22,7 @@ pub struct Args {
 }
 
 /// Run the quorum key init command.
-pub async fn run(args: Args) -> Result<()> {
+pub async fn run(args: Args, _out: &crate::output::Emitter) -> Result<()> {
     if args.output.exists() {
         anyhow::bail!("File already exists: {}", args.output.display());
     }

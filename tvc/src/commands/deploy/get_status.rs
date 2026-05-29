@@ -15,7 +15,7 @@ pub struct Args {
 }
 
 /// Run the deploy get-status command.
-pub async fn run(args: Args) -> anyhow::Result<()> {
+pub async fn run(args: Args, _out: &crate::output::Emitter) -> anyhow::Result<()> {
     let auth = crate::client::build_client().await?;
 
     let deployment_request = GetTvcDeploymentRequest {

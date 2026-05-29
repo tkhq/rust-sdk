@@ -45,7 +45,7 @@ impl Drop for PlaintextShares {
 }
 
 /// Run the quorum key generation command.
-pub async fn run(args: Args) -> Result<()> {
+pub async fn run(args: Args, _out: &crate::output::Emitter) -> Result<()> {
     let config: QuorumKeyConfig =
         read_json_file(&args.config_file, "quorum key config file").await?;
     config.validate()?;

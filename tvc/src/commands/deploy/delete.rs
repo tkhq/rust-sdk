@@ -16,7 +16,7 @@ pub struct Args {
 }
 
 /// Run the deploy delete command.
-pub async fn run(args: Args) -> Result<()> {
+pub async fn run(args: Args, _out: &crate::output::Emitter) -> Result<()> {
     let auth = build_client().await?;
 
     let intent = DeleteTvcDeploymentIntent {

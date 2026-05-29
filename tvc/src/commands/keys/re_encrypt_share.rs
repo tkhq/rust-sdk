@@ -52,7 +52,7 @@ pub(crate) struct ReEncryptedShareOutput {
 }
 
 /// Run the re-encrypt-share command.
-pub async fn run(args: Args) -> anyhow::Result<()> {
+pub async fn run(args: Args, _out: &crate::output::Emitter) -> anyhow::Result<()> {
     if args.dangerous_skip_verification {
         eprintln!(
             "WARNING: Skipping verification! This is dangerous and should not be used for sensitive applications."
