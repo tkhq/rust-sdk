@@ -31,7 +31,7 @@ lint:
 
 .PHONY: build
 build:
-	cargo build
+	cargo build --locked
 
 .PHONY: test
 test: build
