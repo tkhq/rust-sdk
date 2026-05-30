@@ -28,8 +28,7 @@ pub struct Args {
 
 /// Run the app create command.
 pub async fn run(args: Args) -> Result<()> {
-    let mut app_config = load_or_fill_app_config(&args.config_file).await?;
-    apply_overrides(&mut app_config, &args);
+    let app_config = apply_overrides(load_or_fill_app_config(&args.config_file).await?, &args);
 
     app_config
         .validate()
@@ -152,8 +151,9 @@ fn build_create_tvc_app_intent(app_config: &AppConfig) -> CreateTvcAppIntent {
     }
 }
 
-fn apply_overrides(config: &mut AppConfig, args: &Args) {
+fn apply_overrides(mut config: AppConfig, args: &Args) -> AppConfig {
     config.enable_debug_mode_deployments = args.dangerous_enable_debug_mode_deployments;
+    config
 }
 
 fn to_tvc_operator_set_params(params: &OperatorSetParams) -> TvcOperatorSetParams {
@@ -257,13 +257,13 @@ mod tests {
     /// via the command line rather than the config file.
     #[test]
     fn dangerous_flag_enables_debug_mode_when_config_unset() {
-        let mut config = valid_config();
+        let config = valid_config();
         let args = Args {
             config_file: PathBuf::new(),
             dangerous_enable_debug_mode_deployments: true,
         };
 
-        apply_overrides(&mut config, &args);
+        let config = apply_overrides(config, &args);
         assert!(config.enable_debug_mode_deployments);
     }
 
