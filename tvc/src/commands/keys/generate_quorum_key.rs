@@ -1,6 +1,7 @@
 //! Generate quorum key command - generates and encrypts a quorum key from a given config.
 
 use crate::config::quorum_key::QuorumKeyConfig;
+use crate::output::{Emitter, Report};
 use crate::quorum_key_metadata::{
     decode_p256_public_key_hex, EncryptedShareMetadata, QuorumKeyMetadata,
 };
@@ -8,7 +9,9 @@ use crate::util::read_json_file;
 use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
 use qos_p256::{P256Pair, P256Public};
+use serde::Serialize;
 use std::fs;
+use std::io::{self, Write};
 use std::path::PathBuf;
 use zeroize::Zeroize;
 
@@ -34,6 +37,31 @@ struct OperatorPublicKey {
     public: P256Public,
 }
 
+/// Summary of a generated quorum key, emitted to stdout. The encrypted shares
+/// themselves live in the metadata file at `quorum_key_metadata_path`; this
+/// report mirrors the human summary and does not duplicate them.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GenerateQuorumKeyReport {
+    quorum_key_metadata_path: String,
+    // Named to match the metadata file's `quorumKeyPublic` field for
+    // cross-surface consistency, though the text label reads "Quorum Public Key".
+    quorum_key_public: String,
+    threshold: u32,
+}
+
+impl Report for GenerateQuorumKeyReport {
+    fn render_text(&self, w: &mut dyn Write) -> io::Result<()> {
+        writeln!(
+            w,
+            "Quorum key metadata written to: {}",
+            self.quorum_key_metadata_path
+        )?;
+        writeln!(w, "Quorum Public Key: {}", self.quorum_key_public)?;
+        writeln!(w, "Threshold: {}", self.threshold)
+    }
+}
+
 struct PlaintextShares(Vec<Vec<u8>>);
 
 impl Drop for PlaintextShares {
@@ -45,7 +73,7 @@ impl Drop for PlaintextShares {
 }
 
 /// Run the quorum key generation command.
-pub async fn run(args: Args, _out: &crate::output::Emitter) -> Result<()> {
+pub async fn run(args: Args, out: &Emitter) -> Result<()> {
     let config: QuorumKeyConfig =
         read_json_file(&args.config_file, "quorum key config file").await?;
     config.validate()?;
@@ -70,13 +98,12 @@ pub async fn run(args: Args, _out: &crate::output::Emitter) -> Result<()> {
         )
     })?;
 
-    println!(
-        "Quorum key metadata written to: {}",
-        args.quorum_key_metadata_out.display()
-    );
-
-    println!("Quorum Public Key: {quorum_key_public}");
-    println!("Threshold: {}", config.threshold);
+    let report = GenerateQuorumKeyReport {
+        quorum_key_metadata_path: args.quorum_key_metadata_out.display().to_string(),
+        quorum_key_public,
+        threshold: config.threshold,
+    };
+    out.emit(&report)?;
 
     Ok(())
 }
@@ -154,6 +181,30 @@ mod tests {
 
     fn operator_key() -> String {
         hex::encode(operator_pair().public_key().to_bytes())
+    }
+
+    #[test]
+    fn report_renders_text_and_camel_case_json() {
+        let report = GenerateQuorumKeyReport {
+            quorum_key_metadata_path: "out/metadata.json".to_string(),
+            quorum_key_public: "04abcd".to_string(),
+            threshold: 2,
+        };
+
+        let mut buf = Vec::new();
+        report.render_text(&mut buf).unwrap();
+        let text = String::from_utf8(buf).unwrap();
+        assert_eq!(
+            text,
+            "Quorum key metadata written to: out/metadata.json\n\
+             Quorum Public Key: 04abcd\n\
+             Threshold: 2\n"
+        );
+
+        let value = serde_json::to_value(&report).unwrap();
+        assert_eq!(value["quorumKeyMetadataPath"], "out/metadata.json");
+        assert_eq!(value["quorumKeyPublic"], "04abcd");
+        assert_eq!(value["threshold"], 2);
     }
 
     #[test]
