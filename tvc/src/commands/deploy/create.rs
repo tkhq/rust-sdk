@@ -112,6 +112,8 @@ pub struct Args {
     /// so it should only be used to debug non-prod applications and view application
     /// logs.
     ///
+    /// # WARNING
+    ///
     /// Only valid for apps created with `--dangerous-enable-debug-mode-deployments`.
     /// Debug-mode deployments permanently mark the app's quorum key as insecure;
     /// to return to a secure posture, create a new app with a fresh quorum key.
@@ -146,7 +148,7 @@ fn build_create_intent(
         pivot_args: deploy_config.pivot_args.clone(),
         expected_pivot_digest: deploy_config.expected_pivot_digest.clone(),
         pivot_container_encrypted_pull_secret,
-        debug_mode: Some(deploy_config.debug_mode),
+        debug_mode: deploy_config.debug_mode.into(),
         nonce: None,
         health_check_type: deploy_config.health_check_type,
         health_check_port: deploy_config.health_check_port as u32,
