@@ -38,3 +38,30 @@ version_group = "rust-sdk"
 name = "tvc"
 changelog_update = true
 version_group = "rust-sdk"
+
+[changelog]
+# Auto-link PR numbers in commit messages, then group commits into user-facing sections
+# and skip noisy infra/chore commits. See https://release-plz.dev/docs/config#the-changelog-section
+commit_preprocessors = [
+  # Squash-merge style: "subject (#123)" -> hyperlinked PR
+  { pattern = '\(#([0-9]+)\)', replace = "([#${1}](https://github.com/tkhq/rust-sdk/pull/${1}))" },
+  # Merge-commit style: "Merge pull request #123 from owner/branch" -> PR-link prefix
+  { pattern = '^Merge pull request #([0-9]+) from [^ ]+', replace = "PR [#${1}](https://github.com/tkhq/rust-sdk/pull/${1}):" },
+  # Variant occasionally used: "Merge pull-request #123"
+  { pattern = '^Merge pull-request #([0-9]+)', replace = "PR [#${1}](https://github.com/tkhq/rust-sdk/pull/${1}):" },
+]
+
+# Keep only user-facing groups; skip CI/chore/test/build/style/docs/refactor + release-plz's own commits.
+# Order matters: more specific patterns first.
+commit_parsers = [
+  { message = '^chore\(release\):', skip = true },
+  { message = '^chore: release', skip = true },
+  { message = '^chore: cleanup changelog', skip = true },
+  { message = '^(chore|ci|build|test|refactor|style|docs)(\(.*\))?:', skip = true },
+  { message = '^[Ss]ync(ed)? protos?', skip = true },
+  { message = '^feat', group = "Added" },
+  { message = '^fix', group = "Fixed" },
+  { message = '^perf', group = "Changed" },
+  { message = '^revert', group = "Changed" },
+  { message = '.*', skip = true },
+]
