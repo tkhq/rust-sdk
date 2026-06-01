@@ -1,7 +1,7 @@
 //! CLI parsing and dispatch.
 
 use crate::commands;
-use clap::{Parser, Subcommand};
+use clap::{ArgAction, Parser, Subcommand, builder::BoolishValueParser};
 use tracing::debug;
 
 const LONG_ABOUT: &str = "\
@@ -26,12 +26,26 @@ Authentication:
   Local: run `tvc login` once; commands then read ~/.config/turnkey/.
   CI:    set TVC_ORG_ID, TVC_API_KEY_PUBLIC, and TVC_API_KEY_PRIVATE
          to authenticate without files. Env vars take precedence over local
-         config files. Setting some but not all three required vars will error.";
+         config files. Setting some but not all three required vars will error.
+
+Interactive behavior:
+  By default, commands may prompt when stdin is a TTY. Use --non-interactive
+  or set TVC_NON_INTERACTIVE=true to disable prompts and fail fast instead.";
 
 /// CLI command parsing and dispatch.
 #[derive(Debug, Parser)]
 #[command(about = "CLI for building with Turnkey Verifiable Cloud", long_about = LONG_ABOUT)]
 pub struct Cli {
+    /// Disable interactive prompts and fail fast when required values are missing.
+    #[arg(
+        long,
+        global = true,
+        env = "TVC_NON_INTERACTIVE",
+        action = ArgAction::SetTrue,
+        value_parser = BoolishValueParser::new()
+    )]
+    non_interactive: bool,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -40,27 +54,41 @@ impl Cli {
     /// Run the CLI.
     pub async fn run() -> anyhow::Result<()> {
         let args = Cli::parse();
-        debug!(command = args.command.name(), "dispatching");
+        debug!(
+            command = args.command.name(),
+            non_interactive = args.non_interactive,
+            "dispatching"
+        );
+
+        let non_interactive = args.non_interactive;
 
         match args.command {
             Commands::Deploy { command } => match command {
-                DeployCommands::Approve(args) => commands::deploy::approve::run(args).await,
+                DeployCommands::Approve(args) => {
+                    commands::deploy::approve::run(args, non_interactive).await
+                }
                 DeployCommands::GetStatus(args) => commands::deploy::get_status::run(args).await,
                 DeployCommands::ProvisioningDetails(args) => {
                     commands::deploy::provisioning_details::run(args).await
                 }
                 DeployCommands::PostShare(args) => commands::deploy::post_share::run(args).await,
                 DeployCommands::Status(args) => commands::deploy::status::run(args).await,
-                DeployCommands::Create(args) => commands::deploy::create::run(args).await,
-                DeployCommands::Init(args) => commands::deploy::init::run(args).await,
+                DeployCommands::Create(args) => {
+                    commands::deploy::create::run(args, non_interactive).await
+                }
+                DeployCommands::Init(args) => {
+                    commands::deploy::init::run(args, non_interactive).await
+                }
                 DeployCommands::Delete(args) => commands::deploy::delete::run(args).await,
                 DeployCommands::Restore(args) => commands::deploy::restore::run(args).await,
             },
             Commands::App { command } => match command {
                 AppCommands::Status(args) => commands::app::status::run(args).await,
                 AppCommands::List(args) => commands::app::list::run(args).await,
-                AppCommands::Create(args) => commands::app::create::run(args).await,
-                AppCommands::Init(args) => commands::app::init::run(args).await,
+                AppCommands::Create(args) => {
+                    commands::app::create::run(args, non_interactive).await
+                }
+                AppCommands::Init(args) => commands::app::init::run(args, non_interactive).await,
                 AppCommands::SetLiveDeploy(args) => commands::app::set_live_deploy::run(args).await,
                 AppCommands::Delete(args) => commands::app::delete::run(args).await,
             },
@@ -75,7 +103,7 @@ impl Cli {
                     commands::keys::re_encrypt_share::run(args).await
                 }
             },
-            Commands::Login(args) => commands::login::run(args).await,
+            Commands::Login(args) => commands::login::run(args, non_interactive).await,
         }
     }
 }

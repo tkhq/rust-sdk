@@ -1,9 +1,13 @@
 //! App create command - creates an app from a config file.
 
-use crate::client::build_client;
-use crate::config::app::{AppConfig, OperatorSetParams};
-use crate::config::turnkey::{self, StoredQosOperatorKey};
-use crate::prompts;
+use crate::{
+    client::build_client,
+    config::{
+        app::{AppConfig, AppConfigValidationErrors, OperatorSetParams},
+        turnkey::{self, StoredQosOperatorKey},
+    },
+    prompts,
+};
 use anyhow::{Context, Result, anyhow};
 use clap::Args as ClapArgs;
 use std::path::{Path, PathBuf};
@@ -12,12 +16,20 @@ use turnkey_client::generated::{CreateTvcAppIntent, TvcOperatorParams, TvcOperat
 
 /// Create a new TVC application from a config file.
 #[derive(Debug, ClapArgs)]
+#[cfg_attr(test, derive(Default))]
 #[command(about, long_about = None)]
 pub struct Args {
     /// Path to the app configuration file (JSON).
     #[arg(short = 'c', long, value_name = "PATH", env = "TVC_APP_CONFIG")]
     pub config_file: PathBuf,
 
+    #[command(flatten)]
+    overrides: Overrides,
+}
+
+#[derive(Debug, ClapArgs)]
+#[cfg_attr(test, derive(Default))]
+struct Overrides {
     /// Permit debug-mode deployments for this app. Debug-mode deployments expose
     /// secure-enclave logs and emit zero'd attestation PCRs, so remote
     /// attestation cannot succeed. Cannot be changed after app creation; setting
@@ -26,29 +38,103 @@ pub struct Args {
     pub dangerous_enable_debug_mode_deployments: bool,
 }
 
-/// Run the app create command.
-pub async fn run(args: Args) -> Result<()> {
-    let app_config = apply_overrides(load_or_fill_app_config(&args.config_file).await?, &args);
+pub async fn run(args: Args, is_non_interactive: bool) -> Result<()> {
+    let config = if is_non_interactive {
+        build_app_config_non_interactive(&args).await?
+    } else {
+        build_app_config_interactive(&args).await?
+    };
 
-    app_config
-        .validate()
-        .with_context(|| format!("invalid config file: {}", args.config_file.display()))?;
+    let app_config = apply_overrides(config, &args.overrides);
+    run_with_config(args, app_config).await
+}
 
+async fn build_app_config_interactive(args: &Args) -> Result<AppConfig> {
+    let mut config = match read_app_config_file_bytes(&args.config_file).await {
+        Ok(bytes) => parse_app_config(&bytes, &args.config_file)?,
+        Err(_) => AppConfig::template(None),
+    };
+
+    let mut changed = false;
+    loop {
+        match config.validate() {
+            Ok(()) => break,
+            Err(errors) if errors.has_non_placeholder_error() => {
+                return Err(invalid_app_config_error(&args.config_file, errors));
+            }
+            _ => {
+                changed = true;
+                let saved_operator_public_key = load_saved_operator_public_key().await;
+                config.fill_interactively(saved_operator_public_key.as_deref())?;
+            }
+        }
+    }
+
+    if changed {
+        offer_to_save_app_config(&args.config_file, &config)?;
+    }
+
+    Ok(config)
+}
+
+async fn build_app_config_non_interactive(args: &Args) -> Result<AppConfig> {
+    let bytes = read_app_config_file_bytes(&args.config_file).await?;
+    let config = parse_app_config(&bytes, &args.config_file)?;
+
+    if let Err(errors) = config.validate() {
+        return Err(invalid_app_config_error(&args.config_file, errors));
+    }
+
+    Ok(config)
+}
+
+async fn read_app_config_file_bytes(path: &Path) -> Result<String> {
+    tokio::fs::read_to_string(path)
+        .await
+        .with_context(|| format!("failed to read config file: {}", path.display()))
+}
+
+fn parse_app_config(content: &str, path: &Path) -> Result<AppConfig> {
+    serde_json::from_str(content)
+        .with_context(|| format!("failed to parse config file: {}", path.display()))
+}
+
+fn invalid_app_config_error(path: &Path, errors: AppConfigValidationErrors) -> anyhow::Error {
+    anyhow!("invalid config file: {}: {}", path.display(), errors)
+}
+
+fn offer_to_save_app_config(path: &Path, config: &AppConfig) -> Result<()> {
+    let save = prompts::confirm(&format!("Save filled config to {}?", path.display()), true)?;
+    if save {
+        let json = serde_json::to_string_pretty(config).context("failed to serialize config")?;
+        std::fs::write(path, json)
+            .with_context(|| format!("failed to write config file: {}", path.display()))?;
+        println!("Wrote {}", path.display());
+    }
+    Ok(())
+}
+
+/// Best-effort load of the operator public key from the active org's config
+/// so we can offer it as the default for new-operator prompts.
+async fn load_saved_operator_public_key() -> Option<String> {
+    let config = turnkey::Config::load().await.ok()?;
+    let (_, org_config) = config.active_org_config()?;
+    let operator_key = StoredQosOperatorKey::load(org_config).await.ok()??;
+    Some(operator_key.public_key)
+}
+
+async fn run_with_config(args: Args, app_config: AppConfig) -> Result<()> {
     println!("Creating app '{}'...", app_config.name);
 
-    // Build authenticated client
     let auth = build_client().await?;
 
-    // Convert config to API intent
     let intent = build_create_tvc_app_intent(&app_config);
 
-    // Get timestamp
     let timestamp_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .context("system time before unix epoch")?
         .as_millis();
 
-    // Create the app
     let result = auth
         .client
         .create_tvc_app(auth.org_id, timestamp_ms, intent)
@@ -58,7 +144,6 @@ pub async fn run(args: Args) -> Result<()> {
     let app_id = result.result.app_id;
     let operator_ids = result.result.manifest_set_operator_ids;
 
-    // save the app ID and operator_ids to config
     let mut config = turnkey::Config::load().await?;
     config.set_last_app_id(&app_id)?;
     config.set_last_operator_ids(&operator_ids)?;
@@ -82,57 +167,6 @@ pub async fn run(args: Args) -> Result<()> {
     Ok(())
 }
 
-/// Load the app config, walking placeholders interactively when allowed.
-async fn load_or_fill_app_config(path: &Path) -> Result<AppConfig> {
-    let read = std::fs::read_to_string(path);
-    let (mut config, file_existed) = match read {
-        Ok(content) => {
-            let config: AppConfig = serde_json::from_str(&content)
-                .with_context(|| format!("failed to parse config file: {}", path.display()))?;
-            (config, true)
-        }
-        Err(_) if prompts::is_interactive() => (AppConfig::template(None), false),
-        Err(e) => {
-            return Err(anyhow!(e))
-                .with_context(|| format!("failed to read config file: {}", path.display()));
-        }
-    };
-
-    if file_existed && !config.has_placeholders() {
-        return Ok(config);
-    }
-
-    if !prompts::is_interactive() {
-        anyhow::bail!(
-            "Config file contains placeholder values (<FILL_IN_...>). \
-             Please edit {} and fill in all required values.",
-            path.display()
-        );
-    }
-
-    let saved_operator_public_key = load_saved_operator_public_key().await;
-    config.fill_interactively(saved_operator_public_key.as_deref())?;
-
-    let save = prompts::confirm(&format!("Save filled config to {}?", path.display()), true)?;
-    if save {
-        let json = serde_json::to_string_pretty(&config).context("failed to serialize config")?;
-        std::fs::write(path, json)
-            .with_context(|| format!("failed to write config file: {}", path.display()))?;
-        println!("Wrote {}", path.display());
-    }
-
-    Ok(config)
-}
-
-/// Best-effort load of the operator public key from the active org's config
-/// so we can offer it as the default for new-operator prompts.
-async fn load_saved_operator_public_key() -> Option<String> {
-    let config = turnkey::Config::load().await.ok()?;
-    let (_, org_config) = config.active_org_config()?;
-    let operator_key = StoredQosOperatorKey::load(org_config).await.ok()??;
-    Some(operator_key.public_key)
-}
-
 fn build_create_tvc_app_intent(app_config: &AppConfig) -> CreateTvcAppIntent {
     let share_set_params = app_config.effective_share_set_params();
 
@@ -151,10 +185,10 @@ fn build_create_tvc_app_intent(app_config: &AppConfig) -> CreateTvcAppIntent {
     }
 }
 
-fn apply_overrides(mut config: AppConfig, args: &Args) -> AppConfig {
-    if args.dangerous_enable_debug_mode_deployments {
+fn apply_overrides(mut config: AppConfig, overrides: &Overrides) -> AppConfig {
+    if overrides.dangerous_enable_debug_mode_deployments {
         config.dangerous_enable_debug_mode_deployments =
-            args.dangerous_enable_debug_mode_deployments;
+            overrides.dangerous_enable_debug_mode_deployments;
     }
     config
 }
@@ -261,12 +295,11 @@ mod tests {
     #[test]
     fn dangerous_flag_enables_debug_mode_when_config_unset() {
         let config = valid_config();
-        let args = Args {
-            config_file: PathBuf::new(),
+        let overrides = Overrides {
             dangerous_enable_debug_mode_deployments: true,
         };
 
-        let config = apply_overrides(config, &args);
+        let config = apply_overrides(config, &overrides);
         assert!(config.dangerous_enable_debug_mode_deployments);
     }
 
@@ -277,13 +310,51 @@ mod tests {
     fn absent_dangerous_flag_preserves_config_debug_mode() {
         let mut config = valid_config();
         config.dangerous_enable_debug_mode_deployments = true;
-        let args = Args {
-            config_file: PathBuf::new(),
+        let overrides = Overrides {
             dangerous_enable_debug_mode_deployments: false,
         };
 
-        let config = apply_overrides(config, &args);
+        let config = apply_overrides(config, &overrides);
         assert!(config.dangerous_enable_debug_mode_deployments);
+    }
+
+    /// Exercises every override flag via clap parsing so flag renames or
+    /// removals fail this test. The other override tests construct `Args` by
+    /// field name and would silently pass.
+    #[test]
+    fn every_override_flag_changes_config_value() {
+        use clap::Parser;
+
+        #[derive(Parser)]
+        struct TestCli {
+            #[command(flatten)]
+            args: Args,
+        }
+
+        let config_path = "/tmp/test-app.json";
+        let args = TestCli::try_parse_from([
+            "tvc-app-create",
+            "--config-file",
+            config_path,
+            "--dangerous-enable-debug-mode-deployments",
+        ])
+        .unwrap()
+        .args;
+
+        let baseline = valid_config();
+        let resolved = apply_overrides(valid_config(), &args.overrides);
+
+        // Each override moved off its config default ...
+        assert_ne!(
+            resolved.dangerous_enable_debug_mode_deployments,
+            baseline.dangerous_enable_debug_mode_deployments
+        );
+
+        // ... to the value passed on the CLI.
+        assert!(resolved.dangerous_enable_debug_mode_deployments);
+
+        // config_file isn't an override; verify clap captured the path.
+        assert_eq!(args.config_file, PathBuf::from(config_path));
     }
 
     #[test]

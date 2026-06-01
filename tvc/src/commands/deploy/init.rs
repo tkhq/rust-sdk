@@ -2,7 +2,7 @@
 
 use crate::config::deploy::DeployConfig;
 use crate::config::turnkey;
-use crate::prompts;
+use crate::prompts::{bail_interactive_conflicts_with_non_interactive, ensure_stdin_is_tty};
 use anyhow::{Context, Result, bail};
 use chrono::Local;
 use clap::Args as ClapArgs;
@@ -23,14 +23,18 @@ pub struct Args {
 }
 
 /// Run the deploy init command.
-pub async fn run(args: Args) -> Result<()> {
-    if args.interactive && prompts::non_interactive_forced() {
-        bail!(
-            "--interactive conflicts with {}=1",
-            prompts::NON_INTERACTIVE_ENV
-        );
+pub async fn run(args: Args, is_non_interactive: bool) -> Result<()> {
+    if args.interactive {
+        if is_non_interactive {
+            bail_interactive_conflicts_with_non_interactive()?;
+        } else {
+            ensure_stdin_is_tty()?;
+        }
     }
+    execute(args).await
+}
 
+async fn execute(args: Args) -> Result<()> {
     // Generate output filename with timestamp if not provided
     let output = args.output.unwrap_or_else(|| {
         let timestamp = Local::now().format("%Y-%m-%d-%H%M%S");
@@ -43,8 +47,10 @@ pub async fn run(args: Args) -> Result<()> {
     }
 
     // Try to get the last created app ID
-    let config = turnkey::Config::load().await?;
-    let last_app_id = config.get_last_app_id();
+    let last_app_id = turnkey::Config::load()
+        .await
+        .ok()
+        .and_then(|config| config.get_last_app_id());
 
     // Generate template (optionally walking prompts to fill it in)
     let mut config = DeployConfig::template(last_app_id.as_deref());

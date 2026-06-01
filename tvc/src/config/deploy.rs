@@ -1,8 +1,11 @@
 //! Deployment configuration file format for `tvc deploy create`.
 
+use std::fmt::Display;
+
 use crate::prompts;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 use turnkey_client::generated::immutable::common::v1::TvcHealthCheckType;
 
 /// Sentinel written by `tvc deploy init` to remind the user to either remove
@@ -122,6 +125,100 @@ impl DeployConfig {
 
     pub fn pull_secret_is_placeholder(&self) -> bool {
         self.pivot_container_encrypted_pull_secret.as_deref() == Some(PULL_SECRET_PLACEHOLDER)
+    }
+
+    pub fn validate(&self) -> Result<(), DeployConfigValidationErrors> {
+        let mut errors = Vec::new();
+        if self.app_id.starts_with("<FILL_IN") {
+            errors.push(DeployConfigValidationError::Placeholder {
+                field: "app_id",
+                placeholder: self.app_id.clone(),
+            });
+        }
+        if self.qos_version.starts_with("<FILL_IN") {
+            errors.push(DeployConfigValidationError::Placeholder {
+                field: "qos_version",
+                placeholder: self.qos_version.clone(),
+            });
+        }
+        if self.pivot_container_image_url.starts_with("<FILL_IN") {
+            errors.push(DeployConfigValidationError::Placeholder {
+                field: "pivot_container_image_url",
+                placeholder: self.pivot_container_image_url.clone(),
+            });
+        }
+        if self.pivot_path.starts_with("<FILL_IN") {
+            errors.push(DeployConfigValidationError::Placeholder {
+                field: "pivot_path",
+                placeholder: self.pivot_path.clone(),
+            });
+        }
+        if self.expected_pivot_digest.starts_with("<FILL_IN") {
+            errors.push(DeployConfigValidationError::Placeholder {
+                field: "expected_pivot_digest",
+                placeholder: self.expected_pivot_digest.clone(),
+            });
+        }
+        if self.pull_secret_is_placeholder() {
+            errors.push(DeployConfigValidationError::PullSecretPlaceholder {
+                placeholder: PULL_SECRET_PLACEHOLDER.to_string(),
+            });
+        }
+
+        DeployConfigValidationErrors::ok_or_errors(errors)
+    }
+}
+
+#[derive(Debug, Clone, Error)]
+pub enum DeployConfigValidationError {
+    #[error("{field} contains placeholder value {placeholder}")]
+    Placeholder {
+        field: &'static str,
+        placeholder: String,
+    },
+    #[error(
+        "pivotContainerEncryptedPullSecret contains placeholder value {placeholder}; pass \
+         --pivot-pull-secret <PATH> or remove pivotContainerEncryptedPullSecret for public images"
+    )]
+    PullSecretPlaceholder { placeholder: String },
+}
+
+impl DeployConfigValidationError {
+    pub fn is_placeholder(&self) -> bool {
+        matches!(
+            self,
+            Self::Placeholder { .. } | Self::PullSecretPlaceholder { .. }
+        )
+    }
+}
+
+#[derive(Debug)]
+pub struct DeployConfigValidationErrors(Vec<DeployConfigValidationError>);
+
+impl DeployConfigValidationErrors {
+    fn ok_or_errors(errors: Vec<DeployConfigValidationError>) -> Result<(), Self> {
+        if errors.is_empty() {
+            return Ok(());
+        }
+
+        Err(Self(errors))
+    }
+
+    pub fn has_non_placeholder_error(&self) -> bool {
+        self.0.iter().any(|e| !e.is_placeholder())
+    }
+}
+
+impl Display for DeployConfigValidationErrors {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = self
+            .0
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("; ");
+
+        Display::fmt(&s, f)
     }
 }
 

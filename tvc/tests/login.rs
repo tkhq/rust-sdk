@@ -4,7 +4,7 @@ use tempfile::TempDir;
 
 /// When `--org <alias>` points to an alias that is not present in the local
 /// config, we fail fast without entering any interactive flow. Exercises the
-/// early-return branch in `select_or_create_org`.
+/// `OrgPlan::Existing` branch in `execute_login`.
 #[test]
 fn login_errors_when_provided_org_not_found() {
     let temp = TempDir::new().unwrap();

@@ -1,8 +1,11 @@
 //! App configuration file format for `tvc app create`.
 
+use std::fmt::Display;
+
 use crate::prompts;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 pub const MIN_SHARE_SET_THRESHOLD: u32 = 2;
 
@@ -155,32 +158,57 @@ impl AppConfig {
             })
     }
 
-    pub fn validate(&self) -> anyhow::Result<()> {
-        if self.has_placeholders() {
-            anyhow::bail!("config contains placeholder values (<FILL_IN_...)");
+    pub fn validate(&self) -> Result<(), AppConfigValidationErrors> {
+        let mut errors = Vec::new();
+
+        if self.name.starts_with("<FILL_IN") {
+            errors.push(AppConfigValidationError::Placeholder {
+                field: "name",
+                placeholder: self.name.clone(),
+            });
         }
 
-        if self.manifest_set_id.is_some() && self.manifest_set_params.is_some() {
-            anyhow::bail!("Cannot specify both manifestSetId and manifestSetParams");
+        if let Some(params) = &self.manifest_set_params {
+            collect_operator_set_placeholder_errors("manifestSetParams", params, &mut errors);
         }
-        if self.manifest_set_id.is_none() && self.manifest_set_params.is_none() {
-            anyhow::bail!("Must specify either manifestSetId or manifestSetParams");
-        }
-        if self.share_set_id.is_some() && self.share_set_params.is_some() {
-            anyhow::bail!("Cannot specify both shareSetId and shareSetParams");
-        }
-        // It is fine if both share set id and params are none since we support a default dev share set
 
         if let Some(params) = &self.share_set_params {
+            collect_operator_set_placeholder_errors("shareSetParams", params, &mut errors);
+        }
+        // TODO: use types to make this smarter
+        if self.manifest_set_id.is_some() && self.manifest_set_params.is_some() {
+            errors.push(AppConfigValidationError::ConflictingFields {
+                first: "manifestSetId",
+                second: "manifestSetParams",
+            });
+        }
+
+        if self.manifest_set_id.is_none() && self.manifest_set_params.is_none() {
+            errors.push(AppConfigValidationError::MissingOneOf {
+                first: "manifestSetId",
+                second: "manifestSetParams",
+            });
+        }
+
+        if self.share_set_id.is_some() && self.share_set_params.is_some() {
+            errors.push(AppConfigValidationError::ConflictingFields {
+                first: "shareSetId",
+                second: "shareSetParams",
+            });
+        }
+
+        // It is fine if both share set id and params are none since we support a default dev share set
+        if let Some(params) = &self.share_set_params {
             if params.threshold < MIN_SHARE_SET_THRESHOLD {
-                anyhow::bail!(
-                    "shareSetParams.threshold must be >= {MIN_SHARE_SET_THRESHOLD}, got {}",
-                    params.threshold
-                );
+                errors.push(AppConfigValidationError::ThresholdTooLow {
+                    field: "shareSetParams.threshold",
+                    minimum: MIN_SHARE_SET_THRESHOLD,
+                    actual: params.threshold,
+                });
             }
         }
 
-        Ok(())
+        AppConfigValidationErrors::ok_or_errors(errors)
     }
 
     pub fn effective_share_set_params(&self) -> Option<OperatorSetParams> {
@@ -193,6 +221,104 @@ impl AppConfig {
                     .unwrap_or_else(Self::share_set_params),
             )
         }
+    }
+}
+
+fn collect_operator_set_placeholder_errors(
+    prefix: &'static str,
+    params: &OperatorSetParams,
+    errors: &mut Vec<AppConfigValidationError>,
+) {
+    if params.name.starts_with("<FILL_IN") {
+        errors.push(AppConfigValidationError::Placeholder {
+            field: if prefix == "manifestSetParams" {
+                "manifestSetParams.name"
+            } else {
+                "shareSetParams.name"
+            },
+            placeholder: params.name.clone(),
+        });
+    }
+
+    for (index, operator) in params.new_operators.iter().enumerate() {
+        if operator.public_key.starts_with("<FILL_IN") {
+            errors.push(AppConfigValidationError::OperatorPublicKeyPlaceholder {
+                set: prefix,
+                index,
+                placeholder: operator.public_key.clone(),
+            });
+        }
+    }
+}
+
+#[derive(Debug, Clone, Error)]
+pub enum AppConfigValidationError {
+    #[error("{field} contains placeholder value {placeholder}")]
+    Placeholder {
+        field: &'static str,
+        placeholder: String,
+    },
+    #[error("{set}.newOperators[{index}].publicKey contains placeholder value {placeholder}")]
+    OperatorPublicKeyPlaceholder {
+        set: &'static str,
+        index: usize,
+        placeholder: String,
+    },
+    #[error("Cannot specify both {first} and {second}")]
+    ConflictingFields {
+        first: &'static str,
+        second: &'static str,
+    },
+    #[error("Must specify either {first} or {second}")]
+    MissingOneOf {
+        first: &'static str,
+        second: &'static str,
+    },
+    #[error("{field} must be >= {minimum}, got {actual}")]
+    ThresholdTooLow {
+        field: &'static str,
+        minimum: u32,
+        actual: u32,
+    },
+}
+
+#[derive(Debug)]
+pub struct AppConfigValidationErrors(Vec<AppConfigValidationError>);
+
+impl AppConfigValidationErrors {
+    // a bit of a hack, removes need for empty checks
+    fn ok_or_errors(errors: Vec<AppConfigValidationError>) -> Result<(), Self> {
+        if errors.is_empty() {
+            return Ok(());
+        }
+
+        Err(Self(errors))
+    }
+
+    pub fn has_non_placeholder_error(&self) -> bool {
+        self.0.iter().any(|e| !e.is_placeholder())
+    }
+}
+
+impl AppConfigValidationError {
+    pub fn is_placeholder(&self) -> bool {
+        matches!(
+            self,
+            Self::Placeholder { .. } | Self::OperatorPublicKeyPlaceholder { .. }
+        )
+    }
+}
+
+impl Display for AppConfigValidationErrors {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = self
+            .0
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("; ");
+
+        Display::fmt(&s, f)
     }
 }
 
