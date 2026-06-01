@@ -4003,7 +4003,7 @@ impl<S: Stamp> TurnkeyClient<S> {
     }
     /// Get balances
     ///
-    /// Get balances of supported assets for an address on the specified network. Only non-zero balances are returned. This feature is in beta - please contact support for access.
+    /// Get balances of supported assets for an address on the specified network. Only non-zero balances are returned.
     pub async fn get_wallet_address_balances(
         &self,
         request: coordinator::GetWalletAddressBalancesRequest,
@@ -4016,7 +4016,7 @@ impl<S: Stamp> TurnkeyClient<S> {
     }
     /// List supported assets
     ///
-    /// List supported assets for the specified network. This feature is in beta - please contact support for access.
+    /// List supported assets for the specified network.
     pub async fn list_supported_assets(
         &self,
         request: coordinator::ListSupportedAssetsRequest,

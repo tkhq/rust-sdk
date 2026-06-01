@@ -21,11 +21,11 @@ message BootProof {
   ];
   string qos_manifest_b64 = 3 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The borsch serialized base64 encoded Manifest."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The base64 encoded QOS manifest. Encoding depends on qos_manifest_version."}
   ];
   string qos_manifest_envelope_b64 = 4 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The borsch serialized base64 encoded Manifest Envelope."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The base64 encoded QOS manifest envelope. Encoding depends on qos_manifest_version."}
   ];
   string deployment_label = 5 [
     (google.api.field_behavior) = REQUIRED,
@@ -40,6 +40,7 @@ message BootProof {
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Owner of the app i.e. 'tkhq'"}
   ];
   Timestamp created_at = 8 [(google.api.field_behavior) = REQUIRED];
+  optional string qos_manifest_version = 9 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "QOS manifest schema version."}];
 }
 
 message AppProof {

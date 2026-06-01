@@ -2171,6 +2171,8 @@ pub struct CreateTvcAppIntent {
     pub share_set_params: ::core::option::Option<TvcOperatorSetParams>,
     #[serde(default)]
     pub enable_egress: ::core::option::Option<bool>,
+    #[serde(default)]
+    pub enable_debug_mode_deployments: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
