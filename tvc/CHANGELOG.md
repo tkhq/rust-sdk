@@ -13,15 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - *(tvc)* default login API URL to prod
 - *(tvc)* interactive prompts and non-interactive guard
-- *(tvc)* interactive prompts and non-interactive guard
-- *(tvc)* interactive prompts and non-interactive guard
-- *(tvc)* interactive prompts and non-interactive guard
 - *(tvc)* add deploy post-share command
-
-### Other
-
-- Merge pull-request #145
-- Merge pull request #141 from tkhq/richard/tvc-58-add-client-side-debug-logging-to-tvc-cli
+- *(tvc)* add client-side debug logging
 
 ## [0.7.0](https://github.com/tkhq/rust-sdk/compare/tvc-v0.6.2...tvc-v0.7.0) - 2026-05-19
 
