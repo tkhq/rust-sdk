@@ -28,9 +28,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
 
     let mut apps = response.tvc_apps;
 
-    if let Some(ref name_filter) = args.name {
-        apps.retain(|app| app.name.contains(name_filter.as_str()));
-    }
+    filter_by_name(&mut apps, args.name.as_deref());
 
     if apps.is_empty() {
         println!("No apps found.");
@@ -44,6 +42,12 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn filter_by_name(apps: &mut Vec<TvcApp>, name: Option<&str>) {
+    if let Some(filter) = name {
+        apps.retain(|app| app.name.contains(filter));
+    }
+}
+
 fn render_app(app: &TvcApp) {
     println!("Name: {}", app.name);
     println!("ID: {}", app.id);
@@ -54,4 +58,80 @@ fn render_app(app: &TvcApp) {
         println!("Public Domain: {}", app.public_domain);
     }
     println!("{}", "─".repeat(40));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_app(name: &str) -> TvcApp {
+        TvcApp {
+            id: "test-id".to_string(),
+            organization_id: "test-org".to_string(),
+            name: name.to_string(),
+            quorum_public_key: "test-key".to_string(),
+            manifest_set: None,
+            share_set: None,
+            enable_egress: false,
+            created_at: None,
+            updated_at: None,
+            live_deployment_id: None,
+            public_domain: String::new(),
+        }
+    }
+
+    #[test]
+    fn filter_by_name_no_filter_returns_all() {
+        let mut apps = vec![make_app("alpha"), make_app("beta")];
+        filter_by_name(&mut apps, None);
+        assert_eq!(apps.len(), 2);
+    }
+
+    #[test]
+    fn filter_by_name_exact_match_returns_one() {
+        let mut apps = vec![make_app("alpha"), make_app("beta")];
+        filter_by_name(&mut apps, Some("alpha"));
+        assert_eq!(apps.len(), 1);
+        assert_eq!(apps[0].name, "alpha");
+    }
+
+    #[test]
+    fn filter_by_name_partial_match_returns_matching() {
+        let mut apps = vec![make_app("my-app-prod"), make_app("my-app-staging"), make_app("other")];
+        filter_by_name(&mut apps, Some("my-app"));
+        assert_eq!(apps.len(), 2);
+    }
+
+    #[test]
+    fn filter_by_name_no_match_returns_empty() {
+        let mut apps = vec![make_app("alpha"), make_app("beta")];
+        filter_by_name(&mut apps, Some("gamma"));
+        assert!(apps.is_empty());
+    }
+
+    #[test]
+    fn matched_app_has_all_rendered_fields() {
+        let mut app = make_app("my-app");
+        app.id = "app-uuid-123".to_string();
+        app.quorum_public_key = "04abcdef".to_string();
+        app.live_deployment_id = Some("deploy-uuid-456".to_string());
+        app.public_domain = "my-app.example.com".to_string();
+
+        let mut apps = vec![app];
+        filter_by_name(&mut apps, Some("my-app"));
+
+        assert_eq!(apps.len(), 1);
+        let app = &apps[0];
+        assert_eq!(app.name, "my-app");
+        assert_eq!(app.id, "app-uuid-123");
+        assert_eq!(app.quorum_public_key, "04abcdef");
+        assert_eq!(app.live_deployment_id.as_deref().unwrap_or("(none)"), "deploy-uuid-456");
+        assert_eq!(app.public_domain, "my-app.example.com");
+    }
+
+    #[test]
+    fn app_with_no_live_deployment_renders_none() {
+        let app = make_app("my-app");
+        assert_eq!(app.live_deployment_id.as_deref().unwrap_or("(none)"), "(none)");
+    }
 }
