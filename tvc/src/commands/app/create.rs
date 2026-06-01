@@ -140,6 +140,7 @@ fn build_create_tvc_app_intent(app_config: &AppConfig) -> CreateTvcAppIntent {
         share_set_id: app_config.share_set_id.clone(),
         share_set_params: share_set_params.as_ref().map(to_tvc_operator_set_params),
         enable_egress: app_config.external_connectivity,
+        enable_debug_mode_deployments: None,
     }
 }
 
