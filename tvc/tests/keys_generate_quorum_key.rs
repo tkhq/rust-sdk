@@ -99,6 +99,57 @@ fn generate_quorum_key_writes_metadata() {
 }
 
 #[test]
+fn generate_quorum_key_json_emits_summary_envelope() {
+    let temp = TempDir::new().unwrap();
+    let config_path = temp.path().join("quorum_key.json");
+    let metadata_path = temp.path().join("quorum_key_metadata.json");
+
+    let operator_public_keys = (0..3)
+        .map(|_| hex::encode(P256Pair::generate().unwrap().public_key().to_bytes()))
+        .collect::<Vec<_>>();
+
+    fs::write(
+        &config_path,
+        serde_json::to_vec_pretty(&json!({
+            "shares": 3,
+            "threshold": 2,
+            "operatorPublicKeys": operator_public_keys,
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    let output = cargo_bin_cmd!("tvc")
+        .arg("keys")
+        .arg("generate-quorum-key")
+        .arg("--config-file")
+        .arg(&config_path)
+        .arg("--quorum-key-metadata-out")
+        .arg(&metadata_path)
+        .arg("--format")
+        .arg("json")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let value: serde_json::Value = serde_json::from_str(stdout.trim())
+        .unwrap_or_else(|e| panic!("stdout must be a JSON summary, got {stdout:?}: {e}"));
+
+    assert_eq!(value["threshold"], 2);
+    assert_eq!(
+        value["quorumKeyMetadataPath"],
+        json!(metadata_path.display().to_string())
+    );
+    // The summary's public key matches the metadata file's `quorumKeyPublic`.
+    let metadata: QuorumKeyMetadata =
+        serde_json::from_slice(&fs::read(&metadata_path).unwrap()).unwrap();
+    assert_eq!(value["quorumKeyPublic"], json!(metadata.quorum_key_public));
+    // The encrypted shares stay in the file, not the stdout summary.
+    assert!(value.get("shares").is_none());
+}
+
+#[test]
 fn generate_quorum_key_rejects_invalid_config() {
     let temp = TempDir::new().unwrap();
     let config_path = temp.path().join("quorum_key.json");

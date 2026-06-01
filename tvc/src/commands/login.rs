@@ -26,7 +26,7 @@ pub struct Args {
 }
 
 /// Run the login command.
-pub async fn run(args: Args) -> anyhow::Result<()> {
+pub async fn run(args: Args, _out: &crate::output::Emitter) -> anyhow::Result<()> {
     debug!(
         org_arg_present = args.org.is_some(),
         api_base_url_override_present = args.api_base_url.is_some(),

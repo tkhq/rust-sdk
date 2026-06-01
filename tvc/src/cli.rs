@@ -1,6 +1,7 @@
 //! CLI parsing and dispatch.
 
 use crate::commands;
+use crate::output::{Emitter, OutputFormat};
 use clap::{Parser, Subcommand};
 use tracing::debug;
 
@@ -27,51 +28,77 @@ Authentication:
 #[derive(Debug, Parser)]
 #[command(about = "CLI for building with Turnkey Verifiable Cloud", long_about = LONG_ABOUT)]
 pub struct Cli {
+    /// Output format for command results.
+    #[arg(
+        long,
+        global = true,
+        value_enum,
+        default_value = "text",
+        env = "TVC_FORMAT"
+    )]
+    format: OutputFormat,
+
     #[command(subcommand)]
     command: Commands,
 }
 
 impl Cli {
     /// Run the CLI.
+    ///
+    /// Parses arguments, builds the [`Emitter`] from the global `--format` flag,
+    /// and dispatches. On error the emitter renders the failure (a JSON error
+    /// envelope in JSON mode) and the process exits non-zero.
     pub async fn run() -> anyhow::Result<()> {
         let args = Cli::parse();
         debug!(command = args.command.name(), "dispatching");
 
-        match args.command {
-            Commands::Deploy { command } => match command {
-                DeployCommands::Approve(args) => commands::deploy::approve::run(args).await,
-                DeployCommands::GetStatus(args) => commands::deploy::get_status::run(args).await,
-                DeployCommands::ProvisioningDetails(args) => {
-                    commands::deploy::provisioning_details::run(args).await
-                }
-                DeployCommands::PostShare(args) => commands::deploy::post_share::run(args).await,
-                DeployCommands::Status(args) => commands::deploy::status::run(args).await,
-                DeployCommands::Create(args) => commands::deploy::create::run(args).await,
-                DeployCommands::Init(args) => commands::deploy::init::run(args).await,
-                DeployCommands::Delete(args) => commands::deploy::delete::run(args).await,
-                DeployCommands::Restore(args) => commands::deploy::restore::run(args).await,
-            },
-            Commands::App { command } => match command {
-                AppCommands::Status(args) => commands::app::status::run(args).await,
-                AppCommands::List(args) => commands::app::list::run(args).await,
-                AppCommands::Create(args) => commands::app::create::run(args).await,
-                AppCommands::Init(args) => commands::app::init::run(args).await,
-                AppCommands::SetLiveDeploy(args) => commands::app::set_live_deploy::run(args).await,
-                AppCommands::Delete(args) => commands::app::delete::run(args).await,
-            },
-            Commands::Keys { command } => match command {
-                KeysCommands::GenerateQuorumKey(args) => {
-                    commands::keys::generate_quorum_key::run(args).await
-                }
-                KeysCommands::InitQuorumKey(args) => {
-                    commands::keys::init_quorum_key::run(args).await
-                }
-                KeysCommands::ReEncryptShare(args) => {
-                    commands::keys::re_encrypt_share::run(args).await
-                }
-            },
-            Commands::Login(args) => commands::login::run(args).await,
+        let emitter = Emitter::new(args.format);
+        if let Err(err) = dispatch(args.command, &emitter).await {
+            emitter.emit_error(&err);
+            std::process::exit(1);
         }
+        Ok(())
+    }
+}
+
+/// Route a parsed command to its handler, threading the [`Emitter`] through.
+async fn dispatch(command: Commands, out: &Emitter) -> anyhow::Result<()> {
+    match command {
+        Commands::Deploy { command } => match command {
+            DeployCommands::Approve(args) => commands::deploy::approve::run(args, out).await,
+            DeployCommands::GetStatus(args) => commands::deploy::get_status::run(args, out).await,
+            DeployCommands::ProvisioningDetails(args) => {
+                commands::deploy::provisioning_details::run(args, out).await
+            }
+            DeployCommands::PostShare(args) => commands::deploy::post_share::run(args, out).await,
+            DeployCommands::Status(args) => commands::deploy::status::run(args, out).await,
+            DeployCommands::Create(args) => commands::deploy::create::run(args, out).await,
+            DeployCommands::Init(args) => commands::deploy::init::run(args, out).await,
+            DeployCommands::Delete(args) => commands::deploy::delete::run(args, out).await,
+            DeployCommands::Restore(args) => commands::deploy::restore::run(args, out).await,
+        },
+        Commands::App { command } => match command {
+            AppCommands::Status(args) => commands::app::status::run(args, out).await,
+            AppCommands::List(args) => commands::app::list::run(args, out).await,
+            AppCommands::Create(args) => commands::app::create::run(args, out).await,
+            AppCommands::Init(args) => commands::app::init::run(args, out).await,
+            AppCommands::SetLiveDeploy(args) => {
+                commands::app::set_live_deploy::run(args, out).await
+            }
+            AppCommands::Delete(args) => commands::app::delete::run(args, out).await,
+        },
+        Commands::Keys { command } => match command {
+            KeysCommands::GenerateQuorumKey(args) => {
+                commands::keys::generate_quorum_key::run(args, out).await
+            }
+            KeysCommands::InitQuorumKey(args) => {
+                commands::keys::init_quorum_key::run(args, out).await
+            }
+            KeysCommands::ReEncryptShare(args) => {
+                commands::keys::re_encrypt_share::run(args, out).await
+            }
+        },
+        Commands::Login(args) => commands::login::run(args, out).await,
     }
 }
 

@@ -28,7 +28,7 @@ pub struct Args {
 }
 
 /// Run the app init command.
-pub async fn run(args: Args) -> Result<()> {
+pub async fn run(args: Args, _out: &crate::output::Emitter) -> Result<()> {
     if args.interactive && prompts::non_interactive_forced() {
         bail!(
             "--interactive conflicts with {}=1",

@@ -22,7 +22,7 @@ pub struct Args {
 }
 
 /// Run the deploy post-share command.
-pub async fn run(args: Args) -> anyhow::Result<()> {
+pub async fn run(args: Args, _out: &crate::output::Emitter) -> anyhow::Result<()> {
     let re_encrypted_share: ReEncryptedShareOutput =
         read_json_file(&args.re_encrypted_share, "re-encrypted share output").await?;
     let intent =

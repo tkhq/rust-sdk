@@ -76,7 +76,7 @@ pub struct Args {
 }
 
 /// Run the approve deploy command.
-pub async fn run(args: Args) -> anyhow::Result<()> {
+pub async fn run(args: Args, _out: &crate::output::Emitter) -> anyhow::Result<()> {
     let do_prompt_user = !args.dangerous_skip_interactive;
 
     // Guard: Bail fast before fetching the manifest if we cannot prompt the user

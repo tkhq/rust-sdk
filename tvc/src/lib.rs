@@ -5,6 +5,7 @@ pub mod commands;
 pub mod config;
 pub mod logging;
 pub(crate) mod operator_key;
+pub mod output;
 pub mod pair;
 pub mod prompts;
 pub(crate) mod provisioning;

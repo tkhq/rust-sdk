@@ -1,6 +1,7 @@
 //! Re-encrypt share command.
 
 use crate::operator_key::load_operator_pair;
+use crate::output::{Emitter, Report};
 use crate::pair::Pair;
 use crate::provisioning::ProvisionBundle;
 use crate::quorum_key_metadata::QuorumKeyMetadata;
@@ -10,6 +11,7 @@ use clap::Args as ClapArgs;
 use qos_core::protocol::services::boot::{Approval, ManifestEnvelope, QuorumMember};
 use qos_core::protocol::QosHash;
 use serde::{Deserialize, Serialize};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use zeroize::Zeroizing;
 
@@ -51,8 +53,39 @@ pub(crate) struct ReEncryptedShareOutput {
     pub(crate) share_approval: Approval,
 }
 
+/// Result emitted when the share is written inline to stdout (no
+/// `--re-encrypted-out`). Serializes transparently as the share itself, so JSON
+/// callers see the bare artifact — matching the historical stdout output.
+#[derive(Serialize)]
+struct InlineShareReport<'a>(&'a ReEncryptedShareOutput);
+
+impl Report for InlineShareReport<'_> {
+    fn render_text(&self, w: &mut dyn Write) -> io::Result<()> {
+        let json = serde_json::to_string_pretty(self.0).map_err(io::Error::other)?;
+        writeln!(w, "{json}")
+    }
+}
+
+/// Result emitted when `--re-encrypted-out` writes the artifact to a file: the
+/// stdout payload just points at where the share landed.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WrittenShareReport {
+    re_encrypted_share_path: String,
+}
+
+impl Report for WrittenShareReport {
+    fn render_text(&self, w: &mut dyn Write) -> io::Result<()> {
+        writeln!(
+            w,
+            "Re-encrypted share written to: {}",
+            self.re_encrypted_share_path
+        )
+    }
+}
+
 /// Run the re-encrypt-share command.
-pub async fn run(args: Args) -> anyhow::Result<()> {
+pub async fn run(args: Args, out: &Emitter) -> anyhow::Result<()> {
     if args.dangerous_skip_verification {
         eprintln!(
             "WARNING: Skipping verification! This is dangerous and should not be used for sensitive applications."
@@ -73,7 +106,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     )
     .await?;
 
-    write_output(args.re_encrypted_out.as_deref(), &output).await
+    write_output(out, args.re_encrypted_out.as_deref(), &output).await
 }
 
 async fn build_re_encrypted_share_output(
@@ -164,18 +197,22 @@ fn find_share_set_member(
         })
 }
 
-async fn write_output(path: Option<&Path>, output: &ReEncryptedShareOutput) -> anyhow::Result<()> {
-    let contents =
-        serde_json::to_string_pretty(output).context("failed to serialize re-encrypted share")?;
-
-    if let Some(path) = path {
-        write_file(path, &contents).await?;
-        eprintln!("Re-encrypted share written to: {}", path.display());
-    } else {
-        println!("{contents}");
+async fn write_output(
+    out: &Emitter,
+    path: Option<&Path>,
+    output: &ReEncryptedShareOutput,
+) -> anyhow::Result<()> {
+    match path {
+        Some(path) => {
+            let contents = serde_json::to_string_pretty(output)
+                .context("failed to serialize re-encrypted share")?;
+            write_file(path, &contents).await?;
+            out.emit(&WrittenShareReport {
+                re_encrypted_share_path: path.display().to_string(),
+            })
+        }
+        None => out.emit(&InlineShareReport(output)),
     }
-
-    Ok(())
 }
 
 #[cfg(test)]
