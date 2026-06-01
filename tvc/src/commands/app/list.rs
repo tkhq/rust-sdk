@@ -2,6 +2,7 @@
 
 use anyhow::Context;
 use clap::Args as ClapArgs;
+use turnkey_client::generated::external::data::v1::TvcApp;
 use turnkey_client::generated::GetTvcAppsRequest;
 
 /// List apps.
@@ -37,16 +38,20 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     }
 
     for app in &apps {
-        println!("Name:              {}", app.name);
-        println!("ID:                {}", app.id);
-        println!("Quorum Public Key: {}", app.quorum_public_key);
-        let live = app.live_deployment_id.as_deref().unwrap_or("(none)");
-        println!("Live Deployment:   {live}");
-        if !app.public_domain.is_empty() {
-            println!("Public Domain:     {}", app.public_domain);
-        }
-        println!();
+        render_app(app);
     }
 
     Ok(())
+}
+
+fn render_app(app: &TvcApp) {
+    println!("Name: {}", app.name);
+    println!("ID: {}", app.id);
+    println!("Quorum Public Key: {}", app.quorum_public_key);
+    let live = app.live_deployment_id.as_deref().unwrap_or("(none)");
+    println!("Live Deployment: {live}");
+    if !app.public_domain.is_empty() {
+        println!("Public Domain: {}", app.public_domain);
+    }
+    println!("{}", "─".repeat(40));
 }
