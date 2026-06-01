@@ -1,6 +1,8 @@
 //! App list command.
 
+use anyhow::Context;
 use clap::Args as ClapArgs;
+use turnkey_client::generated::GetTvcAppsRequest;
 
 /// List apps.
 #[derive(Debug, ClapArgs)]
@@ -13,6 +15,38 @@ pub struct Args {
 
 /// Run the app list command.
 pub async fn run(args: Args) -> anyhow::Result<()> {
-    println!("Listing apps with filter: {:?}", args.name);
-    todo!("app list not yet implemented")
+    let auth = crate::client::build_client().await?;
+
+    let response = auth
+        .client
+        .get_tvc_apps(GetTvcAppsRequest {
+            organization_id: auth.org_id.clone(),
+        })
+        .await
+        .context("failed to list TVC apps")?;
+
+    let mut apps = response.tvc_apps;
+
+    if let Some(ref name_filter) = args.name {
+        apps.retain(|app| app.name.contains(name_filter.as_str()));
+    }
+
+    if apps.is_empty() {
+        println!("No apps found.");
+        return Ok(());
+    }
+
+    for app in &apps {
+        println!("Name:              {}", app.name);
+        println!("ID:                {}", app.id);
+        println!("Quorum Public Key: {}", app.quorum_public_key);
+        let live = app.live_deployment_id.as_deref().unwrap_or("(none)");
+        println!("Live Deployment:   {live}");
+        if !app.public_domain.is_empty() {
+            println!("Public Domain:     {}", app.public_domain);
+        }
+        println!();
+    }
+
+    Ok(())
 }
