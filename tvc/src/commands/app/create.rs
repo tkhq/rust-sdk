@@ -22,6 +22,10 @@ pub struct Args {
     /// secure-enclave logs and emit zero'd attestation PCRs, so remote
     /// attestation cannot succeed. Cannot be changed after app creation; setting
     /// this true means the app's quorum key is considered permanently insecure.
+    ///
+    /// Opt-in only: passing this flag (or setting the env var) permits debug-mode
+    /// deployments even if the config file leaves it off, but omitting it does NOT
+    /// override a config file that enables it.
     #[arg(long, env = "TVC_DANGEROUS_ENABLE_DEBUG_MODE_DEPLOYMENTS")]
     pub dangerous_enable_debug_mode_deployments: bool,
 }
@@ -152,7 +156,9 @@ fn build_create_tvc_app_intent(app_config: &AppConfig) -> CreateTvcAppIntent {
 }
 
 fn apply_overrides(mut config: AppConfig, args: &Args) -> AppConfig {
-    config.enable_debug_mode_deployments = args.dangerous_enable_debug_mode_deployments;
+    if args.dangerous_enable_debug_mode_deployments {
+        config.enable_debug_mode_deployments = args.dangerous_enable_debug_mode_deployments;
+    }
     config
 }
 
@@ -261,6 +267,22 @@ mod tests {
         let args = Args {
             config_file: PathBuf::new(),
             dangerous_enable_debug_mode_deployments: true,
+        };
+
+        let config = apply_overrides(config, &args);
+        assert!(config.enable_debug_mode_deployments);
+    }
+
+    /// Omitting the CLI flag must NOT override a config that enables debug-mode
+    /// deployments: the flag is opt-in only and can never turn it off, so a
+    /// `true` config survives an absent flag.
+    #[test]
+    fn absent_dangerous_flag_preserves_config_debug_mode() {
+        let mut config = valid_config();
+        config.enable_debug_mode_deployments = true;
+        let args = Args {
+            config_file: PathBuf::new(),
+            dangerous_enable_debug_mode_deployments: false,
         };
 
         let config = apply_overrides(config, &args);

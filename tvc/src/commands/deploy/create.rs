@@ -28,7 +28,9 @@ Required deployment fields:
 
 Special rules:
   --pivot-args replaces the config file's list entirely (does not append).
-  --dangerous-deploy-debug-mode requires an app created with
+  --dangerous-deploy-debug-mode is opt-in only: the flag (or its env var) can
+  turn debug mode ON, but omitting it does not turn OFF debug mode enabled in
+  the config file. It also requires an app created with
   `--dangerous-enable-debug-mode-deployments`; the server rejects debug-mode
   deployments for apps without it.
   --pivot-pull-secret reads an unencrypted pull secret file, encrypts it for the
@@ -118,7 +120,10 @@ pub struct Args {
     /// Debug-mode deployments permanently mark the app's quorum key as insecure;
     /// to return to a secure posture, create a new app with a fresh quorum key.
     ///
-    /// Overrides `debugMode` in the config file when set.
+    /// Opt-in only: passing this flag (or setting the env var) enables debug
+    /// mode even if the config file leaves it off, but omitting it does NOT
+    /// disable debug mode that the config file turns on. To deploy without
+    /// debug mode, set `debugMode: false` in the config and omit this flag.
     #[arg(long, env = "TVC_DANGEROUS_DEPLOY_DEBUG_MODE")]
     pub dangerous_deploy_debug_mode: bool,
 }
@@ -183,7 +188,9 @@ fn apply_overrides(config: &mut DeployConfig, args: &Args) {
     if !args.pivot_args.is_empty() {
         config.pivot_args = args.pivot_args.clone();
     }
-    config.debug_mode = args.dangerous_deploy_debug_mode;
+    if args.dangerous_deploy_debug_mode {
+        config.debug_mode = args.dangerous_deploy_debug_mode;
+    }
     if let Some(v) = args.health_check_port {
         config.health_check_port = v;
     }
@@ -561,6 +568,23 @@ mod tests {
         let args = Args {
             config_file: Some(file.path().to_path_buf()),
             dangerous_deploy_debug_mode: true,
+            ..empty_args()
+        };
+        let resolved = run_resolve(&args).unwrap();
+        assert!(resolved.debug_mode);
+    }
+
+    /// Omitting `--dangerous-deploy-debug-mode` must NOT override a config file
+    /// that enables debug mode: the flag is opt-in only and can never turn it
+    /// off, so a `debug_mode = true` config survives an absent flag.
+    #[test]
+    fn absent_debug_mode_flag_preserves_config_debug_mode() {
+        let mut cfg = file_config();
+        cfg.debug_mode = true;
+        let file = write_config(&cfg);
+        let args = Args {
+            config_file: Some(file.path().to_path_buf()),
+            dangerous_deploy_debug_mode: false,
             ..empty_args()
         };
         let resolved = run_resolve(&args).unwrap();

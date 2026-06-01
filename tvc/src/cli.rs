@@ -14,8 +14,13 @@ Configuration values are resolved in this order, highest priority first:
   3. Config file value (--config-file)
   4. Built-in default
 
-Special rules:
+Special rules (exceptions to the order above):
   --pivot-args replaces the config file's list entirely (does not append)
+  Debug-mode flags (--dangerous-deploy-debug-mode and
+    --dangerous-enable-debug-mode-deployments) are opt-in only: the flag
+    or its env var can turn debug mode ON, but its absence never turns OFF
+    a config file that enables it. To disable debug mode, set it false in
+    the config file (or omit it) and do not pass the flag.
 
 Authentication:
   Local: run `tvc login` once; commands then read ~/.config/turnkey/.
