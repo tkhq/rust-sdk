@@ -26,7 +26,7 @@ pub struct AppConfig {
     /// creation and cannot be changed after. Setting this true means the app's
     /// quorum key is considered permanently insecure.
     #[serde(default)]
-    pub enable_debug_mode_deployments: bool,
+    pub dangerous_enable_debug_mode_deployments: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -78,7 +78,7 @@ impl AppConfig {
             }),
             share_set_id: None,
             share_set_params: None,
-            enable_debug_mode_deployments: false,
+            dangerous_enable_debug_mode_deployments: false,
         }
     }
 

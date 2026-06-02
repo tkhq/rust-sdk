@@ -148,7 +148,7 @@ fn build_create_intent(
         pivot_args: deploy_config.pivot_args.clone(),
         expected_pivot_digest: deploy_config.expected_pivot_digest.clone(),
         pivot_container_encrypted_pull_secret,
-        debug_mode: deploy_config.debug_mode.into(),
+        debug_mode: deploy_config.dangerous_deploy_debug_mode.into(),
         nonce: None,
         health_check_type: deploy_config.health_check_type,
         health_check_port: deploy_config.health_check_port as u32,
@@ -184,7 +184,7 @@ fn apply_overrides(config: &mut DeployConfig, args: &Args) {
         config.pivot_args = args.pivot_args.clone();
     }
     if args.dangerous_deploy_debug_mode {
-        config.debug_mode = args.dangerous_deploy_debug_mode;
+        config.dangerous_deploy_debug_mode = args.dangerous_deploy_debug_mode;
     }
     if let Some(v) = args.health_check_port {
         config.health_check_port = v;
@@ -431,7 +431,7 @@ mod tests {
         c.pivot_path = "file-path".into();
         c.pivot_args = vec!["a".into(), "b".into()];
         c.expected_pivot_digest = "file-digest".into();
-        c.debug_mode = false;
+        c.dangerous_deploy_debug_mode = false;
         c.pivot_container_encrypted_pull_secret = None;
         c.health_check_port = 4000;
         c.public_ingress_port = 5000;
@@ -496,7 +496,7 @@ mod tests {
         // Optional fields fall back to template defaults.
         assert_eq!(resolved.health_check_port, 3000);
         assert_eq!(resolved.public_ingress_port, 3000);
-        assert!(!resolved.debug_mode);
+        assert!(!resolved.dangerous_deploy_debug_mode);
         assert!(resolved.pivot_args.is_empty());
         // Pull-secret placeholder cleared in flag-only mode.
         assert_eq!(resolved.pivot_container_encrypted_pull_secret, None);
@@ -555,27 +555,27 @@ mod tests {
         );
     }
 
-    /// `--dangerous-deploy-debug-mode` flips the resolved `debug_mode` from
-    /// the file's `false` to `true`.
+    /// `--dangerous-deploy-debug-mode` flips the resolved
+    /// `dangerous_deploy_debug_mode` from the file's `false` to `true`.
     #[test]
     fn dangerous_debug_mode_flag_enables_debug_mode() {
-        let file = write_config(&file_config()); // file has debug_mode = false
+        let file = write_config(&file_config()); // file has dangerous_deploy_debug_mode = false
         let args = Args {
             config_file: Some(file.path().to_path_buf()),
             dangerous_deploy_debug_mode: true,
             ..empty_args()
         };
         let resolved = run_resolve(&args).unwrap();
-        assert!(resolved.debug_mode);
+        assert!(resolved.dangerous_deploy_debug_mode);
     }
 
     /// Omitting `--dangerous-deploy-debug-mode` must NOT override a config file
     /// that enables debug mode: the flag is opt-in only and can never turn it
-    /// off, so a `debug_mode = true` config survives an absent flag.
+    /// off, so a `dangerous_deploy_debug_mode = true` config survives an absent flag.
     #[test]
     fn absent_debug_mode_flag_preserves_config_debug_mode() {
         let mut cfg = file_config();
-        cfg.debug_mode = true;
+        cfg.dangerous_deploy_debug_mode = true;
         let file = write_config(&cfg);
         let args = Args {
             config_file: Some(file.path().to_path_buf()),
@@ -583,15 +583,15 @@ mod tests {
             ..empty_args()
         };
         let resolved = run_resolve(&args).unwrap();
-        assert!(resolved.debug_mode);
+        assert!(resolved.dangerous_deploy_debug_mode);
     }
 
-    /// The intent builder wraps the resolved config's debug_mode in `Some(...)`
-    /// when constructing the outgoing `CreateTvcDeploymentIntent`.
+    /// The intent builder wraps the resolved config's dangerous_deploy_debug_mode
+    /// in `Some(...)` when constructing the outgoing `CreateTvcDeploymentIntent`.
     #[test]
     fn build_intent_forwards_debug_mode() {
         let mut cfg = file_config();
-        cfg.debug_mode = true;
+        cfg.dangerous_deploy_debug_mode = true;
         let intent = build_create_intent(&cfg, "image-url".to_string(), None);
         assert_eq!(intent.debug_mode, Some(true));
     }

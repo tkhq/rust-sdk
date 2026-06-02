@@ -147,13 +147,13 @@ fn build_create_tvc_app_intent(app_config: &AppConfig) -> CreateTvcAppIntent {
         share_set_id: app_config.share_set_id.clone(),
         share_set_params: share_set_params.as_ref().map(to_tvc_operator_set_params),
         enable_egress: app_config.external_connectivity,
-        enable_debug_mode_deployments: app_config.enable_debug_mode_deployments.into(),
+        enable_debug_mode_deployments: app_config.dangerous_enable_debug_mode_deployments.into(),
     }
 }
 
 fn apply_overrides(mut config: AppConfig, args: &Args) -> AppConfig {
     if args.dangerous_enable_debug_mode_deployments {
-        config.enable_debug_mode_deployments = args.dangerous_enable_debug_mode_deployments;
+        config.dangerous_enable_debug_mode_deployments = args.dangerous_enable_debug_mode_deployments;
     }
     config
 }
@@ -196,7 +196,7 @@ mod tests {
             }),
             share_set_id: None,
             share_set_params: None,
-            enable_debug_mode_deployments: false,
+            dangerous_enable_debug_mode_deployments: false,
         }
     }
 
@@ -244,12 +244,12 @@ mod tests {
         assert_eq!(intent.enable_debug_mode_deployments, Some(false));
     }
 
-    /// An explicit `enableDebugModeDeployments: true` in the config flows into
+    /// An explicit `dangerousEnableDebugModeDeployments: true` in the config flows into
     /// the intent so the server records the app's debug-mode capability.
     #[test]
     fn build_intent_forwards_debug_mode_from_config() {
         let mut config = valid_config();
-        config.enable_debug_mode_deployments = true;
+        config.dangerous_enable_debug_mode_deployments = true;
 
         let intent = build_create_tvc_app_intent(&config);
         assert_eq!(intent.enable_debug_mode_deployments, Some(true));
@@ -266,7 +266,7 @@ mod tests {
         };
 
         let config = apply_overrides(config, &args);
-        assert!(config.enable_debug_mode_deployments);
+        assert!(config.dangerous_enable_debug_mode_deployments);
     }
 
     /// Omitting the CLI flag must NOT override a config that enables debug-mode
@@ -275,14 +275,14 @@ mod tests {
     #[test]
     fn absent_dangerous_flag_preserves_config_debug_mode() {
         let mut config = valid_config();
-        config.enable_debug_mode_deployments = true;
+        config.dangerous_enable_debug_mode_deployments = true;
         let args = Args {
             config_file: PathBuf::new(),
             dangerous_enable_debug_mode_deployments: false,
         };
 
         let config = apply_overrides(config, &args);
-        assert!(config.enable_debug_mode_deployments);
+        assert!(config.dangerous_enable_debug_mode_deployments);
     }
 
     #[test]

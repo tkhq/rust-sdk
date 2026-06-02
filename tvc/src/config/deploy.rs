@@ -25,7 +25,7 @@ pub struct DeployConfig {
     /// marked insecure: enclave logs are forwarded to the host and attestation
     /// PCRs are zeroed, so anything the enclave processed may have leaked.
     #[serde(default)]
-    pub debug_mode: bool,
+    pub dangerous_deploy_debug_mode: bool,
     #[serde(default)]
     pub pivot_container_encrypted_pull_secret: Option<String>,
     pub health_check_type: TvcHealthCheckType,
@@ -44,7 +44,7 @@ impl DeployConfig {
             pivot_path: "<FILL_IN_PIVOT_PATH>".to_string(),
             pivot_args: vec![],
             expected_pivot_digest: "<FILL_IN_EXPECTED_PIVOT_DIGEST>".to_string(),
-            debug_mode: false,
+            dangerous_deploy_debug_mode: false,
             pivot_container_encrypted_pull_secret: Some(PULL_SECRET_PLACEHOLDER.to_string()),
             health_check_type: TvcHealthCheckType::Http,
             health_check_port: 3000,
