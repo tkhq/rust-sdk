@@ -22,10 +22,6 @@ pub struct Args {
     /// secure-enclave logs and emit zero'd attestation PCRs, so remote
     /// attestation cannot succeed. Cannot be changed after app creation; setting
     /// this true means the app's quorum key is considered permanently insecure.
-    ///
-    /// Opt-in only: passing this flag (or setting the env var) permits debug-mode
-    /// deployments even if the config file leaves it off, but omitting it does NOT
-    /// override a config file that enables it.
     #[arg(long, env = "TVC_DANGEROUS_ENABLE_DEBUG_MODE_DEPLOYMENTS")]
     pub dangerous_enable_debug_mode_deployments: bool,
 }

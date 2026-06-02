@@ -119,11 +119,6 @@ pub struct Args {
     /// Only valid for apps created with `--dangerous-enable-debug-mode-deployments`.
     /// Debug-mode deployments permanently mark the app's quorum key as insecure;
     /// to return to a secure posture, create a new app with a fresh quorum key.
-    ///
-    /// Opt-in only: passing this flag (or setting the env var) enables debug
-    /// mode even if the config file leaves it off, but omitting it does NOT
-    /// disable debug mode that the config file turns on. To deploy without
-    /// debug mode, set `debugMode: false` in the config and omit this flag.
     #[arg(long, env = "TVC_DANGEROUS_DEPLOY_DEBUG_MODE")]
     pub dangerous_deploy_debug_mode: bool,
 }
