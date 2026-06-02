@@ -45,6 +45,10 @@ message TvcApp {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The public domain for ingress to this TVC App (in the format \"app-<ID>.turnkey.cloud\")."}
   ];
+  bool enable_debug_mode_deployments = 12 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether this app permits debug-mode deployments. Set at app creation via CreateTvcAppIntent.enable_debug_mode_deployments and never updated thereafter. Debug-mode deployments expose logs and emit zero'd attestation PCRs, so remote attestation cannot succeed. The app's quorum key is therefore considered permanently insecure once enabled — a new app with a fresh quorum key must be created to return to a secure posture."}
+  ];
 }
 
 message TvcDeployment {

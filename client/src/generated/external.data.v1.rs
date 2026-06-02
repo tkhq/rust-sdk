@@ -371,6 +371,8 @@ pub struct BootProof {
     pub owner: ::prost::alloc::string::String,
     #[serde(default)]
     pub created_at: ::core::option::Option<Timestamp>,
+    #[serde(default)]
+    pub qos_manifest_version: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -531,6 +533,8 @@ pub struct TvcApp {
     #[serde(default)]
     pub live_deployment_id: ::core::option::Option<::prost::alloc::string::String>,
     pub public_domain: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub enable_debug_mode_deployments: bool,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
