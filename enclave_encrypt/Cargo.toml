@@ -1,7 +1,7 @@
 [package]
 name = "turnkey_enclave_encrypt"
 version = "0.7.0"
-edition = "2021"
+edition = "2024"
 license = "Apache-2.0"
 description = "Utilities to encrypt and decrypt data sent to and from Turnkey secure enclaves, using HPKE (RFC 9180). Used in authentication, export, and import flows."
 repository = "https://github.com/tkhq/rust-sdk"

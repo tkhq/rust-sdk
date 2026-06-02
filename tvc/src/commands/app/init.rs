@@ -3,7 +3,7 @@
 use crate::config::app::AppConfig;
 use crate::config::turnkey::{Config, StoredQosOperatorKey};
 use crate::prompts;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Args as ClapArgs;
 use std::path::PathBuf;
 

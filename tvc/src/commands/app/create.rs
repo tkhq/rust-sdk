@@ -4,7 +4,7 @@ use crate::client::build_client;
 use crate::config::app::{AppConfig, OperatorSetParams};
 use crate::config::turnkey::{self, StoredQosOperatorKey};
 use crate::prompts;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use clap::Args as ClapArgs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -178,7 +178,7 @@ fn to_tvc_operator_set_params(params: &OperatorSetParams) -> TvcOperatorSetParam
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::app::{OperatorParams, KNOWN_QUORUM_KEY};
+    use crate::config::app::{KNOWN_QUORUM_KEY, OperatorParams};
 
     fn valid_config() -> AppConfig {
         AppConfig {

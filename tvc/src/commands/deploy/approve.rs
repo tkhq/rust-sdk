@@ -4,13 +4,13 @@ use crate::config::turnkey::Config;
 use crate::operator_key::load_operator_pair;
 use crate::prompts;
 use crate::util::{read_file_to_string, write_file};
-use anyhow::{anyhow, bail, Context};
+use anyhow::{Context, anyhow, bail};
 use clap::{ArgGroup, Args as ClapArgs};
+use qos_core::protocol::QosHash;
 use qos_core::protocol::services::boot::Approval;
 use qos_core::protocol::services::boot::{
     Manifest, ManifestSet, Namespace, NitroConfig, PivotConfig, QuorumMember, ShareSet,
 };
-use qos_core::protocol::QosHash;
 use std::fmt::Write;
 use std::path::Path;
 use std::path::PathBuf;

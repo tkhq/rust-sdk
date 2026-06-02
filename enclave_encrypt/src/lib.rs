@@ -279,7 +279,7 @@ mod tests {
         client::EnclaveEncryptClient, client::ReusableEnclaveEncryptClientSend,
         server::EnclaveEncryptServer, server::ReusableEnclaveEncryptServerRecv,
     };
-    use p256::ecdsa::{signature::Signer, Signature, SigningKey, VerifyingKey};
+    use p256::ecdsa::{Signature, SigningKey, VerifyingKey, signature::Signer};
     use qos_p256::P256Pair;
 
     use super::*;

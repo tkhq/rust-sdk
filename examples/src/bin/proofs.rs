@@ -1,11 +1,11 @@
 use std::env;
 use std::error::Error;
 use turnkey_api_key_stamper::Stamp;
-use turnkey_client::generated::immutable::activity::v1 as immutable_activity;
-use turnkey_client::generated::immutable::common::v1::{AddressFormat, Curve, PathFormat};
+use turnkey_client::ActivityResult;
 use turnkey_client::generated::DeleteWalletsIntent;
 use turnkey_client::generated::WalletAccountParams;
-use turnkey_client::ActivityResult;
+use turnkey_client::generated::immutable::activity::v1 as immutable_activity;
+use turnkey_client::generated::immutable::common::v1::{AddressFormat, Curve, PathFormat};
 use turnkey_examples::load_api_key_from_env;
 use turnkey_proofs::{get_boot_proof_for_app_proof, verify};
 

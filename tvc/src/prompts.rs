@@ -12,7 +12,7 @@
 //!   flag the caller should set instead. Used at the top of any function
 //!   that's about to prompt.
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use inquire::{Confirm, Password, Select, Text};
 use std::fmt::Display;
 use std::io::IsTerminal;

@@ -6,7 +6,7 @@ use crate::config::turnkey::Config;
 use crate::prompts;
 use crate::prompts::is_interactive;
 use crate::pull_secret::encrypt_pivot_pull_secret;
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use clap::Args as ClapArgs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -257,7 +257,9 @@ async fn resolve_placeholders(config: &mut DeployConfig, args: &Args) -> Result<
         }
 
         if config.pull_secret_is_placeholder() {
-            bail!("pivotContainerEncryptedPullSecret is placeholder. Set the field to null in the config file (public image), or pass --pivot-pull-secret <PATH> (private image).")
+            bail!(
+                "pivotContainerEncryptedPullSecret is placeholder. Set the field to null in the config file (public image), or pass --pivot-pull-secret <PATH> (private image)."
+            )
         }
         return Ok(false);
     }

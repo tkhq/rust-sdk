@@ -107,11 +107,13 @@ mod tests {
     fn validate_rejects_placeholders() {
         let config = QuorumKeyConfig::template(None);
 
-        assert!(config
-            .validate()
-            .unwrap_err()
-            .to_string()
-            .contains("placeholder"));
+        assert!(
+            config
+                .validate()
+                .unwrap_err()
+                .to_string()
+                .contains("placeholder")
+        );
     }
 
     #[test]
@@ -119,11 +121,13 @@ mod tests {
         let mut config = valid_config();
         config.shares = 3;
 
-        assert!(config
-            .validate()
-            .unwrap_err()
-            .to_string()
-            .contains("must equal shares"));
+        assert!(
+            config
+                .validate()
+                .unwrap_err()
+                .to_string()
+                .contains("must equal shares")
+        );
     }
 
     #[test]
@@ -140,37 +144,45 @@ mod tests {
             operator_public_keys: vec![key.clone(), key.to_uppercase()],
         };
 
-        assert!(config
-            .validate()
-            .unwrap_err()
-            .to_string()
-            .contains("duplicate operator public key"));
+        assert!(
+            config
+                .validate()
+                .unwrap_err()
+                .to_string()
+                .contains("duplicate operator public key")
+        );
     }
 
     #[test]
     fn validate_rejects_threshold_and_share_bounds() {
         let mut zero_shares = valid_config();
         zero_shares.shares = 0;
-        assert!(zero_shares
-            .validate()
-            .unwrap_err()
-            .to_string()
-            .contains("shares must be between"));
+        assert!(
+            zero_shares
+                .validate()
+                .unwrap_err()
+                .to_string()
+                .contains("shares must be between")
+        );
 
         let mut low_threshold = valid_config();
         low_threshold.threshold = 1;
-        assert!(low_threshold
-            .validate()
-            .unwrap_err()
-            .to_string()
-            .contains("threshold must be"));
+        assert!(
+            low_threshold
+                .validate()
+                .unwrap_err()
+                .to_string()
+                .contains("threshold must be")
+        );
 
         let mut high_threshold = valid_config();
         high_threshold.threshold = 3;
-        assert!(high_threshold
-            .validate()
-            .unwrap_err()
-            .to_string()
-            .contains("cannot exceed shares"));
+        assert!(
+            high_threshold
+                .validate()
+                .unwrap_err()
+                .to_string()
+                .contains("cannot exceed shares")
+        );
     }
 }

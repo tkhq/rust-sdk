@@ -1,10 +1,10 @@
 //! Login command for authenticating with Turnkey.
 
 use crate::config::turnkey::{
-    Config, KeyCurve, OrgConfig, StoredApiKey, StoredQosOperatorKey, API_BASE_URL_PROD,
+    API_BASE_URL_PROD, Config, KeyCurve, OrgConfig, StoredApiKey, StoredQosOperatorKey,
 };
 use crate::prompts;
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use clap::Args as ClapArgs;
 use qos_p256::P256Pair;
 use std::io::{BufRead, Write};
@@ -109,7 +109,9 @@ async fn select_or_create_org(
             return Ok((alias, org_config));
         }
         debug!("organization argument did not match configured organizations");
-        bail!("Organization '{org}' not found. Run `tvc login` without --org to set up a new organization.");
+        bail!(
+            "Organization '{org}' not found. Run `tvc login` without --org to set up a new organization."
+        );
     }
 
     // No --org provided — we'd need to prompt. Honor explicit opt-out.

@@ -1,10 +1,10 @@
 //! Deploy provisioning-details command.
 
 use crate::provisioning::{
-    extract_ephemeral_public_key_bytes, verify_provisioning_details, ProvisionBundle,
+    ProvisionBundle, extract_ephemeral_public_key_bytes, verify_provisioning_details,
 };
 use crate::util::write_file;
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use clap::Args as ClapArgs;
 use qos_core::protocol::services::boot::{Approval, ManifestEnvelope};
 use qos_nsm::types::NsmDigest;
@@ -234,7 +234,7 @@ fn print_approval_summary_entries(approvals: &[ApprovalSummary]) {
 #[cfg(test)]
 mod tests {
     use super::build_summary_with_optional_verify;
-    use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
+    use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
     use qos_core::protocol::services::boot::ManifestEnvelope;
     use serde::Deserialize;
 
@@ -287,12 +287,14 @@ mod tests {
         let mut manifest_envelope = fixture.manifest_envelope;
         manifest_envelope.manifest_set_approvals.clear();
 
-        assert!(build_summary_with_optional_verify(
-            &attestation_document,
-            &manifest_envelope,
-            false,
-            Some(fixture.validation_time_secs),
-        )
-        .is_err());
+        assert!(
+            build_summary_with_optional_verify(
+                &attestation_document,
+                &manifest_envelope,
+                false,
+                Some(fixture.validation_time_secs),
+            )
+            .is_err()
+        );
     }
 }

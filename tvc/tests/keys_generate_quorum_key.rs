@@ -1,6 +1,6 @@
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
-use qos_p256::{P256Pair, P256Public, MASTER_SEED_LEN};
+use qos_p256::{MASTER_SEED_LEN, P256Pair, P256Public};
 use serde::Deserialize;
 use serde_json::json;
 use std::fs;

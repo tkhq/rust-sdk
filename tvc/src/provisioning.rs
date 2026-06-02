@@ -1,10 +1,10 @@
 //! Shared provisioning bundle and attestation verification helpers.
 
-use anyhow::{anyhow, bail, Context};
+use anyhow::{Context, anyhow, bail};
 use aws_nitro_enclaves_nsm_api::api::AttestationDoc;
-use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
-use qos_core::protocol::services::boot::ManifestEnvelope;
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use qos_core::protocol::QosHash;
+use qos_core::protocol::services::boot::ManifestEnvelope;
 use qos_p256::P256Public;
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -152,8 +152,8 @@ fn validation_time_secs(validation_time_override: Option<u64>) -> anyhow::Result
 
 #[cfg(test)]
 mod tests {
-    use super::{extract_ephemeral_public_key_bytes, verify_provisioning_details, ProvisionBundle};
-    use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
+    use super::{ProvisionBundle, extract_ephemeral_public_key_bytes, verify_provisioning_details};
+    use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
     use qos_core::protocol::services::boot::ManifestEnvelope;
     use qos_p256::P256Pair;
     use serde::Deserialize;
@@ -225,9 +225,10 @@ mod tests {
     fn extract_ephemeral_public_key_bytes_requires_key() {
         let err = extract_ephemeral_public_key_bytes(None).unwrap_err();
 
-        assert!(err
-            .to_string()
-            .contains("attestation document missing ephemeral public key"));
+        assert!(
+            err.to_string()
+                .contains("attestation document missing ephemeral public key")
+        );
     }
 
     #[test]
@@ -287,12 +288,14 @@ mod tests {
         let mut manifest_envelope = fixture.manifest_envelope;
         manifest_envelope.manifest_set_approvals.clear();
 
-        assert!(verify_provisioning_details(
-            &attestation_document,
-            &manifest_envelope,
-            Some(fixture.validation_time_secs),
-        )
-        .is_err());
+        assert!(
+            verify_provisioning_details(
+                &attestation_document,
+                &manifest_envelope,
+                Some(fixture.validation_time_secs),
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -327,9 +330,10 @@ mod tests {
             Err(err) => err,
         };
 
-        assert!(err
-            .to_string()
-            .contains("does not match attestation document"));
+        assert!(
+            err.to_string()
+                .contains("does not match attestation document")
+        );
     }
 
     #[test]

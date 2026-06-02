@@ -1,16 +1,16 @@
 #![doc = include_str!("../README.md")]
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use reqwest::header::CONTENT_TYPE;
 use thiserror::Error;
 
-use generated::external::data::v1::AppProof;
-use generated::google::rpc::Status;
 use generated::Activity;
 use generated::ActivityResponse;
 use generated::ActivityStatus;
+use generated::external::data::v1::AppProof;
+use generated::google::rpc::Status;
 
 use turnkey_api_key_stamper::{Stamp, StampHeader, StamperError};
 
@@ -328,17 +328,17 @@ impl<S: Stamp> TurnkeyClient<S> {
                     continue;
                 }
                 ActivityStatus::Failed => {
-                    return Err(TurnkeyClientError::ActivityFailed(activity.failure))
+                    return Err(TurnkeyClientError::ActivityFailed(activity.failure));
                 }
                 ActivityStatus::ConsensusNeeded => {
-                    return Err(TurnkeyClientError::ActivityRequiresApproval(activity.id))
+                    return Err(TurnkeyClientError::ActivityRequiresApproval(activity.id));
                 }
                 ActivityStatus::Unspecified
                 | ActivityStatus::Created
                 | ActivityStatus::Rejected => {
                     return Err(TurnkeyClientError::UnexpectedActivityStatus(
                         activity.status.as_str_name().to_string(),
-                    ))
+                    ));
                 }
             }
         }
@@ -449,8 +449,8 @@ mod test {
         (client, server)
     }
 
-    async fn setup_secp256k1_client_and_server(
-    ) -> (TurnkeyClient<TurnkeySecp256k1ApiKey>, MockServer) {
+    async fn setup_secp256k1_client_and_server()
+    -> (TurnkeyClient<TurnkeySecp256k1ApiKey>, MockServer) {
         let server = MockServer::start().await;
         let client = TurnkeyClient::<TurnkeySecp256k1ApiKey>::builder()
             .api_key(TurnkeySecp256k1ApiKey::generate())
@@ -499,9 +499,11 @@ mod test {
             created_at: None,
             updated_at: None,
         };
-        assert!(serde_json::to_string(&api_key)
-            .unwrap()
-            .contains(r#""expirationSeconds":"123""#));
+        assert!(
+            serde_json::to_string(&api_key)
+                .unwrap()
+                .contains(r#""expirationSeconds":"123""#)
+        );
     }
 
     #[tokio::test]
@@ -575,7 +577,10 @@ mod test {
         match result.unwrap_err() {
             TurnkeyClientError::UnexpectedHttpStatus(status, body) => {
                 assert_eq!(status, 401);
-                assert_eq!(body, "{\"code\":2,\"details\":[],\"message\":\"some error\",\"turnkeyErrorCode\":\"SOME_ERROR_CODE\"}");
+                assert_eq!(
+                    body,
+                    "{\"code\":2,\"details\":[],\"message\":\"some error\",\"turnkeyErrorCode\":\"SOME_ERROR_CODE\"}"
+                );
             }
             other => panic!("unexpected error: {other:?}"),
         }
@@ -982,7 +987,7 @@ mod test {
 
         #[tokio::test]
         async fn test_secp256k1_stamping_sends_correct_scheme() {
-            use base64::prelude::{Engine as _, BASE64_URL_SAFE_NO_PAD};
+            use base64::prelude::{BASE64_URL_SAFE_NO_PAD, Engine as _};
 
             struct ValidateSecpStamp;
             impl wiremock::Respond for ValidateSecpStamp {

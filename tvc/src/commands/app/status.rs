@@ -1,6 +1,6 @@
 //! App status command.
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use clap::Args as ClapArgs;
 use turnkey_client::generated::GetAppStatusRequest;
 

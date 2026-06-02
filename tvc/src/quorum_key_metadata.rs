@@ -1,6 +1,6 @@
 //! Shared quorum key metadata JSON format.
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use qos_p256::P256Public;
 use serde::{Deserialize, Serialize};
 

@@ -2,17 +2,17 @@
 use std::fs;
 use std::path::Path;
 
-use base64::prelude::BASE64_URL_SAFE_NO_PAD;
 use base64::Engine;
+use base64::prelude::BASE64_URL_SAFE_NO_PAD;
 use k256::ecdsa::{
     Signature as K256Signature, SigningKey as K256SigningKey, VerifyingKey as K256VerifyingKey,
 };
 use p256::{
-    ecdsa::{
-        signature::Signer as _, Signature as P256Signature, SigningKey as P256SigningKey,
-        VerifyingKey as P256VerifyingKey,
-    },
     SecretKey,
+    ecdsa::{
+        Signature as P256Signature, SigningKey as P256SigningKey, VerifyingKey as P256VerifyingKey,
+        signature::Signer as _,
+    },
 };
 use rand_core::OsRng;
 use serde::Serialize;
@@ -519,17 +519,21 @@ mod tests {
 
     #[test]
     fn test_from_strings_with_correct_public_key() {
-        assert!(TurnkeyP256ApiKey::from_strings(
-            "9720de87f61537e481f95f4433bed97b9d60719457c4dd20dac4bbf377f59c69",
-            None,
-        )
-        .is_ok());
+        assert!(
+            TurnkeyP256ApiKey::from_strings(
+                "9720de87f61537e481f95f4433bed97b9d60719457c4dd20dac4bbf377f59c69",
+                None,
+            )
+            .is_ok()
+        );
 
-        assert!(TurnkeyP256ApiKey::from_strings(
-            "9720de87f61537e481f95f4433bed97b9d60719457c4dd20dac4bbf377f59c69",
-            Some("02a1d9ee281053cf73c07678d6c1231216e8434f87662b75f08c66882c2f95ee45"),
-        )
-        .is_ok());
+        assert!(
+            TurnkeyP256ApiKey::from_strings(
+                "9720de87f61537e481f95f4433bed97b9d60719457c4dd20dac4bbf377f59c69",
+                Some("02a1d9ee281053cf73c07678d6c1231216e8434f87662b75f08c66882c2f95ee45"),
+            )
+            .is_ok()
+        );
     }
 
     #[test]
@@ -615,7 +619,10 @@ mod tests {
         // Try loading from a non-existant private key file
         let err1 = TurnkeyP256ApiKey::from_files("/tmp/does/not/exist/key.priv", pub_file.path())
             .unwrap_err();
-        assert_eq!(err1.to_string(), "cannot open file at /tmp/does/not/exist/key.priv: No such file or directory (os error 2)");
+        assert_eq!(
+            err1.to_string(),
+            "cannot open file at /tmp/does/not/exist/key.priv: No such file or directory (os error 2)"
+        );
         assert_eq!(
             err1,
             StamperError::Io(
@@ -627,7 +634,10 @@ mod tests {
         // Do the same with a bogus public key file
         let err2 = TurnkeyP256ApiKey::from_files(priv_file.path(), "/tmp/does/not/exist/key.pub")
             .unwrap_err();
-        assert_eq!(err2.to_string(), "cannot open file at /tmp/does/not/exist/key.pub: No such file or directory (os error 2)");
+        assert_eq!(
+            err2.to_string(),
+            "cannot open file at /tmp/does/not/exist/key.pub: No such file or directory (os error 2)"
+        );
         assert_eq!(
             err2,
             StamperError::Io(
