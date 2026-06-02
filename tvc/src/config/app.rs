@@ -22,6 +22,11 @@ pub struct AppConfig {
     pub share_set_id: Option<String>,
     #[serde(default)]
     pub share_set_params: Option<OperatorSetParams>,
+    /// Whether this app permits debug-mode deployments. Must be set at app
+    /// creation and cannot be changed after. Setting this true means the app's
+    /// quorum key is considered permanently insecure.
+    #[serde(default)]
+    pub dangerous_enable_debug_mode_deployments: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,6 +78,7 @@ impl AppConfig {
             }),
             share_set_id: None,
             share_set_params: None,
+            dangerous_enable_debug_mode_deployments: false,
         }
     }
 
