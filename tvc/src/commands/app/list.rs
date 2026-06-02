@@ -77,6 +77,7 @@ mod tests {
             updated_at: None,
             live_deployment_id: None,
             public_domain: String::new(),
+            enable_debug_mode_deployments: false,
         }
     }
 
@@ -97,7 +98,11 @@ mod tests {
 
     #[test]
     fn filter_by_name_partial_match_returns_matching() {
-        let mut apps = vec![make_app("my-app-prod"), make_app("my-app-staging"), make_app("other")];
+        let mut apps = vec![
+            make_app("my-app-prod"),
+            make_app("my-app-staging"),
+            make_app("other"),
+        ];
         filter_by_name(&mut apps, Some("my-app"));
         assert_eq!(apps.len(), 2);
     }
@@ -125,13 +130,19 @@ mod tests {
         assert_eq!(app.name, "my-app");
         assert_eq!(app.id, "app-uuid-123");
         assert_eq!(app.quorum_public_key, "04abcdef");
-        assert_eq!(app.live_deployment_id.as_deref().unwrap_or("(none)"), "deploy-uuid-456");
+        assert_eq!(
+            app.live_deployment_id.as_deref().unwrap_or("(none)"),
+            "deploy-uuid-456"
+        );
         assert_eq!(app.public_domain, "my-app.example.com");
     }
 
     #[test]
     fn app_with_no_live_deployment_renders_none() {
         let app = make_app("my-app");
-        assert_eq!(app.live_deployment_id.as_deref().unwrap_or("(none)"), "(none)");
+        assert_eq!(
+            app.live_deployment_id.as_deref().unwrap_or("(none)"),
+            "(none)"
+        );
     }
 }

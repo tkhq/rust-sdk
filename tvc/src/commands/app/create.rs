@@ -153,7 +153,8 @@ fn build_create_tvc_app_intent(app_config: &AppConfig) -> CreateTvcAppIntent {
 
 fn apply_overrides(mut config: AppConfig, args: &Args) -> AppConfig {
     if args.dangerous_enable_debug_mode_deployments {
-        config.dangerous_enable_debug_mode_deployments = args.dangerous_enable_debug_mode_deployments;
+        config.dangerous_enable_debug_mode_deployments =
+            args.dangerous_enable_debug_mode_deployments;
     }
     config
 }
