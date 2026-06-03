@@ -3,7 +3,7 @@
 //! Public functions use standard streams, while internals accept injected IO
 //! so tests can exercise prompt behavior without terminal input.
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use std::io::{BufRead, Write};
 
 const CANCELLED: &str = "operation cancelled by user";

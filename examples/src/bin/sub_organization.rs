@@ -1,8 +1,8 @@
 use std::error::Error;
 use std::{env, vec};
 use turnkey_client::generated::{
-    immutable::common::v1::{AddressFormat, ApiKeyCurve, Curve, PathFormat},
     ApiKeyParamsV2, RootUserParamsV5, WalletAccountParams, WalletParams,
+    immutable::common::v1::{AddressFormat, ApiKeyCurve, Curve, PathFormat},
 };
 use turnkey_client::generated::{CreateSubOrganizationIntentV8, DeleteSubOrganizationIntent};
 use turnkey_client::{TurnkeyP256ApiKey, TurnkeySecp256k1ApiKey};

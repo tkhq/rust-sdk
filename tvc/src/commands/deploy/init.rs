@@ -3,7 +3,7 @@
 use crate::config::deploy::DeployConfig;
 use crate::config::turnkey;
 use crate::prompts;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use chrono::Local;
 use clap::Args as ClapArgs;
 use std::path::PathBuf;

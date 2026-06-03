@@ -1,10 +1,10 @@
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
+use qos_core::protocol::QosHash;
 use qos_core::protocol::services::boot::{
     Approval, Manifest, ManifestEnvelope, ManifestSet, Namespace, NitroConfig, PatchSet,
     PivotConfig, QuorumMember, RestartPolicy, ShareSet,
 };
-use qos_core::protocol::QosHash;
 use qos_p256::{P256Pair, P256Public};
 use serde::Deserialize;
 use serde_json::json;

@@ -1,9 +1,9 @@
 use crate::config::turnkey::{
     API_BASE_URL_DEV, API_BASE_URL_LOCAL, API_BASE_URL_PREPROD, API_BASE_URL_PROD,
 };
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use p256::elliptic_curve::sec1::ToEncodedPoint;
-use turnkey_enclave_encrypt::{server::EnclaveEncryptServer, P256Public};
+use turnkey_enclave_encrypt::{P256Public, server::EnclaveEncryptServer};
 
 const LOCALHOST_PULL_SECRET_ENCRYPTION_PUBLIC_KEY: &str =
     "02acadf2025005142224d50ebeb93b91b8c57ef243a96cee44f50cf7051e67a3e2";

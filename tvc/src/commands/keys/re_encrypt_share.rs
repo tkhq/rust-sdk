@@ -5,10 +5,10 @@ use crate::pair::Pair;
 use crate::provisioning::ProvisionBundle;
 use crate::quorum_key_metadata::QuorumKeyMetadata;
 use crate::util::{read_json_file, write_file};
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use clap::Args as ClapArgs;
-use qos_core::protocol::services::boot::{Approval, ManifestEnvelope, QuorumMember};
 use qos_core::protocol::QosHash;
+use qos_core::protocol::services::boot::{Approval, ManifestEnvelope, QuorumMember};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use zeroize::Zeroizing;
@@ -181,17 +181,17 @@ async fn write_output(path: Option<&Path>, output: &ReEncryptedShareOutput) -> a
 #[cfg(test)]
 mod tests {
     use super::{
-        build_re_encrypted_share_output, ensure_quorum_key_matches_manifest, find_share_set_member,
-        ReEncryptedShareOutput,
+        ReEncryptedShareOutput, build_re_encrypted_share_output,
+        ensure_quorum_key_matches_manifest, find_share_set_member,
     };
     use crate::pair::LocalPair;
     use crate::provisioning::ProvisionBundle;
     use crate::quorum_key_metadata::{EncryptedShareMetadata, QuorumKeyMetadata};
+    use qos_core::protocol::QosHash;
     use qos_core::protocol::services::boot::{
         Approval, Manifest, ManifestEnvelope, ManifestSet, Namespace, NitroConfig, PatchSet,
         PivotConfig, QuorumMember, RestartPolicy, ShareSet,
     };
-    use qos_core::protocol::QosHash;
     use qos_p256::{P256Pair, P256Public};
     use serde_json::json;
 
@@ -387,9 +387,10 @@ mod tests {
             .encrypted_share_for_operator(&missing_operator_pair.public_key().to_bytes())
             .unwrap_err();
 
-        assert!(err
-            .to_string()
-            .contains(&hex::encode(missing_operator_pair.public_key().to_bytes())));
+        assert!(
+            err.to_string()
+                .contains(&hex::encode(missing_operator_pair.public_key().to_bytes()))
+        );
     }
 
     #[test]

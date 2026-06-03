@@ -1,14 +1,14 @@
 //! Enclave Encryption Server
 use hpke::{Deserializable, Kem as KemTrait, Serializable};
-use p256::ecdsa::{signature::Signer, Signature, SigningKey};
+use p256::ecdsa::{Signature, SigningKey, signature::Signer};
 use p256::elliptic_curve::sec1::ToEncodedPoint;
 use rand_core::OsRng;
 use zeroize::Zeroizing;
 
 use crate::{
-    compress_p256_public, decrypt, encrypt, errors::EnclaveEncryptError, ClientSendMsg, Kem,
-    P256Public, ServerSendData, ServerSendMsgV1, ServerTargetData, ServerTargetMsgV1, DATA_VERSION,
-    TURNKEY_HPKE_INFO,
+    ClientSendMsg, DATA_VERSION, Kem, P256Public, ServerSendData, ServerSendMsgV1,
+    ServerTargetData, ServerTargetMsgV1, TURNKEY_HPKE_INFO, compress_p256_public, decrypt, encrypt,
+    errors::EnclaveEncryptError,
 };
 
 /// An instance of the server side for `EnclaveEncrypt`. This should only be used for either

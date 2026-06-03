@@ -2,7 +2,7 @@
 
 use crate::config::quorum_key::QuorumKeyConfig;
 use crate::quorum_key_metadata::{
-    decode_p256_public_key_hex, EncryptedShareMetadata, QuorumKeyMetadata,
+    EncryptedShareMetadata, QuorumKeyMetadata, decode_p256_public_key_hex,
 };
 use crate::util::read_json_file;
 use anyhow::{Context, Result};

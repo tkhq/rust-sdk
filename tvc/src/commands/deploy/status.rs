@@ -2,8 +2,8 @@
 
 use anyhow::Context;
 use clap::Args as ClapArgs;
-use turnkey_client::generated::external::data::v1::TvcDeployment;
 use turnkey_client::generated::GetTvcDeploymentRequest;
+use turnkey_client::generated::external::data::v1::TvcDeployment;
 
 /// Get the status of a deployment.
 #[derive(Debug, ClapArgs)]

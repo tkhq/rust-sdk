@@ -1,6 +1,6 @@
 //! Deploy get-status command.
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use clap::Args as ClapArgs;
 use turnkey_client::generated::external::data::v1::{AppStatus, DeploymentStatus};
 use turnkey_client::generated::{GetAppStatusRequest, GetTvcDeploymentRequest};

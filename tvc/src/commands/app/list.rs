@@ -2,8 +2,8 @@
 
 use anyhow::Context;
 use clap::Args as ClapArgs;
-use turnkey_client::generated::external::data::v1::TvcApp;
 use turnkey_client::generated::GetTvcAppsRequest;
+use turnkey_client::generated::external::data::v1::TvcApp;
 
 /// List apps.
 #[derive(Debug, ClapArgs)]

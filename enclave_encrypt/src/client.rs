@@ -1,15 +1,15 @@
 //! Enclave Encrypt Client
 use crate::{
-    decompress_p256_public, decrypt, encrypt, errors::EnclaveEncryptError,
-    quorum_public_key::QuorumPublicKey, ClientSendMsg, Kem, P256Public, ServerSendData,
-    ServerSendMsg, ServerSendMsgV0, ServerSendMsgV1, ServerTargetData, ServerTargetMsg,
-    ServerTargetMsgV0, ServerTargetMsgV1, DATA_VERSION, TURNKEY_HPKE_INFO,
+    ClientSendMsg, DATA_VERSION, Kem, P256Public, ServerSendData, ServerSendMsg, ServerSendMsgV0,
+    ServerSendMsgV1, ServerTargetData, ServerTargetMsg, ServerTargetMsgV0, ServerTargetMsgV1,
+    TURNKEY_HPKE_INFO, decompress_p256_public, decrypt, encrypt, errors::EnclaveEncryptError,
+    quorum_public_key::QuorumPublicKey,
 };
 use hpke::{Deserializable, Kem as KemTrait, Serializable};
 use p256::elliptic_curve::sec1::ToEncodedPoint;
 use p256::{
-    ecdsa::{signature::Verifier, DerSignature, SigningKey, VerifyingKey},
     PublicKey,
+    ecdsa::{DerSignature, SigningKey, VerifyingKey, signature::Verifier},
 };
 use rand_core::OsRng;
 use std::str::from_utf8;

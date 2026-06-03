@@ -2,11 +2,11 @@ use std::error::Error;
 use std::{env, vec};
 use turnkey_client::generated::immutable::common::v1::{HashFunction, PayloadEncoding};
 use turnkey_client::generated::{
-    immutable::common::v1::{AddressFormat, Curve, PathFormat},
-    WalletAccountParams,
+    CreateWalletIntent, DeleteWalletsIntent, ExportWalletIntent, SignRawPayloadIntentV2,
 };
 use turnkey_client::generated::{
-    CreateWalletIntent, DeleteWalletsIntent, ExportWalletIntent, SignRawPayloadIntentV2,
+    WalletAccountParams,
+    immutable::common::v1::{AddressFormat, Curve, PathFormat},
 };
 use turnkey_enclave_encrypt::{ExportClient, QuorumPublicKey};
 use turnkey_examples::{load_api_key_from_env, load_base_url_from_env};

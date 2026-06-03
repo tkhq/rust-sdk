@@ -3,15 +3,15 @@
 use std::num::ParseIntError;
 
 use aws_nitro_enclaves_cose::{
+    CoseSign1,
     crypto::{Hash, MessageDigest, SignatureAlgorithm, SigningPublicKey},
     error::CoseError,
-    CoseSign1,
 };
 use aws_nitro_enclaves_nsm_api::api::AttestationDoc;
-use p256::ecdsa::{signature::Verifier, VerifyingKey as P256VerifyingKey};
+use p256::ecdsa::{VerifyingKey as P256VerifyingKey, signature::Verifier};
 use p384::{
-    ecdsa::{signature::hazmat::PrehashVerifier, Signature, VerifyingKey},
     PublicKey,
+    ecdsa::{Signature, VerifyingKey, signature::hazmat::PrehashVerifier},
 };
 use serde_bytes::ByteBuf;
 use sha2::Digest;
@@ -443,7 +443,9 @@ pub fn verify(app_proof: &AppProof, boot_proof: &BootProof) -> Result<(), Verify
         .user_data
         .expect("validated attestation doc should have user_data");
     if manifest_digest.as_slice() != user_data.as_slice() {
-        return Err(VerifyError::DifferentManifest(format!("attestation_doc's user_data doesn't match the hash of the manifest. attestation_doc.user_data: {user_data:?}, manifest_digest: {manifest_digest:?}")));
+        return Err(VerifyError::DifferentManifest(format!(
+            "attestation_doc's user_data doesn't match the hash of the manifest. attestation_doc.user_data: {user_data:?}, manifest_digest: {manifest_digest:?}"
+        )));
     }
 
     // 3. Verify that all the ephemeral public keys match: app proof, boot proof structure, actual attestation doc
@@ -454,7 +456,10 @@ pub fn verify(app_proof: &AppProof, boot_proof: &BootProof) -> Result<(), Verify
     if !(app_proof.public_key == attestation_pub_key
         && attestation_pub_key == boot_proof.ephemeral_public_key_hex)
     {
-        return Err(VerifyError::DifferentEphemeralKey(format!("Ephemeral pub keys from app proof: {}, boot proof structure {}, and attestation doc {} should all match", app_proof.public_key, boot_proof.ephemeral_public_key_hex, attestation_pub_key)));
+        return Err(VerifyError::DifferentEphemeralKey(format!(
+            "Ephemeral pub keys from app proof: {}, boot proof structure {}, and attestation doc {} should all match",
+            app_proof.public_key, boot_proof.ephemeral_public_key_hex, attestation_pub_key
+        )));
     }
 
     Ok(())

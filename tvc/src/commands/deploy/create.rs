@@ -6,7 +6,7 @@ use crate::config::turnkey::Config;
 use crate::prompts;
 use crate::prompts::is_interactive;
 use crate::pull_secret::encrypt_pivot_pull_secret;
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use clap::Args as ClapArgs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -257,7 +257,9 @@ async fn resolve_placeholders(config: &mut DeployConfig, args: &Args) -> Result<
         }
 
         if config.pull_secret_is_placeholder() {
-            bail!("pivotContainerEncryptedPullSecret is placeholder. Set the field to null in the config file (public image), or pass --pivot-pull-secret <PATH> (private image).")
+            bail!(
+                "pivotContainerEncryptedPullSecret is placeholder. Set the field to null in the config file (public image), or pass --pivot-pull-secret <PATH> (private image)."
+            )
         }
         return Ok(false);
     }
@@ -382,6 +384,7 @@ pub async fn run(args: Args) -> Result<()> {
 mod tests {
     use super::*;
     use std::io::Write;
+    use std::sync::{Mutex, MutexGuard};
     use tempfile::NamedTempFile;
 
     #[test]
@@ -596,19 +599,40 @@ mod tests {
         assert_eq!(intent.debug_mode, Some(true));
     }
 
+    // TODO: we shouldn't be messing with the environment in tests
+    // we can either use `Command` to spin up a new process
+    // or trust that `clap` will always handle options parsing
+    // and simply create a new `Args` value with the desired flags
+
     /// Sets `TVC_NON_INTERACTIVE=1` for the lifetime of the value so a test
     /// can exercise the "non-interactive bails with flag list" branch
     /// regardless of how the test runner is invoked.
-    struct NonInteractiveGuard;
+    ///
+    /// The held `MutexGuard` serializes env mutations across parallel tests so
+    /// the `unsafe` env writes can't race with one another.
+    struct NonInteractiveGuard(#[allow(dead_code)] MutexGuard<'static, ()>);
     impl NonInteractiveGuard {
         fn set() -> Self {
-            std::env::set_var(prompts::NON_INTERACTIVE_ENV, "1");
-            Self
+            static ENV_LOCK: Mutex<()> = Mutex::new(());
+            let guard = ENV_LOCK
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            // SAFETY: ENV_LOCK serializes every mutation of
+            // TVC_NON_INTERACTIVE in this test binary, and no other code
+            // path in the crate writes the variable.
+            unsafe {
+                std::env::set_var(prompts::NON_INTERACTIVE_ENV, "1");
+            }
+            Self(guard)
         }
     }
     impl Drop for NonInteractiveGuard {
         fn drop(&mut self) {
-            std::env::remove_var(prompts::NON_INTERACTIVE_ENV);
+            // SAFETY: same as `set` — `self.0` is still held; it drops
+            // after this method returns.
+            unsafe {
+                std::env::remove_var(prompts::NON_INTERACTIVE_ENV);
+            }
         }
     }
 }

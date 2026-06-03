@@ -13,7 +13,7 @@ mod qos_operator_key;
 pub use api_key::{KeyCurve, StoredApiKey};
 pub use qos_operator_key::StoredQosOperatorKey;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
