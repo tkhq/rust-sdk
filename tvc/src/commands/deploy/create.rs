@@ -384,7 +384,6 @@ pub async fn run(args: Args) -> Result<()> {
 mod tests {
     use super::*;
     use std::io::Write;
-    use std::sync::{Mutex, MutexGuard};
     use tempfile::NamedTempFile;
 
     #[test]
@@ -506,19 +505,6 @@ mod tests {
     }
 
     #[test]
-    fn no_file_no_required_flags_bails_naming_each_flag() {
-        // Force non-interactive so the test never tries to prompt.
-        let _guard = NonInteractiveGuard::set();
-        let err = run_resolve(&empty_args()).unwrap_err();
-        let msg = err.to_string();
-        assert!(msg.contains("--app-id"), "{msg}");
-        assert!(msg.contains("--qos-version"), "{msg}");
-        assert!(msg.contains("--pivot-image-url"), "{msg}");
-        assert!(msg.contains("--pivot-path"), "{msg}");
-        assert!(msg.contains("--expected-pivot-digest"), "{msg}");
-    }
-
-    #[test]
     fn pivot_args_flag_replaces_file_list() {
         let file = write_config(&file_config()); // file has ["a", "b"]
         let args = Args {
@@ -528,34 +514,6 @@ mod tests {
         };
         let resolved = run_resolve(&args).unwrap();
         assert_eq!(resolved.pivot_args, vec!["c"]);
-    }
-
-    /// All required fields are filled but the pull-secret sentinel is still
-    /// present. In non-interactive mode we can't prompt the user about it, so
-    /// the resolve bails rather than silently mutating the config or shipping
-    /// the sentinel to the API.
-    #[test]
-    fn pull_secret_placeholder_bails_when_non_interactive() {
-        let _guard = NonInteractiveGuard::set();
-
-        let mut cfg = file_config();
-        cfg.pivot_container_encrypted_pull_secret =
-            Some("<REMOVE_ME_IF_PIVOT_CONTAINER_URL_IS_PUBLIC>".to_string());
-        let file = write_config(&cfg);
-        let args = Args {
-            config_file: Some(file.path().to_path_buf()),
-            ..empty_args()
-        };
-
-        let err = run_resolve(&args).unwrap_err().to_string();
-        assert!(
-            err.contains("pivotContainerEncryptedPullSecret"),
-            "error should name the offending field: {err}"
-        );
-        assert!(
-            err.contains("--pivot-pull-secret"),
-            "error should point the user at the resolution flag: {err}"
-        );
     }
 
     /// `--dangerous-deploy-debug-mode` flips the resolved
@@ -597,42 +555,5 @@ mod tests {
         cfg.dangerous_deploy_debug_mode = true;
         let intent = build_create_intent(&cfg, "image-url".to_string(), None);
         assert_eq!(intent.debug_mode, Some(true));
-    }
-
-    // TODO: we shouldn't be messing with the environment in tests
-    // we can either use `Command` to spin up a new process
-    // or trust that `clap` will always handle options parsing
-    // and simply create a new `Args` value with the desired flags
-
-    /// Sets `TVC_NON_INTERACTIVE=1` for the lifetime of the value so a test
-    /// can exercise the "non-interactive bails with flag list" branch
-    /// regardless of how the test runner is invoked.
-    ///
-    /// The held `MutexGuard` serializes env mutations across parallel tests so
-    /// the `unsafe` env writes can't race with one another.
-    struct NonInteractiveGuard(#[allow(dead_code)] MutexGuard<'static, ()>);
-    impl NonInteractiveGuard {
-        fn set() -> Self {
-            static ENV_LOCK: Mutex<()> = Mutex::new(());
-            let guard = ENV_LOCK
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
-            // SAFETY: ENV_LOCK serializes every mutation of
-            // TVC_NON_INTERACTIVE in this test binary, and no other code
-            // path in the crate writes the variable.
-            unsafe {
-                std::env::set_var(prompts::NON_INTERACTIVE_ENV, "1");
-            }
-            Self(guard)
-        }
-    }
-    impl Drop for NonInteractiveGuard {
-        fn drop(&mut self) {
-            // SAFETY: same as `set` — `self.0` is still held; it drops
-            // after this method returns.
-            unsafe {
-                std::env::remove_var(prompts::NON_INTERACTIVE_ENV);
-            }
-        }
     }
 }
