@@ -146,7 +146,7 @@ fn build_create_tvc_app_intent(app_config: &AppConfig) -> CreateTvcAppIntent {
             .map(to_tvc_operator_set_params),
         share_set_id: app_config.share_set_id.clone(),
         share_set_params: share_set_params.as_ref().map(to_tvc_operator_set_params),
-        enable_egress: app_config.external_connectivity,
+        enable_egress: app_config.enable_egress,
         enable_debug_mode_deployments: app_config.dangerous_enable_debug_mode_deployments.into(),
     }
 }
@@ -184,7 +184,7 @@ mod tests {
         AppConfig {
             name: "test-app".to_string(),
             quorum_public_key: KNOWN_QUORUM_KEY.to_string(),
-            external_connectivity: Some(false),
+            enable_egress: Some(false),
             manifest_set_id: None,
             manifest_set_params: Some(OperatorSetParams {
                 name: "manifest-set".to_string(),
