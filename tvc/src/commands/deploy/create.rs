@@ -384,7 +384,6 @@ pub async fn run(args: Args) -> Result<()> {
 mod tests {
     use super::*;
     use std::io::Write;
-    use std::sync::{Mutex, MutexGuard};
     use tempfile::NamedTempFile;
 
     #[test]
