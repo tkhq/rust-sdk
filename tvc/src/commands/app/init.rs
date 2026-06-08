@@ -2,7 +2,7 @@
 
 use crate::config::app::AppConfig;
 use crate::config::turnkey::{Config, StoredQosOperatorKey};
-use crate::prompts;
+use crate::prompts::{bail_interactive_conflicts_with_non_interactive, ensure_stdin_is_tty};
 use anyhow::{Context, Result, bail};
 use clap::Args as ClapArgs;
 use std::path::PathBuf;
@@ -28,14 +28,18 @@ pub struct Args {
 }
 
 /// Run the app init command.
-pub async fn run(args: Args) -> Result<()> {
-    if args.interactive && prompts::non_interactive_forced() {
-        bail!(
-            "--interactive conflicts with {}=1",
-            prompts::NON_INTERACTIVE_ENV
-        );
+pub async fn run(args: Args, is_non_interactive: bool) -> Result<()> {
+    if args.interactive {
+        if is_non_interactive {
+            bail_interactive_conflicts_with_non_interactive()?;
+        } else {
+            ensure_stdin_is_tty()?;
+        }
     }
+    execute(args).await
+}
 
+async fn execute(args: Args) -> Result<()> {
     // Check if file already exists
     if args.output.exists() {
         bail!("File already exists: {}", args.output.display());

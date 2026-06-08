@@ -1,49 +1,40 @@
 //! Interactive prompts for the TVC CLI.
 //!
 //! Thin wrappers over [`inquire`]. Every primitive requires a real TTY; callers
-//! that expect to drive prompts from CI or scripts must use the corresponding
-//! flag, set `TVC_NON_INTERACTIVE=1`, or both.
-//!
-//! Non-interactive awareness:
-//!
-//! - [`is_interactive`] — true only when stdin is a TTY **and**
-//!   `TVC_NON_INTERACTIVE` is unset.
-//! - [`bail_if_non_interactive`] — errors with a clear message naming the
-//!   flag the caller should set instead. Used at the top of any function
-//!   that's about to prompt.
+//! that expect to drive prompts from CI or scripts must use --non-interactive,
+//! set TVC_NON_INTERACTIVE=true, or both.
 
 use anyhow::{Result, bail};
 use inquire::{Confirm, Password, Select, Text};
 use std::fmt::Display;
 use std::io::IsTerminal;
 
-/// Env var that forces non-interactive mode.
+/// Env var that disables interactive prompts when parsed as true.
 pub const NON_INTERACTIVE_ENV: &str = "TVC_NON_INTERACTIVE";
 
-/// True when we are in a full interactive session: stdin is a TTY and
-/// `TVC_NON_INTERACTIVE` is unset.
-pub fn is_interactive() -> bool {
-    if non_interactive_forced() {
-        return false;
-    }
+pub fn stdin_can_prompt() -> bool {
     std::io::stdin().is_terminal()
 }
 
-/// True when the user has explicitly set `TVC_NON_INTERACTIVE`.
-pub fn non_interactive_forced() -> bool {
-    std::env::var_os(NON_INTERACTIVE_ENV).is_some()
+pub fn error_required_in_non_interactive(flag_hint: &str) -> anyhow::Error {
+    anyhow::anyhow!(
+        "{flag_hint} is required in non-interactive mode \
+     (set {flag_hint} or run in a TTY without --non-interactive \
+     / {NON_INTERACTIVE_ENV}=true)"
+    )
 }
 
-/// Error with a clear message when we cannot prompt — either the env var is
-/// set, or stdin is not a TTY.
-///
-/// `flag_hint` is the flag the user should set instead (e.g. `"--org"`).
-pub fn bail_if_non_interactive(flag_hint: &str) -> Result<()> {
-    if !is_interactive() {
-        bail!(
-            "{flag_hint} is required in non-interactive mode \
-             (set {flag_hint} or run in a TTY without {NON_INTERACTIVE_ENV})"
-        );
+pub fn bail_required_in_non_interactive(flag_hint: &str) -> Result<()> {
+    bail!(error_required_in_non_interactive(flag_hint));
+}
+
+pub fn bail_interactive_conflicts_with_non_interactive() -> Result<()> {
+    bail!("--interactive conflicts with --non-interactive or {NON_INTERACTIVE_ENV}=true");
+}
+
+pub fn ensure_stdin_is_tty() -> Result<()> {
+    if !stdin_can_prompt() {
+        bail!("--interactive requires a TTY");
     }
     Ok(())
 }

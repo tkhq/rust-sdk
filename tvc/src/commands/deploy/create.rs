@@ -1,18 +1,18 @@
 //! Deploy create command - creates a deployment from a config file or CLI flags.
 
 use crate::client::build_client;
-use crate::config::deploy::DeployConfig;
+use crate::config::deploy::{DeployConfig, DeployConfigValidationErrors};
 use crate::config::turnkey::Config;
 use crate::prompts;
-use crate::prompts::is_interactive;
 use crate::pull_secret::encrypt_pivot_pull_secret;
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Args as ClapArgs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::try_join;
 use turnkey_client::generated::{CreateTvcDeploymentIntent, ValidateTvcImageRequest};
 
-pub(crate) const LONG_ABOUT: &str = "\
+pub(crate) const LONG_ABOUT: &str = r#"
 Create a new TVC deployment.
 
 Use --config-file, flags, env vars, or a mix of them. Command-line flags
@@ -38,32 +38,61 @@ Special rules:
 
 Interactive vs non-interactive:
   By default, missing required values are filled by interactive prompts when
-  stdin is a TTY. Set TVC_NON_INTERACTIVE=1 to disable all prompts, like in CI; the command then
-  bails with a precise list of missing fields instead of waiting on input.
+  stdin is a TTY. Use --non-interactive or set TVC_NON_INTERACTIVE=true to
+  disable all prompts, like in CI; the command then bails with a precise list
+  of missing fields instead of waiting on input.
 
 Examples:
   tvc deploy create --config-file deploy.json
 
   # OR
 
-  TVC_ORG_ID=... \\
-  TVC_API_KEY_PUBLIC=... \\
-  TVC_API_KEY_PRIVATE=... \\
-  TVC_APP_ID=... \\
-  TVC_QOS_VERSION=... \\
-  TVC_PIVOT_PATH=... \\
-  TVC_PIVOT_IMAGE_URL=... \\
-  TVC_EXPECTED_PIVOT_DIGEST=... \\
-    tvc deploy create";
+  TVC_ORG_ID=... \
+  TVC_API_KEY_PUBLIC=... \
+  TVC_API_KEY_PRIVATE=... \
+  TVC_APP_ID=... \
+  TVC_QOS_VERSION=... \
+  TVC_PIVOT_PATH=... \
+  TVC_PIVOT_IMAGE_URL=... \
+  TVC_EXPECTED_PIVOT_DIGEST=... \
+    tvc deploy create"#;
 
 /// Create a new TVC deployment from a config file or CLI flags.
 #[derive(Debug, ClapArgs)]
+#[cfg_attr(test, derive(Default))]
 #[command(about, long_about = None)]
 pub struct Args {
     /// Path to the deployment configuration file (JSON).
     /// Optional when all required fields are provided via flags or env.
     #[arg(short = 'c', long, value_name = "PATH", env = "TVC_DEPLOY_CONFIG")]
     pub config_file: Option<PathBuf>,
+
+    /// Path to an unencrypted pivot container pull secret file.
+    ///
+    /// The content will be encrypted based on the active org's API environment and
+    /// override `pivotContainerEncryptedPullSecret` from the config file.
+    #[arg(long, value_name = "PATH", env = "TVC_PIVOT_PULL_SECRET")]
+    pub pivot_pull_secret: Option<PathBuf>,
+
+    #[command(flatten)]
+    overrides: Overrides,
+}
+
+#[derive(Debug, ClapArgs)]
+#[cfg_attr(test, derive(Default))]
+struct Overrides {
+    /// Deploy in debug mode, which forwards secure enclave logs to the host and
+    /// zeroes attestation PCRs. This defeats the purpose of a secure enclave,
+    /// so it should only be used to debug non-prod applications and view application
+    /// logs.
+    ///
+    /// # WARNING
+    ///
+    /// Only valid for apps created with `--dangerous-enable-debug-mode-deployments`.
+    /// Debug-mode deployments permanently mark the app's quorum key as insecure;
+    /// to return to a secure posture, create a new app with a fresh quorum key.
+    #[arg(long, env = "TVC_DANGEROUS_DEPLOY_DEBUG_MODE")]
+    pub dangerous_deploy_debug_mode: bool,
 
     /// Override the appId field.
     #[arg(long, env = "TVC_APP_ID")]
@@ -101,26 +130,192 @@ pub struct Args {
     /// Override the publicIngressPort field.
     #[arg(long, env = "TVC_PUBLIC_INGRESS_PORT")]
     pub public_ingress_port: Option<u16>,
+}
 
-    /// Path to an unencrypted pivot container pull secret file.
-    ///
-    /// The content will be encrypted based on the active org's API environment and
-    /// override `pivotContainerEncryptedPullSecret` from the config file.
-    #[arg(long, value_name = "PATH", env = "TVC_PIVOT_PULL_SECRET")]
-    pub pivot_pull_secret: Option<PathBuf>,
+struct ResolvedDeployInputs {
+    config_path: Option<PathBuf>,
+    config: DeployConfig,
+    pivot_pull_secret: Option<String>,
+}
 
-    /// Deploy in debug mode, which forwards secure enclave logs to the host and
-    /// zeroes attestation PCRs. This defeats the purpose of a secure enclave,
-    /// so it should only be used to debug non-prod applications and view application
-    /// logs.
-    ///
-    /// # WARNING
-    ///
-    /// Only valid for apps created with `--dangerous-enable-debug-mode-deployments`.
-    /// Debug-mode deployments permanently mark the app's quorum key as insecure;
-    /// to return to a secure posture, create a new app with a fresh quorum key.
-    #[arg(long, env = "TVC_DANGEROUS_DEPLOY_DEBUG_MODE")]
-    pub dangerous_deploy_debug_mode: bool,
+pub async fn run(args: Args, is_non_interactive: bool) -> Result<()> {
+    let inputs = if is_non_interactive {
+        build_inputs_non_interactive(args).await?
+    } else {
+        build_inputs_interactive(args).await?
+    };
+
+    run_with_resolved_inputs(inputs).await
+}
+
+async fn build_inputs_interactive(args: Args) -> Result<ResolvedDeployInputs> {
+    let Args {
+        config_file: config_path,
+        pivot_pull_secret,
+        overrides,
+    } = args;
+    let (mut config, file_loaded) = read_config_file_bytes(config_path.as_deref())
+        .await?
+        .map(|(path, contents)| {
+            serde_json::from_str(&contents)
+                .with_context(|| format!("failed to parse config file: {}", path.display()))
+        })
+        .transpose()?
+        .map(|config| (config, true))
+        .unwrap_or_else(|| (flag_only_template(), false));
+
+    apply_overrides(&mut config, &overrides);
+
+    let mut config_updated = false;
+    loop {
+        match config.validate() {
+            Ok(()) => break,
+            Err(errors) if errors.has_non_placeholder_error() => {
+                return Err(invalid_deploy_config_error(errors));
+            }
+            _ => {
+                config_updated = true;
+                let saved_app_id = Config::load().await.ok().and_then(|c| c.get_last_app_id());
+                config.fill_interactively(saved_app_id.as_deref())?;
+            }
+        }
+    }
+
+    if config_updated {
+        if let Some(path) = &config_path {
+            offer_to_save_config(path, &config, file_loaded)?;
+        }
+    }
+    let pivot_pull_secret = read_pivot_pull_secret(pivot_pull_secret.as_deref()).await?;
+
+    Ok(ResolvedDeployInputs {
+        config_path,
+        config,
+        pivot_pull_secret,
+    })
+}
+
+async fn build_inputs_non_interactive(args: Args) -> Result<ResolvedDeployInputs> {
+    let Args {
+        config_file: config_path,
+        pivot_pull_secret,
+        overrides,
+    } = args;
+
+    let (file, pivot_pull_secret) = try_join!(
+        read_config_file_bytes(config_path.as_deref()),
+        read_pivot_pull_secret(pivot_pull_secret.as_deref())
+    )?;
+
+    let mut config = match file {
+        Some((path, bytes)) => serde_json::from_str(&bytes)
+            .with_context(|| format!("failed to parse config file: {}", path.display()))?,
+        _ => flag_only_template(),
+    };
+
+    apply_overrides(&mut config, &overrides);
+
+    if let Err(errors) = config.validate() {
+        return Err(invalid_deploy_config_error(errors));
+    }
+
+    Ok(ResolvedDeployInputs {
+        config_path,
+        config,
+        pivot_pull_secret,
+    })
+}
+
+async fn read_config_file_bytes(path: Option<&Path>) -> Result<Option<(&Path, String)>> {
+    let Some(path) = path else {
+        return Ok(None);
+    };
+
+    tokio::fs::read_to_string(path)
+        .await
+        .with_context(|| format!("failed to read config file: {}", path.display()))
+        .map(|contents| (path, contents))
+        .map(Into::into)
+}
+
+async fn read_pivot_pull_secret(path: Option<&Path>) -> Result<Option<String>> {
+    let Some(path) = path else {
+        return Ok(None);
+    };
+
+    let pull_secret = tokio::fs::read_to_string(path)
+        .await
+        .with_context(|| format!("failed to read pivot pull secret file: {}", path.display()))?;
+
+    if pull_secret.trim().is_empty() {
+        bail!(
+            "pivot pull secret file is empty after trimming whitespace: {}",
+            path.display()
+        );
+    }
+
+    Ok(pull_secret.into())
+}
+
+fn flag_only_template() -> DeployConfig {
+    let mut template = DeployConfig::template(None);
+    // Strip the template's "<REMOVE_ME...>" hint so flag-only mode doesn't ship
+    // it to the API for public images.
+    template.pivot_container_encrypted_pull_secret = None;
+    template
+}
+
+fn apply_overrides(config: &mut DeployConfig, overrides: &Overrides) {
+    if let Some(v) = &overrides.app_id {
+        config.app_id = v.clone();
+    }
+    if let Some(v) = &overrides.qos_version {
+        config.qos_version = v.clone();
+    }
+    if let Some(v) = &overrides.pivot_image_url {
+        config.pivot_container_image_url = v.clone();
+    }
+    if let Some(v) = &overrides.expected_pivot_digest {
+        config.expected_pivot_digest = v.clone();
+    }
+    if let Some(v) = &overrides.pivot_path {
+        config.pivot_path = v.clone();
+    }
+    if !overrides.pivot_args.is_empty() {
+        config.pivot_args = overrides.pivot_args.clone();
+    }
+    // One-way: only ever flips false -> true.
+    if overrides.dangerous_deploy_debug_mode {
+        config.dangerous_deploy_debug_mode = true;
+    }
+    if let Some(v) = overrides.health_check_port {
+        config.health_check_port = v;
+    }
+    if let Some(v) = overrides.public_ingress_port {
+        config.public_ingress_port = v;
+    }
+}
+
+fn invalid_deploy_config_error(errors: DeployConfigValidationErrors) -> anyhow::Error {
+    anyhow!("invalid deploy config: {}", errors)
+}
+
+/// Ask the user whether to write the updated config back to disk.
+/// `file_loaded` distinguishes "saving over an existing file" from
+/// "creating a new file at this path" in the prompt wording.
+fn offer_to_save_config(path: &Path, config: &DeployConfig, file_loaded: bool) -> Result<()> {
+    let prompt = if file_loaded {
+        format!("Save filled config to {}?", path.display())
+    } else {
+        format!("Write a new config file at {}?", path.display())
+    };
+    if prompts::confirm(&prompt, true)? {
+        let json = serde_json::to_string_pretty(config).context("failed to serialize config")?;
+        std::fs::write(path, json)
+            .with_context(|| format!("failed to write config file: {}", path.display()))?;
+        println!("Wrote {}", path.display());
+    }
+    Ok(())
 }
 
 fn build_validate_image_request(
@@ -164,157 +359,15 @@ fn pin_image_url(image_url: &str, resolved_digest: &str) -> String {
     }
 }
 
-fn apply_overrides(config: &mut DeployConfig, args: &Args) {
-    if let Some(v) = &args.app_id {
-        config.app_id = v.clone();
-    }
-    if let Some(v) = &args.qos_version {
-        config.qos_version = v.clone();
-    }
-    if let Some(v) = &args.pivot_image_url {
-        config.pivot_container_image_url = v.clone();
-    }
-    if let Some(v) = &args.expected_pivot_digest {
-        config.expected_pivot_digest = v.clone();
-    }
-    if let Some(v) = &args.pivot_path {
-        config.pivot_path = v.clone();
-    }
-    if !args.pivot_args.is_empty() {
-        config.pivot_args = args.pivot_args.clone();
-    }
-    if args.dangerous_deploy_debug_mode {
-        config.dangerous_deploy_debug_mode = args.dangerous_deploy_debug_mode;
-    }
-    if let Some(v) = args.health_check_port {
-        config.health_check_port = v;
-    }
-    if let Some(v) = args.public_ingress_port {
-        config.public_ingress_port = v;
-    }
-}
-
-/// Read a config from the given path, returning the parsed [`DeployConfig`] and
-/// a flag indicating whether the file existed (interactive flow may treat
-/// missing files as "start from template" when --config-file was provided).
-fn read_config_file(path: &Path) -> Result<Option<DeployConfig>> {
-    match std::fs::read_to_string(path) {
-        Ok(content) => {
-            let config: DeployConfig = serde_json::from_str(&content)
-                .with_context(|| format!("failed to parse config file: {}", path.display()))?;
-            Ok(Some(config))
-        }
-        Err(_) if prompts::is_interactive() => Ok(None),
-        Err(e) => Err(anyhow!(e))
-            .with_context(|| format!("failed to read config file: {}", path.display())),
-    }
-}
-
-async fn resolve_deploy_config(args: &Args) -> Result<DeployConfig> {
-    let (mut config, file_loaded) = match &args.config_file {
-        Some(path) => match read_config_file(path)? {
-            Some(c) => (c, true),
-            None => (DeployConfig::template(None), false),
-        },
-        None => {
-            let mut t = DeployConfig::template(None);
-            // Strip the template's "<REMOVE_ME...>" hint so flag-only mode
-            // doesn't ship it to the API for public images.
-            t.pivot_container_encrypted_pull_secret = None;
-            (t, false)
-        }
-    };
-
-    apply_overrides(&mut config, args);
-
-    let config_updated = resolve_placeholders(&mut config, args).await?;
-    if config_updated {
-        if let Some(path) = &args.config_file {
-            offer_to_save_config(path, &config, file_loaded)?;
-        }
-    }
-    Ok(config)
-}
-
-/// Address any remaining placeholders in `config`. Returns `true` iff the
-/// resolution required walking interactive prompts
-async fn resolve_placeholders(config: &mut DeployConfig, args: &Args) -> Result<bool> {
-    if !config.has_placeholders() {
-        return Ok(false);
-    }
-    if !is_interactive() {
-        let missing = config.missing_required_fields();
-        if !missing.is_empty() {
-            let suggestion = if args.config_file.is_some() {
-                "Edit the config file or override via flag/TVC_* env."
-            } else {
-                "Provide via flag, TVC_* env, or --config-file."
-            };
-            bail!(
-                "missing required values: {}. {suggestion}",
-                missing.join(", ")
-            );
-        }
-
-        if config.pull_secret_is_placeholder() {
-            bail!(
-                "pivotContainerEncryptedPullSecret is placeholder. Set the field to null in the config file (public image), or pass --pivot-pull-secret <PATH> (private image)."
-            )
-        }
-        return Ok(false);
-    }
-
-    let saved_app_id = Config::load().await.ok().and_then(|c| c.get_last_app_id());
-    config.fill_interactively(saved_app_id.as_deref())?;
-
-    Ok(true)
-}
-
-/// Ask the user whether to write the updated config back to disk.
-/// `file_loaded` distinguishes "saving over an existing file" from
-/// "creating a new file at this path" in the prompt wording.
-fn offer_to_save_config(path: &Path, config: &DeployConfig, file_loaded: bool) -> Result<()> {
-    if !is_interactive() {
-        return Ok(());
-    }
-    let prompt = if file_loaded {
-        format!("Save filled config to {}?", path.display())
-    } else {
-        format!("Write a new config file at {}?", path.display())
-    };
-    if prompts::confirm(&prompt, true)? {
-        let json = serde_json::to_string_pretty(config).context("failed to serialize config")?;
-        std::fs::write(path, json)
-            .with_context(|| format!("failed to write config file: {}", path.display()))?;
-        println!("Wrote {}", path.display());
-    }
-    Ok(())
-}
-
-/// Run the deploy create command.
-pub async fn run(args: Args) -> Result<()> {
-    let deploy_config = resolve_deploy_config(&args).await?;
+async fn run_with_resolved_inputs(inputs: ResolvedDeployInputs) -> Result<()> {
+    let deploy_config = inputs.config;
 
     println!("Creating deployment for app '{}'...", deploy_config.app_id);
 
-    // Build authenticated client
     let auth = build_client().await?;
 
-    let pivot_container_encrypted_pull_secret = match args.pivot_pull_secret.as_ref() {
-        Some(path) => {
-            let pull_secret = std::fs::read_to_string(path).with_context(|| {
-                format!("failed to read pivot pull secret file: {}", path.display())
-            })?;
-
-            if pull_secret.trim().is_empty() {
-                bail!(
-                    "pivot pull secret file is empty after trimming whitespace: {}",
-                    path.display()
-                );
-            }
-
-            Some(encrypt_pivot_pull_secret(&pull_secret, &auth.api_base_url)?)
-        }
+    let pivot_container_encrypted_pull_secret = match inputs.pivot_pull_secret.as_ref() {
+        Some(pull_secret) => Some(encrypt_pivot_pull_secret(pull_secret, &auth.api_base_url)?),
         None => deploy_config.pivot_container_encrypted_pull_secret.clone(),
     };
 
@@ -345,13 +398,11 @@ pub async fn run(args: Args) -> Result<()> {
         pivot_container_encrypted_pull_secret,
     );
 
-    // Get timestamp
     let timestamp_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .context("system time before unix epoch")?
         .as_millis();
 
-    // Create the deployment
     let result = auth
         .client
         .create_tvc_deployment(auth.org_id, timestamp_ms, intent)
@@ -363,7 +414,7 @@ pub async fn run(args: Args) -> Result<()> {
     println!();
     println!("Deployment ID: {}", result.result.deployment_id);
     println!("App ID: {}", deploy_config.app_id);
-    if let Some(path) = &args.config_file {
+    if let Some(path) = &inputs.config_path {
         println!("Config: {}", path.display());
     }
     println!();
@@ -398,30 +449,19 @@ mod tests {
         assert_eq!(pinned, "ghcr.io/team/app@sha256:abc123");
     }
 
-    fn empty_args() -> Args {
-        Args {
-            config_file: None,
-            app_id: None,
-            qos_version: None,
-            pivot_image_url: None,
-            expected_pivot_digest: None,
-            pivot_path: None,
-            pivot_args: vec![],
-            health_check_port: None,
-            public_ingress_port: None,
-            pivot_pull_secret: None,
-            dangerous_deploy_debug_mode: false,
-        }
-    }
-
     fn all_required_flags() -> Args {
-        Args {
+        let overrides = Overrides {
             app_id: Some("flag-app-id".into()),
             qos_version: Some("flag-qos".into()),
             pivot_image_url: Some("flag-image".into()),
             expected_pivot_digest: Some("flag-digest".into()),
             pivot_path: Some("flag-path".into()),
-            ..empty_args()
+            ..Default::default()
+        };
+
+        Args {
+            overrides,
+            ..Default::default()
         }
     }
 
@@ -447,24 +487,40 @@ mod tests {
         f
     }
 
-    // Resolution tests run inside the tokio runtime since resolve_deploy_config
-    // now reaches into Config::load(). They're wired to call .block_on() via
-    // a small helper.
+    /// Mirror the non-interactive resolution pipeline (read bytes → parse →
+    /// apply overrides → validate) so the existing flag/env/config-file
+    /// composition tests still have a single helper to call.
     fn run_resolve(args: &Args) -> Result<DeployConfig> {
         tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .unwrap()
-            .block_on(resolve_deploy_config(args))
+            .block_on(async {
+                let mut config = match read_config_file_bytes(args.config_file.as_deref()).await? {
+                    Some((path, bytes)) => serde_json::from_str(&bytes).with_context(|| {
+                        format!("failed to parse config file: {}", path.display())
+                    })?,
+                    None => flag_only_template(),
+                };
+                apply_overrides(&mut config, &args.overrides);
+                if let Err(errors) = config.validate() {
+                    return Err(invalid_deploy_config_error(errors));
+                }
+                anyhow::Ok(config)
+            })
     }
 
     #[test]
     fn flag_overrides_file_value() {
         let file = write_config(&file_config());
+        let overrides = Overrides {
+            app_id: Some("flag-app-id".into()),
+            ..Default::default()
+        };
         let args = Args {
             config_file: Some(file.path().to_path_buf()),
-            app_id: Some("flag-app-id".into()),
-            ..empty_args()
+            overrides,
+            ..Default::default()
         };
         let resolved = run_resolve(&args).unwrap();
         assert_eq!(resolved.app_id, "flag-app-id");
@@ -478,7 +534,7 @@ mod tests {
         let file = write_config(&file_config());
         let args = Args {
             config_file: Some(file.path().to_path_buf()),
-            ..empty_args()
+            ..Default::default()
         };
         let resolved = run_resolve(&args).unwrap();
         assert_eq!(resolved.app_id, "file-app-id");
@@ -505,12 +561,27 @@ mod tests {
     }
 
     #[test]
+    fn no_file_no_required_flags_bails_naming_each_field() {
+        let err = run_resolve(&Default::default()).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("app_id"), "{msg}");
+        assert!(msg.contains("qos_version"), "{msg}");
+        assert!(msg.contains("pivot_container_image_url"), "{msg}");
+        assert!(msg.contains("pivot_path"), "{msg}");
+        assert!(msg.contains("expected_pivot_digest"), "{msg}");
+    }
+
+    #[test]
     fn pivot_args_flag_replaces_file_list() {
         let file = write_config(&file_config()); // file has ["a", "b"]
+        let overrides = Overrides {
+            pivot_args: vec!["c".into()],
+            ..Default::default()
+        };
         let args = Args {
             config_file: Some(file.path().to_path_buf()),
-            pivot_args: vec!["c".into()],
-            ..empty_args()
+            overrides,
+            ..Default::default()
         };
         let resolved = run_resolve(&args).unwrap();
         assert_eq!(resolved.pivot_args, vec!["c"]);
@@ -521,10 +592,14 @@ mod tests {
     #[test]
     fn dangerous_debug_mode_flag_enables_debug_mode() {
         let file = write_config(&file_config()); // file has dangerous_deploy_debug_mode = false
+        let overrides = Overrides {
+            dangerous_deploy_debug_mode: true,
+            ..Default::default()
+        };
         let args = Args {
             config_file: Some(file.path().to_path_buf()),
-            dangerous_deploy_debug_mode: true,
-            ..empty_args()
+            overrides,
+            ..Default::default()
         };
         let resolved = run_resolve(&args).unwrap();
         assert!(resolved.dangerous_deploy_debug_mode);
@@ -538,13 +613,43 @@ mod tests {
         let mut cfg = file_config();
         cfg.dangerous_deploy_debug_mode = true;
         let file = write_config(&cfg);
+        let overrides = Overrides {
+            dangerous_deploy_debug_mode: false,
+            ..Default::default()
+        };
         let args = Args {
             config_file: Some(file.path().to_path_buf()),
-            dangerous_deploy_debug_mode: false,
-            ..empty_args()
+            overrides,
+            ..Default::default()
         };
         let resolved = run_resolve(&args).unwrap();
         assert!(resolved.dangerous_deploy_debug_mode);
+    }
+
+    /// All required fields are filled but the pull-secret sentinel is still
+    /// present. In non-interactive mode we can't prompt the user about it, so
+    /// the resolve bails rather than silently mutating the config or shipping
+    /// the sentinel to the API.
+    #[test]
+    fn pull_secret_placeholder_bails_when_non_interactive() {
+        let mut cfg = file_config();
+        cfg.pivot_container_encrypted_pull_secret =
+            Some("<REMOVE_ME_IF_PIVOT_CONTAINER_URL_IS_PUBLIC>".to_string());
+        let file = write_config(&cfg);
+        let args = Args {
+            config_file: Some(file.path().to_path_buf()),
+            ..Default::default()
+        };
+
+        let err = run_resolve(&args).unwrap_err().to_string();
+        assert!(
+            err.contains("pivotContainerEncryptedPullSecret"),
+            "error should name the offending field: {err}"
+        );
+        assert!(
+            err.contains("--pivot-pull-secret"),
+            "error should point the user at the resolution flag: {err}"
+        );
     }
 
     /// The intent builder wraps the resolved config's dangerous_deploy_debug_mode
@@ -555,5 +660,111 @@ mod tests {
         cfg.dangerous_deploy_debug_mode = true;
         let intent = build_create_intent(&cfg, "image-url".to_string(), None);
         assert_eq!(intent.debug_mode, Some(true));
+    }
+
+    /// Exercises every override flag via clap parsing so flag renames or
+    /// removals fail this test. The other override tests construct `Args` by
+    /// field name and would silently pass.
+    #[test]
+    fn every_override_flag_changes_template_value() {
+        use clap::Parser;
+
+        #[derive(Parser)]
+        struct TestCli {
+            #[command(flatten)]
+            args: Args,
+        }
+
+        let pull_secret_path = "/tmp/test-pull-secret";
+        let args = TestCli::try_parse_from([
+            "tvc-deploy-create",
+            "--app-id",
+            "test-app",
+            "--qos-version",
+            "test-qos",
+            "--pivot-image-url",
+            "test-image",
+            "--expected-pivot-digest",
+            "sha256:test",
+            "--pivot-path",
+            "/usr/bin/pivot",
+            "--pivot-args",
+            "arg1,arg2",
+            "--health-check-port",
+            "8080",
+            "--public-ingress-port",
+            "9090",
+            "--pivot-pull-secret",
+            pull_secret_path,
+            "--dangerous-deploy-debug-mode",
+        ])
+        .unwrap()
+        .args;
+
+        let template = flag_only_template();
+        let mut resolved = flag_only_template();
+        apply_overrides(&mut resolved, &args.overrides);
+
+        // Each override moved off its template default ...
+        assert_ne!(resolved.app_id, template.app_id);
+        assert_ne!(resolved.qos_version, template.qos_version);
+        assert_ne!(
+            resolved.pivot_container_image_url,
+            template.pivot_container_image_url
+        );
+        assert_ne!(
+            resolved.expected_pivot_digest,
+            template.expected_pivot_digest
+        );
+        assert_ne!(resolved.pivot_path, template.pivot_path);
+        assert_ne!(resolved.pivot_args, template.pivot_args);
+        assert_ne!(resolved.health_check_port, template.health_check_port);
+        assert_ne!(resolved.public_ingress_port, template.public_ingress_port);
+        assert_ne!(
+            resolved.dangerous_deploy_debug_mode,
+            template.dangerous_deploy_debug_mode
+        );
+
+        // ... to the value passed on the CLI.
+        assert_eq!(resolved.app_id, "test-app");
+        assert_eq!(resolved.qos_version, "test-qos");
+        assert_eq!(resolved.pivot_container_image_url, "test-image");
+        assert_eq!(resolved.expected_pivot_digest, "sha256:test");
+        assert_eq!(resolved.pivot_path, "/usr/bin/pivot");
+        assert_eq!(resolved.pivot_args, vec!["arg1", "arg2"]);
+        assert_eq!(resolved.health_check_port, 8080);
+        assert_eq!(resolved.public_ingress_port, 9090);
+        assert!(resolved.dangerous_deploy_debug_mode);
+
+        // pivot_pull_secret isn't part of apply_overrides; verify clap captured the path.
+        assert_eq!(
+            args.pivot_pull_secret.as_deref(),
+            Some(Path::new(pull_secret_path))
+        );
+    }
+
+    #[test]
+    fn non_interactive_overrides_can_complete_placeholder_file_without_prompting_to_save() {
+        let mut cfg = DeployConfig::template(None);
+        cfg.pivot_container_encrypted_pull_secret = None;
+        let file = write_config(&cfg);
+        let args = Args {
+            config_file: Some(file.path().to_path_buf()),
+            ..all_required_flags()
+        };
+
+        let resolved = run_resolve(&args).unwrap();
+        assert_eq!(resolved.app_id, "flag-app-id");
+        assert_eq!(resolved.qos_version, "flag-qos");
+        assert_eq!(resolved.pivot_container_image_url, "flag-image");
+        assert_eq!(resolved.pivot_path, "flag-path");
+        assert_eq!(resolved.expected_pivot_digest, "flag-digest");
+
+        let persisted: DeployConfig =
+            serde_json::from_str(&std::fs::read_to_string(file.path()).unwrap()).unwrap();
+        assert!(
+            persisted.has_placeholders(),
+            "non-interactive resolution must not offer to save or mutate config files"
+        );
     }
 }

@@ -17,6 +17,9 @@ fn deploy_create_help_documents_config_and_override_precedence() {
         ))
         .stdout(predicate::str::contains(
             "--pivot-args replaces the config file's list entirely",
+        ))
+        .stdout(predicate::str::contains(
+            "Use --non-interactive or set TVC_NON_INTERACTIVE=true",
         ));
 }
 
@@ -58,4 +61,26 @@ fn top_level_help_documents_auth_precedence() {
         .stdout(predicate::str::contains("TVC_ORG_ID"))
         .stdout(predicate::str::contains("TVC_API_KEY_PUBLIC"))
         .stdout(predicate::str::contains("TVC_API_KEY_PRIVATE"));
+}
+
+#[test]
+fn top_level_help_documents_non_interactive_flag() {
+    cargo_bin_cmd!("tvc")
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--non-interactive"))
+        .stdout(predicate::str::contains("TVC_NON_INTERACTIVE"));
+}
+
+#[test]
+fn deploy_create_help_documents_non_interactive_global_flag() {
+    cargo_bin_cmd!("tvc")
+        .arg("deploy")
+        .arg("create")
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--non-interactive"))
+        .stdout(predicate::str::contains("TVC_NON_INTERACTIVE"));
 }

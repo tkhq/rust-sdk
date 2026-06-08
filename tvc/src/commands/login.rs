@@ -3,7 +3,7 @@
 use crate::config::turnkey::{
     API_BASE_URL_PROD, Config, KeyCurve, OrgConfig, StoredApiKey, StoredQosOperatorKey,
 };
-use crate::prompts;
+use crate::prompts::{self, error_required_in_non_interactive};
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Args as ClapArgs;
 use qos_p256::P256Pair;
@@ -25,109 +25,136 @@ pub struct Args {
     pub api_base_url: Option<String>,
 }
 
-/// Run the login command.
-pub async fn run(args: Args) -> anyhow::Result<()> {
+enum OrgPlan {
+    Existing(String),
+    New { id: String, alias: String },
+}
+
+enum ApiKeyPolicy {
+    AllowGenerate,
+    RequireExisting,
+}
+
+struct LoginPlan {
+    org: OrgPlan,
+    api_base_url_override: Option<String>,
+    api_key_policy: ApiKeyPolicy,
+}
+
+pub async fn run(args: Args, is_non_interactive: bool) -> Result<()> {
     debug!(
+        non_interactive = is_non_interactive,
         org_arg_present = args.org.is_some(),
         api_base_url_override_present = args.api_base_url.is_some(),
         "running login command"
     );
 
-    // Load existing config
-    let mut config = Config::load().await?;
+    let config = Config::load().await?;
 
-    // Select or create org
-    let (alias, org_config) = select_or_create_org(
-        &mut config,
-        args.org.as_deref(),
-        args.api_base_url.as_deref(),
-    )
-    .await?;
+    let plan = if is_non_interactive {
+        build_login_plan_non_interactive(args)?
+    } else {
+        build_login_plan_interactive(args, &config)?
+    };
+
+    execute_login(config, plan).await
+}
+
+fn build_login_plan_interactive(args: Args, config: &Config) -> Result<LoginPlan> {
+    let org = match args.org {
+        Some(query) => OrgPlan::Existing(query),
+        None => prompt_for_org_plan(config)?,
+    };
+    Ok(LoginPlan {
+        org,
+        api_base_url_override: args.api_base_url,
+        api_key_policy: ApiKeyPolicy::AllowGenerate,
+    })
+}
+
+fn build_login_plan_non_interactive(args: Args) -> Result<LoginPlan> {
+    let Some(org_query) = args.org else {
+        return Err(error_required_in_non_interactive("--org"));
+    };
+
+    Ok(LoginPlan {
+        org: OrgPlan::Existing(org_query),
+        api_base_url_override: args.api_base_url,
+        api_key_policy: ApiKeyPolicy::RequireExisting,
+    })
+}
+
+async fn execute_login(mut config: Config, plan: LoginPlan) -> Result<()> {
+    let (alias, org_config) = match plan.org {
+        OrgPlan::Existing(query) => {
+            let alias = match find_org(&config, &query) {
+                Some((alias, _)) => alias.clone(),
+                None => bail!(
+                    "Organization '{query}' not found. \
+                     Run `tvc login` without --org to set up a new organization."
+                ),
+            };
+            update_api_base_url_from_override(
+                &mut config,
+                &alias,
+                plan.api_base_url_override.as_deref(),
+            );
+            let org_config = config.orgs.get(&alias).unwrap().clone();
+            (alias, org_config)
+        }
+        OrgPlan::New { id, alias } => {
+            let api_base_url = new_org_api_base_url(plan.api_base_url_override.as_deref());
+            generate_org(&mut config, id, alias, api_base_url)?
+        }
+    };
 
     println!("Selected org: {} ({})", alias, org_config.id);
 
-    // Save config with the new/updated org
     config.set_active_org(&alias)?;
     config.save().await?;
 
-    // Get or generate API key
-    let api_key = get_or_generate_api_key(&org_config).await?;
+    let api_key = match StoredApiKey::load(&org_config).await? {
+        Some(api_key) => {
+            debug!("using existing API key");
+            println!("Using existing API key.");
+            api_key
+        }
+        None => match plan.api_key_policy {
+            ApiKeyPolicy::AllowGenerate => {
+                let api_key = generate_api_key(&org_config).await?;
+                wait_for_dashboard_registration()?;
+                api_key
+            }
+            ApiKeyPolicy::RequireExisting => bail!(
+                "API key is required in non-interactive mode for org '{}'. \
+                 Run `tvc login` interactively to generate and register one first.",
+                org_config.id
+            ),
+        },
+    };
 
-    // Verify credentials with whoami
     println!();
     println!("Verifying credentials...");
 
     let whoami = verify_credentials(&api_key, &org_config.id, &org_config.api_base_url).await?;
+    let operator_key = find_or_generate_operator_key(&org_config).await?;
 
-    // Get or generate operator key
-    let operator_key = get_or_generate_operator_key(&org_config).await?;
-
-    println!();
-    println!("Successfully logged in!");
-    println!();
-    println!(
-        "Organization: {} ({})",
-        whoami.organization_name, whoami.organization_id
-    );
-    println!("User: {} ({})", whoami.username, whoami.user_id);
-    println!("Active Org: {alias}");
-    println!("API Key: {}", api_key.public_key);
-    println!("Operator Key: {}", operator_key.public_key);
-    println!();
-    println!(
-        "Config: {}",
-        crate::config::turnkey::config_file_path()?.display()
-    );
-    println!("API Key: {}", org_config.api_key_path.display());
-    println!("Operator Key: {}", org_config.operator_key_path.display());
-
-    Ok(())
+    print_success(&alias, &org_config, &api_key, &operator_key, &whoami)
 }
 
-/// Select an existing org or create a new one.
-/// Returns the alias and a clone of the org config.
-async fn select_or_create_org(
-    config: &mut Config,
-    org_arg: Option<&str>,
-    api_base_url_override: Option<&str>,
-) -> Result<(String, OrgConfig)> {
+fn prompt_for_org_plan(config: &Config) -> Result<OrgPlan> {
     debug!(
-        org_arg_present = org_arg.is_some(),
-        api_base_url_override_present = api_base_url_override.is_some(),
         configured_org_count = config.orgs.len(),
         active_org = ?config.active_org,
-        "selecting organization"
+        "prompting for organization plan"
     );
 
-    // If --org provided, try to find it by alias or ID
-    if let Some(org) = org_arg {
-        if let Some((alias, _)) = find_org(config, org) {
-            let alias = alias.clone();
-            debug!(org_alias = %alias, "selected existing organization from argument");
-            update_api_base_url_from_override(config, &alias, api_base_url_override);
-            let org_config = config.orgs.get(&alias).unwrap().clone();
-            return Ok((alias, org_config));
-        }
-        debug!("organization argument did not match configured organizations");
-        bail!(
-            "Organization '{org}' not found. Run `tvc login` without --org to set up a new organization."
-        );
-    }
-
-    // No --org provided — we'd need to prompt. Honor explicit opt-out.
-    prompts::bail_if_non_interactive("--org")?;
-
-    // No --org provided, check existing orgs
-    let org_count = config.orgs.len();
-
-    if org_count == 0 {
-        // No orgs configured - prompt for new org
+    if config.orgs.is_empty() {
         debug!("no organizations configured; prompting for new organization");
         println!("No organization configured.");
-        return prompt_for_new_org(config, api_base_url_override).await;
+        return prompt_for_new_org_inputs();
     }
 
-    // Show existing orgs in a `Select` list
     let mut options: Vec<OrgChoice> = config
         .orgs
         .iter()
@@ -146,16 +173,26 @@ async fn select_or_create_org(
     options.push(OrgChoice::New);
 
     match prompts::select("Select organization", options)? {
-        OrgChoice::Existing { alias, .. } => {
-            update_api_base_url_from_override(config, &alias, api_base_url_override);
-            let org_config = config.orgs.get(&alias).unwrap().clone();
-            Ok((alias, org_config))
-        }
-        OrgChoice::New => prompt_for_new_org(config, api_base_url_override).await,
+        OrgChoice::Existing { alias, .. } => Ok(OrgPlan::Existing(alias)),
+        OrgChoice::New => prompt_for_new_org_inputs(),
     }
 }
 
-/// Choices rendered by the org-selection `Select` widget.
+fn prompt_for_new_org_inputs() -> Result<OrgPlan> {
+    println!("You can find your Organization ID at: https://app.turnkey.com/dashboard/welcome");
+    println!();
+
+    let id = prompts::text("Organization ID", None)?;
+    if id.is_empty() {
+        bail!("Organization ID is required");
+    }
+
+    let alias = prompts::text("Organization alias", Some("default"))?;
+    debug!(org_alias = %alias, "user entered new organization inputs");
+
+    Ok(OrgPlan::New { id, alias })
+}
+
 enum OrgChoice {
     Existing { display: String, alias: String },
     New,
@@ -170,28 +207,28 @@ impl std::fmt::Display for OrgChoice {
     }
 }
 
-/// Prompt the user to enter a new organization ID and alias.
-async fn prompt_for_new_org(
-    config: &mut Config,
-    api_base_url_override: Option<&str>,
-) -> Result<(String, OrgConfig)> {
-    debug!("prompting for new organization");
-
-    println!("You can find your Organization ID at: https://app.turnkey.com/dashboard/welcome");
-    println!();
-
-    let org_id = prompts::text("Organization ID", None)?;
-    if org_id.is_empty() {
-        bail!("Organization ID is required");
+fn find_org<'a>(config: &'a Config, org: &str) -> Option<(&'a String, &'a OrgConfig)> {
+    if let Some((alias, org_config)) = config.orgs.get_key_value(org) {
+        return Some((alias, org_config));
     }
 
-    let alias = prompts::text("Organization alias", Some("default"))?;
-    debug!(org_alias = %alias, "user selected organization");
+    for (alias, org_config) in &config.orgs {
+        if org_config.id == org {
+            return Some((alias, org_config));
+        }
+    }
 
-    let api_base_url = new_org_api_base_url(api_base_url_override);
-    debug!(org_alias = %alias, %api_base_url, "adding prompted organization");
+    None
+}
 
-    config.add_org(&alias, org_id, api_base_url)?;
+fn generate_org(
+    config: &mut Config,
+    id: String,
+    alias: String,
+    api_base_url: String,
+) -> Result<(String, OrgConfig)> {
+    debug!(org_alias = %alias, %api_base_url, "adding organization");
+    config.add_org(&alias, id, api_base_url)?;
     let org_config = config.orgs.get(&alias).unwrap().clone();
     Ok((alias, org_config))
 }
@@ -215,20 +252,7 @@ fn update_api_base_url_from_override(
     }
 }
 
-/// Get an existing API key or generate a new one.
-/// If an API key exists, it's returned directly.
-/// If not, a new key is generated, saved, and the user is prompted to add it to the dashboard.
-async fn get_or_generate_api_key(org_config: &OrgConfig) -> Result<StoredApiKey> {
-    debug!(api_key_path = %org_config.api_key_path.display(), "resolving API key");
-
-    // Check if API key already exists
-    if let Some(api_key) = StoredApiKey::load(org_config).await? {
-        debug!("using existing API key");
-        println!("Using existing API key.");
-        return Ok(api_key);
-    }
-
-    // Generate new API key
+async fn generate_api_key(org_config: &OrgConfig) -> Result<StoredApiKey> {
     debug!("generating new API key");
     println!();
     println!("Generating API key...");
@@ -243,10 +267,8 @@ async fn get_or_generate_api_key(org_config: &OrgConfig) -> Result<StoredApiKey>
         curve: KeyCurve::P256,
     };
 
-    // Save the key
     api_key.save(org_config).await?;
 
-    // Display instructions
     println!();
     println!("API Key Generated!");
     println!();
@@ -258,23 +280,27 @@ async fn get_or_generate_api_key(org_config: &OrgConfig) -> Result<StoredApiKey>
     println!("  3. Paste the public key > Name it \"TVC CLI\" > Continue > Approve");
     println!();
 
-    wait_for_enter("Press Enter when done...")?;
-
     Ok(api_key)
 }
 
-/// Get an existing operator key or generate a new one.
-async fn get_or_generate_operator_key(org_config: &OrgConfig) -> Result<StoredQosOperatorKey> {
+fn wait_for_dashboard_registration() -> Result<()> {
+    print!("Press Enter when done...");
+    std::io::stdout().flush()?;
+
+    let mut input = String::new();
+    std::io::stdin().lock().read_line(&mut input)?;
+    Ok(())
+}
+
+async fn find_or_generate_operator_key(org_config: &OrgConfig) -> Result<StoredQosOperatorKey> {
     debug!(operator_key_path = %org_config.operator_key_path.display(), "resolving operator key");
 
-    // Check if operator key already exists
     if let Some(operator_key) = StoredQosOperatorKey::load(org_config).await? {
         debug!("using existing operator key");
         println!("Using existing operator key.");
         return Ok(operator_key);
     }
 
-    // Generate new operator key
     debug!("generating new operator key");
     println!();
     println!("Generating operator key...");
@@ -289,7 +315,6 @@ async fn get_or_generate_operator_key(org_config: &OrgConfig) -> Result<StoredQo
         private_key,
     };
 
-    // Save the key
     operator_key.save(org_config).await?;
 
     println!();
@@ -303,41 +328,6 @@ async fn get_or_generate_operator_key(org_config: &OrgConfig) -> Result<StoredQo
     Ok(operator_key)
 }
 
-/// Find an org by alias or by org ID.
-fn find_org<'a>(config: &'a Config, org: &str) -> Option<(&'a String, &'a OrgConfig)> {
-    // First try by alias
-    if let Some((alias, org_config)) = config.orgs.get_key_value(org) {
-        return Some((alias, org_config));
-    }
-
-    // Then try by org ID
-    for (alias, org_config) in &config.orgs {
-        if org_config.id == org {
-            return Some((alias, org_config));
-        }
-    }
-
-    None
-}
-
-/// Wait for the user to press Enter. Skips the blocking read when
-/// `TVC_NON_INTERACTIVE` is set so non-interactive callers don't stall after
-/// the dashboard-registration instructions.
-fn wait_for_enter(message: &str) -> Result<()> {
-    print!("{message}");
-    std::io::stdout().flush()?;
-
-    if prompts::non_interactive_forced() {
-        println!();
-        return Ok(());
-    }
-
-    let mut input = String::new();
-    std::io::stdin().lock().read_line(&mut input)?;
-    Ok(())
-}
-
-/// Result of a successful whoami verification.
 pub struct WhoamiResult {
     pub organization_name: String,
     pub organization_id: String,
@@ -345,8 +335,6 @@ pub struct WhoamiResult {
     pub user_id: String,
 }
 
-/// Verify credentials by calling the whoami endpoint.
-/// Returns Ok(WhoamiResult) if credentials are valid, Err otherwise.
 async fn verify_credentials(
     api_key: &StoredApiKey,
     org_id: &str,
@@ -354,18 +342,15 @@ async fn verify_credentials(
 ) -> Result<WhoamiResult> {
     debug!(%api_base_url, "verifying credentials with whoami");
 
-    // Build the API key stamper from stored keys
     let stamper = TurnkeyP256ApiKey::from_strings(&api_key.private_key, Some(&api_key.public_key))
         .context("failed to load API key")?;
 
-    // Build the client
     let client = turnkey_client::TurnkeyClient::builder()
         .api_key(stamper)
         .base_url(api_base_url)
         .build()
         .context("failed to build Turnkey client")?;
 
-    // Call whoami
     let request = GetWhoamiRequest {
         organization_id: org_id.to_string(),
     };
@@ -383,6 +368,35 @@ async fn verify_credentials(
         username: response.username,
         user_id: response.user_id,
     })
+}
+
+fn print_success(
+    alias: &str,
+    org_config: &OrgConfig,
+    api_key: &StoredApiKey,
+    operator_key: &StoredQosOperatorKey,
+    whoami: &WhoamiResult,
+) -> Result<()> {
+    println!();
+    println!("Successfully logged in!");
+    println!();
+    println!(
+        "Organization: {} ({})",
+        whoami.organization_name, whoami.organization_id
+    );
+    println!("User: {} ({})", whoami.username, whoami.user_id);
+    println!("Active Org: {alias}");
+    println!("API Key: {}", api_key.public_key);
+    println!("Operator Key: {}", operator_key.public_key);
+    println!();
+    println!(
+        "Config: {}",
+        crate::config::turnkey::config_file_path()?.display()
+    );
+    println!("API Key: {}", org_config.api_key_path.display());
+    println!("Operator Key: {}", org_config.operator_key_path.display());
+
+    Ok(())
 }
 
 #[cfg(test)]

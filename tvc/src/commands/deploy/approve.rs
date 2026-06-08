@@ -3,6 +3,7 @@
 use crate::config::turnkey::Config;
 use crate::operator_key::load_operator_pair;
 use crate::prompts;
+use crate::prompts::{bail_required_in_non_interactive, stdin_can_prompt};
 use crate::util::{read_file_to_string, write_file};
 use anyhow::{Context, anyhow, bail};
 use clap::{ArgGroup, Args as ClapArgs};
@@ -75,63 +76,190 @@ pub struct Args {
     pub skip_post: bool,
 }
 
-/// Run the approve deploy command.
-pub async fn run(args: Args) -> anyhow::Result<()> {
+struct PostApprovalPlan<'a, 'b> {
+    manifest_id: &'a str,
+    operator_id: &'b str,
+}
+
+struct PostTarget {
+    manifest_id: String,
+    operator_id: String,
+}
+
+struct ResolvedApproveInputs {
+    manifest: Manifest,
+    operator_seed: Option<PathBuf>,
+    approval_out: Option<PathBuf>,
+    dry_run: bool,
+    post_target: Option<PostTarget>,
+}
+
+pub async fn run(args: Args, is_non_interactive: bool) -> anyhow::Result<()> {
+    let inputs = if is_non_interactive {
+        build_inputs_non_interactive(args).await?
+    } else {
+        build_inputs_interactive(args).await?
+    };
+
+    run_with_resolved_inputs(inputs).await
+}
+
+async fn build_inputs_interactive(args: Args) -> anyhow::Result<ResolvedApproveInputs> {
     let do_prompt_user = !args.dangerous_skip_interactive;
 
-    // Guard: Bail fast before fetching the manifest if we cannot prompt the user
-    if do_prompt_user {
-        prompts::bail_if_non_interactive("--dangerous-skip-interactive")?;
+    // Guard: bail fast before fetching the manifest if review prompts are
+    // required but the caller has no TTY to answer them.
+    if do_prompt_user && !stdin_can_prompt() {
+        bail_required_in_non_interactive("--dangerous-skip-interactive")?;
     }
 
-    // Fetch manifest - track manifest_id if fetched from API
-    let (manifest, fetched_manifest_id) = match (&args.manifest, &args.deploy_id) {
-        (Some(path), _) => (read_manifest_from_path(path).await?, None),
-        (_, Some(deploy_id)) => {
-            let (manifest, manifest_id) = fetch_manifest_from_deploy(deploy_id).await?;
-            (manifest, Some(manifest_id))
-        }
-        (None, None) => bail!("a manifest source is required"),
-    };
+    let (manifest, fetched_manifest_id) = load_manifest(&args).await?;
 
     if do_prompt_user {
         interactive_approve(&manifest)?;
     }
 
-    if args.dry_run {
+    let post_target = if !args.dry_run && !args.skip_post {
+        let manifest_id = resolve_manifest_id(&args, fetched_manifest_id.as_deref())?;
+        let operator_id = match &args.operator_id {
+            Some(id) => id.clone(),
+            None => {
+                let saved_ids = load_saved_operator_ids().await?;
+                match &*saved_ids {
+                    [] => bail!(
+                        "--operator-id is required to post approval to API. \
+                         No saved operator IDs found. \
+                         Use --skip-post to only generate the approval locally."
+                    ),
+                    [id] => id.clone(),
+                    _ if stdin_can_prompt() => prompts::select(
+                        "Select approving operator",
+                        saved_ids.iter().map(String::as_str).collect::<Vec<_>>(),
+                    )?
+                    .to_string(),
+                    _ => bail!(
+                        "--operator-id is required to post approval to API when multiple saved operator IDs are available"
+                    ),
+                }
+            }
+        };
+        Some(PostTarget {
+            manifest_id,
+            operator_id,
+        })
+    } else {
+        None
+    };
+
+    Ok(ResolvedApproveInputs {
+        manifest,
+        operator_seed: args.operator_seed,
+        approval_out: args.approval_out,
+        dry_run: args.dry_run,
+        post_target,
+    })
+}
+
+async fn build_inputs_non_interactive(args: Args) -> anyhow::Result<ResolvedApproveInputs> {
+    if !args.dangerous_skip_interactive {
+        bail_required_in_non_interactive("--dangerous-skip-interactive")?;
+    }
+
+    let (manifest, fetched_manifest_id) = load_manifest(&args).await?;
+
+    let post_target = if !args.dry_run && !args.skip_post {
+        let manifest_id = resolve_manifest_id(&args, fetched_manifest_id.as_deref())?;
+        let operator_id = match &args.operator_id {
+            Some(id) => id.clone(),
+            None => {
+                let saved_ids = load_saved_operator_ids().await?;
+                match &*saved_ids {
+                    [] => bail!(
+                        "--operator-id is required to post approval to API. \
+                         No saved operator IDs found. \
+                         Use --skip-post to only generate the approval locally."
+                    ),
+                    [id] => id.clone(),
+                    _ => bail!(
+                        "--operator-id is required to post approval to API when multiple saved operator IDs are available"
+                    ),
+                }
+            }
+        };
+        Some(PostTarget {
+            manifest_id,
+            operator_id,
+        })
+    } else {
+        None
+    };
+
+    Ok(ResolvedApproveInputs {
+        manifest,
+        operator_seed: args.operator_seed,
+        approval_out: args.approval_out,
+        dry_run: args.dry_run,
+        post_target,
+    })
+}
+
+async fn run_with_resolved_inputs(inputs: ResolvedApproveInputs) -> anyhow::Result<()> {
+    if inputs.dry_run {
         println!("Dry run complete. No approval generated.");
         return Ok(());
     }
 
-    let pair: Box<dyn crate::pair::Pair> =
-        Box::new(load_operator_pair(args.operator_seed.as_deref()).await?);
+    let approval = sign_and_output(
+        inputs.operator_seed.as_deref(),
+        inputs.approval_out.as_deref(),
+        &inputs.manifest,
+    )
+    .await?;
 
-    let approval = generate_approval(pair, &manifest).await?;
+    if let Some(target) = inputs.post_target {
+        let plan = PostApprovalPlan {
+            manifest_id: target.manifest_id.as_str(),
+            operator_id: target.operator_id.as_str(),
+        };
+        post_approval_to_api(plan, &approval).await?;
+    }
+
+    Ok(())
+}
+
+async fn load_manifest(args: &Args) -> anyhow::Result<(Manifest, Option<String>)> {
+    match (&args.manifest, &args.deploy_id) {
+        (Some(path), _) => Ok((read_manifest_from_path(path).await?, None)),
+        (_, Some(deploy_id)) => {
+            let (manifest, manifest_id) = fetch_manifest_from_deploy(deploy_id).await?;
+            Ok((manifest, Some(manifest_id)))
+        }
+        (None, None) => bail!("a manifest source is required"),
+    }
+}
+
+async fn sign_and_output(
+    operator_seed: Option<&Path>,
+    approval_out: Option<&Path>,
+    manifest: &Manifest,
+) -> anyhow::Result<Approval> {
+    let pair: Box<dyn crate::pair::Pair> = Box::new(load_operator_pair(operator_seed).await?);
+
+    let approval = generate_approval(pair, manifest).await?;
     let json = serde_json::to_string_pretty(&approval)?;
 
-    // Write to file or stdout
-    if let Some(ref path) = args.approval_out {
+    if let Some(path) = approval_out {
         write_file(path, &json).await?;
         println!("Approval written to: {}", path.display());
     } else {
         println!("{json}");
     }
 
-    // Post to API if not skipped
-    if !args.skip_post {
-        post_approval_to_api(&args, &approval, fetched_manifest_id.as_deref()).await?;
-    }
-
-    Ok(())
+    Ok(approval)
 }
 
-async fn post_approval_to_api(
-    args: &Args,
-    approval: &Approval,
-    fetched_manifest_id: Option<&str>,
-) -> anyhow::Result<()> {
-    // Use fetched manifest_id (from --deploy-id) or fall back to --manifest-id arg
-    let manifest_id = fetched_manifest_id
+fn resolve_manifest_id(args: &Args, fetched_manifest_id: Option<&str>) -> anyhow::Result<String> {
+    fetched_manifest_id
         .map(|s| s.to_string())
         .or_else(|| args.manifest_id.clone())
         .ok_or_else(|| {
@@ -139,57 +267,38 @@ async fn post_approval_to_api(
                 "--manifest-id is required to post approval to API (or use --deploy-id). \
                  Use --skip-post to only generate the approval locally."
             )
-        })?;
+        })
+}
 
-    let operator_id = match &args.operator_id {
-        Some(id) => id.clone(),
-        None => {
-            let config = Config::load().await?;
-            let saved_ids = config.get_last_operator_ids().ok_or_else(|| {
-                anyhow!(
-                    "--operator-id is required to post approval to API. \
-                     No saved operator IDs found. \
-                     Use --skip-post to only generate the approval locally."
-                )
-            })?;
+async fn load_saved_operator_ids() -> anyhow::Result<Vec<String>> {
+    let config = Config::load().await?;
+    Ok(config.get_last_operator_ids().unwrap_or_default())
+}
 
-            match saved_ids.len() {
-                0 => bail!("No operator IDs available"),
-                1 => saved_ids[0].clone(),
-                _ if prompts::is_interactive() => {
-                    prompts::select("Select approving operator", saved_ids.clone())?
-                }
-                // Non-interactive with multiple saved IDs: pick the first entry.
-                // Users who want a specific operator should pass --operator-id.
-                _ => saved_ids[0].clone(),
-            }
-        }
-    };
-
+async fn post_approval_to_api(
+    plan: PostApprovalPlan<'_, '_>,
+    approval: &Approval,
+) -> anyhow::Result<()> {
     println!();
     println!("Posting approval to Turnkey...");
 
-    // Build authenticated client
     let auth = crate::client::build_client().await?;
 
-    // Convert local approval to API format
     let tvc_approval = TvcManifestApproval {
-        operator_id: operator_id.clone(),
+        operator_id: plan.operator_id.into(),
         signature: hex::encode(&approval.signature),
     };
 
     let intent = CreateTvcManifestApprovalsIntent {
-        manifest_id: manifest_id.clone(),
+        manifest_id: plan.manifest_id.into(),
         approvals: vec![tvc_approval],
     };
 
-    // Get timestamp
     let timestamp_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .context("system time before unix epoch")?
         .as_millis();
 
-    // Post the approval
     let result = auth
         .client
         .create_tvc_manifest_approvals(auth.org_id, timestamp_ms, intent)
@@ -200,8 +309,8 @@ async fn post_approval_to_api(
     println!("Approval posted successfully!");
     println!();
     println!("Approval IDs: {:?}", result.result.approval_ids);
-    println!("Manifest ID: {manifest_id}");
-    println!("Operator ID: {operator_id}");
+    println!("Manifest ID: {}", plan.manifest_id);
+    println!("Operator ID: {}", plan.operator_id);
 
     Ok(())
 }
