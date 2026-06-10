@@ -25,7 +25,8 @@ fn dangerous_approve_with_file() {
         .arg("--dangerous-skip-interactive")
         .arg("--skip-post")
         .assert()
-        .success();
+        .success()
+        .stdout(predicate::str::contains("Manifest approval quorum reached").not());
 }
 
 #[test]
