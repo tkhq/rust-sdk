@@ -1,5 +1,6 @@
 //! Deploy create command - creates a deployment from a config file or CLI flags.
 
+use super::format_port_summary;
 use crate::client::build_client;
 use crate::config::deploy::{DeployConfig, DeployConfigValidationErrors};
 use crate::config::turnkey::Config;
@@ -123,11 +124,16 @@ struct Overrides {
     )]
     pub pivot_args: Vec<String>,
 
-    /// Override the healthCheckPort field.
+    /// Container port TVC probes to decide whether the deployment is healthy.
+    ///
+    /// Use the same value as --public-ingress-port unless your binary exposes
+    /// health checks on a separate listener.
     #[arg(long, env = "TVC_HEALTH_CHECK_PORT")]
     pub health_check_port: Option<u16>,
 
-    /// Override the publicIngressPort field.
+    /// Container port that receives public app traffic.
+    ///
+    /// This is usually the port your server listens on for external requests.
     #[arg(long, env = "TVC_PUBLIC_INGRESS_PORT")]
     pub public_ingress_port: Option<u16>,
 }
@@ -363,6 +369,8 @@ async fn run_with_resolved_inputs(inputs: ResolvedDeployInputs) -> Result<()> {
     let deploy_config = inputs.config;
 
     println!("Creating deployment for app '{}'...", deploy_config.app_id);
+    println!("{}", format_port_summary(&deploy_config));
+    println!();
 
     let auth = build_client().await?;
 

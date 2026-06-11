@@ -1,5 +1,6 @@
 //! Deploy init command - generates a template config file.
 
+use super::PORT_GUIDANCE;
 use crate::config::deploy::DeployConfig;
 use crate::config::turnkey;
 use crate::prompts::{bail_interactive_conflicts_with_non_interactive, ensure_stdin_is_tty};
@@ -74,6 +75,8 @@ async fn execute(args: Args) -> Result<()> {
         println!("Edit the file to fill in your values, then run:");
         println!("  tvc deploy create --config-file {}", output.display());
     }
+    println!();
+    println!("{PORT_GUIDANCE}");
 
     Ok(())
 }

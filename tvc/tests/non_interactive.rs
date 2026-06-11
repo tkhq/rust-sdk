@@ -378,7 +378,11 @@ fn deploy_init_template_does_not_require_readable_existing_config() {
         .arg("--output")
         .arg(&output)
         .assert()
-        .success();
+        .success()
+        .stdout(predicate::str::contains("Port guidance:"))
+        .stdout(predicate::str::contains(
+            "Use the same port for both unless your binary exposes health checks",
+        ));
 
     assert!(output.exists(), "deploy init should write the template");
 }
