@@ -153,7 +153,10 @@ enum DeployCommands {
     /// Get the status of a deployment.
     Status(commands::deploy::status::Args),
     /// Create a new deployment from a config file.
-    #[command(long_about = commands::deploy::create::LONG_ABOUT)]
+    #[command(
+        long_about = commands::deploy::create::LONG_ABOUT,
+        after_help = commands::deploy::PORT_GUIDANCE
+    )]
     Create(commands::deploy::create::Args),
     /// Generate a template deployment configuration file.
     Init(commands::deploy::init::Args),

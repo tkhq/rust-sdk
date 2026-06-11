@@ -40,6 +40,24 @@ fn deploy_create_help_documents_env_only_usage() {
 }
 
 #[test]
+fn deploy_create_help_explains_deployment_ports() {
+    cargo_bin_cmd!("tvc")
+        .arg("deploy")
+        .arg("create")
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Port guidance:"))
+        .stdout(predicate::str::contains(
+            "publicIngressPort is the port inside your container",
+        ))
+        .stdout(predicate::str::contains(
+            "healthCheckPort is the port TVC probes",
+        ))
+        .stdout(predicate::str::contains("Use the same port for both"));
+}
+
+#[test]
 fn deploy_create_help_leaves_auth_details_to_global_docs() {
     cargo_bin_cmd!("tvc")
         .arg("deploy")
