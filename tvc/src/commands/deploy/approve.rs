@@ -12,13 +12,19 @@ use qos_core::protocol::services::boot::Approval;
 use qos_core::protocol::services::boot::{
     Manifest, ManifestSet, Namespace, NitroConfig, PivotConfig, QuorumMember, ShareSet,
 };
+use std::collections::HashSet;
 use std::fmt::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tracing::debug;
+use turnkey_client::generated::external::data::v1::TvcDeployment;
 use turnkey_client::generated::{
     CreateTvcManifestApprovalsIntent, GetTvcDeploymentRequest, TvcManifestApproval,
 };
+
+const QUORUM_REACHED_MESSAGE: &str =
+    "Manifest approval quorum reached. Your deployment will be available soon.";
 
 /// Cryptographically approve a QOS manifest for a deployment with your operator's manifest set key.
 #[derive(Debug, ClapArgs)]
@@ -76,14 +82,16 @@ pub struct Args {
     pub skip_post: bool,
 }
 
-struct PostApprovalPlan<'a, 'b> {
+struct PostApprovalPlan<'a> {
     manifest_id: &'a str,
-    operator_id: &'b str,
+    operator_id: &'a str,
+    deploy_id: Option<&'a str>,
 }
 
 struct PostTarget {
     manifest_id: String,
     operator_id: String,
+    deploy_id: Option<String>,
 }
 
 struct ResolvedApproveInputs {
@@ -146,6 +154,7 @@ async fn build_inputs_interactive(args: Args) -> anyhow::Result<ResolvedApproveI
         Some(PostTarget {
             manifest_id,
             operator_id,
+            deploy_id: args.deploy_id.clone(),
         })
     } else {
         None
@@ -189,6 +198,7 @@ async fn build_inputs_non_interactive(args: Args) -> anyhow::Result<ResolvedAppr
         Some(PostTarget {
             manifest_id,
             operator_id,
+            deploy_id: args.deploy_id.clone(),
         })
     } else {
         None
@@ -220,6 +230,7 @@ async fn run_with_resolved_inputs(inputs: ResolvedApproveInputs) -> anyhow::Resu
         let plan = PostApprovalPlan {
             manifest_id: target.manifest_id.as_str(),
             operator_id: target.operator_id.as_str(),
+            deploy_id: target.deploy_id.as_deref(),
         };
         post_approval_to_api(plan, &approval).await?;
     }
@@ -276,7 +287,7 @@ async fn load_saved_operator_ids() -> anyhow::Result<Vec<String>> {
 }
 
 async fn post_approval_to_api(
-    plan: PostApprovalPlan<'_, '_>,
+    plan: PostApprovalPlan<'_>,
     approval: &Approval,
 ) -> anyhow::Result<()> {
     println!();
@@ -301,7 +312,7 @@ async fn post_approval_to_api(
 
     let result = auth
         .client
-        .create_tvc_manifest_approvals(auth.org_id, timestamp_ms, intent)
+        .create_tvc_manifest_approvals(auth.org_id.clone(), timestamp_ms, intent)
         .await
         .context("failed to post manifest approval")?;
 
@@ -312,7 +323,64 @@ async fn post_approval_to_api(
     println!("Manifest ID: {}", plan.manifest_id);
     println!("Operator ID: {}", plan.operator_id);
 
+    if let Some(deploy_id) = plan.deploy_id {
+        let request = GetTvcDeploymentRequest {
+            organization_id: auth.org_id.clone(),
+            deployment_id: deploy_id.to_string(),
+        };
+
+        match auth.client.get_tvc_deployment(request).await {
+            Ok(response) => {
+                println!();
+
+                if response
+                    .tvc_deployment
+                    .as_ref()
+                    .is_some_and(manifest_approval_quorum_reached)
+                {
+                    println!("{QUORUM_REACHED_MESSAGE}");
+                } else {
+                    println!(
+                        "Your approval has been posted. Deployment requires additional manifest approvals before it can be deployed on TVC."
+                    );
+                };
+            }
+            Err(error) => {
+                debug!(
+                    deploy_id,
+                    %error,
+                    "failed to fetch deployment after posting manifest approval"
+                );
+            }
+        }
+    }
+
     Ok(())
+}
+
+fn manifest_approval_quorum_reached(deployment: &TvcDeployment) -> bool {
+    let Some(manifest_set) = &deployment.manifest_set else {
+        return false;
+    };
+
+    if manifest_set.threshold == 0 {
+        return false;
+    }
+
+    let mut operator_ids = HashSet::new();
+    for approval in &deployment.manifest_approvals {
+        let Some(operator) = &approval.operator else {
+            return false;
+        };
+
+        if operator.id.is_empty() {
+            return false;
+        }
+
+        operator_ids.insert(operator.id.as_str());
+    }
+
+    operator_ids.len() >= manifest_set.threshold as usize
 }
 
 async fn generate_approval(
@@ -494,10 +562,71 @@ async fn fetch_manifest_from_deploy(deploy_id: &str) -> anyhow::Result<(Manifest
 #[cfg(test)]
 mod tests {
     use super::*;
+    use turnkey_client::generated::external::data::v1::{
+        TvcOperator, TvcOperatorApproval, TvcOperatorSet,
+    };
 
     fn fixture_manifest() -> Manifest {
         serde_json::from_str(include_str!("../../../fixtures/manifest.json"))
             .expect("fixture manifest should parse")
+    }
+
+    fn test_operator(id: &str) -> TvcOperator {
+        TvcOperator {
+            id: id.to_string(),
+            name: format!("operator-{id}"),
+            public_key: format!("public-key-{id}"),
+            created_at: None,
+            updated_at: None,
+        }
+    }
+
+    fn test_approval(index: usize, operator_id: Option<&str>) -> TvcOperatorApproval {
+        TvcOperatorApproval {
+            id: format!("approval-{index}"),
+            manifest_id: "manifest-123".to_string(),
+            operator: operator_id.map(test_operator),
+            approval: vec![],
+            created_at: None,
+            updated_at: None,
+        }
+    }
+
+    fn test_deployment(
+        manifest_threshold: Option<u32>,
+        approval_operator_ids: &[Option<&str>],
+    ) -> TvcDeployment {
+        let operators = approval_operator_ids
+            .iter()
+            .filter_map(|operator_id| operator_id.map(test_operator))
+            .collect();
+
+        TvcDeployment {
+            id: "deployment-123".to_string(),
+            organization_id: "org-123".to_string(),
+            app_id: "app-123".to_string(),
+            manifest_set: manifest_threshold.map(|threshold| TvcOperatorSet {
+                id: "manifest-set-123".to_string(),
+                name: "manifest-set".to_string(),
+                organization_id: "org-123".to_string(),
+                operators,
+                threshold,
+                created_at: None,
+                updated_at: None,
+            }),
+            share_set: None,
+            manifest: None,
+            manifest_approvals: approval_operator_ids
+                .iter()
+                .enumerate()
+                .map(|(index, operator_id)| test_approval(index, *operator_id))
+                .collect(),
+            qos_version: "qos-v1".to_string(),
+            pivot_container: None,
+            created_at: None,
+            updated_at: None,
+            delete: false,
+        }
     }
 
     #[test]
@@ -540,5 +669,54 @@ mod tests {
         assert!(rendered.contains("operator-alice"));
         assert!(rendered.contains("operator-bob"));
         assert!(rendered.contains("operator-charlie"));
+    }
+
+    #[test]
+    fn manifest_approval_quorum_reached_is_false_below_threshold() {
+        let deployment = test_deployment(Some(2), &[Some("operator-1")]);
+
+        assert!(!manifest_approval_quorum_reached(&deployment));
+    }
+
+    #[test]
+    fn manifest_approval_quorum_reached_is_true_at_threshold() {
+        let deployment = test_deployment(Some(2), &[Some("operator-1"), Some("operator-2")]);
+
+        assert!(manifest_approval_quorum_reached(&deployment));
+    }
+
+    #[test]
+    fn manifest_approval_quorum_counts_distinct_operators() {
+        let deployment = test_deployment(Some(2), &[Some("operator-1"), Some("operator-1")]);
+
+        assert!(!manifest_approval_quorum_reached(&deployment));
+    }
+
+    #[test]
+    fn manifest_approval_quorum_is_false_without_manifest_set() {
+        let deployment = test_deployment(None, &[Some("operator-1"), Some("operator-2")]);
+
+        assert!(!manifest_approval_quorum_reached(&deployment));
+    }
+
+    #[test]
+    fn manifest_approval_quorum_is_false_with_zero_threshold() {
+        let deployment = test_deployment(Some(0), &[Some("operator-1")]);
+
+        assert!(!manifest_approval_quorum_reached(&deployment));
+    }
+
+    #[test]
+    fn manifest_approval_quorum_is_false_when_approval_lacks_operator() {
+        let deployment = test_deployment(Some(2), &[Some("operator-1"), None]);
+
+        assert!(!manifest_approval_quorum_reached(&deployment));
+    }
+
+    #[test]
+    fn manifest_approval_quorum_is_false_when_operator_id_is_empty() {
+        let deployment = test_deployment(Some(1), &[Some("")]);
+
+        assert!(!manifest_approval_quorum_reached(&deployment));
     }
 }
