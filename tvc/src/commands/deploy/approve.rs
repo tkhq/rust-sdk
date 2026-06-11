@@ -331,14 +331,19 @@ async fn post_approval_to_api(
 
         match auth.client.get_tvc_deployment(request).await {
             Ok(response) => {
+                println!();
+
                 if response
                     .tvc_deployment
                     .as_ref()
                     .is_some_and(manifest_approval_quorum_reached)
                 {
-                    println!();
                     println!("{QUORUM_REACHED_MESSAGE}");
-                }
+                } else {
+                    println!(
+                        "Your approval has been posted. Deployment requires additional manifest approvals before it can be deployed on TVC."
+                    );
+                };
             }
             Err(error) => {
                 debug!(
