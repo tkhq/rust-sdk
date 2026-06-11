@@ -24,7 +24,7 @@ use turnkey_client::generated::{
 };
 
 const QUORUM_REACHED_MESSAGE: &str =
-    "Manifest approval quorum reached. All done. Your deployment should go live soon.";
+    "Manifest approval quorum reached. Your deployment will be available soon.";
 
 /// Cryptographically approve a QOS manifest for a deployment with your operator's manifest set key.
 #[derive(Debug, ClapArgs)]
