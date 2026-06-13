@@ -37,9 +37,14 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         .manifest
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("manifest not found in deployment"))?;
+    let app = crate::client::fetch_tvc_app(&auth, &deployment.app_id).await?;
 
     println!("Deployment: {}", deployment.id);
     println!("App ID: {}", deployment.app_id);
+    println!(
+        "{}",
+        crate::commands::display::egress_enabled_line(app.enable_egress)
+    );
     println!("Manifest ID: {}", manifest.id);
     println!("QOS Version: {}", deployment.qos_version);
     println!("{}", format_marked_for_deletion(&deployment));

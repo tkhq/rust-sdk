@@ -49,15 +49,27 @@ fn filter_by_name(apps: &mut Vec<TvcApp>, name: Option<&str>) {
 }
 
 fn render_app(app: &TvcApp) {
-    println!("Name: {}", app.name);
-    println!("ID: {}", app.id);
-    println!("Quorum Public Key: {}", app.quorum_public_key);
-    let live = app.live_deployment_id.as_deref().unwrap_or("(none)");
-    println!("Live Deployment: {live}");
-    if !app.public_domain.is_empty() {
-        println!("Public Domain: {}", app.public_domain);
+    for line in render_app_lines(app) {
+        println!("{line}");
     }
-    println!("{}", "─".repeat(40));
+}
+
+fn render_app_lines(app: &TvcApp) -> Vec<String> {
+    let live = app.live_deployment_id.as_deref().unwrap_or("(none)");
+    let mut lines = vec![
+        format!("Name: {}", app.name),
+        format!("ID: {}", app.id),
+        format!("Quorum Public Key: {}", app.quorum_public_key),
+        format!("Live Deployment: {live}"),
+        crate::commands::display::egress_enabled_line(app.enable_egress),
+    ];
+
+    if !app.public_domain.is_empty() {
+        lines.push(format!("Public Domain: {}", app.public_domain));
+    }
+
+    lines.push("─".repeat(40));
+    lines
 }
 
 #[cfg(test)]
@@ -144,5 +156,13 @@ mod tests {
             app.live_deployment_id.as_deref().unwrap_or("(none)"),
             "(none)"
         );
+    }
+
+    #[test]
+    fn app_render_lines_include_egress_status() {
+        let mut app = make_app("my-app");
+        app.enable_egress = true;
+
+        assert!(render_app_lines(&app).contains(&"Egress Enabled: yes".to_string()));
     }
 }

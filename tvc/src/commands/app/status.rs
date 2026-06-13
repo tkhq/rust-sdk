@@ -33,9 +33,14 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
             .app_status
             .ok_or_else(|| anyhow!("no status returned for app: {}", args.app_id))?,
     );
+    let app = crate::client::fetch_tvc_app(&auth, &args.app_id).await?;
 
     println!("App ID: {}", app_status.app_id);
     println!("Targeted Deployment: {}", app_status.targeted_deployment_id);
+    println!(
+        "{}",
+        crate::commands::display::egress_enabled_line(app.enable_egress)
+    );
 
     if app_status.deployments.is_empty() {
         println!();

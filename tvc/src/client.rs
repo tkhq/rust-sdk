@@ -4,6 +4,8 @@ use crate::config::turnkey::{Config, StoredApiKey};
 use anyhow::{Context, Result, anyhow, bail};
 use tracing::debug;
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
+use turnkey_client::generated::external::data::v1::TvcApp;
+use turnkey_client::generated::GetTvcAppRequest;
 use turnkey_client::TurnkeyClient;
 
 /// Number of *required* auth env vars: org_id, api_key_public, api_key_private.
@@ -51,6 +53,21 @@ pub async fn build_client() -> Result<AuthenticatedClient> {
         };
 
     build_authed_client(&org_id, &api_base_url, &api_key_public, &api_key_private)
+}
+
+pub async fn fetch_tvc_app(auth: &AuthenticatedClient, app_id: &str) -> Result<TvcApp> {
+    let response = auth
+        .client
+        .get_tvc_app(GetTvcAppRequest {
+            organization_id: auth.org_id.clone(),
+            tvc_app_id: app_id.to_string(),
+        })
+        .await
+        .context("failed to fetch app")?;
+
+    response
+        .tvc_app
+        .ok_or_else(|| anyhow!("app not found: {app_id}"))
 }
 
 async fn load_credentials_from_config() -> Result<(String, String, String, String)> {

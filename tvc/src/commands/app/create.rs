@@ -180,7 +180,7 @@ fn build_create_tvc_app_intent(app_config: &AppConfig) -> CreateTvcAppIntent {
             .map(to_tvc_operator_set_params),
         share_set_id: app_config.share_set_id.clone(),
         share_set_params: share_set_params.as_ref().map(to_tvc_operator_set_params),
-        enable_egress: app_config.enable_egress,
+        enable_egress: Some(app_config.enable_egress),
         enable_debug_mode_deployments: app_config.dangerous_enable_debug_mode_deployments.into(),
     }
 }
@@ -218,7 +218,7 @@ mod tests {
         AppConfig {
             name: "test-app".to_string(),
             quorum_public_key: KNOWN_QUORUM_KEY.to_string(),
-            enable_egress: Some(false),
+            enable_egress: false,
             manifest_set_id: None,
             manifest_set_params: Some(OperatorSetParams {
                 name: "manifest-set".to_string(),
@@ -244,6 +244,16 @@ mod tests {
         assert_eq!(share_set_params.threshold, 2);
         assert_eq!(share_set_params.new_operators.len(), 2);
         assert!(share_set_params.existing_operator_ids.is_empty());
+    }
+
+    #[test]
+    fn build_intent_sends_enable_egress() {
+        let mut config = valid_config();
+        config.enable_egress = true;
+
+        let intent = build_create_tvc_app_intent(&config);
+
+        assert_eq!(intent.enable_egress, Some(true));
     }
 
     #[test]

@@ -8,5 +8,6 @@ pub mod app;
 pub mod app_status;
 pub mod confirmation;
 pub mod deploy;
+pub mod display;
 pub mod keys;
 pub mod login;

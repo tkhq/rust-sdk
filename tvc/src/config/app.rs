@@ -16,7 +16,7 @@ pub struct AppConfig {
     pub name: String,
     pub quorum_public_key: String,
     #[serde(default)]
-    pub enable_egress: Option<bool>,
+    pub enable_egress: bool,
     #[serde(default)]
     pub manifest_set_id: Option<String>,
     #[serde(default)]
@@ -72,7 +72,7 @@ impl AppConfig {
         Self {
             name: "<FILL_IN_APP_NAME>".to_string(),
             quorum_public_key: KNOWN_QUORUM_KEY.to_string(),
-            enable_egress: Some(false),
+            enable_egress: false,
             manifest_set_id: None,
             manifest_set_params: Some(OperatorSetParams {
                 name: "<FILL_IN_MANIFEST_SET_NAME>".to_string(),
@@ -356,7 +356,14 @@ mod tests {
         json["enableEgress"] = json!(true);
         let config: AppConfig = serde_json::from_value(json).unwrap();
 
-        assert_eq!(config.enable_egress, Some(true));
+        assert!(config.enable_egress);
+    }
+
+    #[test]
+    fn config_defaults_enable_egress_to_false() {
+        let config: AppConfig = serde_json::from_value(valid_config_json()).unwrap();
+
+        assert!(!config.enable_egress);
     }
 
     #[test]
