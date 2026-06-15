@@ -39,6 +39,9 @@ pub enum StamperError {
 
     #[error("cannot decode hex: {0}")]
     HexDecode(String),
+
+    #[error("cannot create WebAuthn stamp: {0}")]
+    WebAuthn(String),
 }
 
 /// A stamp header to attach to an HTTP request.

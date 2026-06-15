@@ -3,6 +3,7 @@
 use crate::config::turnkey::{
     API_BASE_URL_PROD, Config, KeyCurve, OrgConfig, StoredApiKey, StoredQosOperatorKey,
 };
+use crate::passkey::PasskeyTransport;
 use crate::prompts::{self, error_required_in_non_interactive};
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Args as ClapArgs;
@@ -23,6 +24,12 @@ pub struct Args {
     /// Turnkey API base URL. Defaults to production for newly configured orgs.
     #[arg(long, env = "TVC_API_BASE_URL", value_name = "URL")]
     pub api_base_url: Option<String>,
+    /// Authenticate with a passkey/WebAuthn authenticator instead of a local API key.
+    #[arg(long)]
+    pub passkey: bool,
+    /// WebAuthn transport to use with --passkey.
+    #[arg(long, value_enum, default_value_t = PasskeyTransport::Auto)]
+    pub passkey_transport: PasskeyTransport,
 }
 
 enum OrgPlan {
@@ -49,6 +56,10 @@ pub async fn run(args: Args, is_non_interactive: bool) -> Result<()> {
         "running login command"
     );
 
+    if args.passkey {
+        return run_passkey_login(args, is_non_interactive).await;
+    }
+
     let config = Config::load().await?;
 
     let plan = if is_non_interactive {
@@ -58,6 +69,17 @@ pub async fn run(args: Args, is_non_interactive: bool) -> Result<()> {
     };
 
     execute_login(config, plan).await
+}
+
+async fn run_passkey_login(args: Args, is_non_interactive: bool) -> Result<()> {
+    if is_non_interactive {
+        bail!("passkey authentication requires an interactive terminal; remove --non-interactive");
+    }
+
+    bail!(
+        "passkey login via {} transport is not available in this build; native/browser WebAuthn ceremony support is required",
+        args.passkey_transport
+    )
 }
 
 fn build_login_plan_interactive(args: Args, config: &Config) -> Result<LoginPlan> {
@@ -448,6 +470,7 @@ mod tests {
                     api_key_path: PathBuf::from("api_key.json"),
                     operator_key_path: PathBuf::from("operator.json"),
                     api_base_url: api_base_url.to_string(),
+                    passkey_session_path: None,
                 },
             )]),
             last_created_app_id: HashMap::new(),

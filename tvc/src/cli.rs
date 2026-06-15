@@ -103,6 +103,7 @@ impl Cli {
                     commands::keys::re_encrypt_share::run(args).await
                 }
             },
+            Commands::Auth(args) => commands::auth::run(args, non_interactive).await,
             Commands::Login(args) => commands::login::run(args, non_interactive).await,
         }
     }
@@ -112,6 +113,8 @@ impl Cli {
 enum Commands {
     /// Authenticate with Turnkey and set up local credentials.
     Login(commands::login::Args),
+    /// Manage authentication methods.
+    Auth(commands::auth::Args),
     /// Manage deployments.
     Deploy {
         #[command(subcommand)]
@@ -133,6 +136,7 @@ impl Commands {
     fn name(&self) -> &'static str {
         match self {
             Commands::Login(_) => "login",
+            Commands::Auth(_) => "auth",
             Commands::Deploy { command } => command.name(),
             Commands::App { command } => command.name(),
             Commands::Keys { command } => command.name(),

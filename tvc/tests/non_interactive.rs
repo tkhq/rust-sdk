@@ -44,6 +44,7 @@ fn write_config(
                 api_key_path,
                 operator_key_path,
                 api_base_url: LOCAL_API_BASE_URL.to_string(),
+                passkey_session_path: None,
             },
         )]),
         last_created_app_id: HashMap::new(),

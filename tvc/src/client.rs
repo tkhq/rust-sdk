@@ -1,9 +1,9 @@
 //! Client utilities for authenticated API calls.
 
-use crate::config::turnkey::{Config, StoredApiKey};
+use crate::config::turnkey::{Config, StoredApiKey, StoredPasskeySession};
 use anyhow::{Context, Result, anyhow, bail};
 use tracing::debug;
-use turnkey_api_key_stamper::TurnkeyP256ApiKey;
+use turnkey_api_key_stamper::{Stamp, StampHeader, StamperError, TurnkeyP256ApiKey};
 use turnkey_client::TurnkeyClient;
 
 /// Number of *required* auth env vars: org_id, api_key_public, api_key_private.
@@ -18,11 +18,29 @@ const DEFAULT_API_BASE_URL: &str = "https://api.turnkey.com";
 /// An authenticated Turnkey client with organization context.
 pub struct AuthenticatedClient {
     /// The Turnkey API client.
-    pub client: TurnkeyClient<TurnkeyP256ApiKey>,
+    pub client: TurnkeyClient<TvcStamper>,
     /// The organization ID for API calls.
     pub org_id: String,
     /// The API base URL for the active org. Used for environment-specific behavior.
     pub api_base_url: String,
+}
+
+/// Authentication mechanisms supported by TVC after config resolution.
+pub enum TvcStamper {
+    ApiKey(TurnkeyP256ApiKey),
+    PasskeySession(StoredPasskeySession),
+}
+
+impl Stamp for TvcStamper {
+    fn stamp(&self, body: &[u8]) -> std::result::Result<StampHeader, StamperError> {
+        match self {
+            Self::ApiKey(api_key) => api_key.stamp(body),
+            Self::PasskeySession(session) => Ok(StampHeader {
+                name: "X-Session".to_string(),
+                value: session.session.clone(),
+            }),
+        }
+    }
 }
 
 /// Build an authenticated Turnkey client.
@@ -38,22 +56,26 @@ pub struct AuthenticatedClient {
 pub async fn build_client() -> Result<AuthenticatedClient> {
     debug!("building authenticated Turnkey client");
 
-    let (org_id, api_base_url, api_key_public, api_key_private) =
-        match load_credentials_from_env_vars()? {
-            Some(creds) => {
-                debug!(auth_source = "env", "using env auth credentials");
-                creds
-            }
-            None => {
-                debug!(auth_source = "config", "using local config credentials");
-                load_credentials_from_config().await?
-            }
-        };
+    let (org_id, api_base_url, stamper) = match load_credentials_from_env_vars()? {
+        Some(creds) => {
+            debug!(auth_source = "env", "using env auth credentials");
+            let (org_id, api_base_url, api_key_public, api_key_private) = creds;
+            (
+                org_id,
+                api_base_url,
+                build_api_key_stamper(&api_key_public, &api_key_private)?,
+            )
+        }
+        None => {
+            debug!(auth_source = "config", "using local config credentials");
+            load_credentials_from_config().await?
+        }
+    };
 
-    build_authed_client(&org_id, &api_base_url, &api_key_public, &api_key_private)
+    build_authed_client(&org_id, &api_base_url, stamper)
 }
 
-async fn load_credentials_from_config() -> Result<(String, String, String, String)> {
+async fn load_credentials_from_config() -> Result<(String, String, TvcStamper)> {
     let config = Config::load().await?;
 
     let (alias, org_config) = config
@@ -67,28 +89,37 @@ async fn load_credentials_from_config() -> Result<(String, String, String, Strin
         "resolved active organization config"
     );
 
-    let api_key = StoredApiKey::load(org_config)
-        .await?
-        .ok_or_else(|| anyhow!("No API key found for org '{alias}'. Run `tvc login` first."))?;
+    if let Some(session) = StoredPasskeySession::load(alias, org_config).await? {
+        return Ok((
+            org_config.id.clone(),
+            org_config.api_base_url.clone(),
+            TvcStamper::PasskeySession(session),
+        ));
+    }
+
+    let api_key = StoredApiKey::load(org_config).await?.ok_or_else(|| {
+        anyhow!("No API key or passkey session found for org '{alias}'. Run `tvc login` first.")
+    })?;
 
     Ok((
         org_config.id.clone(),
         org_config.api_base_url.clone(),
-        api_key.public_key.clone(),
-        api_key.private_key.clone(),
+        build_api_key_stamper(&api_key.public_key, &api_key.private_key)?,
     ))
+}
+
+fn build_api_key_stamper(api_key_public: &str, api_key_private: &str) -> Result<TvcStamper> {
+    debug!("constructing API key stamper");
+    let stamper = TurnkeyP256ApiKey::from_strings(api_key_private, Some(api_key_public))
+        .context("failed to load API key")?;
+    Ok(TvcStamper::ApiKey(stamper))
 }
 
 fn build_authed_client(
     org_id: &str,
     api_base_url: &str,
-    api_key_public: &str,
-    api_key_private: &str,
+    stamper: TvcStamper,
 ) -> Result<AuthenticatedClient> {
-    debug!("constructing API key stamper");
-    let stamper = TurnkeyP256ApiKey::from_strings(api_key_private, Some(api_key_public))
-        .context("failed to load API key")?;
-
     debug!(%api_base_url, "building Turnkey API client");
     let client = TurnkeyClient::builder()
         .api_key(stamper)

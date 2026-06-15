@@ -8,9 +8,11 @@
 //! Key paths are stored in the config so users can customize storage locations.
 
 mod api_key;
+mod passkey_session;
 mod qos_operator_key;
 
 pub use api_key::{KeyCurve, StoredApiKey};
+pub use passkey_session::StoredPasskeySession;
 pub use qos_operator_key::StoredQosOperatorKey;
 
 use anyhow::{Context, Result, bail};
@@ -24,6 +26,7 @@ const CONFIG_FILE: &str = "tvc.config.toml";
 const ORGS_DIR: &str = "orgs";
 const API_KEY_FILE: &str = "api_key.json";
 const OPERATOR_KEY_FILE: &str = "operator.json";
+const PASSKEY_SESSION_FILE: &str = "passkey_session.json";
 
 /// Main configuration stored in tvc.config.toml
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -59,6 +62,9 @@ pub struct OrgConfig {
     /// API base URL for this organization
     #[serde(default = "default_api_base_url")]
     pub api_base_url: String,
+    /// Path to the stored passkey session file, if customized.
+    #[serde(default)]
+    pub passkey_session_path: Option<PathBuf>,
 }
 
 fn default_api_base_url() -> String {
@@ -94,6 +100,11 @@ pub fn default_api_key_path(alias: &str) -> Result<PathBuf> {
 /// Returns the default operator key path for an org
 pub fn default_operator_key_path(alias: &str) -> Result<PathBuf> {
     Ok(default_org_dir(alias)?.join(OPERATOR_KEY_FILE))
+}
+
+/// Returns the default passkey session path for an org.
+pub fn default_passkey_session_path_for_org(alias: &str) -> Result<PathBuf> {
+    Ok(default_org_dir(alias)?.join(PASSKEY_SESSION_FILE))
 }
 
 impl Config {
@@ -165,6 +176,7 @@ impl Config {
             api_key_path: default_api_key_path(alias)?,
             operator_key_path: default_operator_key_path(alias)?,
             api_base_url,
+            passkey_session_path: None,
         };
         self.orgs.insert(alias.to_string(), org_config);
         Ok(())
