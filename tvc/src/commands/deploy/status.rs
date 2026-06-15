@@ -5,6 +5,9 @@ use clap::Args as ClapArgs;
 use turnkey_client::generated::external::data::v1::TvcDeployment;
 use turnkey_client::generated::GetTvcDeploymentRequest;
 
+use crate::client::fetch_tvc_app;
+use crate::commands::display::{format_egress_enabled, yes_no};
+
 /// Get the status of a deployment.
 #[derive(Debug, ClapArgs)]
 #[command(about, long_about = None)]
@@ -37,14 +40,11 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         .manifest
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("manifest not found in deployment"))?;
-    let app = crate::client::fetch_tvc_app(&auth, &deployment.app_id).await?;
+    let app = fetch_tvc_app(&auth, &deployment.app_id).await?;
 
     println!("Deployment: {}", deployment.id);
     println!("App ID: {}", deployment.app_id);
-    println!(
-        "{}",
-        crate::commands::display::egress_enabled_line(app.enable_egress)
-    );
+    println!("{}", format_egress_enabled(app.enable_egress));
     println!("Manifest ID: {}", manifest.id);
     println!("QOS Version: {}", deployment.qos_version);
     println!("{}", format_marked_for_deletion(&deployment));
@@ -72,10 +72,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
 }
 
 fn format_marked_for_deletion(deployment: &TvcDeployment) -> String {
-    format!(
-        "Marked for deletion: {}",
-        if deployment.delete { "yes" } else { "no" }
-    )
+    format!("Marked for deletion: {}", yes_no(deployment.delete))
 }
 
 #[cfg(test)]

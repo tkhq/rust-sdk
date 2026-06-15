@@ -8,17 +8,17 @@ pub fn yes_no(value: bool) -> &'static str {
     }
 }
 
-pub fn egress_enabled_line(enable_egress: bool) -> String {
+pub fn format_egress_enabled(enable_egress: bool) -> String {
     format!("Egress Enabled: {}", yes_no(enable_egress))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::egress_enabled_line;
+    use super::format_egress_enabled;
 
     #[test]
-    fn egress_enabled_line_formats_yes_and_no() {
-        assert_eq!(egress_enabled_line(true), "Egress Enabled: yes");
-        assert_eq!(egress_enabled_line(false), "Egress Enabled: no");
+    fn format_egress_enabled_formats_yes_and_no() {
+        assert_eq!(format_egress_enabled(true), "Egress Enabled: yes");
+        assert_eq!(format_egress_enabled(false), "Egress Enabled: no");
     }
 }

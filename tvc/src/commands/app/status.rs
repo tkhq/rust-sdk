@@ -39,7 +39,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     println!("Targeted Deployment: {}", app_status.targeted_deployment_id);
     println!(
         "{}",
-        crate::commands::display::egress_enabled_line(app.enable_egress)
+        crate::commands::display::format_egress_enabled(app.enable_egress)
     );
 
     if app_status.deployments.is_empty() {
