@@ -5,6 +5,8 @@ use clap::Args as ClapArgs;
 use turnkey_client::generated::external::data::v1::{AppStatus, DeploymentStatus};
 use turnkey_client::generated::{GetAppStatusRequest, GetTvcDeploymentRequest};
 
+use crate::commands::display::format_egress_enabled;
+
 /// Get the live status of a deployment from the app status API.
 #[derive(Debug, ClapArgs)]
 #[command(about, long_about = None)]
@@ -53,10 +55,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
 
     println!("Deployment: {}", deployment.id);
     println!("App ID: {}", app_status.app_id);
-    println!(
-        "{}",
-        crate::commands::display::format_egress_enabled(app.enable_egress)
-    );
+    println!("{}", format_egress_enabled(app.enable_egress));
     println!(
         "Is Targeted Deployment: {}",
         if app_status.targeted_deployment_id == args.deploy_id {

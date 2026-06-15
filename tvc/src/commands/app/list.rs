@@ -5,6 +5,8 @@ use clap::Args as ClapArgs;
 use turnkey_client::generated::external::data::v1::TvcApp;
 use turnkey_client::generated::GetTvcAppsRequest;
 
+use crate::commands::display::format_egress_enabled;
+
 const SEPARATOR_WIDTH: usize = 40;
 
 /// List apps.
@@ -57,7 +59,7 @@ fn render_app(app: &TvcApp) {
         format!("ID: {}", app.id),
         format!("Quorum Public Key: {}", app.quorum_public_key),
         format!("Live Deployment: {live}"),
-        crate::commands::display::format_egress_enabled(app.enable_egress),
+        format_egress_enabled(app.enable_egress),
     ];
 
     if !app.public_domain.is_empty() {
@@ -161,7 +163,7 @@ mod tests {
         app.enable_egress = true;
 
         assert_eq!(
-            crate::commands::display::format_egress_enabled(app.enable_egress),
+            format_egress_enabled(app.enable_egress),
             "Egress Enabled: yes"
         );
     }
