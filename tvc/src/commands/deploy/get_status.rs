@@ -5,6 +5,7 @@ use clap::Args as ClapArgs;
 use turnkey_client::generated::external::data::v1::{AppStatus, DeploymentStatus};
 use turnkey_client::generated::{GetAppStatusRequest, GetTvcDeploymentRequest};
 
+use crate::client::fetch_tvc_app;
 use crate::commands::display::format_egress_enabled;
 
 /// Get the live status of a deployment from the app status API.
@@ -51,7 +52,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
             .app_status
             .ok_or_else(|| anyhow!("no status returned for app: {}", deployment.app_id))?,
     );
-    let app = crate::client::fetch_tvc_app(&auth, &deployment.app_id).await?;
+    let app = fetch_tvc_app(&auth, &deployment.app_id).await?;
 
     println!("Deployment: {}", deployment.id);
     println!("App ID: {}", app_status.app_id);
