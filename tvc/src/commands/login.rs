@@ -1,9 +1,10 @@
 //! Login command for authenticating with Turnkey.
 
 use crate::config::turnkey::{
-    API_BASE_URL_PROD, Config, KeyCurve, OrgConfig, StoredApiKey, StoredQosOperatorKey,
+    API_BASE_URL_PROD, Config, KeyCurve, OrgConfig, StoredApiKey, StoredPasskeySession,
+    StoredQosOperatorKey,
 };
-use crate::passkey::PasskeyTransport;
+use crate::passkey::{PasskeyTransport, WebAuthnAssertion, WebAuthnStamper};
 use crate::prompts::{self, error_required_in_non_interactive};
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Args as ClapArgs;
@@ -11,7 +12,10 @@ use qos_p256::P256Pair;
 use std::io::{BufRead, Write};
 use tracing::debug;
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
-use turnkey_client::generated::GetWhoamiRequest;
+use turnkey_client::TurnkeyClient;
+use turnkey_client::generated::{GetWhoamiRequest, StampLoginIntent};
+
+const ENV_PASSKEY_FIXTURE_ASSERTION: &str = "TVC_PASSKEY_FIXTURE_ASSERTION";
 
 /// Authenticate with Turnkey and set up local credentials.
 #[derive(Debug, ClapArgs)]
@@ -76,10 +80,66 @@ async fn run_passkey_login(args: Args, is_non_interactive: bool) -> Result<()> {
         bail!("passkey authentication requires an interactive terminal; remove --non-interactive");
     }
 
-    bail!(
-        "passkey login via {} transport is not available in this build; native/browser WebAuthn ceremony support is required",
-        args.passkey_transport
-    )
+    let Some(assertion_json) = std::env::var(ENV_PASSKEY_FIXTURE_ASSERTION)
+        .ok()
+        .filter(|value| !value.is_empty())
+    else {
+        bail!(
+            "passkey login via {} transport is not available in this build; native/browser WebAuthn ceremony support is required",
+            args.passkey_transport
+        );
+    };
+
+    let mut config = Config::load().await?;
+    let org_query = match args.org.clone().or_else(|| config.active_org.clone()) {
+        Some(org) => org,
+        None => bail!(
+            "Organization is required for passkey login. Pass --org or run `tvc login` first."
+        ),
+    };
+
+    let alias = match find_org(&config, &org_query) {
+        Some((alias, _)) => alias.clone(),
+        None => bail!(
+            "Organization '{org_query}' not found. Run `tvc login` without --passkey first."
+        ),
+    };
+    update_api_base_url_from_override(&mut config, &alias, args.api_base_url.as_deref());
+    config.set_active_org(&alias)?;
+    config.save().await?;
+
+    let org_config = config.orgs.get(&alias).unwrap().clone();
+    let assertion: WebAuthnAssertion = serde_json::from_str(&assertion_json)
+        .with_context(|| format!("failed to parse {ENV_PASSKEY_FIXTURE_ASSERTION}"))?;
+    let stamper = WebAuthnStamper::new_for_tests(assertion);
+    let session_key = TurnkeyP256ApiKey::generate();
+    let client = TurnkeyClient::builder()
+        .api_key(stamper)
+        .base_url(&org_config.api_base_url)
+        .build()
+        .context("failed to build WebAuthn Turnkey client")?;
+
+    let result = client
+        .stamp_login(
+            org_config.id.clone(),
+            client.current_timestamp(),
+            StampLoginIntent {
+                public_key: hex::encode(session_key.compressed_public_key()),
+                expiration_seconds: None,
+                invalidate_existing: Some(true),
+            },
+        )
+        .await
+        .context("failed to create passkey session")?;
+
+    StoredPasskeySession {
+        session: result.result.session,
+    }
+    .save(&alias, &org_config)
+    .await?;
+
+    println!("Passkey session stored for org: {} ({})", alias, org_config.id);
+    Ok(())
 }
 
 fn build_login_plan_interactive(args: Args, config: &Config) -> Result<LoginPlan> {
