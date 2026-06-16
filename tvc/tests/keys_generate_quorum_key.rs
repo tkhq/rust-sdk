@@ -5,6 +5,7 @@ use serde::Deserialize;
 use serde_json::json;
 use std::fs;
 use tempfile::TempDir;
+use zeroize::Zeroizing;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -87,11 +88,12 @@ fn generate_quorum_key_writes_metadata() {
         })
         .collect::<Vec<_>>();
 
-    let reconstructed = qos_crypto::shamir::shares_reconstruct(&decrypted_shares[..2])
-        .unwrap()
-        .try_into()
-        .map(|seed: [u8; MASTER_SEED_LEN]| P256Pair::from_master_seed(&seed).unwrap())
-        .unwrap();
+    let reconstructed_seed =
+        qos_crypto::shamir::shares_reconstruct(&decrypted_shares[..2]).unwrap();
+    let reconstructed_seed: [u8; MASTER_SEED_LEN] =
+        reconstructed_seed.as_slice().try_into().unwrap();
+    let reconstructed_seed = Zeroizing::new(reconstructed_seed);
+    let reconstructed = P256Pair::from_master_seed(&reconstructed_seed).unwrap();
     assert_eq!(
         hex::encode(reconstructed.public_key().to_bytes()),
         metadata.quorum_key_public

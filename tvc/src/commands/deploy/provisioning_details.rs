@@ -6,7 +6,7 @@ use crate::provisioning::{
 use crate::util::write_file;
 use anyhow::{Context, bail};
 use clap::Args as ClapArgs;
-use qos_core::protocol::services::boot::{Approval, ManifestEnvelope};
+use qos_core::protocol::services::boot::{Approval, VersionedManifestEnvelope};
 use qos_nsm::types::NsmDigest;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -87,8 +87,9 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         bail!("manifest envelope missing in provisioning details response");
     }
 
-    let manifest_envelope: ManifestEnvelope = serde_json::from_slice(&manifest_envelope_bytes)
-        .context("failed to parse manifest envelope from provisioning details")?;
+    let manifest_envelope =
+        VersionedManifestEnvelope::try_from_slice_compat(&manifest_envelope_bytes)
+            .context("failed to parse manifest envelope from provisioning details")?;
 
     let summary = build_summary_with_optional_verify(
         &attestation_document,
@@ -129,7 +130,7 @@ async fn write_provision_bundle(path: &Path, bundle: &ProvisionBundle) -> anyhow
 
 fn build_summary_with_optional_verify(
     cose_sign1_der: &[u8],
-    manifest_envelope: &ManifestEnvelope,
+    manifest_envelope: &VersionedManifestEnvelope,
     dangerous_skip_verification: bool,
     validation_time_override: Option<u64>,
 ) -> anyhow::Result<AttestationSummary> {
@@ -159,9 +160,9 @@ fn build_summary_with_optional_verify(
             .collect(),
         certificate_len: attestation_doc.certificate.len(),
         ca_bundle_cert_count: attestation_doc.cabundle.len(),
-        manifest_set_threshold: manifest_envelope.manifest.manifest_set.threshold,
-        manifest_set_approvals: approval_summaries(&manifest_envelope.manifest_set_approvals),
-        share_set_approvals: approval_summaries(&manifest_envelope.share_set_approvals),
+        manifest_set_threshold: manifest_envelope.manifest_set().threshold,
+        manifest_set_approvals: approval_summaries(manifest_envelope.manifest_set_approvals()),
+        share_set_approvals: approval_summaries(manifest_envelope.share_set_approvals()),
         module_id: attestation_doc.module_id,
         digest: attestation_doc.digest.into(),
         timestamp_ms: attestation_doc.timestamp,
@@ -235,7 +236,7 @@ fn print_approval_summary_entries(approvals: &[ApprovalSummary]) {
 mod tests {
     use super::build_summary_with_optional_verify;
     use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
-    use qos_core::protocol::services::boot::ManifestEnvelope;
+    use qos_core::protocol::services::boot::{ManifestEnvelope, VersionedManifestEnvelope};
     use serde::Deserialize;
 
     #[derive(Debug, Deserialize)]
@@ -261,7 +262,7 @@ mod tests {
 
         let summary = build_summary_with_optional_verify(
             &attestation_document,
-            &fixture.manifest_envelope,
+            &VersionedManifestEnvelope::from(fixture.manifest_envelope.clone()),
             false,
             Some(fixture.validation_time_secs),
         )
@@ -286,6 +287,7 @@ mod tests {
             .unwrap();
         let mut manifest_envelope = fixture.manifest_envelope;
         manifest_envelope.manifest_set_approvals.clear();
+        let manifest_envelope = VersionedManifestEnvelope::from(manifest_envelope);
 
         assert!(
             build_summary_with_optional_verify(

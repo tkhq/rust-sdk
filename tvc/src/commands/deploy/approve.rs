@@ -7,10 +7,9 @@ use crate::prompts::{bail_required_in_non_interactive, stdin_can_prompt};
 use crate::util::{read_file_to_string, write_file};
 use anyhow::{Context, anyhow, bail};
 use clap::{ArgGroup, Args as ClapArgs};
-use qos_core::protocol::QosHash;
 use qos_core::protocol::services::boot::Approval;
 use qos_core::protocol::services::boot::{
-    Manifest, ManifestSet, Namespace, NitroConfig, PivotConfig, QuorumMember, ShareSet,
+    ManifestSet, Namespace, NitroConfig, QuorumMember, ShareSet, VersionedManifest,
 };
 use std::collections::HashSet;
 use std::fmt::Write;
@@ -95,7 +94,7 @@ struct PostTarget {
 }
 
 struct ResolvedApproveInputs {
-    manifest: Manifest,
+    manifest: VersionedManifest,
     operator_seed: Option<PathBuf>,
     approval_out: Option<PathBuf>,
     dry_run: bool,
@@ -238,7 +237,7 @@ async fn run_with_resolved_inputs(inputs: ResolvedApproveInputs) -> anyhow::Resu
     Ok(())
 }
 
-async fn load_manifest(args: &Args) -> anyhow::Result<(Manifest, Option<String>)> {
+async fn load_manifest(args: &Args) -> anyhow::Result<(VersionedManifest, Option<String>)> {
     match (&args.manifest, &args.deploy_id) {
         (Some(path), _) => Ok((read_manifest_from_path(path).await?, None)),
         (_, Some(deploy_id)) => {
@@ -252,7 +251,7 @@ async fn load_manifest(args: &Args) -> anyhow::Result<(Manifest, Option<String>)
 async fn sign_and_output(
     operator_seed: Option<&Path>,
     approval_out: Option<&Path>,
-    manifest: &Manifest,
+    manifest: &VersionedManifest,
 ) -> anyhow::Result<Approval> {
     let pair: Box<dyn crate::pair::Pair> = Box::new(load_operator_pair(operator_seed).await?);
 
@@ -385,11 +384,11 @@ fn manifest_approval_quorum_reached(deployment: &TvcDeployment) -> bool {
 
 async fn generate_approval(
     pair: Box<dyn crate::pair::Pair>,
-    manifest: &Manifest,
+    manifest: &VersionedManifest,
 ) -> anyhow::Result<Approval> {
     let public_key = pair.public_key();
     let member = manifest
-        .manifest_set
+        .manifest_set()
         .members
         .iter()
         .find(|m| m.pub_key == public_key)
@@ -401,22 +400,22 @@ async fn generate_approval(
             )
         })?;
 
-    let signature = pair.sign(manifest.qos_hash().to_vec()).await?;
+    let signature = pair.sign(manifest.manifest_hash().to_vec()).await?;
 
     Ok(Approval { signature, member })
 }
 
 /// Walk the user through each section of the manifest for approval.
-fn interactive_approve(manifest: &Manifest) -> anyhow::Result<()> {
+fn interactive_approve(manifest: &VersionedManifest) -> anyhow::Result<()> {
     println!("\n========================================");
     println!("         MANIFEST APPROVAL");
     println!("========================================\n");
 
-    review_namespace(&manifest.namespace)?;
-    review_enclave(&manifest.enclave)?;
-    review_pivot(&manifest.pivot)?;
-    review_manifest_set(&manifest.manifest_set)?;
-    review_share_set(&manifest.share_set)?;
+    review_namespace(manifest.namespace())?;
+    review_enclave(manifest.enclave())?;
+    review_pivot(manifest)?;
+    review_manifest_set(manifest.manifest_set())?;
+    review_share_set(manifest.share_set())?;
 
     println!("\n========================================");
     println!("    ALL SECTIONS APPROVED");
@@ -459,22 +458,26 @@ fn review_enclave(enclave: &NitroConfig) -> anyhow::Result<()> {
     prompts::confirm_or_bail("Approve enclave configuration?", "approval")
 }
 
-fn render_pivot(pivot: &PivotConfig) -> String {
+fn render_pivot(manifest: &VersionedManifest) -> String {
     let mut s = String::new();
     let _ = writeln!(s, "PIVOT BINARY");
     let _ = writeln!(s, "─────────────────────────────────────");
-    let _ = writeln!(s, "  Pivot Binary Hash: {}", hex::encode(pivot.hash));
-    if pivot.args.is_empty() {
+    let _ = writeln!(
+        s,
+        "  Pivot Binary Hash: {}",
+        hex::encode(manifest.pivot_hash())
+    );
+    if manifest.args().is_empty() {
         let _ = writeln!(s, "  CLI Args: (none)");
     } else {
-        let _ = writeln!(s, "  CLI Args:\n   {}", pivot.args.join("\n   "));
+        let _ = writeln!(s, "  CLI Args:\n   {}", manifest.args().join("\n   "));
     }
     let _ = writeln!(s);
     s
 }
 
-fn review_pivot(pivot: &PivotConfig) -> anyhow::Result<()> {
-    print!("{}", render_pivot(pivot));
+fn review_pivot(manifest: &VersionedManifest) -> anyhow::Result<()> {
+    print!("{}", render_pivot(manifest));
     prompts::confirm_or_bail("Approve pivot binary?", "approval")
 }
 
@@ -518,16 +521,18 @@ fn review_share_set(set: &ShareSet) -> anyhow::Result<()> {
     prompts::confirm_or_bail("Approve share set?", "approval")
 }
 
-async fn read_manifest_from_path(path: &Path) -> anyhow::Result<Manifest> {
+async fn read_manifest_from_path(path: &Path) -> anyhow::Result<VersionedManifest> {
     let content = read_file_to_string(path).await?;
-    let manifest: Manifest = serde_json::from_str(&content)
+    let manifest = VersionedManifest::try_from_slice_compat(content.as_bytes())
         .with_context(|| format!("failed to parse manifest JSON from: {}", path.display()))?;
     Ok(manifest)
 }
 
 /// Fetch manifest from Turnkey using GetTvcDeployment API.
 /// Returns the manifest and its Turnkey manifest_id.
-async fn fetch_manifest_from_deploy(deploy_id: &str) -> anyhow::Result<(Manifest, String)> {
+async fn fetch_manifest_from_deploy(
+    deploy_id: &str,
+) -> anyhow::Result<(VersionedManifest, String)> {
     println!("Fetching deployment {deploy_id}...");
 
     let auth = crate::client::build_client().await?;
@@ -551,7 +556,7 @@ async fn fetch_manifest_from_deploy(deploy_id: &str) -> anyhow::Result<(Manifest
         .manifest
         .ok_or_else(|| anyhow!("manifest not found in deployment"))?;
 
-    let manifest: Manifest = serde_json::from_slice(&tvc_manifest.manifest)
+    let manifest = VersionedManifest::try_from_slice_compat(&tvc_manifest.manifest)
         .context("failed to parse manifest from deployment")?;
 
     println!("✓ Manifest loaded (manifest_id: {})", tvc_manifest.id);
@@ -566,9 +571,54 @@ mod tests {
         TvcOperator, TvcOperatorApproval, TvcOperatorSet,
     };
 
-    fn fixture_manifest() -> Manifest {
-        serde_json::from_str(include_str!("../../../fixtures/manifest.json"))
+    fn fixture_manifest() -> VersionedManifest {
+        VersionedManifest::try_from_slice_compat(include_bytes!("../../../fixtures/manifest.json"))
             .expect("fixture manifest should parse")
+    }
+
+    #[test]
+    fn parses_v2_manifest() {
+        let manifest_bytes = serde_json::to_vec(&serde_json::json!({
+            "version": "v2",
+            "namespace": {
+                "name": "turnkey-prod",
+                "nonce": 1,
+                "quorumKey": "04a1"
+            },
+            "pivot": {
+                "hash": "0000000000000000000000000000000000000000000000000000000000000000",
+                "restart": "Never",
+                "bridgeConfig": [],
+                "debugMode": false,
+                "args": ["--flag"]
+            },
+            "manifestSet": {
+                "threshold": 1,
+                "members": [{
+                    "alias": "operator-alice",
+                    "pubKey": "04aabb"
+                }]
+            },
+            "shareSet": {
+                "threshold": 0,
+                "members": []
+            },
+            "enclave": {
+                "pcr0": "00",
+                "pcr1": "11",
+                "pcr2": "22",
+                "pcr3": "33",
+                "awsRootCertificate": "44",
+                "qosCommit": "test-commit"
+            }
+        }))
+        .unwrap();
+
+        let manifest = VersionedManifest::try_from_slice_compat(&manifest_bytes).unwrap();
+
+        assert!(matches!(manifest, VersionedManifest::V2(_)));
+        assert_eq!(manifest.manifest_set().threshold, 1);
+        assert!(render_pivot(&manifest).contains("--flag"));
     }
 
     fn test_operator(id: &str) -> TvcOperator {
@@ -632,7 +682,7 @@ mod tests {
     #[test]
     fn render_namespace_includes_name_nonce_and_quorum_key() {
         let manifest = fixture_manifest();
-        let rendered = render_namespace(&manifest.namespace);
+        let rendered = render_namespace(manifest.namespace());
         assert!(rendered.contains("NAMESPACE"));
         assert!(rendered.contains("turnkey-prod"));
         assert!(rendered.contains("Nonce:"));
@@ -642,7 +692,7 @@ mod tests {
     #[test]
     fn render_enclave_includes_all_four_pcrs() {
         let manifest = fixture_manifest();
-        let rendered = render_enclave(&manifest.enclave);
+        let rendered = render_enclave(manifest.enclave());
         assert!(rendered.contains("ENCLAVE (AWS Nitro)"));
         assert!(rendered.contains("PCR0"));
         assert!(rendered.contains("PCR1"));
@@ -653,7 +703,7 @@ mod tests {
     #[test]
     fn render_pivot_includes_header_and_args() {
         let manifest = fixture_manifest();
-        let rendered = render_pivot(&manifest.pivot);
+        let rendered = render_pivot(&manifest);
         assert!(rendered.contains("PIVOT BINARY"));
         assert!(rendered.contains("Pivot Binary Hash:"));
         assert!(rendered.contains("--flag"));
@@ -663,7 +713,7 @@ mod tests {
     #[test]
     fn render_manifest_set_includes_threshold_and_each_member() {
         let manifest = fixture_manifest();
-        let rendered = render_manifest_set(&manifest.manifest_set);
+        let rendered = render_manifest_set(manifest.manifest_set());
         assert!(rendered.contains("MANIFEST SET"));
         assert!(rendered.contains("Threshold: 2 of 3"));
         assert!(rendered.contains("operator-alice"));
