@@ -5,6 +5,10 @@ use clap::Args as ClapArgs;
 use turnkey_client::generated::GetTvcAppsRequest;
 use turnkey_client::generated::external::data::v1::TvcApp;
 
+use crate::commands::display::format_egress_enabled;
+
+const SEPARATOR_WIDTH: usize = 40;
+
 /// List apps.
 #[derive(Debug, ClapArgs)]
 #[command(about, long_about = None)]
@@ -49,15 +53,22 @@ fn filter_by_name(apps: &mut Vec<TvcApp>, name: Option<&str>) {
 }
 
 fn render_app(app: &TvcApp) {
-    println!("Name: {}", app.name);
-    println!("ID: {}", app.id);
-    println!("Quorum Public Key: {}", app.quorum_public_key);
     let live = app.live_deployment_id.as_deref().unwrap_or("(none)");
-    println!("Live Deployment: {live}");
+    let mut lines = vec![
+        format!("Name: {}", app.name),
+        format!("ID: {}", app.id),
+        format!("Quorum Public Key: {}", app.quorum_public_key),
+        format!("Live Deployment: {live}"),
+        format_egress_enabled(app.enable_egress),
+    ];
+
     if !app.public_domain.is_empty() {
-        println!("Public Domain: {}", app.public_domain);
+        lines.push(format!("Public Domain: {}", app.public_domain));
     }
-    println!("{}", "─".repeat(40));
+
+    lines.push("─".repeat(SEPARATOR_WIDTH));
+
+    println!("{}", lines.join("\n"));
 }
 
 #[cfg(test)]
@@ -143,6 +154,17 @@ mod tests {
         assert_eq!(
             app.live_deployment_id.as_deref().unwrap_or("(none)"),
             "(none)"
+        );
+    }
+
+    #[test]
+    fn egress_enabled_line_reflects_app_setting() {
+        let mut app = make_app("my-app");
+        app.enable_egress = true;
+
+        assert_eq!(
+            format_egress_enabled(app.enable_egress),
+            "Egress Enabled: yes"
         );
     }
 }

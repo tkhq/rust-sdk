@@ -4,6 +4,9 @@ use anyhow::{Context, anyhow};
 use clap::Args as ClapArgs;
 use turnkey_client::generated::GetAppStatusRequest;
 
+use crate::client::fetch_tvc_app;
+use crate::commands::display::format_egress_enabled;
+
 /// Get the live status of an app from the cluster.
 #[derive(Debug, ClapArgs)]
 #[command(about, long_about = None)]
@@ -33,9 +36,11 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
             .app_status
             .ok_or_else(|| anyhow!("no status returned for app: {}", args.app_id))?,
     );
+    let app = fetch_tvc_app(&auth, &args.app_id).await?;
 
     println!("App ID: {}", app_status.app_id);
     println!("Targeted Deployment: {}", app_status.targeted_deployment_id);
+    println!("{}", format_egress_enabled(app.enable_egress));
 
     if app_status.deployments.is_empty() {
         println!();
