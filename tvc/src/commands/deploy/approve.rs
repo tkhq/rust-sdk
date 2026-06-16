@@ -101,28 +101,6 @@ struct ResolvedApproveInputs {
     post_target: Option<PostTarget>,
 }
 
-struct LoadedManifest {
-    manifest: VersionedManifest,
-    egress_allowlist: Option<EgressAllowlistReview>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct EgressAllowlistReview {
-    #[serde(default)]
-    urls: Vec<String>,
-    #[serde(default)]
-    hostnames: Vec<String>,
-    #[serde(default)]
-    ips: Vec<String>,
-}
-
-impl EgressAllowlistReview {
-    fn is_empty(&self) -> bool {
-        self.urls.is_empty() && self.hostnames.is_empty() && self.ips.is_empty()
-    }
-}
-
 pub async fn run(args: Args, is_non_interactive: bool) -> anyhow::Result<()> {
     let inputs = if is_non_interactive {
         build_inputs_non_interactive(args).await?
@@ -142,10 +120,10 @@ async fn build_inputs_interactive(args: Args) -> anyhow::Result<ResolvedApproveI
         bail_required_in_non_interactive("--dangerous-skip-interactive")?;
     }
 
-    let (loaded_manifest, fetched_manifest_id) = load_manifest(&args).await?;
+    let (manifest, fetched_manifest_id) = load_manifest(&args).await?;
 
     if do_prompt_user {
-        interactive_approve(&loaded_manifest)?;
+        interactive_approve(&manifest)?;
     }
 
     let post_target = if !args.dry_run && !args.skip_post {
@@ -182,7 +160,7 @@ async fn build_inputs_interactive(args: Args) -> anyhow::Result<ResolvedApproveI
     };
 
     Ok(ResolvedApproveInputs {
-        manifest: loaded_manifest.manifest,
+        manifest,
         operator_seed: args.operator_seed,
         approval_out: args.approval_out,
         dry_run: args.dry_run,
@@ -195,7 +173,7 @@ async fn build_inputs_non_interactive(args: Args) -> anyhow::Result<ResolvedAppr
         bail_required_in_non_interactive("--dangerous-skip-interactive")?;
     }
 
-    let (loaded_manifest, fetched_manifest_id) = load_manifest(&args).await?;
+    let (manifest, fetched_manifest_id) = load_manifest(&args).await?;
 
     let post_target = if !args.dry_run && !args.skip_post {
         let manifest_id = resolve_manifest_id(&args, fetched_manifest_id.as_deref())?;
@@ -226,7 +204,7 @@ async fn build_inputs_non_interactive(args: Args) -> anyhow::Result<ResolvedAppr
     };
 
     Ok(ResolvedApproveInputs {
-        manifest: loaded_manifest.manifest,
+        manifest,
         operator_seed: args.operator_seed,
         approval_out: args.approval_out,
         dry_run: args.dry_run,
@@ -259,7 +237,7 @@ async fn run_with_resolved_inputs(inputs: ResolvedApproveInputs) -> anyhow::Resu
     Ok(())
 }
 
-async fn load_manifest(args: &Args) -> anyhow::Result<(LoadedManifest, Option<String>)> {
+async fn load_manifest(args: &Args) -> anyhow::Result<(VersionedManifest, Option<String>)> {
     match (&args.manifest, &args.deploy_id) {
         (Some(path), _) => Ok((read_manifest_from_path(path).await?, None)),
         (_, Some(deploy_id)) => {
@@ -428,9 +406,7 @@ async fn generate_approval(
 }
 
 /// Walk the user through each section of the manifest for approval.
-fn interactive_approve(loaded_manifest: &LoadedManifest) -> anyhow::Result<()> {
-    let manifest = &loaded_manifest.manifest;
-
+fn interactive_approve(manifest: &VersionedManifest) -> anyhow::Result<()> {
     println!("\n========================================");
     println!("         MANIFEST APPROVAL");
     println!("========================================\n");
@@ -438,9 +414,6 @@ fn interactive_approve(loaded_manifest: &LoadedManifest) -> anyhow::Result<()> {
     review_namespace(manifest.namespace())?;
     review_enclave(manifest.enclave())?;
     review_pivot(manifest)?;
-    if let Some(allowlist) = &loaded_manifest.egress_allowlist {
-        review_egress_allowlist(allowlist)?;
-    }
     review_manifest_set(manifest.manifest_set())?;
     review_share_set(manifest.share_set())?;
 
@@ -508,34 +481,6 @@ fn review_pivot(manifest: &VersionedManifest) -> anyhow::Result<()> {
     prompts::confirm_or_bail("Approve pivot binary?", "approval")
 }
 
-fn render_entries(label: &str, entries: &[String], out: &mut String) {
-    if entries.is_empty() {
-        return;
-    }
-
-    let _ = writeln!(out, "  {label}:");
-    for entry in entries {
-        let _ = writeln!(out, "    {entry}");
-    }
-}
-
-fn render_egress_allowlist(allowlist: &EgressAllowlistReview) -> String {
-    let mut s = String::new();
-    let _ = writeln!(s, "EGRESS ALLOWLIST");
-    let _ = writeln!(s, "─────────────────────────────────────");
-    let _ = writeln!(s, "  Metadata only; not enforced by QOS.");
-    render_entries("URLs", &allowlist.urls, &mut s);
-    render_entries("Hostnames", &allowlist.hostnames, &mut s);
-    render_entries("IPs", &allowlist.ips, &mut s);
-    let _ = writeln!(s);
-    s
-}
-
-fn review_egress_allowlist(allowlist: &EgressAllowlistReview) -> anyhow::Result<()> {
-    print!("{}", render_egress_allowlist(allowlist));
-    prompts::confirm_or_bail("Approve egress allowlist metadata?", "approval")
-}
-
 fn render_quorum_members(members: &[QuorumMember]) -> String {
     let mut s = String::new();
     for member in members.iter() {
@@ -576,39 +521,18 @@ fn review_share_set(set: &ShareSet) -> anyhow::Result<()> {
     prompts::confirm_or_bail("Approve share set?", "approval")
 }
 
-fn parse_egress_allowlist(manifest_bytes: &[u8]) -> anyhow::Result<Option<EgressAllowlistReview>> {
-    let Ok(value) = serde_json::from_slice::<serde_json::Value>(manifest_bytes) else {
-        return Ok(None);
-    };
-
-    let Some(raw_allowlist) = value.get("egressAllowlist") else {
-        return Ok(None);
-    };
-
-    let allowlist: EgressAllowlistReview = serde_json::from_value(raw_allowlist.clone())
-        .context("failed to parse egressAllowlist metadata")?;
-    if allowlist.is_empty() {
-        return Ok(None);
-    }
-
-    Ok(Some(allowlist))
-}
-
-async fn read_manifest_from_path(path: &Path) -> anyhow::Result<LoadedManifest> {
+async fn read_manifest_from_path(path: &Path) -> anyhow::Result<VersionedManifest> {
     let content = read_file_to_string(path).await?;
     let manifest = VersionedManifest::try_from_slice_compat(content.as_bytes())
         .with_context(|| format!("failed to parse manifest JSON from: {}", path.display()))?;
-    let egress_allowlist = parse_egress_allowlist(content.as_bytes())?;
-
-    Ok(LoadedManifest {
-        manifest,
-        egress_allowlist,
-    })
+    Ok(manifest)
 }
 
 /// Fetch manifest from Turnkey using GetTvcDeployment API.
 /// Returns the manifest and its Turnkey manifest_id.
-async fn fetch_manifest_from_deploy(deploy_id: &str) -> anyhow::Result<(LoadedManifest, String)> {
+async fn fetch_manifest_from_deploy(
+    deploy_id: &str,
+) -> anyhow::Result<(VersionedManifest, String)> {
     println!("Fetching deployment {deploy_id}...");
 
     let auth = crate::client::build_client().await?;
@@ -634,17 +558,10 @@ async fn fetch_manifest_from_deploy(deploy_id: &str) -> anyhow::Result<(LoadedMa
 
     let manifest = VersionedManifest::try_from_slice_compat(&tvc_manifest.manifest)
         .context("failed to parse manifest from deployment")?;
-    let egress_allowlist = parse_egress_allowlist(&tvc_manifest.manifest)?;
 
     println!("✓ Manifest loaded (manifest_id: {})", tvc_manifest.id);
 
-    Ok((
-        LoadedManifest {
-            manifest,
-            egress_allowlist,
-        },
-        tvc_manifest.id,
-    ))
+    Ok((manifest, tvc_manifest.id))
 }
 
 #[cfg(test)]
@@ -702,43 +619,6 @@ mod tests {
         assert!(matches!(manifest, VersionedManifest::V2(_)));
         assert_eq!(manifest.manifest_set().threshold, 1);
         assert!(render_pivot(&manifest).contains("--flag"));
-    }
-
-    #[test]
-    fn parses_egress_allowlist_from_raw_manifest_json() {
-        let manifest_bytes = serde_json::to_vec(&serde_json::json!({
-            "egressAllowlist": {
-                "urls": ["https://api.example.com/v1"],
-                "hostnames": ["api.example.com"],
-                "ips": ["203.0.113.10"]
-            }
-        }))
-        .unwrap();
-
-        let allowlist = parse_egress_allowlist(&manifest_bytes)
-            .unwrap()
-            .expect("allowlist should parse");
-
-        assert_eq!(allowlist.urls, ["https://api.example.com/v1"]);
-        assert_eq!(allowlist.hostnames, ["api.example.com"]);
-        assert_eq!(allowlist.ips, ["203.0.113.10"]);
-    }
-
-    #[test]
-    fn render_egress_allowlist_includes_each_entry() {
-        let allowlist = EgressAllowlistReview {
-            urls: vec!["https://api.example.com/v1".into()],
-            hostnames: vec!["api.example.com".into()],
-            ips: vec!["203.0.113.10".into()],
-        };
-
-        let rendered = render_egress_allowlist(&allowlist);
-
-        assert!(rendered.contains("EGRESS ALLOWLIST"));
-        assert!(rendered.contains("not enforced"));
-        assert!(rendered.contains("https://api.example.com/v1"));
-        assert!(rendered.contains("api.example.com"));
-        assert!(rendered.contains("203.0.113.10"));
     }
 
     fn test_operator(id: &str) -> TvcOperator {

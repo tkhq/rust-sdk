@@ -4248,10 +4248,6 @@ message CreateTvcDeploymentIntent {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Port to use for public ingress."}
   ];
-  TvcEgressAllowlist egress_allowlist = 17 [
-    (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional egress allowlist metadata to include in the QOS manifest for TVC apps with egress enabled. This metadata is not enforced by QOS."}
-  ];
 }
 
 message CreateTvcManifestApprovalsIntent {
@@ -6596,18 +6592,3 @@ message SparkStaticDepositDerivation {
 }
 
 message SparkHtlcPreimageDerivation {}
-
-message TvcEgressAllowlist {
-  repeated string urls = 1 [
-    (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "URL entries to include in the TVC deployment manifest egress allowlist metadata. This metadata is not enforced by QOS."}
-  ];
-  repeated string hostnames = 2 [
-    (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Hostname entries to include in the TVC deployment manifest egress allowlist metadata. This metadata is not enforced by QOS."}
-  ];
-  repeated string ips = 3 [
-    (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "IP entries to include in the TVC deployment manifest egress allowlist metadata. This metadata is not enforced by QOS."}
-  ];
-}

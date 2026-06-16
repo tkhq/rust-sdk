@@ -2229,8 +2229,6 @@ pub struct CreateTvcDeploymentIntent {
     pub health_check_port: u32,
     #[serde(default)]
     pub public_ingress_port: u32,
-    #[serde(default)]
-    pub egress_allowlist: ::core::option::Option<TvcEgressAllowlist>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -4101,18 +4099,6 @@ pub struct SparkStaticDepositDerivation {
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, Copy, PartialEq)]
 pub struct SparkHtlcPreimageDerivation {}
-#[derive(Debug)]
-#[derive(::serde::Serialize, ::serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[derive(Clone, PartialEq)]
-pub struct TvcEgressAllowlist {
-    #[serde(default)]
-    pub urls: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[serde(default)]
-    pub hostnames: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[serde(default)]
-    pub ips: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-}
 /// Type of Activity, such as Add User, or Sign Transaction.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
