@@ -6,6 +6,7 @@
 
 pub mod app;
 pub mod app_status;
+pub mod auth;
 pub mod confirmation;
 pub mod deploy;
 pub mod keys;
