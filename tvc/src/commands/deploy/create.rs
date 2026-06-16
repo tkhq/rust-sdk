@@ -28,6 +28,9 @@ Required deployment fields:
 
 Optional deployment fields:
   --qos-version / TVC_QOS_VERSION (defaults to 0.10.2)
+  --egress-allowed-url / TVC_EGRESS_ALLOWED_URLS
+  --egress-allowed-hostname / TVC_EGRESS_ALLOWED_HOSTNAMES
+  --egress-allowed-ip / TVC_EGRESS_ALLOWED_IPS
 
 Special rules:
   --pivot-args replaces the config file's list entirely (does not append).
@@ -137,6 +140,39 @@ struct Overrides {
     /// This is usually the port your server listens on for external requests.
     #[arg(long, env = "TVC_PUBLIC_INGRESS_PORT")]
     pub public_ingress_port: Option<u16>,
+
+    /// URL metadata entries to include in the manifest egress allowlist.
+    ///
+    /// These entries are for operator review only and are not enforced by QOS.
+    #[arg(
+        long = "egress-allowed-url",
+        value_name = "URL",
+        value_delimiter = ',',
+        env = "TVC_EGRESS_ALLOWED_URLS"
+    )]
+    pub egress_allowed_urls: Vec<String>,
+
+    /// Hostname metadata entries to include in the manifest egress allowlist.
+    ///
+    /// These entries are for operator review only and are not enforced by QOS.
+    #[arg(
+        long = "egress-allowed-hostname",
+        value_name = "HOSTNAME",
+        value_delimiter = ',',
+        env = "TVC_EGRESS_ALLOWED_HOSTNAMES"
+    )]
+    pub egress_allowed_hostnames: Vec<String>,
+
+    /// IP metadata entries to include in the manifest egress allowlist.
+    ///
+    /// These entries are for operator review only and are not enforced by QOS.
+    #[arg(
+        long = "egress-allowed-ip",
+        value_name = "IP",
+        value_delimiter = ',',
+        env = "TVC_EGRESS_ALLOWED_IPS"
+    )]
+    pub egress_allowed_ips: Vec<String>,
 }
 
 struct ResolvedDeployInputs {
@@ -301,6 +337,15 @@ fn apply_overrides(config: &mut DeployConfig, overrides: &Overrides) {
     if let Some(v) = overrides.public_ingress_port {
         config.public_ingress_port = v;
     }
+    if !overrides.egress_allowed_urls.is_empty() {
+        config.egress_allowlist.urls = overrides.egress_allowed_urls.clone();
+    }
+    if !overrides.egress_allowed_hostnames.is_empty() {
+        config.egress_allowlist.hostnames = overrides.egress_allowed_hostnames.clone();
+    }
+    if !overrides.egress_allowed_ips.is_empty() {
+        config.egress_allowlist.ips = overrides.egress_allowed_ips.clone();
+    }
 }
 
 fn invalid_deploy_config_error(errors: DeployConfigValidationErrors) -> anyhow::Error {
@@ -355,6 +400,7 @@ fn build_create_intent(
         health_check_type: deploy_config.health_check_type,
         health_check_port: deploy_config.health_check_port as u32,
         public_ingress_port: deploy_config.public_ingress_port as u32,
+        egress_allowlist: deploy_config.egress_allowlist.to_intent(),
     }
 }
 
@@ -670,6 +716,31 @@ mod tests {
         assert_eq!(intent.debug_mode, Some(true));
     }
 
+    #[test]
+    fn build_intent_forwards_egress_allowlist() {
+        let mut cfg = file_config();
+        cfg.egress_allowlist.urls = vec!["https://api.example.com/v1".into()];
+        cfg.egress_allowlist.hostnames = vec!["api.example.com".into()];
+        cfg.egress_allowlist.ips = vec!["203.0.113.10".into()];
+
+        let intent = build_create_intent(&cfg, "image-url".to_string(), None);
+        let allowlist = intent
+            .egress_allowlist
+            .expect("allowlist should be present");
+
+        assert_eq!(allowlist.urls, ["https://api.example.com/v1"]);
+        assert_eq!(allowlist.hostnames, ["api.example.com"]);
+        assert_eq!(allowlist.ips, ["203.0.113.10"]);
+    }
+
+    #[test]
+    fn build_intent_omits_empty_egress_allowlist() {
+        let cfg = file_config();
+        let intent = build_create_intent(&cfg, "image-url".to_string(), None);
+
+        assert_eq!(intent.egress_allowlist, None);
+    }
+
     /// Exercises every override flag via clap parsing so flag renames or
     /// removals fail this test. The other override tests construct `Args` by
     /// field name and would silently pass.
@@ -702,6 +773,12 @@ mod tests {
             "8080",
             "--public-ingress-port",
             "9090",
+            "--egress-allowed-url",
+            "https://api.example.com/v1",
+            "--egress-allowed-hostname",
+            "api.example.com",
+            "--egress-allowed-ip",
+            "203.0.113.10",
             "--pivot-pull-secret",
             pull_secret_path,
             "--dangerous-deploy-debug-mode",
@@ -728,6 +805,7 @@ mod tests {
         assert_ne!(resolved.pivot_args, template.pivot_args);
         assert_ne!(resolved.health_check_port, template.health_check_port);
         assert_ne!(resolved.public_ingress_port, template.public_ingress_port);
+        assert_ne!(resolved.egress_allowlist, template.egress_allowlist);
         assert_ne!(
             resolved.dangerous_deploy_debug_mode,
             template.dangerous_deploy_debug_mode
@@ -742,6 +820,12 @@ mod tests {
         assert_eq!(resolved.pivot_args, vec!["arg1", "arg2"]);
         assert_eq!(resolved.health_check_port, 8080);
         assert_eq!(resolved.public_ingress_port, 9090);
+        assert_eq!(
+            resolved.egress_allowlist.urls,
+            ["https://api.example.com/v1"]
+        );
+        assert_eq!(resolved.egress_allowlist.hostnames, ["api.example.com"]);
+        assert_eq!(resolved.egress_allowlist.ips, ["203.0.113.10"]);
         assert!(resolved.dangerous_deploy_debug_mode);
 
         // pivot_pull_secret isn't part of apply_overrides; verify clap captured the path.

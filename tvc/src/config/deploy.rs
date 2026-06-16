@@ -6,6 +6,7 @@ use crate::prompts;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use turnkey_client::generated::TvcEgressAllowlist;
 use turnkey_client::generated::immutable::common::v1::TvcHealthCheckType;
 
 /// Sentinel written by `tvc deploy init` to remind the user to either remove
@@ -16,6 +17,36 @@ pub const DEFAULT_QOS_VERSION: &str = "0.10.2";
 
 fn default_qos_version() -> String {
     DEFAULT_QOS_VERSION.to_string()
+}
+
+/// Non-enforced egress allowlist metadata to include in the QOS manifest.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EgressAllowlist {
+    #[serde(default)]
+    pub urls: Vec<String>,
+    #[serde(default)]
+    pub hostnames: Vec<String>,
+    #[serde(default)]
+    pub ips: Vec<String>,
+}
+
+impl EgressAllowlist {
+    pub fn is_empty(&self) -> bool {
+        self.urls.is_empty() && self.hostnames.is_empty() && self.ips.is_empty()
+    }
+
+    pub fn to_intent(&self) -> Option<TvcEgressAllowlist> {
+        if self.is_empty() {
+            return None;
+        }
+
+        Some(TvcEgressAllowlist {
+            urls: self.urls.clone(),
+            hostnames: self.hostnames.clone(),
+            ips: self.ips.clone(),
+        })
+    }
 }
 
 /// Deployment configuration loaded from JSON file.
@@ -40,6 +71,8 @@ pub struct DeployConfig {
     pub health_check_type: TvcHealthCheckType,
     pub health_check_port: u16,
     pub public_ingress_port: u16,
+    #[serde(default)]
+    pub egress_allowlist: EgressAllowlist,
 }
 
 impl DeployConfig {
@@ -58,6 +91,7 @@ impl DeployConfig {
             health_check_type: TvcHealthCheckType::Http,
             health_check_port: 3000,
             public_ingress_port: 3000,
+            egress_allowlist: EgressAllowlist::default(),
         }
     }
 
@@ -258,6 +292,29 @@ mod tests {
         .unwrap();
 
         assert_eq!(config.qos_version, DEFAULT_QOS_VERSION);
+    }
+
+    #[test]
+    fn config_deserializes_egress_allowlist() {
+        let config: DeployConfig = serde_json::from_value(serde_json::json!({
+            "appId": "app_123",
+            "pivotContainerImageUrl": "ghcr.io/x/y:v1",
+            "pivotPath": "/bin/pivot",
+            "expectedPivotDigest": "sha256:abc",
+            "healthCheckType": "TVC_HEALTH_CHECK_TYPE_HTTP",
+            "healthCheckPort": 3000,
+            "publicIngressPort": 3000,
+            "egressAllowlist": {
+                "urls": ["https://api.example.com/v1"],
+                "hostnames": ["api.example.com"],
+                "ips": ["203.0.113.10"]
+            }
+        }))
+        .unwrap();
+
+        assert_eq!(config.egress_allowlist.urls, ["https://api.example.com/v1"]);
+        assert_eq!(config.egress_allowlist.hostnames, ["api.example.com"]);
+        assert_eq!(config.egress_allowlist.ips, ["203.0.113.10"]);
     }
 
     #[test]
