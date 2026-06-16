@@ -104,6 +104,7 @@ impl Cli {
                 }
             },
             Commands::Login(args) => commands::login::run(args, non_interactive).await,
+            Commands::Whoami(args) => commands::whoami::run(args).await,
         }
     }
 }
@@ -112,6 +113,8 @@ impl Cli {
 enum Commands {
     /// Authenticate with Turnkey and set up local credentials.
     Login(commands::login::Args),
+    /// Print the current authenticated Turnkey identity.
+    Whoami(commands::whoami::Args),
     /// Manage deployments.
     Deploy {
         #[command(subcommand)]
@@ -133,6 +136,7 @@ impl Commands {
     fn name(&self) -> &'static str {
         match self {
             Commands::Login(_) => "login",
+            Commands::Whoami(_) => "whoami",
             Commands::Deploy { command } => command.name(),
             Commands::App { command } => command.name(),
             Commands::Keys { command } => command.name(),
