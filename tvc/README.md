@@ -24,9 +24,23 @@ When all three required vars are present, every command authenticates directly f
 
 The typical flow: run `tvc login` once locally to generate an API key, register the public key in the Turnkey dashboard, then store the values in your CI's secret store (e.g. `TVC_API_KEY_PRIVATE` as a GitHub Secret, the rest as GitHub Variables).
 
+### New Organization Signup
+
+For a new top-level Turnkey organization, use the dashboard-compatible signup handoff:
+
+```bash
+tvc --non-interactive login --create-org --org my-org
+```
+
+This generates and stores the local TVC API key and operator key, then prints the dashboard signup URL and the generated API public key. Complete the dashboard magic-link/passkey onboarding flow, register the printed API public key during onboarding or in user settings, then run `tvc login` and add the resulting organization ID using the same local alias.
+
+TVC intentionally does not create top-level organizations directly through the public API. The dashboard flow performs the magic-link email session, passkey/WebAuthn registration, recovery setup, and onboarding state needed for later web UI login compatibility. Public API org creation is for sub-organizations (`CreateSubOrganization`), not dashboard-compatible top-level signup.
+
+`--create-org` is safe in `--non-interactive` mode: it prints the URL and instructions and never opens a browser or prompts. Use `--dashboard-url` or `TVC_DASHBOARD_URL` only when targeting a non-production dashboard environment.
+
 ### Passkeys and WebAuthn
 
-TVC includes the backend-compatible WebAuthn stamping and session plumbing used by Turnkey passkeys:
+TVC includes the backend-compatible WebAuthn stamping and session plumbing used by Turnkey passkeys for existing organizations:
 
 ```bash
 tvc login --passkey --passkey-transport auto
@@ -35,7 +49,7 @@ tvc auth passkey list
 tvc auth passkey remove <AUTHENTICATOR_ID>
 ```
 
-Turnkey verifies WebAuthn assertions against the exact JSON request body. The challenge is `base64url(hex(sha256(raw_request_body)))`, and the CLI sends the assertion as protojson in `X-Stamp-WebAuthn`. After passkey login returns a Turnkey session, later commands can use the stored session via `X-Session` without requiring another touch.
+Turnkey verifies WebAuthn assertions against the exact JSON request body. The challenge is `base64url(hex(sha256(raw_request_body)))`, and the CLI sends the assertion as protojson in `X-Stamp-WebAuthn`. After passkey login returns a Turnkey session for an already configured org, later commands can use the stored session via `X-Session` without requiring another touch. This passkey session flow authenticates existing org sessions only; it is not top-level organization creation. New top-level orgs should use `tvc login --create-org` and complete signup in the dashboard.
 
 Transport status:
 

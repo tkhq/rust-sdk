@@ -16,6 +16,9 @@ use turnkey_client::TurnkeyClient;
 use turnkey_client::generated::{GetWhoamiRequest, StampLoginIntent};
 
 const ENV_PASSKEY_FIXTURE_ASSERTION: &str = "TVC_PASSKEY_FIXTURE_ASSERTION";
+const DASHBOARD_SIGNUP_URL: &str = "https://app.turnkey.com/dashboard/welcome";
+const PENDING_DASHBOARD_SIGNUP_ORG_ID: &str = "pending-dashboard-signup";
+const DEFAULT_DASHBOARD_SIGNUP_ALIAS: &str = "default";
 
 /// Authenticate with Turnkey and set up local credentials.
 #[derive(Debug, ClapArgs)]
@@ -28,6 +31,12 @@ pub struct Args {
     /// Turnkey API base URL. Defaults to production for newly configured orgs.
     #[arg(long, env = "TVC_API_BASE_URL", value_name = "URL")]
     pub api_base_url: Option<String>,
+    /// Start dashboard signup for a new top-level org and store generated local keys.
+    #[arg(long, visible_alias = "dashboard-signup", conflicts_with = "passkey")]
+    pub create_org: bool,
+    /// Turnkey dashboard URL for --create-org. Defaults to the production dashboard.
+    #[arg(long, env = "TVC_DASHBOARD_URL", value_name = "URL")]
+    pub dashboard_url: Option<String>,
     /// Authenticate with a passkey/WebAuthn authenticator instead of a local API key.
     #[arg(long)]
     pub passkey: bool,
@@ -62,6 +71,10 @@ pub async fn run(args: Args, is_non_interactive: bool) -> Result<()> {
 
     if args.passkey {
         return run_passkey_login(args, is_non_interactive).await;
+    }
+
+    if args.create_org {
+        return run_dashboard_signup_handoff(args).await;
     }
 
     let config = Config::load().await?;
@@ -100,9 +113,9 @@ async fn run_passkey_login(args: Args, is_non_interactive: bool) -> Result<()> {
 
     let alias = match find_org(&config, &org_query) {
         Some((alias, _)) => alias.clone(),
-        None => bail!(
-            "Organization '{org_query}' not found. Run `tvc login` without --passkey first."
-        ),
+        None => {
+            bail!("Organization '{org_query}' not found. Run `tvc login` without --passkey first.")
+        }
     };
     update_api_base_url_from_override(&mut config, &alias, args.api_base_url.as_deref());
     config.set_active_org(&alias)?;
@@ -138,8 +151,44 @@ async fn run_passkey_login(args: Args, is_non_interactive: bool) -> Result<()> {
     .save(&alias, &org_config)
     .await?;
 
-    println!("Passkey session stored for org: {} ({})", alias, org_config.id);
+    println!(
+        "Passkey session stored for org: {} ({})",
+        alias, org_config.id
+    );
     Ok(())
+}
+
+async fn run_dashboard_signup_handoff(args: Args) -> Result<()> {
+    let mut config = Config::load().await?;
+    let alias = args
+        .org
+        .as_deref()
+        .unwrap_or(DEFAULT_DASHBOARD_SIGNUP_ALIAS);
+    let api_base_url = new_org_api_base_url(args.api_base_url.as_deref());
+    let org_config = pending_dashboard_signup_org(&mut config, alias, api_base_url)?;
+
+    config.save().await?;
+
+    let api_key = match StoredApiKey::load(&org_config).await? {
+        Some(api_key) => {
+            debug!(
+                org_alias = alias,
+                "using existing pending dashboard signup API key"
+            );
+            println!("Using existing pending dashboard signup API key.");
+            api_key
+        }
+        None => generate_dashboard_signup_api_key(&org_config).await?,
+    };
+    let operator_key = find_or_generate_operator_key(&org_config).await?;
+
+    print_dashboard_signup_handoff(
+        alias,
+        &org_config,
+        &api_key,
+        &operator_key,
+        dashboard_signup_url(args.dashboard_url.as_deref()),
+    )
 }
 
 fn build_login_plan_interactive(args: Args, config: &Config) -> Result<LoginPlan> {
@@ -315,6 +364,29 @@ fn generate_org(
     Ok((alias, org_config))
 }
 
+fn pending_dashboard_signup_org(
+    config: &mut Config,
+    alias: &str,
+    api_base_url: String,
+) -> Result<OrgConfig> {
+    match config.orgs.get(alias) {
+        Some(org_config) if org_config.id == PENDING_DASHBOARD_SIGNUP_ORG_ID => {
+            update_api_base_url_from_override(config, alias, Some(&api_base_url));
+        }
+        Some(org_config) => bail!(
+            "Organization alias '{alias}' is already configured for '{}'. Choose a different --org alias for dashboard signup.",
+            org_config.id
+        ),
+        None => config.add_org(
+            alias,
+            PENDING_DASHBOARD_SIGNUP_ORG_ID.to_string(),
+            api_base_url,
+        )?,
+    }
+
+    Ok(config.orgs.get(alias).unwrap().clone())
+}
+
 fn new_org_api_base_url(api_base_url_override: Option<&str>) -> String {
     api_base_url_override
         .unwrap_or(API_BASE_URL_PROD)
@@ -332,6 +404,37 @@ fn update_api_base_url_from_override(
             org_config.api_base_url = api_base_url.to_string();
         }
     }
+}
+
+fn dashboard_signup_url(dashboard_url_override: Option<&str>) -> String {
+    dashboard_url_override
+        .unwrap_or(DASHBOARD_SIGNUP_URL)
+        .to_string()
+}
+
+async fn generate_dashboard_signup_api_key(org_config: &OrgConfig) -> Result<StoredApiKey> {
+    debug!("generating dashboard signup API key");
+    println!();
+    println!("Generating API key for dashboard signup...");
+
+    let stamper = TurnkeyP256ApiKey::generate();
+    let public_key = hex::encode(stamper.compressed_public_key());
+    let private_key = hex::encode(stamper.private_key());
+
+    let api_key = StoredApiKey {
+        public_key: public_key.clone(),
+        private_key,
+        curve: KeyCurve::P256,
+    };
+
+    api_key.save(org_config).await?;
+
+    println!();
+    println!("API Key Generated!");
+    println!();
+    println!("Public Key: {public_key}");
+
+    Ok(api_key)
 }
 
 async fn generate_api_key(org_config: &OrgConfig) -> Result<StoredApiKey> {
@@ -481,6 +584,48 @@ fn print_success(
     Ok(())
 }
 
+fn print_dashboard_signup_handoff(
+    alias: &str,
+    org_config: &OrgConfig,
+    api_key: &StoredApiKey,
+    operator_key: &StoredQosOperatorKey,
+    dashboard_url: String,
+) -> Result<()> {
+    println!();
+    println!("Dashboard signup handoff ready.");
+    println!();
+    println!("Dashboard URL: {dashboard_url}");
+    println!("Local alias: {alias}");
+    println!("API Public Key: {}", api_key.public_key);
+    println!("Operator Public Key: {}", operator_key.public_key);
+    println!();
+    println!("Next steps:");
+    println!("  1. Open the dashboard URL and complete the magic-link/passkey signup flow.");
+    println!(
+        "  2. Register the API public key above for this TVC CLI during onboarding or in the dashboard user settings."
+    );
+    println!(
+        "  3. After dashboard signup gives you the organization ID, run `tvc login` and add a new organization using alias '{alias}'."
+    );
+    println!(
+        "  4. Reuse alias '{alias}' so TVC keeps using the API key stored at {}.",
+        org_config.api_key_path.display()
+    );
+    println!();
+    println!(
+        "TVC does not create top-level organizations through the public API. Dashboard signup preserves magic-link, passkey, recovery, and web UI login compatibility."
+    );
+    println!();
+    println!(
+        "Config: {}",
+        crate::config::turnkey::config_file_path()?.display()
+    );
+    println!("API Key: {}", org_config.api_key_path.display());
+    println!("Operator Key: {}", org_config.operator_key_path.display());
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -497,6 +642,42 @@ mod tests {
     #[test]
     fn new_org_api_base_url_uses_override() {
         assert_eq!(new_org_api_base_url(Some(OVERRIDE_URL)), OVERRIDE_URL);
+    }
+
+    #[test]
+    fn dashboard_signup_url_defaults_to_turnkey_dashboard() {
+        assert_eq!(dashboard_signup_url(None), DASHBOARD_SIGNUP_URL);
+    }
+
+    #[test]
+    fn dashboard_signup_url_uses_override() {
+        assert_eq!(
+            dashboard_signup_url(Some("http://localhost:3000/signup")),
+            "http://localhost:3000/signup"
+        );
+    }
+
+    #[test]
+    fn pending_dashboard_signup_org_creates_sentinel_entry() {
+        let mut config = Config::default();
+
+        let org = pending_dashboard_signup_org(&mut config, "test", API_BASE_URL_PROD.to_string())
+            .unwrap();
+
+        assert_eq!(org.id, PENDING_DASHBOARD_SIGNUP_ORG_ID);
+        assert_eq!(config.active_org, None);
+        assert_eq!(config.orgs["test"].id, PENDING_DASHBOARD_SIGNUP_ORG_ID);
+    }
+
+    #[test]
+    fn pending_dashboard_signup_org_rejects_existing_real_org() {
+        let mut config = config_with_org(API_BASE_URL_PROD);
+
+        let err =
+            pending_dashboard_signup_org(&mut config, "default", API_BASE_URL_PROD.to_string())
+                .unwrap_err();
+
+        assert!(err.to_string().contains("already configured"));
     }
 
     #[test]

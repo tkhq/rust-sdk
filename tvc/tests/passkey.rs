@@ -1,9 +1,9 @@
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
+use turnkey_api_key_stamper::Stamp as _;
 use tvc::passkey::{
     WEBAUTHN_STAMP_HEADER_NAME, WebAuthnAssertion, WebAuthnStamper, derive_challenge,
 };
-use turnkey_api_key_stamper::Stamp as _;
 
 #[test]
 fn derives_turnkey_webauthn_challenge_from_raw_request_body() {
