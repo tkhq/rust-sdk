@@ -4001,6 +4001,25 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/get_app_status".to_string())
             .await
     }
+    /// Stream TVC enclave debug logs
+    ///
+    /// Stream application logs from a debug-mode TVC deployment. Lines from every running replica are interleaved on one stream, tagged by pod. Each stream is bounded by the request timeout; re-request to continue tailing.
+    pub async fn get_enclave_debug_logs(
+        &self,
+        request: coordinator::GetEnclaveDebugLogsRequest,
+    ) -> Result<
+        futures_util::stream::BoxStream<
+            'static,
+            Result<coordinator::GetEnclaveDebugLogsResponse, TurnkeyClientError>,
+        >,
+        TurnkeyClientError,
+    > {
+        self.process_streaming_request(
+            &request,
+            "/public/v1/query/get_enclave_debug_logs".to_string(),
+        )
+        .await
+    }
     /// Get balances
     ///
     /// Get balances of supported assets for an address on the specified network. Only non-zero balances are returned.

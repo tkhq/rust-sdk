@@ -666,6 +666,53 @@ pub struct AppStatus {
     pub targeted_deployment_id: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct LogLine {
+    pub content: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub ts: ::core::option::Option<Timestamp>,
+}
+/// LogEventType discriminates what a debug-log stream message carries:
+/// customer application log data, or a server-synthesized stream signal.
+/// Consumers must ignore event types they do not recognize.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum LogEventType {
+    #[serde(rename = "LOG_EVENT_TYPE_UNSPECIFIED")]
+    Unspecified = 0,
+    /// The message carries application log lines.
+    #[serde(rename = "LOG_EVENT_TYPE_APP_LOG")]
+    AppLog = 1,
+    /// The pod's log stream ended (container terminated); the message carries
+    /// no lines.
+    #[serde(rename = "LOG_EVENT_TYPE_POD_TERMINATED")]
+    PodTerminated = 2,
+}
+impl LogEventType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "LOG_EVENT_TYPE_UNSPECIFIED",
+            Self::AppLog => "LOG_EVENT_TYPE_APP_LOG",
+            Self::PodTerminated => "LOG_EVENT_TYPE_POD_TERMINATED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "LOG_EVENT_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+            "LOG_EVENT_TYPE_APP_LOG" => Some(Self::AppLog),
+            "LOG_EVENT_TYPE_POD_TERMINATED" => Some(Self::PodTerminated),
+            _ => None,
+        }
+    }
+}
+#[derive(Debug)]
 /// An account derived from a Wallet
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]

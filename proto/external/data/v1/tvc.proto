@@ -238,3 +238,25 @@ message AppStatus {
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The deployment ID currently serving traffic for this app"}
   ];
 }
+
+// LogEventType discriminates what a debug-log stream message carries:
+// customer application log data, or a server-synthesized stream signal.
+// Consumers must ignore event types they do not recognize.
+enum LogEventType {
+  LOG_EVENT_TYPE_UNSPECIFIED = 0;
+
+  // The message carries application log lines.
+  LOG_EVENT_TYPE_APP_LOG = 1;
+
+  // The pod's log stream ended (container terminated); the message carries
+  // no lines.
+  LOG_EVENT_TYPE_POD_TERMINATED = 2;
+}
+
+message LogLine {
+  string content = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "One log line, exactly as the application printed it (without the trailing newline)"}
+  ];
+  Timestamp ts = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "When the line was logged. Stable across replays, so lines can be chronologically merged across pods"}];
+}

@@ -1899,6 +1899,24 @@ service PublicApiService {
     };
   }
 
+  rpc GetEnclaveDebugLogs(GetEnclaveDebugLogsRequest) returns (stream GetEnclaveDebugLogsResponse) {
+    // INTERNAL until Phase 4: keeps this streaming RPC out of the
+    // externally-published SDK swaggers. The JS codegen has no streaming
+    // concept and would otherwise generate a broken unary client for it.
+    // REMOVE in Phase 4 once SDK streaming support lands (see
+    // DEBUG_LOGS_STREAMING_FINAL_PLAN, "Phase 4 prerequisite — JS codegen").
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/query/get_enclave_debug_logs"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Stream application logs from a debug-mode TVC deployment. Lines from every running replica are interleaved on one stream, tagged by pod. Each stream is bounded by the request timeout; re-request to continue tailing."
+      summary: "Stream TVC enclave debug logs"
+      tags: "TVC"
+    };
+  }
+
   rpc GetWalletAddressBalances(GetWalletAddressBalancesRequest) returns (GetWalletAddressBalancesResponse) {
     option (google.api.http) = {
       post: "/public/v1/query/get_wallet_address_balances"
@@ -2727,7 +2745,9 @@ message GetNoncesRequest {
         "eip155:8453",
         "eip155:84532",
         "eip155:137",
-        "eip155:80002"
+        "eip155:80002",
+        "eip155:56",
+        "eip155:97"
       ]
     }
   ];
@@ -2916,6 +2936,31 @@ message GetAppStatusResponse {
   ];
 }
 
+message GetEnclaveDebugLogsRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string deployment_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given TVC Deployment. The deployment must be running in debug mode."}
+  ];
+  bool follow = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Keep the stream open and emit new lines as they arrive, until the request timeout."}];
+  int32 tail_lines = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Limit the initial history to the last N lines per replica. Unset returns the full log buffer."}];
+}
+
+message GetEnclaveDebugLogsResponse {
+  repeated external.data.v1.LogLine lines = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Application log lines, in order, for APP_LOG events."}];
+  string pod_name = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The replica (pod) that produced this message."}
+  ];
+  external.data.v1.LogEventType event = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "What this message carries: application log lines, or a stream signal such as pod termination."}
+  ];
+}
+
 message RefreshFeatureFlagsRequest {}
 
 message RefreshFeatureFlagsResponse {}
@@ -2942,6 +2987,8 @@ message GetWalletAddressBalancesRequest {
         "eip155:80002",
         "eip155:42161",
         "eip155:421614",
+        "eip155:56",
+        "eip155:97",
         "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
         "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1"
       ]
@@ -2985,6 +3032,8 @@ message ListSupportedAssetsRequest {
         "eip155:80002",
         "eip155:42161",
         "eip155:421614",
+        "eip155:56",
+        "eip155:97",
         "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
         "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1"
       ]

@@ -1562,7 +1562,9 @@ message EthSendTransactionIntent {
         "eip155:8453",
         "eip155:84532",
         "eip155:137",
-        "eip155:80002"
+        "eip155:80002",
+        "eip155:56",
+        "eip155:97"
       ]
     }
   ];
@@ -4035,7 +4037,9 @@ message EthSendRawTransactionIntent {
         "eip155:8453",
         "eip155:84532",
         "eip155:137",
-        "eip155:80002"
+        "eip155:80002",
+        "eip155:56",
+        "eip155:97"
       ]
     }
   ];
