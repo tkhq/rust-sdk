@@ -67,13 +67,14 @@ pub struct WebAuthnAttestation {
     pub transports: Vec<String>,
 }
 
-/// A synchronous WebAuthn ceremony provider.
-pub trait PasskeyCeremony: Send + Sync {
+/// A synchronous WebAuthn assertion provider.
+pub trait PasskeyAssertionCeremony: Send + Sync {
     fn assert(&self, challenge: &str) -> Result<WebAuthnAssertion>;
+}
 
-    fn attest(&self, _challenge: &str, _name: &str) -> Result<WebAuthnAttestation> {
-        bail!("passkey registration is not implemented for this transport")
-    }
+/// A synchronous WebAuthn attestation provider.
+pub trait PasskeyAttestationCeremony: Send + Sync {
+    fn attest(&self, challenge: &str, name: &str) -> Result<WebAuthnAttestation>;
 }
 
 /// Derive the Turnkey WebAuthn challenge from the exact serialized request body.
@@ -102,7 +103,7 @@ impl WebAuthnStamper<FixtureCeremony> {
     }
 }
 
-impl<C: PasskeyCeremony> Stamp for WebAuthnStamper<C> {
+impl<C: PasskeyAssertionCeremony> Stamp for WebAuthnStamper<C> {
     fn stamp(&self, body: &[u8]) -> std::result::Result<StampHeader, StamperError> {
         let challenge = derive_challenge(body);
         let assertion = self
@@ -125,7 +126,7 @@ pub struct FixtureCeremony {
     assertion: WebAuthnAssertion,
 }
 
-impl PasskeyCeremony for FixtureCeremony {
+impl PasskeyAssertionCeremony for FixtureCeremony {
     fn assert(&self, _challenge: &str) -> Result<WebAuthnAssertion> {
         Ok(self.assertion.clone())
     }
@@ -142,7 +143,7 @@ impl UnsupportedCeremony {
     }
 }
 
-impl PasskeyCeremony for UnsupportedCeremony {
+impl PasskeyAssertionCeremony for UnsupportedCeremony {
     fn assert(&self, _challenge: &str) -> Result<WebAuthnAssertion> {
         match self.transport {
             PasskeyTransport::Usb => bail!(
@@ -155,5 +156,11 @@ impl PasskeyCeremony for UnsupportedCeremony {
                 "no passkey transport is available in this build; try --passkey-transport=usb or --passkey-transport=browser after enabling native support"
             ),
         }
+    }
+}
+
+impl PasskeyAttestationCeremony for UnsupportedCeremony {
+    fn attest(&self, _challenge: &str, _name: &str) -> Result<WebAuthnAttestation> {
+        bail!("passkey registration is not implemented for this transport")
     }
 }

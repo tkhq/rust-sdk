@@ -3,9 +3,8 @@ use predicates::prelude::*;
 use std::collections::HashMap;
 use std::fs;
 use tempfile::TempDir;
-use turnkey_api_key_stamper::{Stamp as _, TurnkeyP256ApiKey};
-use tvc::client::TvcStamper;
-use tvc::config::turnkey::{Config, KeyCurve, OrgConfig, StoredApiKey, StoredPasskeySession};
+use turnkey_api_key_stamper::TurnkeyP256ApiKey;
+use tvc::config::turnkey::{Config, KeyCurve, OrgConfig, StoredApiKey};
 
 const ENV_ORG_ID: &str = "TVC_ORG_ID";
 const ENV_API_KEY_PUBLIC: &str = "TVC_API_KEY_PUBLIC";
@@ -117,25 +116,4 @@ fn auth_falls_back_to_disk_config_when_required_env_vars_are_unset() {
         .failure()
         .stderr(predicate::str::contains("failed to fetch app status"))
         .stderr(predicate::str::contains("No active organization").not());
-}
-
-#[test]
-fn stored_passkey_session_stamps_with_x_session() {
-    let stamper = TvcStamper::PasskeySession(StoredPasskeySession {
-        session: "session-jwt".to_string(),
-    });
-
-    let header = stamper.stamp(b"{}").unwrap();
-
-    assert_eq!(header.name, "X-Session");
-    assert_eq!(header.value, "session-jwt");
-}
-
-#[test]
-fn env_api_key_stamper_still_uses_x_stamp() {
-    let stamper = TvcStamper::ApiKey(TurnkeyP256ApiKey::generate());
-
-    let header = stamper.stamp(b"{}").unwrap();
-
-    assert_eq!(header.name, "X-Stamp");
 }

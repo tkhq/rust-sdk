@@ -12,7 +12,7 @@ pub struct Args {
 
 #[derive(Debug, Subcommand)]
 pub enum AuthCommands {
-    /// Manage passkey authenticators.
+    /// Manage passkey authenticators; other auth methods can be added here later.
     Passkey(PasskeyArgs),
 }
 
@@ -43,7 +43,7 @@ pub struct RegisterArgs {
 }
 
 #[derive(Debug, ClapArgs)]
-pub struct ListArgs {}
+pub struct ListArgs;
 
 #[derive(Debug, ClapArgs)]
 pub struct RemoveArgs {

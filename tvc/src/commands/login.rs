@@ -69,8 +69,10 @@ pub async fn run(args: Args, is_non_interactive: bool) -> Result<()> {
         "running login command"
     );
 
+    validate_login_args(&args, is_non_interactive)?;
+
     if args.passkey {
-        return run_passkey_login(args, is_non_interactive).await;
+        return run_passkey_login(args).await;
     }
 
     if args.create_org {
@@ -88,11 +90,19 @@ pub async fn run(args: Args, is_non_interactive: bool) -> Result<()> {
     execute_login(config, plan).await
 }
 
-async fn run_passkey_login(args: Args, is_non_interactive: bool) -> Result<()> {
-    if is_non_interactive {
+fn validate_login_args(args: &Args, is_non_interactive: bool) -> Result<()> {
+    if args.passkey && args.create_org {
+        bail!("--passkey cannot be used with --create-org");
+    }
+
+    if args.passkey && is_non_interactive {
         bail!("passkey authentication requires an interactive terminal; remove --non-interactive");
     }
 
+    Ok(())
+}
+
+async fn run_passkey_login(args: Args) -> Result<()> {
     let Some(assertion_json) = std::env::var(ENV_PASSKEY_FIXTURE_ASSERTION)
         .ok()
         .filter(|value| !value.is_empty())
@@ -104,19 +114,14 @@ async fn run_passkey_login(args: Args, is_non_interactive: bool) -> Result<()> {
     };
 
     let mut config = Config::load().await?;
-    let org_query = match args.org.clone().or_else(|| config.active_org.clone()) {
-        Some(org) => org,
-        None => bail!(
-            "Organization is required for passkey login. Pass --org or run `tvc login` first."
-        ),
+    let Some(org_query) = args.org.clone().or_else(|| config.active_org.clone()) else {
+        bail!("Organization is required for passkey login. Pass --org or run `tvc login` first.");
     };
 
-    let alias = match find_org(&config, &org_query) {
-        Some((alias, _)) => alias.clone(),
-        None => {
-            bail!("Organization '{org_query}' not found. Run `tvc login` without --passkey first.")
-        }
+    let Some((alias, _)) = find_org(&config, &org_query) else {
+        bail!("Organization '{org_query}' not found. Run `tvc login` without --passkey first.");
     };
+    let alias = alias.clone();
     update_api_base_url_from_override(&mut config, &alias, args.api_base_url.as_deref());
     config.set_active_org(&alias)?;
     config.save().await?;
@@ -699,6 +704,44 @@ mod tests {
         update_api_base_url_from_override(&mut config, "default", Some(OVERRIDE_URL));
 
         assert_eq!(config.orgs["default"].api_base_url, OVERRIDE_URL);
+    }
+
+    #[test]
+    fn validation_rejects_passkey_with_create_org() {
+        let args = Args {
+            org: None,
+            api_base_url: None,
+            create_org: true,
+            dashboard_url: None,
+            passkey: true,
+            passkey_transport: PasskeyTransport::Auto,
+        };
+
+        let err = validate_login_args(&args, false).unwrap_err();
+
+        assert!(
+            err.to_string()
+                .contains("--passkey cannot be used with --create-org")
+        );
+    }
+
+    #[test]
+    fn validation_rejects_non_interactive_passkey() {
+        let args = Args {
+            org: None,
+            api_base_url: None,
+            create_org: false,
+            dashboard_url: None,
+            passkey: true,
+            passkey_transport: PasskeyTransport::Auto,
+        };
+
+        let err = validate_login_args(&args, true).unwrap_err();
+
+        assert!(
+            err.to_string()
+                .contains("passkey authentication requires an interactive terminal")
+        );
     }
 
     fn config_with_org(api_base_url: &str) -> Config {

@@ -1,6 +1,8 @@
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
-use turnkey_api_key_stamper::Stamp as _;
+use turnkey_api_key_stamper::{Stamp as _, TurnkeyP256ApiKey};
+use tvc::client::TvcStamper;
+use tvc::config::turnkey::StoredPasskeySession;
 use tvc::passkey::{
     WEBAUTHN_STAMP_HEADER_NAME, WebAuthnAssertion, WebAuthnStamper, derive_challenge,
 };
@@ -40,6 +42,27 @@ fn webauthn_stamper_serializes_protojson_header_without_base64_wrapping() {
         !header.value.starts_with("ey"),
         "stamp must not be base64url-wrapped"
     );
+}
+
+#[test]
+fn stored_passkey_session_stamps_with_x_session() {
+    let stamper = TvcStamper::PasskeySession(StoredPasskeySession {
+        session: "session-jwt".to_string(),
+    });
+
+    let header = stamper.stamp(b"{}").unwrap();
+
+    assert_eq!(header.name, "X-Session");
+    assert_eq!(header.value, "session-jwt");
+}
+
+#[test]
+fn api_key_stamper_still_uses_x_stamp() {
+    let stamper = TvcStamper::ApiKey(TurnkeyP256ApiKey::generate());
+
+    let header = stamper.stamp(b"{}").unwrap();
+
+    assert_eq!(header.name, "X-Stamp");
 }
 
 #[test]
