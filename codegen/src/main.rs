@@ -325,16 +325,14 @@ fn parse_rpcs(proto: &str) -> Vec<Rpc> {
     service_re
         .captures_iter(proto)
         .flat_map(|service_caps| {
-            rpc_re
-                .captures_iter(&service_caps[2])
-                .map(|rpc_caps| Rpc {
-                    name: rpc_caps[1].to_string(),
-                    request_type: rpc_caps[2].to_string(),
-                    response_type: rpc_caps[3].to_string(),
-                    response_kind: RpcResponseKind::Unary,
-                    options: rpc_caps[4].to_string(),
-                })
-                .collect::<Vec<_>>()
+            let service_body = service_caps.get(2).unwrap().as_str();
+            rpc_re.captures_iter(service_body).map(|rpc_caps| Rpc {
+                name: rpc_caps[1].to_string(),
+                request_type: rpc_caps[2].to_string(),
+                response_type: rpc_caps[3].to_string(),
+                response_kind: RpcResponseKind::Unary,
+                options: rpc_caps[4].to_string(),
+            })
         })
         .collect()
 }
