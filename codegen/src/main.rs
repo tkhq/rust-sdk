@@ -32,6 +32,20 @@ struct ActivitiesFile {
     activities: HashMap<String, ActivityDetails>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+struct Rpc {
+    name: String,
+    request_type: String,
+    response_type: String,
+    response_kind: RpcResponseKind,
+    options: String,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum RpcResponseKind {
+    Unary,
+}
+
 fn main() {
     let out_dir = PathBuf::from(GENERATED_CLIENT_DIR);
 
@@ -53,42 +67,6 @@ fn main() {
         .unwrap();
 
     let proto = fs::read_to_string(PUBLIC_API_PROTO_PATH).expect("Failed to read proto file");
-    // Capture the start of "service... {" until a single "}" is encountered on its own line without indentation.
-    // That's just a simple alternative to writing a nesting-aware parser...
-    // We're trying to match on blocks like this one:
-    //   service PublicApiService {
-    //     rpc GetWhoami(GetWhoamiRequest) returns (GetWhoamiResponse) {
-    //       option (google.api.http) = {
-    //         post: "/public/v1/query/whoami"
-    //         body: "*"
-    //       };
-    //       option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-    //         description: "Get basic information about your current API or WebAuthN user and their organization. Affords Sub-Organization look ups via Parent Organization for WebAuthN or API key users."
-    //         summary: "Who am I?"
-    //         tags: "Sessions"
-    //       };
-    //     }
-    //     ....more rpc blocks
-    //   }
-    let service_re = Regex::new(r"(?ms)^service\s+(\w+)\s*\{\n(.*?)^\}").unwrap();
-
-    // Now that we have the inside of a "service Foo {...}" block, we're parsing the rpc blocks within that
-    // We're capturing the RPC name, input type, output type, and contents. For example:
-    //  rpc GetWhoami(GetWhoamiRequest) returns (GetWhoamiResponse) {
-    //    option (google.api.http) = {
-    //      post: "/public/v1/query/whoami"
-    //      body: "*"
-    //    };
-    //    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-    //      description: "Get basic information about your current API or WebAuthN user and their organization. Affords Sub-Organization look ups via Parent Organization for WebAuthN or API key users."
-    //      summary: "Who am I?"
-    //      tags: "Sessions"
-    //    };
-    //  }
-    let rpc_re = Regex::new(
-        r#"(?ms)^  rpc\s+(\w+)\s*\(\s*([a-zA-Z0-9_.]+)\s*\)\s+returns\s+\(\s*([a-zA-Z0-9_.]+)\s*\)\s*\{\n(.*?)^  \}"#
-    ).unwrap();
-
     // Now we try to parse the URL out of the option. For example:
     //   option (google.api.http) = {
     //     post: "/public/v1/submit/delete_policy"
@@ -124,86 +102,80 @@ fn main() {
     let request_to_activity_type = request_to_activity_types(&external_activity_proto);
     let requests_with_app_proofs = requests_with_generate_app_proofs(&external_activity_proto);
 
-    for service_caps in service_re.captures_iter(&proto) {
-        // Remember: this capture group has the inside of "service Foo {...}" block,
-        // and contains many "rpc Foo(input) returns (output) {...}" blocks
-        let service_body = &service_caps[2];
+    for rpc in parse_rpcs(&proto) {
+        // e.g. "DeletePolicy"
+        let fn_name = to_snake_case(&rpc.name);
 
-        // Here we iterate over each "rpc Foo(input) returns (output) {...}" block
-        for rpc_caps in rpc_re.captures_iter(service_body) {
-            // e.g. "DeletePolicy"
-            let fn_name = to_snake_case(&rpc_caps[1]);
+        // e.g. "external.activity.v1.DeletePolicyRequest"
+        let req_type = rpc.request_type.as_str();
 
-            // e.g. "external.activity.v1.DeletePolicyRequest"
-            let req_type = &rpc_caps[2];
+        // e.g.. "ActivityResponse"
+        let res_type = rpc.response_type.as_str();
 
-            // e.g.. "ActivityResponse"
-            let res_type = &rpc_caps[3];
+        // This is the inside of our "rpc Foo(input) returns (output) { ... }" block.
+        // It contains a list of options. For example:
+        //     option (google.api.http) = {
+        //      post: "/public/v1/submit/delete_policy"
+        //      body: "*"
+        //    };
+        //    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+        //      description: "Delete an existing Policy"
+        //      summary: "Delete Policy"
+        //      tags: "Policies"
+        //    };
+        let http_opts = rpc.options.as_str();
+        let is_internal =
+            http_opts.contains("option (google.api.method_visibility).restriction = \"INTERNAL\"");
+        let is_tvc = fn_name.contains("tvc");
+        if is_internal && !is_tvc {
+            // Skip internal-only endpoints (except TVC endpoints)
+            continue;
+        }
 
-            // This is the inside of our "rpc Foo(input) returns (output) { ... }" block.
-            // It contains a list of options. For example:
-            //     option (google.api.http) = {
-            //      post: "/public/v1/submit/delete_policy"
-            //      body: "*"
-            //    };
-            //    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-            //      description: "Delete an existing Policy"
-            //      summary: "Delete Policy"
-            //      tags: "Policies"
-            //    };
-            let http_opts = &rpc_caps[4];
-            let is_internal = http_opts
-                .contains("option (google.api.method_visibility).restriction = \"INTERNAL\"");
-            let is_tvc = fn_name.contains("tvc");
-            if is_internal && !is_tvc {
-                // Skip internal-only endpoints (except TVC endpoints)
-                continue;
-            }
+        if fn_name == "n_o_o_p_codegen_anchor" {
+            // Skip the NOOP anchor endpoint — it exists only to anchor extra
+            // OpenAPI/TypeScript types and has no summary/description.
+            continue;
+        }
 
-            if fn_name == "n_o_o_p_codegen_anchor" {
-                // Skip the NOOP anchor endpoint — it exists only to anchor extra
-                // OpenAPI/TypeScript types and has no summary/description.
-                continue;
-            }
+        if let Some(http_caps) = http_re.captures(http_opts) {
+            // This is our URL (e.g. "/public/v1/submit/delete_policy")
+            let route = &http_caps[1];
 
-            if let Some(http_caps) = http_re.captures(http_opts) {
-                // This is our URL (e.g. "/public/v1/submit/delete_policy")
-                let route = &http_caps[1];
+            // We expect a description and summary for each endpoint.
+            let summary = &summary_re
+                .captures(http_opts)
+                .unwrap_or_else(|| panic!("no summary found for {route}"))[1];
+            let description = &description_re
+                .captures(http_opts)
+                .unwrap_or_else(|| panic!("no description found for {route}"))[1];
 
-                // We expect a description and summary for each endpoint.
-                let summary = &summary_re
-                    .captures(http_opts)
-                    .unwrap_or_else(|| panic!("no summary found for {route}"))[1];
-                let description = &description_re
-                    .captures(http_opts)
-                    .unwrap_or_else(|| panic!("no description found for {route}"))[1];
-
-                if req_type.contains("external.activity.v1") {
-                    // If the request type is "external.activity.v1.DeletePolicyRequest" the sanitized
-                    // request type will be "DeletePolicyRequest", and we'll need to import it from the external activity namespace
-                    let short_req_type = req_type.rsplit(".").next().unwrap();
-                    let activity_type = request_to_activity_type
+            if req_type.contains("external.activity.v1") {
+                // If the request type is "external.activity.v1.DeletePolicyRequest" the sanitized
+                // request type will be "DeletePolicyRequest", and we'll need to import it from the external activity namespace
+                let short_req_type = req_type.rsplit(".").next().unwrap();
+                let activity_type = request_to_activity_type
                         .get(short_req_type)
                         .unwrap_or_else(|| panic!("no activity type annotation found for {short_req_type} in external activity proto"));
-                    let activities_details = parsed_activities
-                        .activities
-                        .get(activity_type.as_str())
-                        .unwrap_or_else(|| {
-                            panic!("activity type {activity_type} not found in activities.json")
-                        });
-                    if activities_details.internal {
-                        continue;
-                    }
-                    let activity_intent = activities_details.intent_type.clone();
-                    let activity_result = activities_details.result_type.clone();
-                    let app_proofs_field =
-                        build_generate_app_proofs_field(short_req_type, &requests_with_app_proofs);
+                let activities_details = parsed_activities
+                    .activities
+                    .get(activity_type.as_str())
+                    .unwrap_or_else(|| {
+                        panic!("activity type {activity_type} not found in activities.json")
+                    });
+                if activities_details.internal {
+                    continue;
+                }
+                let activity_intent = activities_details.intent_type.clone();
+                let activity_result = activities_details.result_type.clone();
+                let app_proofs_field =
+                    build_generate_app_proofs_field(short_req_type, &requests_with_app_proofs);
 
-                    // Approve and Reject activity functions are a bit different than the rest
-                    // In the mapping they have a resultType set to "*" (because they can indeed reference ANY activity.
-                    let activity_func = if activity_result == "*" {
-                        format!(
-                            r#"
+                // Approve and Reject activity functions are a bit different than the rest
+                // In the mapping they have a resultType set to "*" (because they can indeed reference ANY activity.
+                let activity_func = if activity_result == "*" {
+                    format!(
+                        r#"
                             /// {summary}
                             ///
                             /// {description}
@@ -219,10 +191,10 @@ fn main() {
                                 self.process_activity(&request, "{route}".to_string()).await
                             }}
                         "#
-                        )
-                    } else {
-                        format!(
-                            r#"
+                    )
+                } else {
+                    format!(
+                        r#"
                             /// {summary}
                             ///
                             /// {description}
@@ -257,25 +229,26 @@ fn main() {
                                 }})
                             }}
                         "#
-                        )
-                    };
+                    )
+                };
 
-                    println!("Generating {fn_name} (activity)");
-                    generated_methods.push_str(&activity_func);
-                } else {
-                    let func = format!(
+                println!("Generating {fn_name} (activity)");
+                generated_methods.push_str(&activity_func);
+            } else {
+                let func = match rpc.response_kind {
+                    RpcResponseKind::Unary => format!(
                         r#"
-                        /// {summary}
-                        ///
-                        /// {description}
-                        pub async fn {fn_name}(&self, request: coordinator::{req_type}) -> Result<coordinator::{res_type}, TurnkeyClientError> {{
-                            self.process_request(&request, "{route}".to_string()).await
-                        }}
-                    "#
-                    );
-                    println!("Generating {fn_name} (query)");
-                    generated_methods.push_str(&func);
-                }
+                            /// {summary}
+                            ///
+                            /// {description}
+                            pub async fn {fn_name}(&self, request: coordinator::{req_type}) -> Result<coordinator::{res_type}, TurnkeyClientError> {{
+                                self.process_request(&request, "{route}".to_string()).await
+                            }}
+                        "#
+                    ),
+                };
+                println!("Generating {fn_name} (query)");
+                generated_methods.push_str(&func);
             }
         }
     }
@@ -339,6 +312,33 @@ fn main() {
     }
 }
 
+fn parse_rpcs(proto: &str) -> Vec<Rpc> {
+    // Capture the start of "service... {" until a single "}" is encountered on its own line without indentation.
+    // That's just a simple alternative to writing a nesting-aware parser.
+    let service_re = Regex::new(r"(?ms)^service\s+(\w+)\s*\{\n(.*?)^\}").unwrap();
+
+    // Parse unary rpc blocks inside a service body.
+    let rpc_re = Regex::new(
+        r#"(?ms)^  rpc\s+(\w+)\s*\(\s*([a-zA-Z0-9_.]+)\s*\)\s+returns\s+\(\s*([a-zA-Z0-9_.]+)\s*\)\s*\{\n(.*?)^  \}"#
+    ).unwrap();
+
+    service_re
+        .captures_iter(proto)
+        .flat_map(|service_caps| {
+            rpc_re
+                .captures_iter(&service_caps[2])
+                .map(|rpc_caps| Rpc {
+                    name: rpc_caps[1].to_string(),
+                    request_type: rpc_caps[2].to_string(),
+                    response_type: rpc_caps[3].to_string(),
+                    response_kind: RpcResponseKind::Unary,
+                    options: rpc_caps[4].to_string(),
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
 // Simple utility function to convert CamelCase to snake_case
 fn to_snake_case(name: &str) -> String {
     let mut result = String::new();
@@ -397,6 +397,109 @@ fn requests_with_generate_app_proofs(proto: &str) -> HashSet<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_rpcs_decodes_unary_rpc() {
+        let proto = r#"
+service PublicApiService {
+  rpc GetWhoami(GetWhoamiRequest) returns (GetWhoamiResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/whoami"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get basic information about your current API user."
+      summary: "Who am I?"
+      tags: "Sessions"
+    };
+  }
+}
+"#;
+
+        let rpcs = parse_rpcs(proto);
+
+        assert_eq!(rpcs.len(), 1);
+        assert_eq!(rpcs[0].name, "GetWhoami");
+        assert_eq!(rpcs[0].request_type, "GetWhoamiRequest");
+        assert_eq!(rpcs[0].response_type, "GetWhoamiResponse");
+        assert_eq!(rpcs[0].response_kind, RpcResponseKind::Unary);
+        assert!(rpcs[0]
+            .options
+            .contains("post: \"/public/v1/query/whoami\""));
+    }
+
+    #[test]
+    fn parse_rpcs_ignores_server_streaming_rpc() {
+        let proto = r#"
+service PublicApiService {
+  rpc GetEnclaveDebugLogs(GetEnclaveDebugLogsRequest) returns (stream GetEnclaveDebugLogsResponse) {
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/query/get_enclave_debug_logs"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get debug logs for a TVC enclave deployment."
+      summary: "Get enclave debug logs"
+      tags: "TVC"
+    };
+  }
+}
+"#;
+
+        assert!(parse_rpcs(proto).is_empty());
+    }
+
+    #[test]
+    fn parse_rpcs_decodes_fully_qualified_types() {
+        let proto = r#"
+service PublicApiService {
+  rpc SubmitFoo(external.activity.v1.FooRequest) returns (external.activity.v1.ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/foo"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Create foo."
+      summary: "Create foo"
+      tags: "Foo"
+    };
+  }
+}
+"#;
+
+        let rpcs = parse_rpcs(proto);
+
+        assert_eq!(rpcs.len(), 1);
+        assert_eq!(rpcs[0].name, "SubmitFoo");
+        assert_eq!(rpcs[0].request_type, "external.activity.v1.FooRequest");
+        assert_eq!(
+            rpcs[0].response_type,
+            "external.activity.v1.ActivityResponse"
+        );
+        assert_eq!(rpcs[0].response_kind, RpcResponseKind::Unary);
+    }
+
+    #[test]
+    fn parse_rpcs_ignores_client_streaming_rpc() {
+        let proto = r#"
+service PublicApiService {
+  rpc UploadLogs(stream UploadLogsRequest) returns (UploadLogsResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/upload_logs"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Upload logs."
+      summary: "Upload logs"
+      tags: "TVC"
+    };
+  }
+}
+"#;
+
+        assert!(parse_rpcs(proto).is_empty());
+    }
 
     #[test]
     fn generate_app_proofs_field_is_emitted_only_when_request_supports_it() {
