@@ -22,10 +22,12 @@ omitted, all required deployment fields must be provided by flags or env vars.
 
 Required deployment fields:
   --app-id / TVC_APP_ID
-  --qos-version / TVC_QOS_VERSION
   --pivot-image-url / TVC_PIVOT_IMAGE_URL
   --pivot-path / TVC_PIVOT_PATH
   --expected-pivot-digest / TVC_EXPECTED_PIVOT_DIGEST
+
+Optional deployment fields:
+  --qos-version / TVC_QOS_VERSION (defaults to 0.10.2)
 
 Special rules:
   --pivot-args replaces the config file's list entirely (does not append).
@@ -52,7 +54,6 @@ Examples:
   TVC_API_KEY_PUBLIC=... \
   TVC_API_KEY_PRIVATE=... \
   TVC_APP_ID=... \
-  TVC_QOS_VERSION=... \
   TVC_PIVOT_PATH=... \
   TVC_PIVOT_IMAGE_URL=... \
   TVC_EXPECTED_PIVOT_DIGEST=... \
@@ -187,10 +188,8 @@ async fn build_inputs_interactive(args: Args) -> Result<ResolvedDeployInputs> {
         }
     }
 
-    if config_updated {
-        if let Some(path) = &config_path {
-            offer_to_save_config(path, &config, file_loaded)?;
-        }
+    if config_updated && let Some(path) = &config_path {
+        offer_to_save_config(path, &config, file_loaded)?;
     }
     let pivot_pull_secret = read_pivot_pull_secret(pivot_pull_secret.as_deref()).await?;
 
@@ -442,6 +441,7 @@ async fn run_with_resolved_inputs(inputs: ResolvedDeployInputs) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::deploy::DEFAULT_QOS_VERSION;
     use std::io::Write;
     use tempfile::NamedTempFile;
 
@@ -460,7 +460,6 @@ mod tests {
     fn all_required_flags() -> Args {
         let overrides = Overrides {
             app_id: Some("flag-app-id".into()),
-            qos_version: Some("flag-qos".into()),
             pivot_image_url: Some("flag-image".into()),
             expected_pivot_digest: Some("flag-digest".into()),
             pivot_path: Some("flag-path".into()),
@@ -555,7 +554,7 @@ mod tests {
         let resolved = run_resolve(&all_required_flags()).unwrap();
         // Required fields come from flags.
         assert_eq!(resolved.app_id, "flag-app-id");
-        assert_eq!(resolved.qos_version, "flag-qos");
+        assert_eq!(resolved.qos_version, DEFAULT_QOS_VERSION);
         assert_eq!(resolved.pivot_container_image_url, "flag-image");
         assert_eq!(resolved.pivot_path, "flag-path");
         assert_eq!(resolved.expected_pivot_digest, "flag-digest");
@@ -573,7 +572,6 @@ mod tests {
         let err = run_resolve(&Default::default()).unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("app_id"), "{msg}");
-        assert!(msg.contains("qos_version"), "{msg}");
         assert!(msg.contains("pivot_container_image_url"), "{msg}");
         assert!(msg.contains("pivot_path"), "{msg}");
         assert!(msg.contains("expected_pivot_digest"), "{msg}");
@@ -763,7 +761,7 @@ mod tests {
 
         let resolved = run_resolve(&args).unwrap();
         assert_eq!(resolved.app_id, "flag-app-id");
-        assert_eq!(resolved.qos_version, "flag-qos");
+        assert_eq!(resolved.qos_version, DEFAULT_QOS_VERSION);
         assert_eq!(resolved.pivot_container_image_url, "flag-image");
         assert_eq!(resolved.pivot_path, "flag-path");
         assert_eq!(resolved.expected_pivot_digest, "flag-digest");

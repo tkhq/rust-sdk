@@ -12,12 +12,18 @@ use turnkey_client::generated::immutable::common::v1::TvcHealthCheckType;
 /// the field (public image) or replace it with an encrypted pull secret
 /// (private image). Treated as a placeholder by [`DeployConfig::has_placeholders`].
 const PULL_SECRET_PLACEHOLDER: &str = "<REMOVE_ME_IF_PIVOT_CONTAINER_URL_IS_PUBLIC>";
+pub const DEFAULT_QOS_VERSION: &str = "0.10.2";
+
+fn default_qos_version() -> String {
+    DEFAULT_QOS_VERSION.to_string()
+}
 
 /// Deployment configuration loaded from JSON file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeployConfig {
     pub app_id: String,
+    #[serde(default = "default_qos_version")]
     pub qos_version: String,
     pub pivot_container_image_url: String,
     pub pivot_path: String,
@@ -42,7 +48,7 @@ impl DeployConfig {
     pub fn template(app_id: Option<&str>) -> Self {
         Self {
             app_id: app_id.unwrap_or("<FILL_IN_APP_ID>").to_string(),
-            qos_version: "<FILL_IN_QOS_VERSION>".to_string(),
+            qos_version: default_qos_version(),
             pivot_container_image_url: "<FILL_IN_PIVOT_CONTAINER_IMAGE_URL>".to_string(),
             pivot_path: "<FILL_IN_PIVOT_PATH>".to_string(),
             pivot_args: vec![],
@@ -64,7 +70,7 @@ impl DeployConfig {
             self.app_id = prompts::required_text("App ID", saved_app_id)?;
         }
         if self.qos_version.starts_with("<FILL_IN") {
-            self.qos_version = prompts::required_text("QOS version", None)?;
+            self.qos_version = prompts::required_text("QOS version", Some(DEFAULT_QOS_VERSION))?;
         }
         if self.pivot_container_image_url.starts_with("<FILL_IN") {
             self.pivot_container_image_url =
@@ -230,6 +236,28 @@ mod tests {
     fn fresh_template_is_all_placeholders() {
         let config = DeployConfig::template(None);
         assert!(config.has_placeholders());
+    }
+
+    #[test]
+    fn fresh_template_defaults_qos_version() {
+        let config = DeployConfig::template(None);
+        assert_eq!(config.qos_version, DEFAULT_QOS_VERSION);
+    }
+
+    #[test]
+    fn missing_qos_version_deserializes_to_default() {
+        let config: DeployConfig = serde_json::from_value(serde_json::json!({
+            "appId": "app_123",
+            "pivotContainerImageUrl": "ghcr.io/x/y:v1",
+            "pivotPath": "/bin/pivot",
+            "expectedPivotDigest": "sha256:abc",
+            "healthCheckType": "TVC_HEALTH_CHECK_TYPE_HTTP",
+            "healthCheckPort": 3000,
+            "publicIngressPort": 3000
+        }))
+        .unwrap();
+
+        assert_eq!(config.qos_version, DEFAULT_QOS_VERSION);
     }
 
     #[test]

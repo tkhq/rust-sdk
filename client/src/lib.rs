@@ -380,22 +380,22 @@ impl<S: Stamp> TurnkeyClient<S> {
             .await?;
 
         let status = res.status();
-        let content_type = res
-            .headers()
-            .get(CONTENT_TYPE)
-            .ok_or(TurnkeyClientError::MissingContentTypeHeader)?
-            .to_str()
-            .map_err(|e| TurnkeyClientError::HeaderToStrError(e.to_string()))?
-            .parse::<mime::Mime>()
-            .map_err(|e| TurnkeyClientError::HeaderFromStrError(e.to_string()))?;
+        let content_type = res.headers().get(CONTENT_TYPE).cloned();
         let text = res.text().await?;
 
         if !status.is_success() {
             return Err(TurnkeyClientError::UnexpectedHttpStatus(
                 status.as_u16(),
-                text,
+                http_error_body(status, text),
             ));
         }
+
+        let content_type = content_type
+            .ok_or(TurnkeyClientError::MissingContentTypeHeader)?
+            .to_str()
+            .map_err(|e| TurnkeyClientError::HeaderToStrError(e.to_string()))?
+            .parse::<mime::Mime>()
+            .map_err(|e| TurnkeyClientError::HeaderFromStrError(e.to_string()))?;
 
         if content_type != mime::APPLICATION_JSON {
             return Err(TurnkeyClientError::UnexpectedMimeType(
@@ -408,6 +408,24 @@ impl<S: Stamp> TurnkeyClient<S> {
 
         Ok(response)
     }
+}
+
+fn http_error_body(status: reqwest::StatusCode, body: String) -> String {
+    if status.is_server_error() {
+        return json_error_message(&body).unwrap_or(body);
+    }
+
+    body
+}
+
+fn json_error_message(body: &str) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_str(body).ok()?;
+    let message = value.get("message")?.as_str()?.trim();
+    if message.is_empty() {
+        return None;
+    }
+
+    Some(message.to_string())
 }
 
 #[cfg(test)]
@@ -525,6 +543,34 @@ mod test {
             TurnkeyClientError::UnexpectedHttpStatus(status, body) => {
                 assert_eq!(status, 500);
                 assert_eq!(body, "internal server error");
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_server_error_with_json_body_exposes_message() {
+        let (client, server) = setup_client_and_server().await;
+
+        let response = ResponseTemplate::new(504).set_body_json(serde_json::json!({
+            "code": 13,
+            "message": "timed out while validating TVC image",
+            "details": [],
+            "turnkeyErrorCode": "",
+        }));
+        Mock::given(method("POST"))
+            .respond_with(response)
+            .mount(&server)
+            .await;
+
+        let result = client
+            .process_activity(simple_activity_intent(), "/sign_raw_payload".to_string())
+            .await;
+
+        match result.unwrap_err() {
+            TurnkeyClientError::UnexpectedHttpStatus(status, body) => {
+                assert_eq!(status, 504);
+                assert_eq!(body, "timed out while validating TVC image");
             }
             other => panic!("unexpected error: {other:?}"),
         }

@@ -21,7 +21,7 @@ fn spawn(args: &str) -> PtySession {
         .unwrap_or_else(|e| panic!("spawn failed: {e}\n  cmd: {cmd}"))
 }
 
-/// `tvc deploy approve` walks all five section confirmations in order and
+/// `tvc deploy approve` walks all six section confirmations in order and
 /// emits the signed approval JSON when the user accepts every section.
 ///
 /// Replaces the deleted `tests/deploy_approve.rs::approve_interactive_prompts`
@@ -49,6 +49,11 @@ fn approve_walks_all_sections_with_yeses() {
 
     session.exp_string("PIVOT BINARY").unwrap();
     session.exp_string("Approve pivot binary?").unwrap();
+    session.send_line("y").unwrap();
+
+    session.exp_string("BRIDGE CONFIG").unwrap();
+    session.exp_string("Type: server").unwrap();
+    session.exp_string("Approve bridge configuration?").unwrap();
     session.send_line("y").unwrap();
 
     session.exp_string("MANIFEST SET").unwrap();

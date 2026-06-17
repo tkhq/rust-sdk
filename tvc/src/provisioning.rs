@@ -3,8 +3,7 @@
 use anyhow::{Context, anyhow, bail};
 use aws_nitro_enclaves_nsm_api::api::AttestationDoc;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
-use qos_core::protocol::QosHash;
-use qos_core::protocol::services::boot::ManifestEnvelope;
+use qos_core::protocol::services::boot::VersionedManifestEnvelope;
 use qos_p256::P256Public;
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -13,7 +12,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ProvisionBundle {
     attestation_document_cose_sign1_base64: String,
-    manifest_envelope: ManifestEnvelope,
+    manifest_envelope: VersionedManifestEnvelope,
     fetched_at_unix_ms: u64,
     deployment_id: String,
     ephemeral_public_key_hex: String,
@@ -23,13 +22,13 @@ impl ProvisionBundle {
     pub(crate) fn new(
         deployment_id: String,
         attestation_document: &[u8],
-        manifest_envelope: ManifestEnvelope,
+        manifest_envelope: impl Into<VersionedManifestEnvelope>,
         fetched_at_unix_ms: u64,
         ephemeral_public_key: &[u8],
     ) -> Self {
         Self {
             attestation_document_cose_sign1_base64: BASE64_STANDARD.encode(attestation_document),
-            manifest_envelope,
+            manifest_envelope: manifest_envelope.into(),
             fetched_at_unix_ms,
             deployment_id,
             ephemeral_public_key_hex: hex::encode(ephemeral_public_key),
@@ -44,7 +43,7 @@ impl ProvisionBundle {
         &self.ephemeral_public_key_hex
     }
 
-    pub(crate) fn manifest_envelope(&self) -> &ManifestEnvelope {
+    pub(crate) fn manifest_envelope(&self) -> &VersionedManifestEnvelope {
         &self.manifest_envelope
     }
 
@@ -93,7 +92,7 @@ impl ProvisionBundle {
 
 pub(crate) fn verify_provisioning_details(
     cose_sign1_der: &[u8],
-    manifest_envelope: &ManifestEnvelope,
+    manifest_envelope: &VersionedManifestEnvelope,
     validation_time_override: Option<u64>,
 ) -> anyhow::Result<AttestationDoc> {
     manifest_envelope
@@ -108,13 +107,15 @@ pub(crate) fn verify_provisioning_details(
     )
     .context("failed to parse and verify attestation document")?;
 
+    let manifest = manifest_envelope.clone().manifest();
+    let enclave = manifest.enclave();
     qos_nsm::nitro::verify_attestation_doc_against_user_input(
         &attestation_doc,
-        &manifest_envelope.manifest.qos_hash(),
-        &manifest_envelope.manifest.enclave.pcr0,
-        &manifest_envelope.manifest.enclave.pcr1,
-        &manifest_envelope.manifest.enclave.pcr2,
-        &manifest_envelope.manifest.enclave.pcr3,
+        &manifest_envelope.manifest_hash(),
+        &enclave.pcr0,
+        &enclave.pcr1,
+        &enclave.pcr2,
+        &enclave.pcr3,
     )
     .context("attestation document did not match manifest expectations")?;
 
@@ -154,7 +155,7 @@ fn validation_time_secs(validation_time_override: Option<u64>) -> anyhow::Result
 mod tests {
     use super::{ProvisionBundle, extract_ephemeral_public_key_bytes, verify_provisioning_details};
     use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
-    use qos_core::protocol::services::boot::ManifestEnvelope;
+    use qos_core::protocol::services::boot::{ManifestEnvelope, VersionedManifestEnvelope};
     use qos_p256::P256Pair;
     use serde::Deserialize;
     use serde_json::json;
@@ -273,7 +274,7 @@ mod tests {
 
         verify_provisioning_details(
             &attestation_document,
-            &fixture.manifest_envelope,
+            &VersionedManifestEnvelope::from(fixture.manifest_envelope),
             Some(fixture.validation_time_secs),
         )
         .unwrap();
@@ -287,6 +288,7 @@ mod tests {
             .unwrap();
         let mut manifest_envelope = fixture.manifest_envelope;
         manifest_envelope.manifest_set_approvals.clear();
+        let manifest_envelope = VersionedManifestEnvelope::from(manifest_envelope);
 
         assert!(
             verify_provisioning_details(
@@ -341,7 +343,7 @@ mod tests {
         let expected_public_key = P256Pair::generate().unwrap().public_key();
         let bundle = ProvisionBundle {
             attestation_document_cose_sign1_base64: "not base64".to_string(),
-            manifest_envelope: sample_manifest_envelope(),
+            manifest_envelope: sample_manifest_envelope().into(),
             fetched_at_unix_ms: 1_712_345_678_901,
             deployment_id: "deploy-123".to_string(),
             ephemeral_public_key_hex: hex::encode(expected_public_key.to_bytes()),

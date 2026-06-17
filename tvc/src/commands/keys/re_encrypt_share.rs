@@ -7,8 +7,7 @@ use crate::quorum_key_metadata::QuorumKeyMetadata;
 use crate::util::{read_json_file, write_file};
 use anyhow::{Context, anyhow};
 use clap::Args as ClapArgs;
-use qos_core::protocol::QosHash;
-use qos_core::protocol::services::boot::{Approval, ManifestEnvelope, QuorumMember};
+use qos_core::protocol::services::boot::{Approval, QuorumMember, VersionedManifestEnvelope};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use zeroize::Zeroizing;
@@ -107,8 +106,7 @@ async fn build_re_encrypted_share_output(
         .sign(
             provision_bundle
                 .manifest_envelope()
-                .manifest
-                .qos_hash()
+                .manifest_hash()
                 .to_vec(),
         )
         .await
@@ -128,11 +126,8 @@ fn ensure_quorum_key_matches_manifest(
     provision_bundle: &ProvisionBundle,
 ) -> anyhow::Result<()> {
     let metadata_quorum_key = quorum_key_metadata.quorum_key_public_bytes()?;
-    let manifest_quorum_key = &provision_bundle
-        .manifest_envelope()
-        .manifest
-        .namespace
-        .quorum_key;
+    let manifest = provision_bundle.manifest_envelope().clone().manifest();
+    let manifest_quorum_key = &manifest.namespace().quorum_key;
 
     if metadata_quorum_key.as_slice() != manifest_quorum_key.as_slice() {
         anyhow::bail!(
@@ -146,12 +141,12 @@ fn ensure_quorum_key_matches_manifest(
 }
 
 fn find_share_set_member(
-    manifest_envelope: &ManifestEnvelope,
+    manifest_envelope: &VersionedManifestEnvelope,
     operator_public_key: &[u8],
 ) -> anyhow::Result<QuorumMember> {
-    manifest_envelope
-        .manifest
-        .share_set
+    let manifest = manifest_envelope.clone().manifest();
+    manifest
+        .share_set()
         .members
         .iter()
         .find(|member| member.pub_key == operator_public_key)
@@ -187,10 +182,9 @@ mod tests {
     use crate::pair::LocalPair;
     use crate::provisioning::ProvisionBundle;
     use crate::quorum_key_metadata::{EncryptedShareMetadata, QuorumKeyMetadata};
-    use qos_core::protocol::QosHash;
     use qos_core::protocol::services::boot::{
         Approval, Manifest, ManifestEnvelope, ManifestSet, Namespace, NitroConfig, PatchSet,
-        PivotConfig, QuorumMember, RestartPolicy, ShareSet,
+        PivotConfig, QuorumMember, RestartPolicy, ShareSet, VersionedManifestEnvelope,
     };
     use qos_p256::{P256Pair, P256Public};
     use serde_json::json;
@@ -198,7 +192,7 @@ mod tests {
     fn sample_manifest_envelope(
         quorum_key: Vec<u8>,
         share_set_members: Vec<QuorumMember>,
-    ) -> ManifestEnvelope {
+    ) -> VersionedManifestEnvelope {
         ManifestEnvelope {
             manifest: Manifest {
                 namespace: Namespace {
@@ -237,6 +231,7 @@ mod tests {
             manifest_set_approvals: vec![],
             share_set_approvals: vec![],
         }
+        .into()
     }
 
     fn bundle_with_ephemeral_key(
@@ -254,7 +249,7 @@ mod tests {
     }
 
     fn local_pair_from_pair(pair: &P256Pair) -> LocalPair {
-        let seed_hex = String::from_utf8(pair.to_master_seed_hex()).unwrap();
+        let seed_hex = String::from_utf8(pair.to_master_seed_hex().to_vec()).unwrap();
         LocalPair::from_hex_seed(&seed_hex).unwrap()
     }
 
@@ -441,14 +436,14 @@ mod tests {
         );
         let re_encrypted_share = hex::decode(&output.re_encrypted_share).unwrap();
         let decrypted_share = ephemeral_pair.decrypt(&re_encrypted_share).unwrap();
-        assert_eq!(decrypted_share, plaintext_share);
+        assert_eq!(decrypted_share.as_slice(), plaintext_share);
         assert_eq!(output.share_approval.member, operator_member);
 
         let approval_public_key =
             P256Public::from_bytes(&output.share_approval.member.pub_key).unwrap();
         approval_public_key
             .verify(
-                &bundle.manifest_envelope().manifest.qos_hash(),
+                &bundle.manifest_envelope().manifest_hash(),
                 &output.share_approval.signature,
             )
             .unwrap();
