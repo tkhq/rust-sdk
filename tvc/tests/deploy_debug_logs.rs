@@ -34,6 +34,7 @@ fn debug_logs_help_lists_expected_flags() {
         .success()
         .stdout(predicate::str::contains("--deploy-id <DEPLOY_ID>"))
         .stdout(predicate::str::contains("--follow"))
+        .stdout(predicate::str::contains("--include-platform-timestamp"))
         .stdout(predicate::str::contains("--tail-lines <TAIL_LINES>"))
         .stdout(predicate::str::contains(
             "--dangerous-enable-debug-mode-deployments",
@@ -64,6 +65,7 @@ fn debug_logs_accepts_flags_before_authentication() {
         .arg("--follow")
         .arg("--tail-lines")
         .arg("10")
+        .arg("--include-platform-timestamp")
         .assert()
         .failure()
         .stderr(predicate::str::contains("No active organization"));

@@ -30,8 +30,10 @@ debug logs retroactively. Create a new debug-mode deployment, then pass that
 deployment ID to this command.
 
 Use `--follow` to keep listening for new log lines after the initial log
-buffer. See `tvc app create --help`, `tvc deploy create --help`, and
-`tvc --help` for more info."#;
+buffer. By default, output omits the platform timestamp that Kubernetes
+prepends to each log line; pass `--include-platform-timestamp` to show it.
+See `tvc app create --help`, `tvc deploy create --help`, and `tvc --help`
+for more info."#;
 
 /// Stream debug logs for a deployment.
 #[derive(Debug, ClapArgs)]
@@ -48,6 +50,10 @@ pub struct Args {
     /// Limit initial history to the last N lines per replica. Omit for the full log buffer.
     #[arg(long, env = "TVC_DEBUG_LOGS_TAIL_LINES", allow_hyphen_values = true)]
     pub tail_lines: Option<i32>,
+
+    /// Include the platform timestamp prepended by the Kubernetes log stream.
+    #[arg(long, env = "TVC_DEBUG_LOGS_INCLUDE_PLATFORM_TIMESTAMP")]
+    pub include_platform_timestamp: bool,
 }
 
 /// Run the `deploy debug-logs` command.
@@ -60,6 +66,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         deployment_id: args.deploy_id,
         follow: args.follow,
         tail_lines,
+        include_platform_timestamp: args.include_platform_timestamp,
     };
 
     stream_debug_logs(&auth.client, &request).await
@@ -71,6 +78,7 @@ struct DebugLogStreamRequest {
     deployment_id: String,
     follow: bool,
     tail_lines: i32,
+    include_platform_timestamp: bool,
 }
 
 impl DebugLogStreamRequest {
@@ -128,7 +136,11 @@ async fn drain_stream_window(
 
     while let Some(response) = stream.next().await {
         match response {
-            Ok(response) => print_debug_log_response(&response, printed_lines),
+            Ok(response) => print_debug_log_response(
+                &response,
+                printed_lines,
+                request.include_platform_timestamp,
+            ),
             Err(err) => {
                 return Ok(StreamWindowOutcome {
                     elapsed: started_at.elapsed(),
@@ -222,6 +234,7 @@ impl LogLineKey {
 fn print_debug_log_response(
     response: &GetEnclaveDebugLogsResponse,
     printed_lines: &mut HashSet<LogLineKey>,
+    include_platform_timestamp: bool,
 ) {
     if response.event == LogEventType::PodTerminated {
         eprintln!("{}", format_pod_terminated(&response.pod_name));
@@ -235,11 +248,18 @@ fn print_debug_log_response(
             }
         }
 
-        println!("{}", format_log_line(&response.pod_name, line));
+        println!(
+            "{}",
+            format_log_line(&response.pod_name, line, include_platform_timestamp)
+        );
     }
 }
 
-fn format_log_line(pod_name: &str, line: &LogLine) -> String {
+fn format_log_line(pod_name: &str, line: &LogLine, include_platform_timestamp: bool) -> String {
+    if !include_platform_timestamp {
+        return format!("{pod_name} {}", line.content);
+    }
+
     match line.ts.as_ref().and_then(format_timestamp) {
         Some(ts) => format!("{ts} {pod_name} {}", line.content),
         None => format!("{pod_name} {}", line.content),
@@ -412,11 +432,18 @@ mod tests {
     }
 
     #[test]
-    fn format_log_line_includes_timestamp_when_present() {
+    fn format_log_line_omits_platform_timestamp_by_default() {
+        let line = log_line("hello", Some(timestamp("1710000000", "123456789")));
+
+        assert_eq!(format_log_line("pod-a", &line, false), "pod-a hello");
+    }
+
+    #[test]
+    fn format_log_line_includes_platform_timestamp_when_requested() {
         let line = log_line("hello", Some(timestamp("1710000000", "123456789")));
 
         assert_eq!(
-            format_log_line("pod-a", &line),
+            format_log_line("pod-a", &line, true),
             "2024-03-09T16:00:00.123456789Z pod-a hello"
         );
     }
@@ -425,14 +452,14 @@ mod tests {
     fn format_log_line_omits_timestamp_when_missing() {
         let line = log_line("hello", None);
 
-        assert_eq!(format_log_line("pod-a", &line), "pod-a hello");
+        assert_eq!(format_log_line("pod-a", &line, true), "pod-a hello");
     }
 
     #[test]
     fn format_log_line_omits_invalid_timestamp() {
         let line = log_line("hello", Some(timestamp("bad", "123")));
 
-        assert_eq!(format_log_line("pod-a", &line), "pod-a hello");
+        assert_eq!(format_log_line("pod-a", &line, true), "pod-a hello");
     }
 
     #[test]
