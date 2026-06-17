@@ -8,29 +8,31 @@ const LONG_ABOUT: &str = "\
 CLI for building with Turnkey Verifiable Cloud.
 
 Some commands accept multiple configuration input types.
+f
 Configuration values are resolved in this order, highest priority first:
-  1. Command-line flag (e.g. --app-id)
-  2. Environment variable (e.g. TVC_APP_ID)
-  3. Config file value (--config-file)
-  4. Built-in default
+    1. Command-line flag (e.g. --app-id)
+    2. Environment variable (e.g. TVC_APP_ID)
+    3. Config file value (--config-file)
+    4. Built-in default
 
 Special rules (exceptions to the order above):
-  --pivot-args replaces the config file's list entirely (does not append)
-  Debug-mode flags (--dangerous-deploy-debug-mode and
+    --pivot-args replaces the config file's list entirely (does not append)
+
+    Debug-mode flags (--dangerous-deploy-debug-mode and
     --dangerous-enable-debug-mode-deployments) are opt-in only: the flag
     or its env var can turn debug mode ON, but its absence never turns OFF
     a config file that enables it. To disable debug mode, set it false in
     the config file (or omit it) and do not pass the flag.
 
 Authentication:
-  Local: run `tvc login` once; commands then read ~/.config/turnkey/.
-  CI:    set TVC_ORG_ID, TVC_API_KEY_PUBLIC, and TVC_API_KEY_PRIVATE
+    Local: run `tvc login` once; commands then read ~/.config/turnkey/.
+    CI:    set TVC_ORG_ID, TVC_API_KEY_PUBLIC, and TVC_API_KEY_PRIVATE
          to authenticate without files. Env vars take precedence over local
          config files. Setting some but not all three required vars will error.
 
 Interactive behavior:
-  By default, commands may prompt when stdin is a TTY. Use --non-interactive
-  or set TVC_NON_INTERACTIVE=true to disable prompts and fail fast instead.";
+    By default, commands may prompt when stdin is a TTY. Use --non-interactive
+    or set TVC_NON_INTERACTIVE=true to disable prompts and fail fast instead.";
 
 /// CLI command parsing and dispatch.
 #[derive(Debug, Parser)]
@@ -162,6 +164,7 @@ enum DeployCommands {
     /// Generate a template deployment configuration file.
     Init(commands::deploy::init::Args),
     /// Stream debug logs for a deployment.
+    #[command(long_about = commands::deploy::debug_logs::LONG_ABOUT)]
     DebugLogs(commands::deploy::debug_logs::Args),
     /// Delete a deployment by marking it for deletion.
     Delete(commands::deploy::delete::Args),
