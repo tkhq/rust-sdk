@@ -1,11 +1,7 @@
 //! Shared display helpers for CLI output.
 
 pub fn yes_no(value: bool) -> &'static str {
-    if value {
-        "yes"
-    } else {
-        "no"
-    }
+    if value { "yes" } else { "no" }
 }
 
 pub fn format_egress_enabled(enable_egress: bool) -> String {
