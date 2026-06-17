@@ -79,6 +79,7 @@ impl Cli {
                 DeployCommands::Init(args) => {
                     commands::deploy::init::run(args, non_interactive).await
                 }
+                DeployCommands::DebugLogs(args) => commands::deploy::debug_logs::run(args).await,
                 DeployCommands::Delete(args) => commands::deploy::delete::run(args).await,
                 DeployCommands::Restore(args) => commands::deploy::restore::run(args).await,
             },
@@ -160,6 +161,8 @@ enum DeployCommands {
     Create(commands::deploy::create::Args),
     /// Generate a template deployment configuration file.
     Init(commands::deploy::init::Args),
+    /// Stream debug logs for a deployment.
+    DebugLogs(commands::deploy::debug_logs::Args),
     /// Delete a deployment by marking it for deletion.
     Delete(commands::deploy::delete::Args),
     /// Restore a deleted deployment.
@@ -176,6 +179,7 @@ impl DeployCommands {
             DeployCommands::Status(_) => "deploy status",
             DeployCommands::Create(_) => "deploy create",
             DeployCommands::Init(_) => "deploy init",
+            DeployCommands::DebugLogs(_) => "deploy debug-logs",
             DeployCommands::Delete(_) => "deploy delete",
             DeployCommands::Restore(_) => "deploy restore",
         }
