@@ -16,7 +16,7 @@ strip-doc:
 .PHONY: check-generate
 check-generate:
 	make generate
-	git diff --exit-code client/src/generated/client.rs
+	git diff --exit-code
 
 .PHONY: fmt
 fmt:
