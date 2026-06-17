@@ -11,6 +11,18 @@ documentation = "https://docs.rs/tvc"
 keywords = ["turnkey", "tvc", "enclaves", "cli"]
 categories = ["command-line-utilities", "cryptography"]
 
+# Crate-local lints (intentionally NOT wired to the workspace). We enable the
+# `clippy::absolute_paths` restriction lint only for this crate to push the tvc
+# CLI toward short `use` imports instead of inline fully-qualified absolute
+# paths at call sites (e.g. prefer `use crate::commands::display::format_egress_enabled;`
+# + `format_egress_enabled(x)` over `crate::commands::display::format_egress_enabled(x)`).
+# Tuning lives in the repo-root clippy.toml (max segments + allowed crates).
+#
+# NOTE: "warn" here becomes a hard error under `make lint`, which runs
+# `cargo clippy ... -- -D warnings`. See the PR description for that tradeoff.
+[lints.clippy]
+absolute_paths = "warn"
+
 [dependencies]
 qos_core = { workspace = true }
 qos_crypto = { workspace = true }
