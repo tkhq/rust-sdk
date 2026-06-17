@@ -9,7 +9,7 @@ use anyhow::{Context, anyhow, bail};
 use clap::{ArgGroup, Args as ClapArgs};
 use qos_core::protocol::services::boot::Approval;
 use qos_core::protocol::services::boot::{
-    ManifestSet, Namespace, NitroConfig, QuorumMember, ShareSet, VersionedManifest,
+    BridgeConfig, ManifestSet, Namespace, NitroConfig, QuorumMember, ShareSet, VersionedManifest,
 };
 use std::collections::HashSet;
 use std::fmt::Write;
@@ -414,6 +414,7 @@ fn interactive_approve(manifest: &VersionedManifest) -> anyhow::Result<()> {
     review_namespace(manifest.namespace())?;
     review_enclave(manifest.enclave())?;
     review_pivot(manifest)?;
+    review_bridge_config(manifest)?;
     review_manifest_set(manifest.manifest_set())?;
     review_share_set(manifest.share_set())?;
 
@@ -479,6 +480,39 @@ fn render_pivot(manifest: &VersionedManifest) -> String {
 fn review_pivot(manifest: &VersionedManifest) -> anyhow::Result<()> {
     print!("{}", render_pivot(manifest));
     prompts::confirm_or_bail("Approve pivot binary?", "approval")
+}
+
+fn render_bridge_config(manifest: &VersionedManifest) -> String {
+    let mut s = String::new();
+    let _ = writeln!(s, "BRIDGE CONFIG");
+    let _ = writeln!(s, "─────────────────────────────────────");
+    let bridge_config = manifest.bridge_config();
+    if bridge_config.is_empty() {
+        let _ = writeln!(s, "  Entries: (none)");
+    } else {
+        for (index, bridge) in bridge_config.iter().enumerate() {
+            let _ = writeln!(s, "  Entry {}:", index + 1);
+            match bridge {
+                BridgeConfig::Server { port, host } => {
+                    let _ = writeln!(s, "    Type: server");
+                    let _ = writeln!(s, "    Port: {port}");
+                    let _ = writeln!(s, "    Host: {host}");
+                }
+                BridgeConfig::Client { port, host } => {
+                    let _ = writeln!(s, "    Type: client");
+                    let _ = writeln!(s, "    Port: {port}");
+                    let _ = writeln!(s, "    Host: {}", host.as_deref().unwrap_or("null"));
+                }
+            }
+        }
+    }
+    let _ = writeln!(s);
+    s
+}
+
+fn review_bridge_config(manifest: &VersionedManifest) -> anyhow::Result<()> {
+    print!("{}", render_bridge_config(manifest));
+    prompts::confirm_or_bail("Approve bridge configuration?", "approval")
 }
 
 fn render_quorum_members(members: &[QuorumMember]) -> String {
@@ -574,6 +608,46 @@ mod tests {
     fn fixture_manifest() -> VersionedManifest {
         VersionedManifest::try_from_slice_compat(include_bytes!("../../../fixtures/manifest.json"))
             .expect("fixture manifest should parse")
+    }
+
+    fn manifest_with_bridge_config(bridge_config: serde_json::Value) -> VersionedManifest {
+        let manifest_bytes = serde_json::to_vec(&serde_json::json!({
+            "version": "v2",
+            "namespace": {
+                "name": "turnkey-prod",
+                "nonce": 1,
+                "quorumKey": "04a1"
+            },
+            "pivot": {
+                "hash": "0000000000000000000000000000000000000000000000000000000000000000",
+                "restart": "Never",
+                "bridgeConfig": bridge_config,
+                "debugMode": false,
+                "args": []
+            },
+            "manifestSet": {
+                "threshold": 1,
+                "members": [{
+                    "alias": "operator-alice",
+                    "pubKey": "04aabb"
+                }]
+            },
+            "shareSet": {
+                "threshold": 0,
+                "members": []
+            },
+            "enclave": {
+                "pcr0": "00",
+                "pcr1": "11",
+                "pcr2": "22",
+                "pcr3": "33",
+                "awsRootCertificate": "44",
+                "qosCommit": "test-commit"
+            }
+        }))
+        .unwrap();
+
+        VersionedManifest::try_from_slice_compat(&manifest_bytes).unwrap()
     }
 
     #[test]
@@ -708,6 +782,48 @@ mod tests {
         assert!(rendered.contains("Pivot Binary Hash:"));
         assert!(rendered.contains("--flag"));
         assert!(rendered.contains("positional"));
+    }
+
+    #[test]
+    fn render_bridge_config_reports_no_entries() {
+        let manifest = manifest_with_bridge_config(serde_json::json!([]));
+
+        let rendered = render_bridge_config(&manifest);
+
+        assert!(rendered.contains("BRIDGE CONFIG"));
+        assert!(rendered.contains("(none)"));
+    }
+
+    #[test]
+    fn render_bridge_config_includes_server_entries() {
+        let manifest = fixture_manifest();
+
+        let rendered = render_bridge_config(&manifest);
+
+        assert!(rendered.contains("BRIDGE CONFIG"));
+        assert!(rendered.contains("Entry 1:"));
+        assert!(rendered.contains("Type: server"));
+        assert!(rendered.contains("Port: 3000"));
+        assert!(rendered.contains("Host: 0.0.0.0"));
+    }
+
+    #[test]
+    fn render_bridge_config_includes_client_entries_with_null_host() {
+        let manifest = manifest_with_bridge_config(serde_json::json!([
+            {
+                "type": "client",
+                "port": 0,
+                "host": null
+            }
+        ]));
+
+        let rendered = render_bridge_config(&manifest);
+
+        assert!(rendered.contains("BRIDGE CONFIG"));
+        assert!(rendered.contains("Entry 1:"));
+        assert!(rendered.contains("Type: client"));
+        assert!(rendered.contains("Port: 0"));
+        assert!(rendered.contains("Host: null"));
     }
 
     #[test]
