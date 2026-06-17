@@ -34,7 +34,11 @@ fn debug_logs_help_lists_expected_flags() {
         .success()
         .stdout(predicate::str::contains("--deploy-id <DEPLOY_ID>"))
         .stdout(predicate::str::contains("--follow"))
-        .stdout(predicate::str::contains("--tail-lines <TAIL_LINES>"));
+        .stdout(predicate::str::contains("--tail-lines <TAIL_LINES>"))
+        .stdout(predicate::str::contains(
+            "--dangerous-enable-debug-mode-deployments",
+        ))
+        .stdout(predicate::str::contains("--dangerous-deploy-debug-mode"));
 }
 
 #[test]
