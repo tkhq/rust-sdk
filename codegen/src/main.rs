@@ -44,7 +44,6 @@ struct Rpc {
 #[derive(Debug, PartialEq, Eq)]
 enum RpcResponseKind {
     Unary,
-    Streaming,
 }
 
 fn main() {
@@ -127,7 +126,7 @@ fn main() {
         let http_opts = rpc.options.as_str();
         let is_internal =
             http_opts.contains("option (google.api.method_visibility).restriction = \"INTERNAL\"");
-        let is_tvc = fn_name.contains("tvc") || http_opts.contains("tags: \"TVC\"");
+        let is_tvc = fn_name.contains("tvc");
         if is_internal && !is_tvc {
             // Skip internal-only endpoints (except TVC endpoints)
             continue;
@@ -152,10 +151,6 @@ fn main() {
                 .unwrap_or_else(|| panic!("no description found for {route}"))[1];
 
             if req_type.contains("external.activity.v1") {
-                if rpc.response_kind == RpcResponseKind::Streaming {
-                    panic!("streaming activity endpoints are unsupported: {fn_name}");
-                }
-
                 // If the request type is "external.activity.v1.DeletePolicyRequest" the sanitized
                 // request type will be "DeletePolicyRequest", and we'll need to import it from the external activity namespace
                 let short_req_type = req_type.rsplit(".").next().unwrap();
@@ -251,24 +246,8 @@ fn main() {
                             }}
                         "#
                     ),
-                    RpcResponseKind::Streaming => format!(
-                        r#"
-                            /// {summary}
-                            ///
-                            /// {description}
-                            pub async fn {fn_name}(&self, request: coordinator::{req_type}) -> Result<futures_util::stream::BoxStream<'static, Result<coordinator::{res_type}, TurnkeyClientError>>, TurnkeyClientError> {{
-                                self.process_streaming_request(&request, "{route}".to_string()).await
-                            }}
-                        "#
-                    ),
                 };
-                println!(
-                    "Generating {fn_name} ({})",
-                    match rpc.response_kind {
-                        RpcResponseKind::Unary => "query",
-                        RpcResponseKind::Streaming => "stream",
-                    }
-                );
+                println!("Generating {fn_name} (query)");
                 generated_methods.push_str(&func);
             }
         }
@@ -338,10 +317,9 @@ fn parse_rpcs(proto: &str) -> Vec<Rpc> {
     // That's just a simple alternative to writing a nesting-aware parser.
     let service_re = Regex::new(r"(?ms)^service\s+(\w+)\s*\{\n(.*?)^\}").unwrap();
 
-    // Parse unary request rpc blocks inside a service body. Responses can be
-    // unary or server-streaming.
+    // Parse unary rpc blocks inside a service body.
     let rpc_re = Regex::new(
-        r#"(?ms)^  rpc\s+(\w+)\s*\(\s*([a-zA-Z0-9_.]+)\s*\)\s+returns\s+\(\s*(stream\s+)?([a-zA-Z0-9_.]+)\s*\)\s*\{\n(.*?)^  \}"#
+        r#"(?ms)^  rpc\s+(\w+)\s*\(\s*([a-zA-Z0-9_.]+)\s*\)\s+returns\s+\(\s*([a-zA-Z0-9_.]+)\s*\)\s*\{\n(.*?)^  \}"#
     ).unwrap();
 
     service_re
@@ -351,13 +329,9 @@ fn parse_rpcs(proto: &str) -> Vec<Rpc> {
             rpc_re.captures_iter(service_body).map(|rpc_caps| Rpc {
                 name: rpc_caps[1].to_string(),
                 request_type: rpc_caps[2].to_string(),
-                response_kind: if rpc_caps.get(3).is_some() {
-                    RpcResponseKind::Streaming
-                } else {
-                    RpcResponseKind::Unary
-                },
-                response_type: rpc_caps[4].to_string(),
-                options: rpc_caps[5].to_string(),
+                response_type: rpc_caps[3].to_string(),
+                response_kind: RpcResponseKind::Unary,
+                options: rpc_caps[4].to_string(),
             })
         })
         .collect()
@@ -453,7 +427,7 @@ service PublicApiService {
     }
 
     #[test]
-    fn parse_rpcs_decodes_streaming_rpc() {
+    fn parse_rpcs_ignores_server_streaming_rpc() {
         let proto = r#"
 service PublicApiService {
   rpc GetEnclaveDebugLogs(GetEnclaveDebugLogsRequest) returns (stream GetEnclaveDebugLogsResponse) {
@@ -471,16 +445,7 @@ service PublicApiService {
 }
 "#;
 
-        let rpcs = parse_rpcs(proto);
-
-        assert_eq!(rpcs.len(), 1);
-        assert_eq!(rpcs[0].name, "GetEnclaveDebugLogs");
-        assert_eq!(rpcs[0].request_type, "GetEnclaveDebugLogsRequest");
-        assert_eq!(rpcs[0].response_type, "GetEnclaveDebugLogsResponse");
-        assert_eq!(rpcs[0].response_kind, RpcResponseKind::Streaming);
-        assert!(rpcs[0]
-            .options
-            .contains("post: \"/public/v1/query/get_enclave_debug_logs\""));
+        assert!(parse_rpcs(proto).is_empty());
     }
 
     #[test]

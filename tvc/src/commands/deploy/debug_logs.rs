@@ -3,20 +3,19 @@
 use anyhow::{Context, bail};
 use chrono::{DateTime, SecondsFormat, Utc};
 use clap::Args as ClapArgs;
-use futures_util::StreamExt;
 use std::collections::HashSet;
-use std::time::{Duration, Instant};
-use turnkey_client::generated::external::data::v1::{LogEventType, LogLine, Timestamp};
-use turnkey_client::generated::{GetEnclaveDebugLogsRequest, GetEnclaveDebugLogsResponse};
-use turnkey_client::{TurnkeyClientError, TurnkeyP256ApiKey};
+use std::time::Duration;
+use turnkey_client::TurnkeyP256ApiKey;
+use turnkey_client::generated::external::data::v1::{LogLine, Timestamp};
+use turnkey_client::generated::{
+    EnclaveDebugLogEntry, GetEnclaveDebugLogsRequest, GetEnclaveDebugLogsResponse,
+};
 
-const GATEWAY_DEADLINE_EXCEEDED_CODE: i32 = 4;
-const GATEWAY_DEADLINE_EXCEEDED_MESSAGE: &str = "context deadline exceeded";
-const GATEWAY_RST_STREAM_CANCEL_MARKERS: [&str; 2] = ["RST_STREAM", "CANCEL"];
-const EXPECTED_STREAM_WINDOW: Duration = Duration::from_secs(10);
+const FOLLOW_POLL_INTERVAL: Duration = Duration::from_secs(2);
+const FOLLOW_SINCE_SECONDS: i64 = 5;
 
 pub(crate) const LONG_ABOUT: &str = r#"
-Stream debug logs for a deployment.
+Fetch debug logs for a deployment.
 
 Debug logs are only available when debug mode has been enabled at both the app
 and deployment levels. First, the app must opt in to allowing debug-mode
@@ -29,13 +28,13 @@ The specific deployment must also be created in debug mode with
 debug logs retroactively. Create a new debug-mode deployment, then pass that
 deployment ID to this command.
 
-Use `--follow` to keep listening for new log lines after the initial log
-buffer. By default, output omits the platform timestamp that Kubernetes
-prepends to each log line; pass `--include-platform-timestamp` to show it.
+Use `--follow` to keep polling for new log lines after the initial log window.
+By default, output omits the platform timestamp that Kubernetes prepends to each
+log line; pass `--include-platform-timestamp` to show it.
 See `tvc app create --help`, `tvc deploy create --help`, and `tvc --help`
 for more info."#;
 
-/// Stream debug logs for a deployment.
+/// Fetch debug logs for a deployment.
 #[derive(Debug, ClapArgs)]
 #[command(about, long_about = LONG_ABOUT)]
 pub struct Args {
@@ -43,13 +42,21 @@ pub struct Args {
     #[arg(short = 'd', long, env = "TVC_DEPLOY_ID")]
     pub deploy_id: String,
 
-    /// Keep streaming new lines until the request timeout.
+    /// Keep polling for new lines.
     #[arg(long, env = "TVC_DEBUG_LOGS_FOLLOW")]
     pub follow: bool,
 
-    /// Limit initial history to the last N lines per replica. Omit for the full log buffer.
+    /// Limit history to the last N lines per replica.
     #[arg(long, env = "TVC_DEBUG_LOGS_TAIL_LINES", allow_hyphen_values = true)]
     pub tail_lines: Option<i32>,
+
+    /// Return logs newer than this many seconds ago.
+    #[arg(long, env = "TVC_DEBUG_LOGS_SINCE_SECONDS", allow_hyphen_values = true)]
+    pub since_seconds: Option<i64>,
+
+    /// Return logs from the previous container instance.
+    #[arg(long, env = "TVC_DEBUG_LOGS_PREVIOUS")]
+    pub previous: bool,
 
     /// Include the platform timestamp prepended by the Kubernetes log stream.
     #[arg(long, env = "TVC_DEBUG_LOGS_INCLUDE_PLATFORM_TIMESTAMP")]
@@ -59,101 +66,95 @@ pub struct Args {
 /// Run the `deploy debug-logs` command.
 pub async fn run(args: Args) -> anyhow::Result<()> {
     let tail_lines = tail_lines_or_default(args.tail_lines)?;
+    let since_seconds = since_seconds_or_default(args.since_seconds)?;
     let auth = crate::client::build_client().await?;
 
-    let request = DebugLogStreamRequest {
+    let request = DebugLogQueryRequest {
         organization_id: auth.org_id.clone(),
         deployment_id: args.deploy_id,
         follow: args.follow,
         tail_lines,
+        since_seconds,
+        previous: args.previous,
         include_platform_timestamp: args.include_platform_timestamp,
     };
 
-    stream_debug_logs(&auth.client, &request).await
+    query_debug_logs(&auth.client, &request).await
 }
 
 #[derive(Clone, Debug)]
-struct DebugLogStreamRequest {
+struct DebugLogQueryRequest {
     organization_id: String,
     deployment_id: String,
     follow: bool,
     tail_lines: i32,
+    since_seconds: i64,
+    previous: bool,
     include_platform_timestamp: bool,
 }
 
-impl DebugLogStreamRequest {
+impl DebugLogQueryRequest {
     fn to_api_request(&self) -> GetEnclaveDebugLogsRequest {
         GetEnclaveDebugLogsRequest {
             organization_id: self.organization_id.clone(),
             deployment_id: self.deployment_id.clone(),
-            follow: self.follow,
             tail_lines: self.tail_lines,
+            since_seconds: self.since_seconds,
+            previous: self.previous,
+        }
+    }
+
+    fn followup_request(&self) -> Self {
+        Self {
+            tail_lines: 0,
+            since_seconds: FOLLOW_SINCE_SECONDS,
+            ..self.clone()
         }
     }
 }
 
-async fn stream_debug_logs(
+async fn query_debug_logs(
     client: &turnkey_client::TurnkeyClient<TurnkeyP256ApiKey>,
-    request: &DebugLogStreamRequest,
+    request: &DebugLogQueryRequest,
 ) -> anyhow::Result<()> {
-    let retry_policy = StreamRetryPolicy::new(request.follow);
     let mut printed_lines = HashSet::new();
-    let mut connected = false;
+    let mut current_request = request.clone();
 
-    loop {
-        let outcome = drain_stream_window(client, request, &mut printed_lines, connected).await?;
-        connected = true;
+    let response = fetch_debug_logs(client, &current_request).await?;
+    if request.follow {
+        eprintln!("Connected; polling for debug logs...");
+    }
+    print_debug_log_response(
+        &response,
+        &mut printed_lines,
+        request.include_platform_timestamp,
+    );
 
-        if retry_policy.should_retry(&outcome) {
-            continue;
-        }
-
-        if let Some(err) = outcome.error {
-            return Err(err).context("debug log stream failed");
-        }
-
+    if !request.follow {
         return Ok(());
     }
+
+    current_request = request.followup_request();
+
+    loop {
+        tokio::time::sleep(FOLLOW_POLL_INTERVAL).await;
+        let response = fetch_debug_logs(client, &current_request).await?;
+        print_debug_log_response(
+            &response,
+            &mut printed_lines,
+            request.include_platform_timestamp,
+        );
+    }
 }
 
-async fn drain_stream_window(
+async fn fetch_debug_logs(
     client: &turnkey_client::TurnkeyClient<TurnkeyP256ApiKey>,
-    request: &DebugLogStreamRequest,
-    printed_lines: &mut HashSet<LogLineKey>,
-    reconnected: bool,
-) -> anyhow::Result<StreamWindowOutcome> {
-    let started_at = Instant::now();
-    let mut stream = client
+    request: &DebugLogQueryRequest,
+) -> anyhow::Result<GetEnclaveDebugLogsResponse> {
+    client
         .get_enclave_debug_logs(request.to_api_request())
         .await
-        .context("failed to start debug log stream")?;
-
-    if reconnected {
-        eprintln!("Reconnected; listening for debug logs...");
-    } else {
-        eprintln!("Connected; listening for debug logs...");
-    }
-
-    while let Some(response) = stream.next().await {
-        match response {
-            Ok(response) => print_debug_log_response(
-                &response,
-                printed_lines,
-                request.include_platform_timestamp,
-            ),
-            Err(err) => {
-                return Ok(StreamWindowOutcome {
-                    elapsed: started_at.elapsed(),
-                    error: Some(err),
-                });
-            }
-        }
-    }
-
-    Ok(StreamWindowOutcome {
-        elapsed: started_at.elapsed(),
-        error: None,
-    })
+        .context("failed to fetch debug logs")
 }
 
 fn tail_lines_or_default(tail_lines: Option<i32>) -> anyhow::Result<i32> {
@@ -168,62 +169,32 @@ fn tail_lines_or_default(tail_lines: Option<i32>) -> anyhow::Result<i32> {
     Ok(tail_lines)
 }
 
-#[derive(Debug)]
-struct StreamWindowOutcome {
-    elapsed: Duration,
-    error: Option<TurnkeyClientError>,
-}
-
-struct StreamRetryPolicy {
-    follow: bool,
-}
-
-impl StreamRetryPolicy {
-    fn new(follow: bool) -> Self {
-        Self { follow }
-    }
-
-    fn should_retry(&self, outcome: &StreamWindowOutcome) -> bool {
-        if !self.follow || outcome.elapsed < EXPECTED_STREAM_WINDOW {
-            return false;
-        }
-
-        match outcome.error.as_ref() {
-            Some(err) => is_expected_gateway_stream_end(err),
-            None => true,
-        }
-    }
-}
-
-fn is_expected_gateway_stream_end(err: &TurnkeyClientError) -> bool {
-    let TurnkeyClientError::StreamError { code, message } = err else {
-        return false;
+fn since_seconds_or_default(since_seconds: Option<i64>) -> anyhow::Result<i64> {
+    let Some(since_seconds) = since_seconds else {
+        return Ok(0);
     };
 
-    if *code != GATEWAY_DEADLINE_EXCEEDED_CODE {
-        return false;
+    if since_seconds < 0 {
+        bail!("--since-seconds must be greater than or equal to 0");
     }
 
-    message == GATEWAY_DEADLINE_EXCEEDED_MESSAGE
-        || GATEWAY_RST_STREAM_CANCEL_MARKERS
-            .iter()
-            .all(|marker| message.contains(marker))
+    Ok(since_seconds)
 }
 
 #[derive(Debug, Eq, Hash, PartialEq)]
 struct LogLineKey {
-    pod_name: String,
+    replica: String,
     content: String,
     seconds: String,
     nanos: String,
 }
 
 impl LogLineKey {
-    fn new(pod_name: &str, line: &LogLine) -> Option<Self> {
+    fn new(replica: &str, line: &LogLine) -> Option<Self> {
         let ts = line.ts.as_ref()?;
 
         Some(Self {
-            pod_name: pod_name.to_string(),
+            replica: replica.to_string(),
             content: line.content.clone(),
             seconds: ts.seconds.clone(),
             nanos: ts.nanos.clone(),
@@ -236,38 +207,41 @@ fn print_debug_log_response(
     printed_lines: &mut HashSet<LogLineKey>,
     include_platform_timestamp: bool,
 ) {
-    if response.event == LogEventType::PodTerminated {
-        eprintln!("{}", format_pod_terminated(&response.pod_name));
-        return;
-    }
-
-    for line in &response.lines {
-        if let Some(key) = LogLineKey::new(&response.pod_name, line) {
-            if !printed_lines.insert(key) {
-                continue;
-            }
-        }
-
-        println!(
-            "{}",
-            format_log_line(&response.pod_name, line, include_platform_timestamp)
-        );
+    for entry in &response.entries {
+        print_debug_log_entry(entry, printed_lines, include_platform_timestamp);
     }
 }
 
-fn format_log_line(pod_name: &str, line: &LogLine, include_platform_timestamp: bool) -> String {
+fn print_debug_log_entry(
+    entry: &EnclaveDebugLogEntry,
+    printed_lines: &mut HashSet<LogLineKey>,
+    include_platform_timestamp: bool,
+) {
+    let Some(line) = entry.line.as_ref() else {
+        return;
+    };
+
+    if let Some(key) = LogLineKey::new(&entry.replica, line) {
+        if !printed_lines.insert(key) {
+            return;
+        }
+    }
+
+    println!(
+        "{}",
+        format_log_line(&entry.replica, line, include_platform_timestamp)
+    );
+}
+
+fn format_log_line(replica: &str, line: &LogLine, include_platform_timestamp: bool) -> String {
     if !include_platform_timestamp {
-        return format!("{pod_name} {}", line.content);
+        return format!("{replica} {}", line.content);
     }
 
     match line.ts.as_ref().and_then(format_timestamp) {
-        Some(ts) => format!("{ts} {pod_name} {}", line.content),
-        None => format!("{pod_name} {}", line.content),
+        Some(ts) => format!("{ts} {replica} {}", line.content),
+        None => format!("{replica} {}", line.content),
     }
-}
-
-fn format_pod_terminated(pod_name: &str) -> String {
-    format!("{pod_name} stream terminated")
 }
 
 fn format_timestamp(timestamp: &Timestamp) -> Option<String> {
@@ -296,10 +270,10 @@ mod tests {
         }
     }
 
-    fn stream_error(code: i32, message: &str) -> TurnkeyClientError {
-        TurnkeyClientError::StreamError {
-            code,
-            message: message.to_string(),
+    fn entry(replica: &str, line: Option<LogLine>) -> EnclaveDebugLogEntry {
+        EnclaveDebugLogEntry {
+            replica: replica.to_string(),
+            line,
         }
     }
 
@@ -321,97 +295,61 @@ mod tests {
     }
 
     #[test]
-    fn retry_policy_retries_follow_deadline_after_expected_window() {
-        let policy = StreamRetryPolicy::new(true);
-        let outcome = StreamWindowOutcome {
-            elapsed: EXPECTED_STREAM_WINDOW,
-            error: Some(stream_error(4, GATEWAY_DEADLINE_EXCEEDED_MESSAGE)),
-        };
-
-        assert!(policy.should_retry(&outcome));
+    fn since_seconds_defaults_to_zero_when_omitted() {
+        assert_eq!(since_seconds_or_default(None).unwrap(), 0);
     }
 
     #[test]
-    fn retry_policy_retries_follow_rst_stream_cancel_after_expected_window() {
-        let policy = StreamRetryPolicy::new(true);
-        let outcome = StreamWindowOutcome {
-            elapsed: EXPECTED_STREAM_WINDOW,
-            error: Some(stream_error(
-                4,
-                "stream terminated by RST_STREAM with error code: CANCEL",
-            )),
-        };
-
-        assert!(policy.should_retry(&outcome));
+    fn since_seconds_accepts_zero_and_positive_values() {
+        assert_eq!(since_seconds_or_default(Some(0)).unwrap(), 0);
+        assert_eq!(since_seconds_or_default(Some(25)).unwrap(), 25);
     }
 
     #[test]
-    fn retry_policy_retries_follow_clean_end_after_expected_window() {
-        let policy = StreamRetryPolicy::new(true);
-        let outcome = StreamWindowOutcome {
-            elapsed: EXPECTED_STREAM_WINDOW,
-            error: None,
-        };
-
-        assert!(policy.should_retry(&outcome));
+    fn since_seconds_rejects_negative_values() {
+        let err = since_seconds_or_default(Some(-1)).unwrap_err();
+        assert!(err.to_string().contains("--since-seconds"));
     }
 
     #[test]
-    fn retry_policy_does_not_retry_immediate_deadline_error() {
-        let policy = StreamRetryPolicy::new(true);
-        let outcome = StreamWindowOutcome {
-            elapsed: Duration::from_secs(1),
-            error: Some(stream_error(4, GATEWAY_DEADLINE_EXCEEDED_MESSAGE)),
+    fn request_maps_to_unary_api_request() {
+        let request = DebugLogQueryRequest {
+            organization_id: "org".to_string(),
+            deployment_id: "deployment".to_string(),
+            follow: true,
+            tail_lines: 10,
+            since_seconds: 30,
+            previous: true,
+            include_platform_timestamp: true,
         };
 
-        assert!(!policy.should_retry(&outcome));
+        let api_request = request.to_api_request();
+
+        assert_eq!(api_request.organization_id, "org");
+        assert_eq!(api_request.deployment_id, "deployment");
+        assert_eq!(api_request.tail_lines, 10);
+        assert_eq!(api_request.since_seconds, 30);
+        assert!(api_request.previous);
     }
 
     #[test]
-    fn retry_policy_does_not_retry_immediate_rst_stream_cancel() {
-        let policy = StreamRetryPolicy::new(true);
-        let outcome = StreamWindowOutcome {
-            elapsed: Duration::from_secs(1),
-            error: Some(stream_error(
-                4,
-                "stream terminated by RST_STREAM with error code: CANCEL",
-            )),
+    fn followup_request_uses_overlapping_since_window() {
+        let request = DebugLogQueryRequest {
+            organization_id: "org".to_string(),
+            deployment_id: "deployment".to_string(),
+            follow: true,
+            tail_lines: 100,
+            since_seconds: 0,
+            previous: false,
+            include_platform_timestamp: false,
         };
 
-        assert!(!policy.should_retry(&outcome));
-    }
+        let followup = request.followup_request();
 
-    #[test]
-    fn retry_policy_does_not_retry_non_follow_streams() {
-        let policy = StreamRetryPolicy::new(false);
-        let outcome = StreamWindowOutcome {
-            elapsed: EXPECTED_STREAM_WINDOW,
-            error: Some(stream_error(4, GATEWAY_DEADLINE_EXCEEDED_MESSAGE)),
-        };
-
-        assert!(!policy.should_retry(&outcome));
-    }
-
-    #[test]
-    fn retry_policy_does_not_retry_other_stream_errors() {
-        let policy = StreamRetryPolicy::new(true);
-        let outcome = StreamWindowOutcome {
-            elapsed: EXPECTED_STREAM_WINDOW,
-            error: Some(stream_error(7, "denied")),
-        };
-
-        assert!(!policy.should_retry(&outcome));
-    }
-
-    #[test]
-    fn retry_policy_does_not_retry_unexpected_deadline_error() {
-        let policy = StreamRetryPolicy::new(true);
-        let outcome = StreamWindowOutcome {
-            elapsed: EXPECTED_STREAM_WINDOW,
-            error: Some(stream_error(4, "unexpected deadline exceeded")),
-        };
-
-        assert!(!policy.should_retry(&outcome));
+        assert_eq!(followup.tail_lines, 0);
+        assert_eq!(followup.since_seconds, FOLLOW_SINCE_SECONDS);
+        assert_eq!(followup.organization_id, request.organization_id);
+        assert_eq!(followup.deployment_id, request.deployment_id);
     }
 
     #[test]
@@ -419,8 +357,8 @@ mod tests {
         let line = log_line("hello", Some(timestamp("1710000000", "123456789")));
 
         assert_eq!(
-            LogLineKey::new("pod-a", &line),
-            LogLineKey::new("pod-a", &line)
+            LogLineKey::new("replica 1/3", &line),
+            LogLineKey::new("replica 1/3", &line)
         );
     }
 
@@ -428,14 +366,17 @@ mod tests {
     fn log_line_key_requires_timestamp() {
         let line = log_line("hello", None);
 
-        assert_eq!(LogLineKey::new("pod-a", &line), None);
+        assert_eq!(LogLineKey::new("replica 1/3", &line), None);
     }
 
     #[test]
     fn format_log_line_omits_platform_timestamp_by_default() {
         let line = log_line("hello", Some(timestamp("1710000000", "123456789")));
 
-        assert_eq!(format_log_line("pod-a", &line, false), "pod-a hello");
+        assert_eq!(
+            format_log_line("replica 1/3", &line, false),
+            "replica 1/3 hello"
+        );
     }
 
     #[test]
@@ -443,8 +384,8 @@ mod tests {
         let line = log_line("hello", Some(timestamp("1710000000", "123456789")));
 
         assert_eq!(
-            format_log_line("pod-a", &line, true),
-            "2024-03-09T16:00:00.123456789Z pod-a hello"
+            format_log_line("replica 1/3", &line, true),
+            "2024-03-09T16:00:00.123456789Z replica 1/3 hello"
         );
     }
 
@@ -452,18 +393,41 @@ mod tests {
     fn format_log_line_omits_timestamp_when_missing() {
         let line = log_line("hello", None);
 
-        assert_eq!(format_log_line("pod-a", &line, true), "pod-a hello");
+        assert_eq!(
+            format_log_line("replica 1/3", &line, true),
+            "replica 1/3 hello"
+        );
     }
 
     #[test]
     fn format_log_line_omits_invalid_timestamp() {
         let line = log_line("hello", Some(timestamp("bad", "123")));
 
-        assert_eq!(format_log_line("pod-a", &line, true), "pod-a hello");
+        assert_eq!(
+            format_log_line("replica 1/3", &line, true),
+            "replica 1/3 hello"
+        );
     }
 
     #[test]
-    fn format_pod_terminated_mentions_pod() {
-        assert_eq!(format_pod_terminated("pod-a"), "pod-a stream terminated");
+    fn print_response_skips_empty_entries_and_dedupes_timestamped_lines() {
+        let response = GetEnclaveDebugLogsResponse {
+            entries: vec![
+                entry(
+                    "replica 1/2",
+                    Some(log_line("hello", Some(timestamp("1710000000", "1")))),
+                ),
+                entry(
+                    "replica 1/2",
+                    Some(log_line("hello", Some(timestamp("1710000000", "1")))),
+                ),
+                entry("replica 2/2", None),
+            ],
+        };
+        let mut printed = HashSet::new();
+
+        print_debug_log_response(&response, &mut printed, false);
+
+        assert_eq!(printed.len(), 1);
     }
 }

@@ -13,7 +13,6 @@ categories = ["api-bindings"]
 
 [dependencies]
 mime.workspace = true
-futures-util.workspace = true
 prost.workspace = true
 prost-types.workspace = true
 reqwest.workspace = true

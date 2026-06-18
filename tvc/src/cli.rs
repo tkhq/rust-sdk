@@ -163,7 +163,7 @@ enum DeployCommands {
     Create(commands::deploy::create::Args),
     /// Generate a template deployment configuration file.
     Init(commands::deploy::init::Args),
-    /// Stream debug logs for a deployment.
+    /// Fetch debug logs for a deployment.
     #[command(long_about = commands::deploy::debug_logs::LONG_ABOUT)]
     DebugLogs(commands::deploy::debug_logs::Args),
     /// Delete a deployment by marking it for deletion.

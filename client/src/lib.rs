@@ -1,9 +1,8 @@
 #![doc = include_str!("../README.md")]
+use serde::Serialize;
 use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use futures_util::StreamExt;
 use reqwest::header::CONTENT_TYPE;
 use thiserror::Error;
 
@@ -61,12 +60,6 @@ pub struct ActivityResult<T> {
     pub app_proofs: Vec<AppProof>,
 }
 
-#[derive(Debug, Deserialize)]
-struct StreamingResponseChunk<T> {
-    result: Option<T>,
-    error: Option<Status>,
-}
-
 // Re-export this for convenience
 pub use turnkey_api_key_stamper::{TurnkeyP256ApiKey, TurnkeySecp256k1ApiKey};
 
@@ -106,12 +99,6 @@ pub enum TurnkeyClientError {
 
     #[error("Failed to decode response {0} ({1})")]
     Decode(String, serde_json::Error),
-
-    #[error("Streaming response did not include a result")]
-    MissingStreamResult,
-
-    #[error("Streaming response error {code}: {message}")]
-    StreamError { code: i32, message: String },
 
     #[error("Serde JSON failure: {0}")]
     SerdeJsonFailure(#[from] serde_json::Error),
@@ -421,120 +408,6 @@ impl<S: Stamp> TurnkeyClient<S> {
 
         Ok(response)
     }
-
-    /// Processes a streaming request and returns each newline-delimited gRPC-gateway
-    /// response envelope as a typed stream item.
-    pub async fn process_streaming_request<Request, Response>(
-        &self,
-        request: &Request,
-        path: String,
-    ) -> Result<
-        futures_util::stream::BoxStream<'static, Result<Response, TurnkeyClientError>>,
-        TurnkeyClientError,
-    >
-    where
-        Request: Serialize,
-        Response: DeserializeOwned + Send + 'static,
-    {
-        let url = format!("{}{}", self.base_url, path);
-        let post_body = serde_json::to_string(&request)?;
-        let StampHeader { name, value } = self.api_key.stamp(post_body.as_bytes())?;
-        let res = self
-            .http
-            .post(url)
-            .header(name, value)
-            .body(post_body)
-            .send()
-            .await?;
-
-        let status = res.status();
-        let content_type = res
-            .headers()
-            .get(CONTENT_TYPE)
-            .ok_or(TurnkeyClientError::MissingContentTypeHeader)?
-            .to_str()
-            .map_err(|e| TurnkeyClientError::HeaderToStrError(e.to_string()))?
-            .parse::<mime::Mime>()
-            .map_err(|e| TurnkeyClientError::HeaderFromStrError(e.to_string()))?;
-
-        if !status.is_success() {
-            let text = res.text().await?;
-            return Err(TurnkeyClientError::UnexpectedHttpStatus(
-                status.as_u16(),
-                text,
-            ));
-        }
-
-        if content_type != mime::APPLICATION_JSON {
-            return Err(TurnkeyClientError::UnexpectedMimeType(
-                content_type.to_string(),
-            ));
-        }
-
-        let chunks = res.bytes_stream().boxed();
-
-        Ok(futures_util::stream::unfold(
-            (chunks, Vec::<u8>::new()),
-            |(mut chunks, mut buffer)| async move {
-                loop {
-                    if let Some(delimiter_index) = buffer.iter().position(|byte| *byte == b'\n') {
-                        let mut line = buffer.drain(..=delimiter_index).collect::<Vec<_>>();
-                        line.pop();
-
-                        if line.last() == Some(&b'\r') {
-                            line.pop();
-                        }
-
-                        if line.is_empty() {
-                            continue;
-                        }
-
-                        let item = decode_streaming_response_chunk(&line);
-                        return Some((item, (chunks, buffer)));
-                    }
-
-                    match chunks.next().await {
-                        Some(Ok(bytes)) => buffer.extend_from_slice(&bytes),
-                        Some(Err(err)) => {
-                            return Some((Err(TurnkeyClientError::Http(err)), (chunks, buffer)));
-                        }
-                        None if buffer.is_empty() => return None,
-                        None => {
-                            if buffer.last() == Some(&b'\r') {
-                                buffer.pop();
-                            }
-
-                            if buffer.is_empty() {
-                                return None;
-                            }
-
-                            let item = decode_streaming_response_chunk(&buffer);
-                            return Some((item, (chunks, Vec::new())));
-                        }
-                    }
-                }
-            },
-        )
-        .boxed())
-    }
-}
-
-fn decode_streaming_response_chunk<Response>(line: &[u8]) -> Result<Response, TurnkeyClientError>
-where
-    Response: DeserializeOwned,
-{
-    let raw = String::from_utf8_lossy(line).to_string();
-    let chunk: StreamingResponseChunk<Response> =
-        serde_json::from_slice(line).map_err(|e| TurnkeyClientError::Decode(raw, e))?;
-
-    if let Some(error) = chunk.error {
-        return Err(TurnkeyClientError::StreamError {
-            code: error.code,
-            message: error.message,
-        });
-    }
-
-    chunk.result.ok_or(TurnkeyClientError::MissingStreamResult)
 }
 
 #[cfg(test)]
@@ -550,38 +423,6 @@ mod test {
     use std::time::Duration;
     use wiremock::matchers::{header, method};
     use wiremock::{Mock, MockServer, ResponseTemplate};
-
-    #[derive(Debug, Deserialize, PartialEq)]
-    struct TestStreamResult {
-        value: String,
-    }
-
-    #[test]
-    fn decode_streaming_response_chunk_decodes_result_envelope() {
-        let result: TestStreamResult =
-            decode_streaming_response_chunk(br#"{"result":{"value":"ok"}}"#).unwrap();
-
-        assert_eq!(
-            result,
-            TestStreamResult {
-                value: "ok".to_string()
-            }
-        );
-    }
-
-    #[test]
-    fn decode_streaming_response_chunk_decodes_error_envelope() {
-        let result: Result<TestStreamResult, TurnkeyClientError> =
-            decode_streaming_response_chunk(br#"{"error":{"code":7,"message":"denied"}}"#);
-
-        match result {
-            Err(TurnkeyClientError::StreamError { code, message }) => {
-                assert_eq!(code, 7);
-                assert_eq!(message, "denied");
-            }
-            other => panic!("unexpected result: {other:?}"),
-        }
-    }
 
     fn simple_activity_intent() -> SignRawPayloadIntentV2 {
         SignRawPayloadIntentV2 {

@@ -20,7 +20,7 @@ fn deploy_help_lists_debug_logs_subcommand() {
         .success()
         .stdout(predicate::str::contains("debug-logs"))
         .stdout(predicate::str::contains(
-            "Stream debug logs for a deployment",
+            "Fetch debug logs for a deployment",
         ));
 }
 
@@ -35,6 +35,8 @@ fn debug_logs_help_lists_expected_flags() {
         .stdout(predicate::str::contains("--deploy-id <DEPLOY_ID>"))
         .stdout(predicate::str::contains("--follow"))
         .stdout(predicate::str::contains("--include-platform-timestamp"))
+        .stdout(predicate::str::contains("--previous"))
+        .stdout(predicate::str::contains("--since-seconds <SINCE_SECONDS>"))
         .stdout(predicate::str::contains("--tail-lines <TAIL_LINES>"))
         .stdout(predicate::str::contains(
             "--dangerous-enable-debug-mode-deployments",
@@ -65,6 +67,9 @@ fn debug_logs_accepts_flags_before_authentication() {
         .arg("--follow")
         .arg("--tail-lines")
         .arg("10")
+        .arg("--since-seconds")
+        .arg("30")
+        .arg("--previous")
         .arg("--include-platform-timestamp")
         .assert()
         .failure()
@@ -84,5 +89,21 @@ fn debug_logs_rejects_negative_tail_lines_before_authentication() {
         .failure()
         .stderr(predicate::str::contains(
             "--tail-lines must be greater than or equal to 0",
+        ));
+}
+
+#[test]
+fn debug_logs_rejects_negative_since_seconds_before_authentication() {
+    let temp = TempDir::new().unwrap();
+
+    debug_logs_cmd(&temp)
+        .arg("--deploy-id")
+        .arg("deploy-123")
+        .arg("--since-seconds")
+        .arg("-1")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--since-seconds must be greater than or equal to 0",
         ));
 }
