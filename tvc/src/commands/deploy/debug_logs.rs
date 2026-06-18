@@ -3,7 +3,7 @@
 use anyhow::{Context, bail};
 use chrono::{DateTime, SecondsFormat, Utc};
 use clap::Args as ClapArgs;
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::time::Duration;
 use turnkey_client::TurnkeyP256ApiKey;
 use turnkey_client::generated::external::data::v1::{LogLine, Timestamp};
@@ -11,8 +11,9 @@ use turnkey_client::generated::{
     EnclaveDebugLogEntry, GetEnclaveDebugLogsRequest, GetEnclaveDebugLogsResponse,
 };
 
-const FOLLOW_POLL_INTERVAL: Duration = Duration::from_secs(2);
-const FOLLOW_SINCE_SECONDS: i64 = 5;
+const DEFAULT_FOLLOW_POLL_INTERVAL_SECONDS: i64 = 2;
+const FOLLOW_OVERLAP_SECONDS: i64 = 2;
+const RECENT_LOG_LINE_CAPACITY: usize = 1000;
 
 pub(crate) const LONG_ABOUT: &str = r#"
 Fetch debug logs for a deployment.
@@ -29,6 +30,8 @@ debug logs retroactively. Create a new debug-mode deployment, then pass that
 deployment ID to this command.
 
 Use `--follow` to keep polling for new log lines after the initial log window.
+Follow mode polls every 2 seconds by default and requests a 2-second overlap
+on each follow-up poll to avoid missing late-arriving log lines.
 By default, output omits the platform timestamp that Kubernetes prepends to each
 log line; pass `--include-platform-timestamp` to show it.
 See `tvc app create --help`, `tvc deploy create --help`, and `tvc --help`
@@ -45,6 +48,14 @@ pub struct Args {
     /// Keep polling for new lines.
     #[arg(long, env = "TVC_DEBUG_LOGS_FOLLOW")]
     pub follow: bool,
+
+    /// Seconds to wait between follow-mode polls.
+    #[arg(
+        long,
+        env = "TVC_DEBUG_LOGS_FOLLOW_POLL_INTERVAL_SECONDS",
+        allow_hyphen_values = true
+    )]
+    pub follow_poll_interval_seconds: Option<i64>,
 
     /// Limit history to the last N lines per replica.
     #[arg(long, env = "TVC_DEBUG_LOGS_TAIL_LINES", allow_hyphen_values = true)]
@@ -63,12 +74,15 @@ pub struct Args {
 pub async fn run(args: Args) -> anyhow::Result<()> {
     let tail_lines = tail_lines_or_default(args.tail_lines)?;
     let since_seconds = since_seconds_or_default(args.since_seconds)?;
+    let follow_poll_interval_seconds =
+        follow_poll_interval_seconds_or_default(args.follow_poll_interval_seconds)?;
     let auth = crate::client::build_client().await?;
 
     let request = DebugLogQueryRequest {
         organization_id: auth.org_id.clone(),
         deployment_id: args.deploy_id,
         follow: args.follow,
+        follow_poll_interval_seconds,
         tail_lines,
         since_seconds,
         include_platform_timestamp: args.include_platform_timestamp,
@@ -82,6 +96,7 @@ struct DebugLogQueryRequest {
     organization_id: String,
     deployment_id: String,
     follow: bool,
+    follow_poll_interval_seconds: i64,
     tail_lines: i32,
     since_seconds: i64,
     include_platform_timestamp: bool,
@@ -100,7 +115,7 @@ impl DebugLogQueryRequest {
     fn followup_request(&self) -> Self {
         Self {
             tail_lines: 0,
-            since_seconds: FOLLOW_SINCE_SECONDS,
+            since_seconds: self.follow_poll_interval_seconds + FOLLOW_OVERLAP_SECONDS,
             ..self.clone()
         }
     }
@@ -110,7 +125,7 @@ async fn query_debug_logs(
     client: &turnkey_client::TurnkeyClient<TurnkeyP256ApiKey>,
     request: &DebugLogQueryRequest,
 ) -> anyhow::Result<()> {
-    let mut printed_lines = HashSet::new();
+    let mut printed_lines = RecentLogLines::new(RECENT_LOG_LINE_CAPACITY);
     let mut current_request = request.clone();
 
     let response = fetch_debug_logs(client, &current_request).await?;
@@ -129,8 +144,9 @@ async fn query_debug_logs(
 
     current_request = request.followup_request();
 
+    let follow_poll_interval = Duration::from_secs(request.follow_poll_interval_seconds as u64);
     loop {
-        tokio::time::sleep(FOLLOW_POLL_INTERVAL).await;
+        tokio::time::sleep(follow_poll_interval).await;
         let response = fetch_debug_logs(client, &current_request).await?;
         print_debug_log_response(
             &response,
@@ -174,7 +190,24 @@ fn since_seconds_or_default(since_seconds: Option<i64>) -> anyhow::Result<i64> {
     Ok(since_seconds)
 }
 
-#[derive(Debug, Eq, Hash, PartialEq)]
+fn follow_poll_interval_seconds_or_default(
+    follow_poll_interval_seconds: Option<i64>,
+) -> anyhow::Result<i64> {
+    let follow_poll_interval_seconds =
+        follow_poll_interval_seconds.unwrap_or(DEFAULT_FOLLOW_POLL_INTERVAL_SECONDS);
+
+    if follow_poll_interval_seconds <= 0 {
+        bail!("--follow-poll-interval-seconds must be greater than 0");
+    }
+
+    if follow_poll_interval_seconds > i64::MAX - FOLLOW_OVERLAP_SECONDS {
+        bail!("--follow-poll-interval-seconds is too large");
+    }
+
+    Ok(follow_poll_interval_seconds)
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct LogLineKey {
     replica: String,
     content: String,
@@ -187,7 +220,7 @@ impl LogLineKey {
         let ts = line.ts.as_ref()?;
 
         Some(Self {
-            replica: replica.to_string(),
+            replica: replica.into(),
             content: line.content.clone(),
             seconds: ts.seconds.clone(),
             nanos: ts.nanos.clone(),
@@ -195,9 +228,51 @@ impl LogLineKey {
     }
 }
 
+#[derive(Debug)]
+struct RecentLogLines {
+    seen: HashSet<LogLineKey>,
+    order: VecDeque<LogLineKey>,
+    capacity: usize,
+}
+
+impl RecentLogLines {
+    fn new(capacity: usize) -> Self {
+        Self {
+            seen: HashSet::new(),
+            order: VecDeque::new(),
+            capacity,
+        }
+    }
+
+    fn insert(&mut self, key: LogLineKey) -> bool {
+        if self.capacity == 0 {
+            return true;
+        }
+
+        if !self.seen.insert(key.clone()) {
+            return false;
+        }
+
+        self.order.push_back(key);
+
+        while self.order.len() > self.capacity {
+            if let Some(oldest) = self.order.pop_front() {
+                self.seen.remove(&oldest);
+            }
+        }
+
+        true
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.seen.len()
+    }
+}
+
 fn print_debug_log_response(
     response: &GetEnclaveDebugLogsResponse,
-    printed_lines: &mut HashSet<LogLineKey>,
+    printed_lines: &mut RecentLogLines,
     include_platform_timestamp: bool,
 ) {
     for entry in &response.entries {
@@ -207,7 +282,7 @@ fn print_debug_log_response(
 
 fn print_debug_log_entry(
     entry: &EnclaveDebugLogEntry,
-    printed_lines: &mut HashSet<LogLineKey>,
+    printed_lines: &mut RecentLogLines,
     include_platform_timestamp: bool,
 ) {
     let Some(line) = entry.line.as_ref() else {
@@ -305,11 +380,46 @@ mod tests {
     }
 
     #[test]
+    fn follow_poll_interval_seconds_defaults_to_two_when_omitted() {
+        assert_eq!(
+            follow_poll_interval_seconds_or_default(None).unwrap(),
+            DEFAULT_FOLLOW_POLL_INTERVAL_SECONDS
+        );
+    }
+
+    #[test]
+    fn follow_poll_interval_seconds_accepts_positive_values() {
+        assert_eq!(follow_poll_interval_seconds_or_default(Some(1)).unwrap(), 1);
+        assert_eq!(
+            follow_poll_interval_seconds_or_default(Some(25)).unwrap(),
+            25
+        );
+    }
+
+    #[test]
+    fn follow_poll_interval_seconds_rejects_zero_and_negative_values() {
+        let zero_err = follow_poll_interval_seconds_or_default(Some(0)).unwrap_err();
+        assert!(
+            zero_err
+                .to_string()
+                .contains("--follow-poll-interval-seconds")
+        );
+
+        let negative_err = follow_poll_interval_seconds_or_default(Some(-1)).unwrap_err();
+        assert!(
+            negative_err
+                .to_string()
+                .contains("--follow-poll-interval-seconds")
+        );
+    }
+
+    #[test]
     fn request_maps_to_unary_api_request() {
         let request = DebugLogQueryRequest {
             organization_id: "org".to_string(),
             deployment_id: "deployment".to_string(),
             follow: true,
+            follow_poll_interval_seconds: DEFAULT_FOLLOW_POLL_INTERVAL_SECONDS,
             tail_lines: 10,
             since_seconds: 30,
             include_platform_timestamp: true,
@@ -329,6 +439,7 @@ mod tests {
             organization_id: "org".to_string(),
             deployment_id: "deployment".to_string(),
             follow: true,
+            follow_poll_interval_seconds: 7,
             tail_lines: 100,
             since_seconds: 0,
             include_platform_timestamp: false,
@@ -337,7 +448,7 @@ mod tests {
         let followup = request.followup_request();
 
         assert_eq!(followup.tail_lines, 0);
-        assert_eq!(followup.since_seconds, FOLLOW_SINCE_SECONDS);
+        assert_eq!(followup.since_seconds, 9);
         assert_eq!(followup.organization_id, request.organization_id);
         assert_eq!(followup.deployment_id, request.deployment_id);
     }
@@ -414,10 +525,39 @@ mod tests {
                 entry("replica 2/2", None),
             ],
         };
-        let mut printed = HashSet::new();
+        let mut printed = RecentLogLines::new(RECENT_LOG_LINE_CAPACITY);
 
         print_debug_log_response(&response, &mut printed, false);
 
         assert_eq!(printed.len(), 1);
+    }
+
+    #[test]
+    fn recent_log_lines_evicts_oldest_entries() {
+        let first = LogLineKey::new(
+            "replica 1/2",
+            &log_line("first", Some(timestamp("1710000000", "1"))),
+        )
+        .unwrap();
+        let second = LogLineKey::new(
+            "replica 1/2",
+            &log_line("second", Some(timestamp("1710000000", "2"))),
+        )
+        .unwrap();
+        let third = LogLineKey::new(
+            "replica 1/2",
+            &log_line("third", Some(timestamp("1710000000", "3"))),
+        )
+        .unwrap();
+        let mut recent = RecentLogLines::new(2);
+
+        assert!(recent.insert(first.clone()));
+        assert!(recent.insert(second.clone()));
+        assert!(!recent.insert(first.clone()));
+        assert!(recent.insert(third));
+
+        assert_eq!(recent.len(), 2);
+        assert!(recent.insert(first));
+        assert_eq!(recent.len(), 2);
     }
 }

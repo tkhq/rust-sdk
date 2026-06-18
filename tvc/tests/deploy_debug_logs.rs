@@ -34,6 +34,9 @@ fn debug_logs_help_lists_expected_flags() {
         .success()
         .stdout(predicate::str::contains("--deploy-id <DEPLOY_ID>"))
         .stdout(predicate::str::contains("--follow"))
+        .stdout(predicate::str::contains(
+            "--follow-poll-interval-seconds <FOLLOW_POLL_INTERVAL_SECONDS>",
+        ))
         .stdout(predicate::str::contains("--include-platform-timestamp"))
         .stdout(predicate::str::contains("--since-seconds <SINCE_SECONDS>"))
         .stdout(predicate::str::contains("--tail-lines <TAIL_LINES>"))
@@ -64,6 +67,8 @@ fn debug_logs_accepts_flags_before_authentication() {
         .arg("--deploy-id")
         .arg("deploy-123")
         .arg("--follow")
+        .arg("--follow-poll-interval-seconds")
+        .arg("3")
         .arg("--tail-lines")
         .arg("10")
         .arg("--since-seconds")
@@ -87,6 +92,38 @@ fn debug_logs_rejects_negative_tail_lines_before_authentication() {
         .failure()
         .stderr(predicate::str::contains(
             "--tail-lines must be greater than or equal to 0",
+        ));
+}
+
+#[test]
+fn debug_logs_rejects_zero_follow_poll_interval_before_authentication() {
+    let temp = TempDir::new().unwrap();
+
+    debug_logs_cmd(&temp)
+        .arg("--deploy-id")
+        .arg("deploy-123")
+        .arg("--follow-poll-interval-seconds")
+        .arg("0")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--follow-poll-interval-seconds must be greater than 0",
+        ));
+}
+
+#[test]
+fn debug_logs_rejects_negative_follow_poll_interval_before_authentication() {
+    let temp = TempDir::new().unwrap();
+
+    debug_logs_cmd(&temp)
+        .arg("--deploy-id")
+        .arg("deploy-123")
+        .arg("--follow-poll-interval-seconds")
+        .arg("-1")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--follow-poll-interval-seconds must be greater than 0",
         ));
 }
 
