@@ -35,7 +35,6 @@ fn debug_logs_help_lists_expected_flags() {
         .stdout(predicate::str::contains("--deploy-id <DEPLOY_ID>"))
         .stdout(predicate::str::contains("--follow"))
         .stdout(predicate::str::contains("--include-platform-timestamp"))
-        .stdout(predicate::str::contains("--previous"))
         .stdout(predicate::str::contains("--since-seconds <SINCE_SECONDS>"))
         .stdout(predicate::str::contains("--tail-lines <TAIL_LINES>"))
         .stdout(predicate::str::contains(
@@ -69,7 +68,6 @@ fn debug_logs_accepts_flags_before_authentication() {
         .arg("10")
         .arg("--since-seconds")
         .arg("30")
-        .arg("--previous")
         .arg("--include-platform-timestamp")
         .assert()
         .failure()

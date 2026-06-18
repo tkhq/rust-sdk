@@ -54,10 +54,6 @@ pub struct Args {
     #[arg(long, env = "TVC_DEBUG_LOGS_SINCE_SECONDS", allow_hyphen_values = true)]
     pub since_seconds: Option<i64>,
 
-    /// Return logs from the previous container instance.
-    #[arg(long, env = "TVC_DEBUG_LOGS_PREVIOUS")]
-    pub previous: bool,
-
     /// Include the platform timestamp prepended by the Kubernetes log stream.
     #[arg(long, env = "TVC_DEBUG_LOGS_INCLUDE_PLATFORM_TIMESTAMP")]
     pub include_platform_timestamp: bool,
@@ -75,7 +71,6 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         follow: args.follow,
         tail_lines,
         since_seconds,
-        previous: args.previous,
         include_platform_timestamp: args.include_platform_timestamp,
     };
 
@@ -89,7 +84,6 @@ struct DebugLogQueryRequest {
     follow: bool,
     tail_lines: i32,
     since_seconds: i64,
-    previous: bool,
     include_platform_timestamp: bool,
 }
 
@@ -100,7 +94,6 @@ impl DebugLogQueryRequest {
             deployment_id: self.deployment_id.clone(),
             tail_lines: self.tail_lines,
             since_seconds: self.since_seconds,
-            previous: self.previous,
         }
     }
 
@@ -319,7 +312,6 @@ mod tests {
             follow: true,
             tail_lines: 10,
             since_seconds: 30,
-            previous: true,
             include_platform_timestamp: true,
         };
 
@@ -329,7 +321,6 @@ mod tests {
         assert_eq!(api_request.deployment_id, "deployment");
         assert_eq!(api_request.tail_lines, 10);
         assert_eq!(api_request.since_seconds, 30);
-        assert!(api_request.previous);
     }
 
     #[test]
@@ -340,7 +331,6 @@ mod tests {
             follow: true,
             tail_lines: 100,
             since_seconds: 0,
-            previous: false,
             include_platform_timestamp: false,
         };
 
