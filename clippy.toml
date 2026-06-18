@@ -1,0 +1,22 @@
+# Repo-root Clippy configuration.
+#
+# NOTE: clippy.toml is global by nature (one per repo / config dir). The settings
+# below only take effect for lints that are actually ENABLED, and right now
+# `clippy::absolute_paths` is enabled only for the `tvc` crate (see
+# tvc/Cargo.toml `[lints.clippy]`). So in practice these knobs currently scope to
+# tvc; if other crates opt into the lint later, they will share this config.
+#
+# `absolute_paths` (restriction lint) nudges developers away from inline
+# fully-qualified absolute paths at call sites
+# (e.g. `crate::commands::display::format_egress_enabled(x)`) and toward a
+# short `use` import + bare call (`use crate::commands::display::format_egress_enabled;`
+# then `format_egress_enabled(x)`).
+#
+# - `absolute-paths-max-segments`: paths with this many segments or fewer are
+#   allowed inline. 2 is the Clippy default; it still flags 3+ segment paths
+#   such as `crate::commands::app_status::sanitize_app_status(...)`.
+# - `absolute-paths-allowed-crates`: paths rooted at these crates are always
+#   allowed inline. We allow the std-family crates so that fully-qualified
+#   references like `std::collections::HashMap` are not flagged.
+absolute-paths-max-segments = 2
+absolute-paths-allowed-crates = ["std", "core", "alloc"]
