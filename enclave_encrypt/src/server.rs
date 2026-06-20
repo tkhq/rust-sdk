@@ -132,7 +132,7 @@ impl EnclaveEncryptServer {
             .user_id
             .as_ref()
             .ok_or(EnclaveEncryptError::InvalidUser)?
-            .to_string();
+            .clone();
         let data = ServerTargetData {
             target_public: self.target_public.to_bytes().to_vec().try_into()?,
             organization_id: self.organization_id.clone(),

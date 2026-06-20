@@ -198,14 +198,14 @@ impl AppConfig {
         }
 
         // It is fine if both share set id and params are none since we support a default dev share set
-        if let Some(params) = &self.share_set_params {
-            if params.threshold < MIN_SHARE_SET_THRESHOLD {
-                errors.push(AppConfigValidationError::ThresholdTooLow {
-                    field: "shareSetParams.threshold",
-                    minimum: MIN_SHARE_SET_THRESHOLD,
-                    actual: params.threshold,
-                });
-            }
+        if let Some(params) = &self.share_set_params
+            && params.threshold < MIN_SHARE_SET_THRESHOLD
+        {
+            errors.push(AppConfigValidationError::ThresholdTooLow {
+                field: "shareSetParams.threshold",
+                minimum: MIN_SHARE_SET_THRESHOLD,
+                actual: params.threshold,
+            });
         }
 
         AppConfigValidationErrors::ok_or_errors(errors)

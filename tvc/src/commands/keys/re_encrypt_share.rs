@@ -254,7 +254,7 @@ mod tests {
     }
 
     fn local_pair_from_pair(pair: &P256Pair) -> LocalPair {
-        let seed_hex = String::from_utf8(pair.to_master_seed_hex()).unwrap();
+        let seed_hex = String::from_utf8(pair.to_master_seed_hex().to_vec()).unwrap();
         LocalPair::from_hex_seed(&seed_hex).unwrap()
     }
 
@@ -441,7 +441,7 @@ mod tests {
         );
         let re_encrypted_share = hex::decode(&output.re_encrypted_share).unwrap();
         let decrypted_share = ephemeral_pair.decrypt(&re_encrypted_share).unwrap();
-        assert_eq!(decrypted_share, plaintext_share);
+        assert_eq!(decrypted_share.as_slice(), plaintext_share);
         assert_eq!(output.share_approval.member, operator_member);
 
         let approval_public_key =

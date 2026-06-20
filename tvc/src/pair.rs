@@ -5,6 +5,7 @@ use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
 use std::sync::Arc;
+use zeroize::Zeroizing;
 
 /// Something that can do key pair operations with the QOS p256 scheme.
 pub trait Pair: Send + Sync {
@@ -43,7 +44,7 @@ impl LocalPair {
             .try_into()
             .map_err(|v: Vec<u8>| anyhow!("seed must be exactly 32 bytes, got {}", v.len()))?;
 
-        let pair = P256Pair::from_master_seed(&bytes_seed)
+        let pair = P256Pair::from_master_seed(&Zeroizing::new(bytes_seed))
             .map_err(|_| anyhow!("could not create key from seed"))?;
 
         Ok(Self {
@@ -83,6 +84,7 @@ impl Pair for LocalPair {
             tokio::task::spawn_blocking(move || {
                 pair2
                     .decrypt(&ciphertext)
+                    .map(|plaintext| plaintext.to_vec())
                     .map_err(|_| anyhow!("failed to decrypt with local signer"))
             })
             .await?
