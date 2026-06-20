@@ -15,8 +15,13 @@ strip-doc:
 
 .PHONY: check-generate
 check-generate:
-	make generate
-	git diff --exit-code client/src/generated/client.rs
+	$(MAKE) generate
+	git diff --exit-code
+	@if [ -n "$$(git ls-files --others --exclude-standard client/src/generated)" ]; then \
+		echo "Untracked generated files found:"; \
+		git ls-files --others --exclude-standard client/src/generated; \
+		exit 1; \
+	fi
 
 .PHONY: fmt
 fmt:
