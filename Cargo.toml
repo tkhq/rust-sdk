@@ -44,6 +44,7 @@ sha2 = { version = "0.10", default-features = false }
 zeroize = { version = "1.8.1", default-features = false }
 
 # Error handling
+anstyle = { version = "1.0.13", default-features = false }
 thiserror = { version = "2.0.12", default-features = false }
 anyhow = { version = "1.0", default-features = false }
 tracing = { version = "0.1.41", default-features = false, features = ["std"] }

@@ -2,10 +2,13 @@
 
 use anyhow::Context;
 use clap::Args as ClapArgs;
+use std::io::Write;
 use turnkey_client::generated::GetTvcAppsRequest;
 use turnkey_client::generated::external::data::v1::TvcApp;
 
 use crate::commands::display::format_egress_enabled;
+use crate::output::Shell;
+use crate::shell_line;
 
 const SEPARATOR_WIDTH: usize = 40;
 
@@ -19,7 +22,7 @@ pub struct Args {
 }
 
 /// Run the app list command.
-pub async fn run(args: Args) -> anyhow::Result<()> {
+pub async fn run<O: Write, E: Write>(args: Args, shell: &mut Shell<O, E>) -> anyhow::Result<()> {
     let auth = crate::client::build_client().await?;
 
     let response = auth
@@ -35,12 +38,12 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     filter_by_name(&mut apps, args.name.as_deref());
 
     if apps.is_empty() {
-        println!("No apps found.");
+        shell_line!(shell, "No apps found.")?;
         return Ok(());
     }
 
     for app in &apps {
-        render_app(app);
+        render_app(shell, app)?;
     }
 
     Ok(())
@@ -52,7 +55,7 @@ fn filter_by_name(apps: &mut Vec<TvcApp>, name: Option<&str>) {
     }
 }
 
-fn render_app(app: &TvcApp) {
+fn render_app<O: Write, E: Write>(shell: &mut Shell<O, E>, app: &TvcApp) -> anyhow::Result<()> {
     let live = app.live_deployment_id.as_deref().unwrap_or("(none)");
     let mut lines = vec![
         format!("Name: {}", app.name),
@@ -68,7 +71,8 @@ fn render_app(app: &TvcApp) {
 
     lines.push("─".repeat(SEPARATOR_WIDTH));
 
-    println!("{}", lines.join("\n"));
+    shell_line!(shell, "{}", lines.join("\n"))?;
+    Ok(())
 }
 
 #[cfg(test)]
