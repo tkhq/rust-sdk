@@ -84,7 +84,7 @@ impl Pair for LocalPair {
             tokio::task::spawn_blocking(move || {
                 pair2
                     .decrypt(&ciphertext)
-                    .map(|plaintext| plaintext.to_vec())
+                    .map(|mut plaintext| std::mem::take(&mut *plaintext))
                     .map_err(|_| anyhow!("failed to decrypt with local signer"))
             })
             .await?
