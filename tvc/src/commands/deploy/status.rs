@@ -2,11 +2,14 @@
 
 use anyhow::Context;
 use clap::Args as ClapArgs;
+use std::io::Write;
 use turnkey_client::generated::GetTvcDeploymentRequest;
 use turnkey_client::generated::external::data::v1::TvcDeployment;
 
 use crate::client::fetch_tvc_app;
 use crate::commands::display::{format_egress_enabled, yes_no};
+use crate::output::Shell;
+use crate::shell_line;
 
 /// Get the status of a deployment.
 #[derive(Debug, ClapArgs)]
@@ -18,7 +21,7 @@ pub struct Args {
 }
 
 /// Run the deploy status command.
-pub async fn run(args: Args) -> anyhow::Result<()> {
+pub async fn run<O: Write, E: Write>(args: Args, shell: &mut Shell<O, E>) -> anyhow::Result<()> {
     let auth = crate::client::build_client().await?;
 
     let request = GetTvcDeploymentRequest {
@@ -42,30 +45,30 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         .ok_or_else(|| anyhow::anyhow!("manifest not found in deployment"))?;
     let app = fetch_tvc_app(&auth, &deployment.app_id).await?;
 
-    println!("Deployment: {}", deployment.id);
-    println!("App ID: {}", deployment.app_id);
-    println!("{}", format_egress_enabled(app.enable_egress));
-    println!("Manifest ID: {}", manifest.id);
-    println!("QOS Version: {}", deployment.qos_version);
-    println!("{}", format_marked_for_deletion(&deployment));
+    shell_line!(shell, "Deployment: {}", deployment.id)?;
+    shell_line!(shell, "App ID: {}", deployment.app_id)?;
+    shell_line!(shell, "{}", format_egress_enabled(app.enable_egress))?;
+    shell_line!(shell, "Manifest ID: {}", manifest.id)?;
+    shell_line!(shell, "QOS Version: {}", deployment.qos_version)?;
+    shell_line!(shell, "{}", format_marked_for_deletion(&deployment))?;
 
     if let Some(pivot) = &deployment.pivot_container {
-        println!();
-        println!("Pivot Container:");
-        println!("  URL: {}", pivot.container_url);
-        println!("  Path: {}", pivot.path);
+        shell_line!(shell)?;
+        shell_line!(shell, "Pivot Container:")?;
+        shell_line!(shell, "  URL: {}", pivot.container_url)?;
+        shell_line!(shell, "  Path: {}", pivot.path)?;
         if !pivot.args.is_empty() {
-            println!("  Args: {:?}", pivot.args);
+            shell_line!(shell, "  Args: {:?}", pivot.args)?;
         }
     }
 
     if let Some(created) = &deployment.created_at {
-        println!();
-        println!("Created: {}.{:09}s", created.seconds, created.nanos);
+        shell_line!(shell)?;
+        shell_line!(shell, "Created: {}.{:09}s", created.seconds, created.nanos)?;
     }
 
     if let Some(updated) = &deployment.updated_at {
-        println!("Updated: {}.{:09}s", updated.seconds, updated.nanos);
+        shell_line!(shell, "Updated: {}.{:09}s", updated.seconds, updated.nanos)?;
     }
 
     Ok(())

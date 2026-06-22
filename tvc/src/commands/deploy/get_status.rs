@@ -2,11 +2,14 @@
 
 use anyhow::{Context, anyhow};
 use clap::Args as ClapArgs;
+use std::io::Write;
 use turnkey_client::generated::external::data::v1::{AppStatus, DeploymentStatus};
 use turnkey_client::generated::{GetAppStatusRequest, GetTvcDeploymentRequest};
 
 use crate::client::fetch_tvc_app;
 use crate::commands::display::format_egress_enabled;
+use crate::output::Shell;
+use crate::shell_line;
 
 /// Get the live status of a deployment from the app status API.
 #[derive(Debug, ClapArgs)]
@@ -18,7 +21,7 @@ pub struct Args {
 }
 
 /// Run the deploy get-status command.
-pub async fn run(args: Args) -> anyhow::Result<()> {
+pub async fn run<O: Write, E: Write>(args: Args, shell: &mut Shell<O, E>) -> anyhow::Result<()> {
     let auth = crate::client::build_client().await?;
 
     let deployment_request = GetTvcDeploymentRequest {
@@ -54,29 +57,39 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     );
     let app = fetch_tvc_app(&auth, &deployment.app_id).await?;
 
-    println!("Deployment: {}", deployment.id);
-    println!("App ID: {}", app_status.app_id);
-    println!("{}", format_egress_enabled(app.enable_egress));
-    println!(
+    shell_line!(shell, "Deployment: {}", deployment.id)?;
+    shell_line!(shell, "App ID: {}", app_status.app_id)?;
+    shell_line!(shell, "{}", format_egress_enabled(app.enable_egress))?;
+    shell_line!(
+        shell,
         "Is Targeted Deployment: {}",
         if app_status.targeted_deployment_id == args.deploy_id {
             "yes"
         } else {
             "no"
         }
-    );
+    )?;
     if let Some(deployment_status) = find_deployment_status(&app_status, &args.deploy_id) {
-        println!(
+        shell_line!(
+            shell,
             "{}",
             crate::commands::app_status::format_replica_status(deployment_status)
-        );
+        )?;
 
         if let Some(updated) = &deployment_status.last_updated_time {
-            println!("Last Updated: {}.{:09}s", updated.seconds, updated.nanos);
+            shell_line!(
+                shell,
+                "Last Updated: {}.{:09}s",
+                updated.seconds,
+                updated.nanos
+            )?;
         }
     } else {
-        println!("Live Status: unavailable");
-        println!("Reason: deployment not present in current app status");
+        shell_line!(shell, "Live Status: unavailable")?;
+        shell_line!(
+            shell,
+            "Reason: deployment not present in current app status"
+        )?;
     }
 
     Ok(())
