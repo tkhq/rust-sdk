@@ -5,8 +5,8 @@ use crate::operator_key::load_operator_pair;
 use crate::output::{Message, Shell};
 use crate::prompts;
 use crate::prompts::{bail_required_in_non_interactive, stdin_can_prompt};
-use crate::{shell_line, shell_print};
 use crate::util::{read_file_to_string, write_file};
+use crate::{shell_line, shell_print};
 use anyhow::{Context, anyhow, bail};
 use clap::{ArgGroup, Args as ClapArgs};
 use qos_core::protocol::QosHash;
@@ -621,7 +621,11 @@ async fn fetch_manifest_from_deploy<O: IoWrite, E: IoWrite>(
     let manifest: Manifest = serde_json::from_slice(&tvc_manifest.manifest)
         .context("failed to parse manifest from deployment")?;
 
-    shell_line!(shell, "✓ Manifest loaded (manifest_id: {})", tvc_manifest.id)?;
+    shell_line!(
+        shell,
+        "✓ Manifest loaded (manifest_id: {})",
+        tvc_manifest.id
+    )?;
 
     Ok((manifest, tvc_manifest.id))
 }

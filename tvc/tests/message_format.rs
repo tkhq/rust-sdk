@@ -17,7 +17,9 @@ fn deploy_init_defaults_to_human_output() {
         .arg(&output)
         .assert()
         .success()
-        .stdout(predicate::str::contains("Created deployment config template:"))
+        .stdout(predicate::str::contains(
+            "Created deployment config template:",
+        ))
         .stdout(predicate::str::contains("\"reason\"").not());
 }
 
