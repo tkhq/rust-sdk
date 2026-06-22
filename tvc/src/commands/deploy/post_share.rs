@@ -1,9 +1,12 @@
 //! Deploy post-share command.
 
 use crate::commands::keys::re_encrypt_share::ReEncryptedShareOutput;
+use crate::output::{Message, Shell};
 use crate::util::read_json_file;
 use anyhow::Context;
 use clap::Args as ClapArgs;
+use serde::Serialize;
+use std::io::Write;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::{PostTvcQuorumKeyShareIntent, QuorumKeyShareApprovalBundle};
@@ -22,7 +25,7 @@ pub struct Args {
 }
 
 /// Run the deploy post-share command.
-pub async fn run(args: Args) -> anyhow::Result<()> {
+pub async fn run<O: Write, E: Write>(args: Args, shell: &mut Shell<O, E>) -> anyhow::Result<()> {
     let re_encrypted_share: ReEncryptedShareOutput =
         read_json_file(&args.re_encrypted_share, "re-encrypted share output").await?;
     let intent =
@@ -40,12 +43,27 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         .await
         .context("failed to post quorum key share")?;
 
-    println!(
-        "Provisioning Share ID: {}",
-        result.result.provisioning_share_id
-    );
+    shell.emit(&QuorumKeySharePosted {
+        provisioning_share_id: result.result.provisioning_share_id,
+    })?;
 
     Ok(())
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct QuorumKeySharePosted {
+    provisioning_share_id: String,
+}
+
+impl Message for QuorumKeySharePosted {
+    fn reason(&self) -> &'static str {
+        "quorum-key-share-posted"
+    }
+
+    fn human_message(&self) -> String {
+        format!("Provisioning Share ID: {}", self.provisioning_share_id)
+    }
 }
 
 fn build_post_tvc_quorum_key_share_intent(

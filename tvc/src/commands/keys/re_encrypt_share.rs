@@ -1,15 +1,18 @@
 //! Re-encrypt share command.
 
 use crate::operator_key::load_operator_pair;
+use crate::output::{Message, Shell};
 use crate::pair::Pair;
 use crate::provisioning::ProvisionBundle;
 use crate::quorum_key_metadata::QuorumKeyMetadata;
+use crate::shell_err_line;
 use crate::util::{read_json_file, write_file};
 use anyhow::{Context, anyhow};
 use clap::Args as ClapArgs;
 use qos_core::protocol::QosHash;
 use qos_core::protocol::services::boot::{Approval, ManifestEnvelope, QuorumMember};
 use serde::{Deserialize, Serialize};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use zeroize::Zeroizing;
 
@@ -51,12 +54,24 @@ pub(crate) struct ReEncryptedShareOutput {
     pub(crate) share_approval: Approval,
 }
 
+impl Message for ReEncryptedShareOutput {
+    fn reason(&self) -> &'static str {
+        "re-encrypted-share-generated"
+    }
+
+    fn human_message(&self) -> String {
+        // Preserve the previous human behavior: pretty-printed share JSON.
+        serde_json::to_string_pretty(self).expect("serializing re-encrypted share should not fail")
+    }
+}
+
 /// Run the re-encrypt-share command.
-pub async fn run(args: Args) -> anyhow::Result<()> {
+pub async fn run<O: Write, E: Write>(args: Args, shell: &mut Shell<O, E>) -> anyhow::Result<()> {
     if args.dangerous_skip_verification {
-        eprintln!(
+        shell_err_line!(
+            shell,
             "WARNING: Skipping verification! This is dangerous and should not be used for sensitive applications."
-        );
+        )?;
     }
 
     let quorum_key_metadata: QuorumKeyMetadata =
@@ -73,7 +88,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     )
     .await?;
 
-    write_output(args.re_encrypted_out.as_deref(), &output).await
+    write_output(args.re_encrypted_out.as_deref(), &output, shell).await
 }
 
 async fn build_re_encrypted_share_output(
@@ -164,15 +179,21 @@ fn find_share_set_member(
         })
 }
 
-async fn write_output(path: Option<&Path>, output: &ReEncryptedShareOutput) -> anyhow::Result<()> {
-    let contents =
-        serde_json::to_string_pretty(output).context("failed to serialize re-encrypted share")?;
-
+async fn write_output<O: Write, E: Write>(
+    path: Option<&Path>,
+    output: &ReEncryptedShareOutput,
+    shell: &mut Shell<O, E>,
+) -> anyhow::Result<()> {
     if let Some(path) = path {
+        let contents = serde_json::to_string_pretty(output)
+            .context("failed to serialize re-encrypted share")?;
         write_file(path, &contents).await?;
-        eprintln!("Re-encrypted share written to: {}", path.display());
+        shell_err_line!(shell, "Re-encrypted share written to: {}", path.display())?;
     } else {
-        println!("{contents}");
+        // Emit the share output as the machine-relevant payload. In human mode
+        // this prints pretty JSON exactly as before; in JSON mode it is wrapped
+        // in a stable `reason` envelope so the share survives suppression.
+        shell.emit(output)?;
     }
 
     Ok(())

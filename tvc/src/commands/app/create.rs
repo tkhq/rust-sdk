@@ -112,13 +112,17 @@ fn invalid_app_config_error(path: &Path, errors: AppConfigValidationErrors) -> a
     anyhow!("invalid config file: {}: {}", path.display(), errors)
 }
 
-fn offer_to_save_app_config(path: &Path, config: &AppConfig) -> Result<()> {
+fn offer_to_save_app_config<O: Write, E: Write>(
+    path: &Path,
+    config: &AppConfig,
+    shell: &mut Shell<O, E>,
+) -> Result<()> {
     let save = prompts::confirm(&format!("Save filled config to {}?", path.display()), true)?;
     if save {
         let json = serde_json::to_string_pretty(config).context("failed to serialize config")?;
         std::fs::write(path, json)
             .with_context(|| format!("failed to write config file: {}", path.display()))?;
-        println!("Wrote {}", path.display());
+        shell_line!(shell, "Wrote {}", path.display())?;
     }
     Ok(())
 }
@@ -132,8 +136,12 @@ async fn load_saved_operator_public_key() -> Option<String> {
     Some(operator_key.public_key)
 }
 
-async fn run_with_config(args: Args, app_config: AppConfig) -> Result<()> {
-    println!("Creating app '{}'...", app_config.name);
+async fn run_with_config<O: Write, E: Write>(
+    args: Args,
+    app_config: AppConfig,
+    shell: &mut Shell<O, E>,
+) -> Result<()> {
+    shell_line!(shell, "Creating app '{}'...", app_config.name)?;
 
     let auth = build_client().await?;
 
@@ -158,20 +166,25 @@ async fn run_with_config(args: Args, app_config: AppConfig) -> Result<()> {
     config.set_last_operator_ids(&operator_ids)?;
     config.save().await?;
 
-    println!();
-    println!("App created successfully!");
-    println!();
-    println!("App ID: {app_id}");
-    println!("Name: {}", app_config.name);
-    println!("Manifest Set ID: {}", result.result.manifest_set_id);
+    shell_line!(shell)?;
+    shell_line!(shell, "App created successfully!")?;
+    shell_line!(shell)?;
+    shell_line!(shell, "App ID: {app_id}")?;
+    shell_line!(shell, "Name: {}", app_config.name)?;
+    shell_line!(shell, "Manifest Set ID: {}", result.result.manifest_set_id)?;
     if !operator_ids.is_empty() {
-        println!("Manifest Set Operator IDs: {}", operator_ids.join(", "));
+        shell_line!(
+            shell,
+            "Manifest Set Operator IDs: {}",
+            operator_ids.join(", ")
+        )?;
     }
-    println!("Config: {}", args.config_file.display());
-    println!();
-    println!(
+    shell_line!(shell, "Config: {}", args.config_file.display())?;
+    shell_line!(shell)?;
+    shell_line!(
+        shell,
         "Use one of the Manifest Set Operator IDs above with `tvc deploy approve --operator-id`"
-    );
+    )?;
 
     Ok(())
 }
