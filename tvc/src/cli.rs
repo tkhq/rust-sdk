@@ -1,7 +1,10 @@
 //! CLI parsing and dispatch.
 
 use crate::commands;
+use crate::output::{ColorChoice, ErrorMessage, MessageFormat, Shell};
 use clap::{ArgAction, Parser, Subcommand, builder::BoolishValueParser};
+use std::io::Write;
+use std::process::ExitCode;
 use tracing::debug;
 
 const LONG_ABOUT: &str = "\
@@ -46,64 +49,102 @@ pub struct Cli {
     )]
     non_interactive: bool,
 
+    /// Format user-facing output.
+    #[arg(long, global = true, value_enum, default_value_t = MessageFormat::Human)]
+    message_format: MessageFormat,
+
+    /// Control ANSI color in user-facing output.
+    #[arg(long, global = true, value_enum, default_value_t = ColorChoice::Auto)]
+    color: ColorChoice,
+
     #[command(subcommand)]
     command: Commands,
 }
 
 impl Cli {
     /// Run the CLI.
-    pub async fn run() -> anyhow::Result<()> {
+    pub async fn run() -> ExitCode {
         let args = Cli::parse();
+        let mut shell = Shell::standard(args.message_format, args.color);
         debug!(
             command = args.command.name(),
             non_interactive = args.non_interactive,
+            message_format = ?args.message_format,
+            color = ?args.color,
             "dispatching"
         );
 
-        let non_interactive = args.non_interactive;
+        let result = args.run_command(&mut shell).await;
+        match result {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                let emit_result = if shell.message_format().is_json() {
+                    shell.emit(&ErrorMessage::from_error(&error))
+                } else {
+                    shell.error(&error)
+                };
+                if let Err(emit_error) = emit_result {
+                    let mut stderr = std::io::stderr();
+                    let _ = writeln!(stderr, "error: failed to write CLI error: {emit_error}");
+                }
+                ExitCode::FAILURE
+            }
+        }
+    }
 
-        match args.command {
+    async fn run_command<O: Write, E: Write>(self, shell: &mut Shell<O, E>) -> anyhow::Result<()> {
+        let non_interactive = self.non_interactive || self.message_format.is_json();
+
+        match self.command {
             Commands::Deploy { command } => match command {
                 DeployCommands::Approve(args) => {
-                    commands::deploy::approve::run(args, non_interactive).await
+                    commands::deploy::approve::run(args, non_interactive, shell).await
                 }
-                DeployCommands::GetStatus(args) => commands::deploy::get_status::run(args).await,
+                DeployCommands::GetStatus(args) => {
+                    commands::deploy::get_status::run(args, shell).await
+                }
                 DeployCommands::ProvisioningDetails(args) => {
-                    commands::deploy::provisioning_details::run(args).await
+                    commands::deploy::provisioning_details::run(args, shell).await
                 }
-                DeployCommands::PostShare(args) => commands::deploy::post_share::run(args).await,
-                DeployCommands::Status(args) => commands::deploy::status::run(args).await,
+                DeployCommands::PostShare(args) => {
+                    commands::deploy::post_share::run(args, shell).await
+                }
+                DeployCommands::Status(args) => commands::deploy::status::run(args, shell).await,
                 DeployCommands::Create(args) => {
-                    commands::deploy::create::run(args, non_interactive).await
+                    commands::deploy::create::run(args, non_interactive, shell).await
                 }
                 DeployCommands::Init(args) => {
-                    commands::deploy::init::run(args, non_interactive).await
+                    commands::deploy::init::run(args, non_interactive, shell).await
                 }
-                DeployCommands::Delete(args) => commands::deploy::delete::run(args).await,
-                DeployCommands::Restore(args) => commands::deploy::restore::run(args).await,
+                DeployCommands::Delete(args) => commands::deploy::delete::run(args, shell).await,
+                DeployCommands::Restore(args) => commands::deploy::restore::run(args, shell).await,
             },
             Commands::App { command } => match command {
-                AppCommands::Status(args) => commands::app::status::run(args).await,
-                AppCommands::List(args) => commands::app::list::run(args).await,
+                AppCommands::Status(args) => commands::app::status::run(args, shell).await,
+                AppCommands::List(args) => commands::app::list::run(args, shell).await,
                 AppCommands::Create(args) => {
-                    commands::app::create::run(args, non_interactive).await
+                    commands::app::create::run(args, non_interactive, shell).await
                 }
-                AppCommands::Init(args) => commands::app::init::run(args, non_interactive).await,
-                AppCommands::SetLiveDeploy(args) => commands::app::set_live_deploy::run(args).await,
-                AppCommands::Delete(args) => commands::app::delete::run(args).await,
+                AppCommands::Init(args) => {
+                    commands::app::init::run(args, non_interactive, shell).await
+                }
+                AppCommands::SetLiveDeploy(args) => {
+                    commands::app::set_live_deploy::run(args, shell).await
+                }
+                AppCommands::Delete(args) => commands::app::delete::run(args, shell).await,
             },
             Commands::Keys { command } => match command {
                 KeysCommands::GenerateQuorumKey(args) => {
-                    commands::keys::generate_quorum_key::run(args).await
+                    commands::keys::generate_quorum_key::run(args, shell).await
                 }
                 KeysCommands::InitQuorumKey(args) => {
-                    commands::keys::init_quorum_key::run(args).await
+                    commands::keys::init_quorum_key::run(args, shell).await
                 }
                 KeysCommands::ReEncryptShare(args) => {
-                    commands::keys::re_encrypt_share::run(args).await
+                    commands::keys::re_encrypt_share::run(args, shell).await
                 }
             },
-            Commands::Login(args) => commands::login::run(args, non_interactive).await,
+            Commands::Login(args) => commands::login::run(args, non_interactive, shell).await,
         }
     }
 }

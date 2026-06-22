@@ -3,7 +3,9 @@
 use crate::config::turnkey::{
     API_BASE_URL_PROD, Config, KeyCurve, OrgConfig, StoredApiKey, StoredQosOperatorKey,
 };
+use crate::output::Shell;
 use crate::prompts::{self, error_required_in_non_interactive};
+use crate::{shell_line, shell_print};
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Args as ClapArgs;
 use qos_p256::P256Pair;
@@ -41,7 +43,11 @@ struct LoginPlan {
     api_key_policy: ApiKeyPolicy,
 }
 
-pub async fn run(args: Args, is_non_interactive: bool) -> Result<()> {
+pub async fn run<O: Write, E: Write>(
+    args: Args,
+    is_non_interactive: bool,
+    shell: &mut Shell<O, E>,
+) -> Result<()> {
     debug!(
         non_interactive = is_non_interactive,
         org_arg_present = args.org.is_some(),
@@ -54,16 +60,20 @@ pub async fn run(args: Args, is_non_interactive: bool) -> Result<()> {
     let plan = if is_non_interactive {
         build_login_plan_non_interactive(args)?
     } else {
-        build_login_plan_interactive(args, &config)?
+        build_login_plan_interactive(args, &config, shell)?
     };
 
-    execute_login(config, plan).await
+    execute_login(config, plan, shell).await
 }
 
-fn build_login_plan_interactive(args: Args, config: &Config) -> Result<LoginPlan> {
+fn build_login_plan_interactive<O: Write, E: Write>(
+    args: Args,
+    config: &Config,
+    shell: &mut Shell<O, E>,
+) -> Result<LoginPlan> {
     let org = match args.org {
         Some(query) => OrgPlan::Existing(query),
-        None => prompt_for_org_plan(config)?,
+        None => prompt_for_org_plan(config, shell)?,
     };
     Ok(LoginPlan {
         org,
@@ -84,7 +94,11 @@ fn build_login_plan_non_interactive(args: Args) -> Result<LoginPlan> {
     })
 }
 
-async fn execute_login(mut config: Config, plan: LoginPlan) -> Result<()> {
+async fn execute_login<O: Write, E: Write>(
+    mut config: Config,
+    plan: LoginPlan,
+    shell: &mut Shell<O, E>,
+) -> Result<()> {
     let (alias, org_config) = match plan.org {
         OrgPlan::Existing(query) => {
             let alias = match find_org(&config, &query) {
@@ -108,7 +122,7 @@ async fn execute_login(mut config: Config, plan: LoginPlan) -> Result<()> {
         }
     };
 
-    println!("Selected org: {} ({})", alias, org_config.id);
+    shell_line!(shell, "Selected org: {} ({})", alias, org_config.id)?;
 
     config.set_active_org(&alias)?;
     config.save().await?;
@@ -116,13 +130,13 @@ async fn execute_login(mut config: Config, plan: LoginPlan) -> Result<()> {
     let api_key = match StoredApiKey::load(&org_config).await? {
         Some(api_key) => {
             debug!("using existing API key");
-            println!("Using existing API key.");
+            shell_line!(shell, "Using existing API key.")?;
             api_key
         }
         None => match plan.api_key_policy {
             ApiKeyPolicy::AllowGenerate => {
-                let api_key = generate_api_key(&org_config).await?;
-                wait_for_dashboard_registration()?;
+                let api_key = generate_api_key(&org_config, shell).await?;
+                wait_for_dashboard_registration(shell)?;
                 api_key
             }
             ApiKeyPolicy::RequireExisting => bail!(
@@ -133,16 +147,19 @@ async fn execute_login(mut config: Config, plan: LoginPlan) -> Result<()> {
         },
     };
 
-    println!();
-    println!("Verifying credentials...");
+    shell_line!(shell)?;
+    shell_line!(shell, "Verifying credentials...")?;
 
     let whoami = verify_credentials(&api_key, &org_config.id, &org_config.api_base_url).await?;
-    let operator_key = find_or_generate_operator_key(&org_config).await?;
+    let operator_key = find_or_generate_operator_key(&org_config, shell).await?;
 
-    print_success(&alias, &org_config, &api_key, &operator_key, &whoami)
+    print_success(&alias, &org_config, &api_key, &operator_key, &whoami, shell)
 }
 
-fn prompt_for_org_plan(config: &Config) -> Result<OrgPlan> {
+fn prompt_for_org_plan<O: Write, E: Write>(
+    config: &Config,
+    shell: &mut Shell<O, E>,
+) -> Result<OrgPlan> {
     debug!(
         configured_org_count = config.orgs.len(),
         active_org = ?config.active_org,
@@ -151,8 +168,8 @@ fn prompt_for_org_plan(config: &Config) -> Result<OrgPlan> {
 
     if config.orgs.is_empty() {
         debug!("no organizations configured; prompting for new organization");
-        println!("No organization configured.");
-        return prompt_for_new_org_inputs();
+        shell_line!(shell, "No organization configured.")?;
+        return prompt_for_new_org_inputs(shell);
     }
 
     let mut options: Vec<OrgChoice> = config
@@ -174,13 +191,16 @@ fn prompt_for_org_plan(config: &Config) -> Result<OrgPlan> {
 
     match prompts::select("Select organization", options)? {
         OrgChoice::Existing { alias, .. } => Ok(OrgPlan::Existing(alias)),
-        OrgChoice::New => prompt_for_new_org_inputs(),
+        OrgChoice::New => prompt_for_new_org_inputs(shell),
     }
 }
 
-fn prompt_for_new_org_inputs() -> Result<OrgPlan> {
-    println!("You can find your Organization ID at: https://app.turnkey.com/dashboard/welcome");
-    println!();
+fn prompt_for_new_org_inputs<O: Write, E: Write>(shell: &mut Shell<O, E>) -> Result<OrgPlan> {
+    shell_line!(
+        shell,
+        "You can find your Organization ID at: https://app.turnkey.com/dashboard/welcome"
+    )?;
+    shell_line!(shell)?;
 
     let id = prompts::text("Organization ID", None)?;
     if id.is_empty() {
@@ -252,10 +272,13 @@ fn update_api_base_url_from_override(
     }
 }
 
-async fn generate_api_key(org_config: &OrgConfig) -> Result<StoredApiKey> {
+async fn generate_api_key<O: Write, E: Write>(
+    org_config: &OrgConfig,
+    shell: &mut Shell<O, E>,
+) -> Result<StoredApiKey> {
     debug!("generating new API key");
-    println!();
-    println!("Generating API key...");
+    shell_line!(shell)?;
+    shell_line!(shell, "Generating API key...")?;
 
     let stamper = TurnkeyP256ApiKey::generate();
     let public_key = hex::encode(stamper.compressed_public_key());
@@ -269,41 +292,49 @@ async fn generate_api_key(org_config: &OrgConfig) -> Result<StoredApiKey> {
 
     api_key.save(org_config).await?;
 
-    println!();
-    println!("API Key Generated!");
-    println!();
-    println!("Public Key: {public_key}");
-    println!();
-    println!("Add this API key to your Turnkey dashboard:");
-    println!("  1. Go to https://app.turnkey.com/dashboard/users");
-    println!("  2. Click your user > Create API Key > Generate API Keys via CLI > Continue");
-    println!("  3. Paste the public key > Name it \"TVC CLI\" > Continue > Approve");
-    println!();
+    shell_line!(shell)?;
+    shell_line!(shell, "API Key Generated!")?;
+    shell_line!(shell)?;
+    shell_line!(shell, "Public Key: {public_key}")?;
+    shell_line!(shell)?;
+    shell_line!(shell, "Add this API key to your Turnkey dashboard:")?;
+    shell_line!(shell, "  1. Go to https://app.turnkey.com/dashboard/users")?;
+    shell_line!(
+        shell,
+        "  2. Click your user > Create API Key > Generate API Keys via CLI > Continue"
+    )?;
+    shell_line!(
+        shell,
+        "  3. Paste the public key > Name it \"TVC CLI\" > Continue > Approve"
+    )?;
+    shell_line!(shell)?;
 
     Ok(api_key)
 }
 
-fn wait_for_dashboard_registration() -> Result<()> {
-    print!("Press Enter when done...");
-    std::io::stdout().flush()?;
+fn wait_for_dashboard_registration<O: Write, E: Write>(shell: &mut Shell<O, E>) -> Result<()> {
+    shell_print!(shell, "Press Enter when done...")?;
 
     let mut input = String::new();
     std::io::stdin().lock().read_line(&mut input)?;
     Ok(())
 }
 
-async fn find_or_generate_operator_key(org_config: &OrgConfig) -> Result<StoredQosOperatorKey> {
+async fn find_or_generate_operator_key<O: Write, E: Write>(
+    org_config: &OrgConfig,
+    shell: &mut Shell<O, E>,
+) -> Result<StoredQosOperatorKey> {
     debug!(operator_key_path = %org_config.operator_key_path.display(), "resolving operator key");
 
     if let Some(operator_key) = StoredQosOperatorKey::load(org_config).await? {
         debug!("using existing operator key");
-        println!("Using existing operator key.");
+        shell_line!(shell, "Using existing operator key.")?;
         return Ok(operator_key);
     }
 
     debug!("generating new operator key");
-    println!();
-    println!("Generating operator key...");
+    shell_line!(shell)?;
+    shell_line!(shell, "Generating operator key...")?;
 
     let pair =
         P256Pair::generate().map_err(|e| anyhow!("failed to generate operator key: {e:?}"))?;
@@ -317,13 +348,19 @@ async fn find_or_generate_operator_key(org_config: &OrgConfig) -> Result<StoredQ
 
     operator_key.save(org_config).await?;
 
-    println!();
-    println!("Operator Key Generated!");
-    println!();
-    println!("Public Key: {public_key}");
-    println!();
-    println!("This key will be used for approving deployment manifests.");
-    println!("Make sure to register this as an operator in your organization.");
+    shell_line!(shell)?;
+    shell_line!(shell, "Operator Key Generated!")?;
+    shell_line!(shell)?;
+    shell_line!(shell, "Public Key: {public_key}")?;
+    shell_line!(shell)?;
+    shell_line!(
+        shell,
+        "This key will be used for approving deployment manifests."
+    )?;
+    shell_line!(
+        shell,
+        "Make sure to register this as an operator in your organization."
+    )?;
 
     Ok(operator_key)
 }
@@ -370,31 +407,39 @@ async fn verify_credentials(
     })
 }
 
-fn print_success(
+fn print_success<O: Write, E: Write>(
     alias: &str,
     org_config: &OrgConfig,
     api_key: &StoredApiKey,
     operator_key: &StoredQosOperatorKey,
     whoami: &WhoamiResult,
+    shell: &mut Shell<O, E>,
 ) -> Result<()> {
-    println!();
-    println!("Successfully logged in!");
-    println!();
-    println!(
+    shell_line!(shell)?;
+    shell_line!(shell, "Successfully logged in!")?;
+    shell_line!(shell)?;
+    shell_line!(
+        shell,
         "Organization: {} ({})",
-        whoami.organization_name, whoami.organization_id
-    );
-    println!("User: {} ({})", whoami.username, whoami.user_id);
-    println!("Active Org: {alias}");
-    println!("API Key: {}", api_key.public_key);
-    println!("Operator Key: {}", operator_key.public_key);
-    println!();
-    println!(
+        whoami.organization_name,
+        whoami.organization_id
+    )?;
+    shell_line!(shell, "User: {} ({})", whoami.username, whoami.user_id)?;
+    shell_line!(shell, "Active Org: {alias}")?;
+    shell_line!(shell, "API Key: {}", api_key.public_key)?;
+    shell_line!(shell, "Operator Key: {}", operator_key.public_key)?;
+    shell_line!(shell)?;
+    shell_line!(
+        shell,
         "Config: {}",
         crate::config::turnkey::config_file_path()?.display()
-    );
-    println!("API Key: {}", org_config.api_key_path.display());
-    println!("Operator Key: {}", org_config.operator_key_path.display());
+    )?;
+    shell_line!(shell, "API Key: {}", org_config.api_key_path.display())?;
+    shell_line!(
+        shell,
+        "Operator Key: {}",
+        org_config.operator_key_path.display()
+    )?;
 
     Ok(())
 }

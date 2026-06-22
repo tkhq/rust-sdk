@@ -4139,6 +4139,7 @@ dependencies = [
 name = "tvc"
 version = "0.7.0"
 dependencies = [
+ "anstyle",
  "anyhow",
  "assert_cmd",
  "aws-nitro-enclaves-nsm-api",

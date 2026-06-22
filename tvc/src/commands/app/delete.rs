@@ -1,8 +1,11 @@
 //! App delete command - marks an app and all deployments for deletion.
 
 use crate::client::build_client;
+use crate::output::Shell;
+use crate::shell_line;
 use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
+use std::io::Write;
 use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::DeleteTvcAppAndDeploymentsIntent;
 
@@ -16,7 +19,7 @@ pub struct Args {
 }
 
 /// Run the app delete command.
-pub async fn run(args: Args) -> Result<()> {
+pub async fn run<O: Write, E: Write>(args: Args, shell: &mut Shell<O, E>) -> Result<()> {
     let auth = build_client().await?;
 
     let intent = DeleteTvcAppAndDeploymentsIntent {
@@ -34,11 +37,11 @@ pub async fn run(args: Args) -> Result<()> {
         .await
         .context("failed to delete TVC app and deployments")?;
 
-    println!("App delete accepted.");
-    println!("App and deployments marked for deletion.");
-    println!("App ID: {}", result.result.app_id);
-    println!("Activity ID: {}", result.activity_id);
-    println!("Activity Status: {:?}", result.status);
+    shell_line!(shell, "App delete accepted.")?;
+    shell_line!(shell, "App and deployments marked for deletion.")?;
+    shell_line!(shell, "App ID: {}", result.result.app_id)?;
+    shell_line!(shell, "Activity ID: {}", result.activity_id)?;
+    shell_line!(shell, "Activity Status: {:?}", result.status)?;
 
     Ok(())
 }

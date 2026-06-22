@@ -1,8 +1,11 @@
 //! Deployment configuration file format for `tvc deploy create`.
 
 use std::fmt::Display;
+use std::io::Write;
 
+use crate::output::Shell;
 use crate::prompts;
+use crate::shell_line;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -59,7 +62,11 @@ impl DeployConfig {
     /// Non-placeholder fields are preserved unchanged so partial edits work.
     ///
     /// `saved_app_id` is offered as the default for the App ID prompt when set.
-    pub fn fill_interactively(&mut self, saved_app_id: Option<&str>) -> Result<()> {
+    pub fn fill_interactively<O: Write, E: Write>(
+        &mut self,
+        saved_app_id: Option<&str>,
+        shell: &mut Shell<O, E>,
+    ) -> Result<()> {
         if self.app_id.starts_with("<FILL_IN") {
             self.app_id = prompts::required_text("App ID", saved_app_id)?;
         }
@@ -81,10 +88,11 @@ impl DeployConfig {
             let is_public = prompts::confirm("Is the container image in a public registry?", true)?;
             self.pivot_container_encrypted_pull_secret = None;
             if !is_public {
-                println!(
+                shell_line!(
+                    shell,
                     "Note: pass `--pivot-pull-secret <PATH>` when running \
                      `tvc deploy create` to encrypt and attach the pull secret."
-                );
+                )?;
             }
         }
         Ok(())
@@ -261,7 +269,8 @@ mod tests {
         config.expected_pivot_digest = "sha256:abc".into();
         config.pivot_container_encrypted_pull_secret = None;
 
-        config.fill_interactively(None).unwrap();
+        let mut shell = Shell::from_write(Vec::new(), crate::output::MessageFormat::Human);
+        config.fill_interactively(None, &mut shell).unwrap();
         assert_eq!(config.app_id, "app_xyz");
         assert_eq!(config.qos_version, "0.6.1");
         assert_eq!(config.pivot_container_image_url, "ghcr.io/x/y:v1");
