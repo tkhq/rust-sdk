@@ -9,6 +9,8 @@ use inquire::{Confirm, Password, Select, Text};
 use std::fmt::Display;
 use std::io::IsTerminal;
 
+use crate::output::MissingRequiredInput;
+
 /// Env var that disables interactive prompts when parsed as true.
 pub const NON_INTERACTIVE_ENV: &str = "TVC_NON_INTERACTIVE";
 
@@ -17,11 +19,7 @@ pub fn stdin_can_prompt() -> bool {
 }
 
 pub fn error_required_in_non_interactive(flag_hint: &str) -> anyhow::Error {
-    anyhow::anyhow!(
-        "{flag_hint} is required in non-interactive mode \
-     (set {flag_hint} or run in a TTY without --non-interactive \
-     / {NON_INTERACTIVE_ENV}=true)"
-    )
+    MissingRequiredInput::new(flag_hint).into()
 }
 
 pub fn bail_required_in_non_interactive(flag_hint: &str) -> Result<()> {
