@@ -10,7 +10,7 @@ use clap::Args as ClapArgs;
 use qos_p256::{P256Pair, P256Public};
 use std::fs;
 use std::path::PathBuf;
-use zeroize::Zeroize;
+use zeroize::Zeroizing;
 
 #[derive(Debug, ClapArgs)]
 #[command(about, long_about = None)]
@@ -34,15 +34,8 @@ struct OperatorPublicKey {
     public: P256Public,
 }
 
-struct PlaintextShares(Vec<Vec<u8>>);
-
-impl Drop for PlaintextShares {
-    fn drop(&mut self) {
-        for share in &mut self.0 {
-            share.as_mut_slice().zeroize();
-        }
-    }
-}
+// `Zeroizing` zeroes each share's memory on drop.
+struct PlaintextShares(Vec<Zeroizing<Vec<u8>>>);
 
 /// Run the quorum key generation command.
 pub async fn run(args: Args) -> Result<()> {
@@ -113,7 +106,7 @@ fn generate_and_encrypt_shares(
     let quorum_key_public = hex::encode(quorum_pair.public_key().to_bytes());
 
     let plaintext_shares = qos_crypto::shamir::shares_generate(
-        quorum_pair.to_master_seed(),
+        quorum_pair.to_master_seed().as_slice(),
         shares as usize,
         threshold as usize,
     )
@@ -199,11 +192,10 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        let reconstructed = qos_crypto::shamir::shares_reconstruct(&decrypted_shares[..2])
-            .unwrap()
-            .try_into()
-            .map(|seed: [u8; MASTER_SEED_LEN]| P256Pair::from_master_seed(&seed).unwrap())
-            .unwrap();
+        let reconstructed_seed =
+            qos_crypto::shamir::shares_reconstruct(&decrypted_shares[..2]).unwrap();
+        let seed: [u8; MASTER_SEED_LEN] = reconstructed_seed.as_slice().try_into().unwrap();
+        let reconstructed = P256Pair::from_master_seed(&Zeroizing::new(seed)).unwrap();
 
         assert_eq!(
             hex::encode(reconstructed.public_key().to_bytes()),

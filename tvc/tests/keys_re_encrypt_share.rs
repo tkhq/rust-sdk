@@ -139,7 +139,7 @@ fn re_encrypt_share_round_trips_metadata_share() {
 
     fs::write(
         &operator_seed_path,
-        String::from_utf8(operator_pair.to_master_seed_hex()).unwrap(),
+        String::from_utf8(operator_pair.to_master_seed_hex().to_vec()).unwrap(),
     )
     .unwrap();
     fs::write(
@@ -203,7 +203,7 @@ fn re_encrypt_share_round_trips_metadata_share() {
     );
     let re_encrypted_share = hex::decode(&output.re_encrypted_share).unwrap();
     let decrypted_share = ephemeral_pair.decrypt(&re_encrypted_share).unwrap();
-    assert_eq!(decrypted_share, plaintext_share);
+    assert_eq!(decrypted_share.as_slice(), plaintext_share);
     assert_eq!(output.share_approval.member.pub_key, operator_public_key);
 
     let approval_public_key =

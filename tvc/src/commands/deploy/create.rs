@@ -187,10 +187,8 @@ async fn build_inputs_interactive(args: Args) -> Result<ResolvedDeployInputs> {
         }
     }
 
-    if config_updated {
-        if let Some(path) = &config_path {
-            offer_to_save_config(path, &config, file_loaded)?;
-        }
+    if config_updated && let Some(path) = &config_path {
+        offer_to_save_config(path, &config, file_loaded)?;
     }
     let pivot_pull_secret = read_pivot_pull_secret(pivot_pull_secret.as_deref()).await?;
 

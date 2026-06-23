@@ -111,9 +111,9 @@ impl TurnkeyP256ApiKey {
         let private_key_bytes = hex::decode(private_key.as_ref())
             .map_err(|e| StamperError::HexDecode(e.to_string()))?;
 
-        let public_key_bytes = if public_key.is_some() {
+        let public_key_bytes = if let Some(public_key) = public_key {
             Some(
-                hex::decode(public_key.unwrap().as_ref())
+                hex::decode(public_key.as_ref())
                     .map_err(|e| StamperError::HexDecode(e.to_string()))?,
             )
         } else {
