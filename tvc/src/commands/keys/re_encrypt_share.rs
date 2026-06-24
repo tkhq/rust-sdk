@@ -28,10 +28,11 @@ pub struct Args {
     #[arg(long, value_name = "PATH", env = "TVC_PROVISION_BUNDLE")]
     pub provision_bundle: PathBuf,
 
-    /// Path to the file containing the master seed for the operator key.
-    /// If not provided, uses the operator key from the logged-in org config.
-    #[arg(long, value_name = "PATH", env = "TVC_OPERATOR_SEED")]
-    pub operator_seed: Option<PathBuf>,
+    /// Source of the operator key's hex master seed: a file path (back-compatible),
+    /// `env:NAME`, `stdin` (or `-`), or `file://<path>`. If not provided, uses the
+    /// operator key from the logged-in org config.
+    #[arg(long, value_name = "SOURCE", env = "TVC_OPERATOR_SEED")]
+    pub operator_seed: Option<String>,
 
     /// Never use for sensitive applications! Skip attestation and manifest approval verification.
     #[arg(long, env = "TVC_DANGEROUS_SKIP_VERIFICATION")]
