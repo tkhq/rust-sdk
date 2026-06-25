@@ -8,6 +8,7 @@ use std::sync::Arc;
 use zeroize::Zeroizing;
 
 /// Something that can do key pair operations with the QOS p256 scheme.
+#[allow(clippy::type_complexity)]
 pub trait Pair: Send + Sync {
     /// Sign the given message.
     fn sign(
@@ -19,7 +20,7 @@ pub trait Pair: Send + Sync {
     fn decrypt(
         &self,
         ciphertext: Vec<u8>,
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Vec<u8>>> + Send + '_>>;
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Zeroizing<Vec<u8>>>> + Send + '_>>;
 
     /// The public key for this pair.
     fn public_key(&self) -> Vec<u8>;
@@ -43,8 +44,9 @@ impl LocalPair {
         let bytes_seed: [u8; 32] = hex::decode(hex_seed.trim())?
             .try_into()
             .map_err(|v: Vec<u8>| anyhow!("seed must be exactly 32 bytes, got {}", v.len()))?;
+        let bytes_seed = Zeroizing::new(bytes_seed);
 
-        let pair = P256Pair::from_master_seed(&Zeroizing::new(bytes_seed))
+        let pair = P256Pair::from_master_seed(&bytes_seed)
             .map_err(|_| anyhow!("could not create key from seed"))?;
 
         Ok(Self {
@@ -77,14 +79,13 @@ impl Pair for LocalPair {
     fn decrypt(
         &self,
         ciphertext: Vec<u8>,
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Vec<u8>>> + Send + '_>> {
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Zeroizing<Vec<u8>>>> + Send + '_>> {
         let pair2 = Arc::clone(&self.pair);
 
         Box::pin(async move {
             tokio::task::spawn_blocking(move || {
                 pair2
                     .decrypt(&ciphertext)
-                    .map(|mut plaintext| std::mem::take(&mut *plaintext))
                     .map_err(|_| anyhow!("failed to decrypt with local signer"))
             })
             .await?

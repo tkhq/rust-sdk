@@ -13,8 +13,12 @@ use p384::{
     PublicKey,
     ecdsa::{Signature, VerifyingKey, signature::hazmat::PrehashVerifier},
 };
+use qos_core::protocol::services::boot::{VersionedManifest, VersionedManifestEnvelope};
+pub use qos_nsm::nitro::{
+    AttestError as QosAttestError, ManifestAttestationInput,
+    verify_attestation_doc_against_manifest_live, verify_attestation_doc_against_manifest_setup,
+};
 use serde_bytes::ByteBuf;
-use sha2::Digest;
 use turnkey_api_key_stamper::Stamp;
 use turnkey_client::generated::external::data::v1::{AppProof, BootProof, SignatureScheme};
 use turnkey_client::generated::services::coordinator::public::v1::{
@@ -58,95 +62,6 @@ pub fn cert_from_pem(pem: &[u8]) -> Result<Vec<u8>, AttestError> {
     let (_, doc) = x509_cert::der::Document::from_pem(&String::from_utf8_lossy(pem))
         .map_err(|_| AttestError::PemDecodingError)?;
     Ok(doc.to_vec())
-}
-
-/// Verify that `attestation_doc` matches the specified parameters.
-///
-/// To learn more about the attestation document fields see:
-/// <https://github.com/aws/aws-nitro-enclaves-nsm-api/blob/main/docs/attestation_process.md#22-attestation-document-specification/>.
-///
-/// # Arguments
-///
-/// * `attestation_doc` - the attestation document to verify.
-/// * `user_data` - expected value of the `user_data` field.
-/// * `pcr0` - expected value of PCR index 0.
-/// * `pcr1` - expected value of PCR index 1.
-/// * `pcr2` - expected value of PCR index 3.
-///
-/// # Panics
-///
-/// Panics if any part of verification fails.
-pub fn verify_attestation_doc_against_user_input(
-    attestation_doc: &AttestationDoc,
-    user_data: &[u8],
-    pcr0: &[u8],
-    pcr1: &[u8],
-    pcr2: &[u8],
-    pcr3: &[u8],
-) -> Result<(), AttestError> {
-    if user_data
-        != attestation_doc
-            .user_data
-            .as_ref()
-            .ok_or(AttestError::MissingUserData)?
-            .to_vec()
-    {
-        return Err(AttestError::DifferentUserData);
-    }
-
-    // nonce is none
-    if attestation_doc.nonce.is_some() {
-        return Err(AttestError::UnexpectedAttestationDocNonce);
-    }
-
-    if pcr0
-        != attestation_doc
-            .pcrs
-            .get(&0)
-            .ok_or(AttestError::MissingPcr0)?
-            .clone()
-            .into_vec()
-    {
-        return Err(AttestError::DifferentPcr0);
-    }
-
-    // pcr1 matches
-    if pcr1
-        != attestation_doc
-            .pcrs
-            .get(&1)
-            .ok_or(AttestError::MissingPcr1)?
-            .clone()
-            .into_vec()
-    {
-        return Err(AttestError::DifferentPcr1);
-    }
-
-    // pcr2 matches
-    if pcr2
-        != attestation_doc
-            .pcrs
-            .get(&2)
-            .ok_or(AttestError::MissingPcr2)?
-            .clone()
-            .into_vec()
-    {
-        return Err(AttestError::DifferentPcr2);
-    }
-
-    // pcr3 matches
-    if pcr3
-        != attestation_doc
-            .pcrs
-            .get(&3)
-            .ok_or(AttestError::MissingPcr3)?
-            .clone()
-            .into_vec()
-    {
-        return Err(AttestError::DifferentPcr3);
-    }
-
-    Ok(())
 }
 
 /// Extract the DER encoded `AttestationDoc` from the nitro secure module
@@ -407,7 +322,7 @@ pub fn verify_app_proof_signature(app_proof: &AppProof) -> Result<(), AppProofEr
 ///  - Verify app proof signature
 ///  - Verify the boot proof
 ///    - Attestation doc was signed by AWS
-///    - Attestation doc's `user_data` is the hash of the qos manifest
+///    - Attestation doc matches the approved QOS manifest and live PCR commitment
 ///  - Verify the app proof / boot proof connection - that the ephemeral keys match
 ///
 /// To learn more about verifying app proofs and boot proofs, see:
@@ -435,22 +350,42 @@ pub fn verify(app_proof: &AppProof, boot_proof: &BootProof) -> Result<(), Verify
     )
     .map_err(|e| VerifyError::InvalidAttestation(e.to_string()))?;
 
-    // Verify manifest digest
     let decoded_boot_proof_manifest = base64::decode(&boot_proof.qos_manifest_b64)
         .map_err(|e| VerifyError::InvalidBootProof(e.to_string()))?;
-    let manifest_digest = sha2::Sha256::digest(&decoded_boot_proof_manifest);
+    let manifest = VersionedManifest::try_from_slice_compat(&decoded_boot_proof_manifest)
+        .map_err(|e| VerifyError::InvalidBootProof(e.to_string()))?;
+    let decoded_boot_proof_manifest_envelope =
+        base64::decode(&boot_proof.qos_manifest_envelope_b64)
+            .map_err(|e| VerifyError::InvalidBootProof(e.to_string()))?;
+    let manifest_envelope =
+        VersionedManifestEnvelope::try_from_slice_compat(&decoded_boot_proof_manifest_envelope)
+            .map_err(|e| VerifyError::InvalidBootProof(e.to_string()))?;
+    manifest_envelope
+        .check_approvals()
+        .map_err(|e| VerifyError::InvalidBootProof(format!("{e:?}")))?;
+
+    let manifest_hash = manifest_envelope.manifest_hash();
+    let standalone_manifest_hash = manifest.manifest_hash();
+    if manifest_hash != standalone_manifest_hash {
+        return Err(VerifyError::DifferentManifest(format!(
+            "boot proof manifest hash ({standalone_manifest_hash:?}) does not match manifest envelope hash ({manifest_hash:?})"
+        )));
+    }
+
     let user_data = attestation_doc
         .user_data
+        .as_ref()
         .expect("validated attestation doc should have user_data");
-    if manifest_digest.as_slice() != user_data.as_slice() {
+    if manifest_hash.as_slice() != user_data.as_slice() {
         return Err(VerifyError::DifferentManifest(format!(
-            "attestation_doc's user_data doesn't match the hash of the manifest. attestation_doc.user_data: {user_data:?}, manifest_digest: {manifest_digest:?}"
+            "attestation_doc's user_data doesn't match the approved manifest envelope hash. attestation_doc.user_data: {user_data:?}, manifest_hash: {manifest_hash:?}"
         )));
     }
 
     // 3. Verify that all the ephemeral public keys match: app proof, boot proof structure, actual attestation doc
     let attestation_pub_key_bytes = attestation_doc
         .public_key
+        .as_ref()
         .expect("validated attestation doc should have public_key");
     let attestation_pub_key = hex::encode(attestation_pub_key_bytes);
     if !(app_proof.public_key == attestation_pub_key
@@ -461,6 +396,20 @@ pub fn verify(app_proof: &AppProof, boot_proof: &BootProof) -> Result<(), Verify
             app_proof.public_key, boot_proof.ephemeral_public_key_hex, attestation_pub_key
         )));
     }
+
+    let envelope_manifest = manifest_envelope.manifest();
+    let enclave = envelope_manifest.enclave();
+    verify_attestation_doc_against_manifest_live(
+        &attestation_doc,
+        ManifestAttestationInput {
+            manifest_hash: &manifest_hash,
+            pcr0: &enclave.pcr0,
+            pcr1: &enclave.pcr1,
+            pcr2: &enclave.pcr2,
+            pcr3: &enclave.pcr3,
+        },
+    )
+    .map_err(|e| VerifyError::InvalidAttestation(e.to_string()))?;
 
     Ok(())
 }
@@ -533,12 +482,6 @@ mod tests {
     fn test_should_verify_app_proof_signature() {
         assert!(verify_app_proof_signature(&test_app_proof1()).is_ok());
         assert!(verify_app_proof_signature(&test_app_proof2()).is_ok());
-    }
-
-    #[test]
-    fn test_should_verify() {
-        assert!(verify(&test_app_proof1(), &test_boot_proof1()).is_ok());
-        assert!(verify(&test_app_proof2(), &test_boot_proof2()).is_ok());
     }
 
     #[test]
@@ -616,10 +559,10 @@ mod tests {
         assert!(matches!(result, Err(VerifyError::DifferentEphemeralKey(_))));
         malformed_boot_proof1.aws_attestation_doc_b64 = boot_proof1.aws_attestation_doc_b64;
 
-        // Wrong qosManifestB64 (randomly generated) - should cause user_data verification failure
+        // Wrong qosManifestB64 (randomly generated) - should fail manifest parsing.
         malformed_boot_proof1.qos_manifest_b64 =
             "puwpDDoA3dqZpFV0nDnSgj2iFyy2VDUnDSE7u+awts0=".to_string();
         let result = verify(&app_proof1, &malformed_boot_proof1);
-        assert!(matches!(result, Err(VerifyError::DifferentManifest(_))));
+        assert!(matches!(result, Err(VerifyError::InvalidBootProof(_))));
     }
 }

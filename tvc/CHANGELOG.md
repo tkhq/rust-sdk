@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+
+- Deployment approval, provisioning, and share re-encryption flows now parse
+  versioned QOS manifests and manifest envelopes.
+- Provisioning verification now checks manifest envelope approvals, PCR0-PCR3,
+  and the PCR16 setup manifest/key commitment against the approved manifest
+  hash.
+- Share re-encryption now signs the versioned manifest envelope hash for share
+  approvals.
+
+### Added
+
+- `tvc deploy provisioning-details` now includes PCR16 and PCR17 in its
+  attestation summary output with manifest/key commitment labels.
+
 ## [0.7.0](https://github.com/tkhq/rust-sdk/compare/tvc-v0.6.2...tvc-v0.7.0) - 2026-05-19
 
 ### Added

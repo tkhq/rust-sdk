@@ -1,9 +1,8 @@
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
-use qos_core::protocol::QosHash;
 use qos_core::protocol::services::boot::{
     Approval, Manifest, ManifestEnvelope, ManifestSet, Namespace, NitroConfig, PatchSet,
-    PivotConfig, QuorumMember, RestartPolicy, ShareSet,
+    PivotConfig, QuorumMember, RestartPolicy, ShareSet, VersionedManifestEnvelope,
 };
 use qos_p256::{P256Pair, P256Public};
 use serde::Deserialize;
@@ -23,8 +22,8 @@ struct ReEncryptedShareOutput {
 fn sample_manifest_envelope(
     quorum_key: Vec<u8>,
     share_set_members: Vec<QuorumMember>,
-) -> ManifestEnvelope {
-    ManifestEnvelope {
+) -> VersionedManifestEnvelope {
+    let envelope = ManifestEnvelope {
         manifest: Manifest {
             namespace: Namespace {
                 name: "test-namespace".to_string(),
@@ -61,7 +60,8 @@ fn sample_manifest_envelope(
         },
         manifest_set_approvals: vec![],
         share_set_approvals: vec![],
-    }
+    };
+    envelope.into()
 }
 
 #[test]
@@ -210,7 +210,7 @@ fn re_encrypt_share_round_trips_metadata_share() {
         P256Public::from_bytes(&output.share_approval.member.pub_key).unwrap();
     approval_public_key
         .verify(
-            &manifest_envelope.manifest.qos_hash(),
+            &manifest_envelope.manifest_hash(),
             &output.share_approval.signature,
         )
         .unwrap();
