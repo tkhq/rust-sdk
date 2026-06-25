@@ -8,7 +8,7 @@ use std::time::Duration;
 use turnkey_client::TurnkeyP256ApiKey;
 use turnkey_client::generated::external::data::v1::{LogLine, Timestamp};
 use turnkey_client::generated::{
-    EnclaveDebugLogEntry, GetEnclaveDebugLogsRequest, GetEnclaveDebugLogsResponse,
+    GetTvcDeploymentDebugLogsRequest, GetTvcDeploymentDebugLogsResponse, TvcDeploymentDebugLogEntry,
 };
 
 const DEFAULT_FOLLOW_POLL_INTERVAL_SECONDS: i64 = 2;
@@ -103,8 +103,8 @@ struct DebugLogQueryRequest {
 }
 
 impl DebugLogQueryRequest {
-    fn to_api_request(&self) -> GetEnclaveDebugLogsRequest {
-        GetEnclaveDebugLogsRequest {
+    fn to_api_request(&self) -> GetTvcDeploymentDebugLogsRequest {
+        GetTvcDeploymentDebugLogsRequest {
             organization_id: self.organization_id.clone(),
             deployment_id: self.deployment_id.clone(),
             tail_lines: self.tail_lines,
@@ -159,9 +159,9 @@ async fn query_debug_logs(
 async fn fetch_debug_logs(
     client: &turnkey_client::TurnkeyClient<TurnkeyP256ApiKey>,
     request: &DebugLogQueryRequest,
-) -> anyhow::Result<GetEnclaveDebugLogsResponse> {
+) -> anyhow::Result<GetTvcDeploymentDebugLogsResponse> {
     client
-        .get_enclave_debug_logs(request.to_api_request())
+        .get_tvc_deployment_debug_logs(request.to_api_request())
         .await
         .context("failed to fetch debug logs")
 }
@@ -271,7 +271,7 @@ impl RecentLogLines {
 }
 
 fn print_debug_log_response(
-    response: &GetEnclaveDebugLogsResponse,
+    response: &GetTvcDeploymentDebugLogsResponse,
     printed_lines: &mut RecentLogLines,
     include_platform_timestamp: bool,
 ) {
@@ -281,7 +281,7 @@ fn print_debug_log_response(
 }
 
 fn print_debug_log_entry(
-    entry: &EnclaveDebugLogEntry,
+    entry: &TvcDeploymentDebugLogEntry,
     printed_lines: &mut RecentLogLines,
     include_platform_timestamp: bool,
 ) {
@@ -289,7 +289,7 @@ fn print_debug_log_entry(
         return;
     };
 
-    if let Some(key) = LogLineKey::new(&entry.replica, line) {
+    if let Some(key) = LogLineKey::new(&entry.replica_label, line) {
         if !printed_lines.insert(key) {
             return;
         }
@@ -297,7 +297,7 @@ fn print_debug_log_entry(
 
     println!(
         "{}",
-        format_log_line(&entry.replica, line, include_platform_timestamp)
+        format_log_line(&entry.replica_label, line, include_platform_timestamp)
     );
 }
 
@@ -338,9 +338,9 @@ mod tests {
         }
     }
 
-    fn entry(replica: &str, line: Option<LogLine>) -> EnclaveDebugLogEntry {
-        EnclaveDebugLogEntry {
-            replica: replica.to_string(),
+    fn entry(replica: &str, line: Option<LogLine>) -> TvcDeploymentDebugLogEntry {
+        TvcDeploymentDebugLogEntry {
+            replica_label: replica.to_string(),
             line,
         }
     }
@@ -512,7 +512,7 @@ mod tests {
 
     #[test]
     fn print_response_skips_empty_entries_and_dedupes_timestamped_lines() {
-        let response = GetEnclaveDebugLogsResponse {
+        let response = GetTvcDeploymentDebugLogsResponse {
             entries: vec![
                 entry(
                     "replica 1/2",
