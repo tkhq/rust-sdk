@@ -75,7 +75,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     let tail_lines = tail_lines_or_default(args.tail_lines)?;
     let since_seconds = since_seconds_or_default(args.since_seconds)?;
     let follow_poll_interval_seconds =
-        follow_poll_interval_seconds_or_default(args.follow_poll_interval_seconds)?;
+        follow_poll_interval_seconds_or_default(args.follow, args.follow_poll_interval_seconds)?;
     let auth = crate::client::build_client().await?;
 
     let request = DebugLogQueryRequest {
@@ -191,8 +191,14 @@ fn since_seconds_or_default(since_seconds: Option<i64>) -> anyhow::Result<i64> {
 }
 
 fn follow_poll_interval_seconds_or_default(
+    follow: bool,
     follow_poll_interval_seconds: Option<i64>,
 ) -> anyhow::Result<i64> {
+    if !follow {
+        eprintln!("--follow is disabled, disregarding value for --follow-poll-interval-seconds");
+        return Ok(DEFAULT_FOLLOW_POLL_INTERVAL_SECONDS);
+    }
+
     let follow_poll_interval_seconds =
         follow_poll_interval_seconds.unwrap_or(DEFAULT_FOLLOW_POLL_INTERVAL_SECONDS);
 
@@ -382,34 +388,49 @@ mod tests {
     #[test]
     fn follow_poll_interval_seconds_defaults_to_two_when_omitted() {
         assert_eq!(
-            follow_poll_interval_seconds_or_default(None).unwrap(),
+            follow_poll_interval_seconds_or_default(true, None).unwrap(),
             DEFAULT_FOLLOW_POLL_INTERVAL_SECONDS
         );
     }
 
     #[test]
     fn follow_poll_interval_seconds_accepts_positive_values() {
-        assert_eq!(follow_poll_interval_seconds_or_default(Some(1)).unwrap(), 1);
         assert_eq!(
-            follow_poll_interval_seconds_or_default(Some(25)).unwrap(),
+            follow_poll_interval_seconds_or_default(true, Some(1)).unwrap(),
+            1
+        );
+        assert_eq!(
+            follow_poll_interval_seconds_or_default(true, Some(25)).unwrap(),
             25
         );
     }
 
     #[test]
     fn follow_poll_interval_seconds_rejects_zero_and_negative_values() {
-        let zero_err = follow_poll_interval_seconds_or_default(Some(0)).unwrap_err();
+        let zero_err = follow_poll_interval_seconds_or_default(true, Some(0)).unwrap_err();
         assert!(
             zero_err
                 .to_string()
                 .contains("--follow-poll-interval-seconds")
         );
 
-        let negative_err = follow_poll_interval_seconds_or_default(Some(-1)).unwrap_err();
+        let negative_err = follow_poll_interval_seconds_or_default(true, Some(-1)).unwrap_err();
         assert!(
             negative_err
                 .to_string()
                 .contains("--follow-poll-interval-seconds")
+        );
+    }
+
+    #[test]
+    fn follow_poll_interval_seconds_ignores_values_without_follow() {
+        assert_eq!(
+            follow_poll_interval_seconds_or_default(false, Some(0)).unwrap(),
+            DEFAULT_FOLLOW_POLL_INTERVAL_SECONDS
+        );
+        assert_eq!(
+            follow_poll_interval_seconds_or_default(false, Some(-1)).unwrap(),
+            DEFAULT_FOLLOW_POLL_INTERVAL_SECONDS
         );
     }
 

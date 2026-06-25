@@ -102,6 +102,7 @@ fn debug_logs_rejects_zero_follow_poll_interval_before_authentication() {
     debug_logs_cmd(&temp)
         .arg("--deploy-id")
         .arg("deploy-123")
+        .arg("--follow")
         .arg("--follow-poll-interval-seconds")
         .arg("0")
         .assert()
@@ -118,6 +119,7 @@ fn debug_logs_rejects_negative_follow_poll_interval_before_authentication() {
     debug_logs_cmd(&temp)
         .arg("--deploy-id")
         .arg("deploy-123")
+        .arg("--follow")
         .arg("--follow-poll-interval-seconds")
         .arg("-1")
         .assert()
@@ -125,6 +127,20 @@ fn debug_logs_rejects_negative_follow_poll_interval_before_authentication() {
         .stderr(predicate::str::contains(
             "--follow-poll-interval-seconds must be greater than 0",
         ));
+}
+
+#[test]
+fn debug_logs_ignores_follow_poll_interval_without_follow() {
+    let temp = TempDir::new().unwrap();
+
+    debug_logs_cmd(&temp)
+        .arg("--deploy-id")
+        .arg("deploy-123")
+        .arg("--follow-poll-interval-seconds")
+        .arg("0")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("No active organization"));
 }
 
 #[test]
