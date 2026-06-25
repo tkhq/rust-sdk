@@ -195,7 +195,11 @@ fn follow_poll_interval_seconds_or_default(
     follow_poll_interval_seconds: Option<i64>,
 ) -> anyhow::Result<i64> {
     if !follow {
-        eprintln!("--follow is disabled, disregarding value for --follow-poll-interval-seconds");
+        if follow_poll_interval_seconds.is_some() {
+            eprintln!(
+                "--follow is disabled, disregarding value for --follow-poll-interval-seconds"
+            );
+        }
         return Ok(DEFAULT_FOLLOW_POLL_INTERVAL_SECONDS);
     }
 
