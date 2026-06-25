@@ -57,7 +57,7 @@ pub struct Args {
     )]
     pub follow_poll_interval_seconds: Option<i64>,
 
-    /// Limit raw pod log history requested per replica. Filtered output may contain fewer lines.
+    /// Limit raw pod log history requested per replica. Filtered output may contain (many) fewer lines.
     #[arg(long, env = "TVC_DEBUG_LOGS_TAIL_LINES", allow_hyphen_values = true)]
     pub tail_lines: Option<i32>,
 
@@ -79,7 +79,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     let auth = crate::client::build_client().await?;
 
     let request = DebugLogQueryRequest {
-        organization_id: auth.org_id.clone(),
+        organization_id: auth.org_id,
         deployment_id: args.deploy_id,
         follow: args.follow,
         follow_poll_interval_seconds,

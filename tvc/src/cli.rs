@@ -8,7 +8,6 @@ const LONG_ABOUT: &str = "\
 CLI for building with Turnkey Verifiable Cloud.
 
 Some commands accept multiple configuration input types.
-f
 Configuration values are resolved in this order, highest priority first:
     1. Command-line flag (e.g. --app-id)
     2. Environment variable (e.g. TVC_APP_ID)
