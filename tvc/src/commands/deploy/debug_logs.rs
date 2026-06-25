@@ -57,7 +57,7 @@ pub struct Args {
     )]
     pub follow_poll_interval_seconds: Option<i64>,
 
-    /// Limit history to the last N lines per replica.
+    /// Limit raw pod log history requested per replica. Filtered output may contain fewer lines.
     #[arg(long, env = "TVC_DEBUG_LOGS_TAIL_LINES", allow_hyphen_values = true)]
     pub tail_lines: Option<i32>,
 

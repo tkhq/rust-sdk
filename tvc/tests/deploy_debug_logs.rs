@@ -41,6 +41,9 @@ fn debug_logs_help_lists_expected_flags() {
         .stdout(predicate::str::contains("--since-seconds <SINCE_SECONDS>"))
         .stdout(predicate::str::contains("--tail-lines <TAIL_LINES>"))
         .stdout(predicate::str::contains(
+            "Limit raw pod log history requested per replica",
+        ))
+        .stdout(predicate::str::contains(
             "--dangerous-enable-debug-mode-deployments",
         ))
         .stdout(predicate::str::contains("--dangerous-deploy-debug-mode"));
