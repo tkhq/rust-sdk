@@ -1,7 +1,7 @@
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::io::Write;
+use std::io::{ErrorKind, Write};
 use std::path::PathBuf;
 use walkdir::WalkDir;
 
@@ -11,6 +11,7 @@ const PUBLIC_API_PROTO_PATH: &str = "proto/services/coordinator/public/v1/public
 const EXTERNAL_ACTIVITY_PROTO_PATH: &str = "proto/external/activity/v1/activity.proto";
 const INCLUDE_PROTO_PATH: &str = "proto";
 const ACTIVITIES_MAPPING_PATH: &str = "proto/activities.json";
+const ACTIVITY_VERSION_CAPS_PATH: &str = "codegen/activity_version_caps.json";
 const GENERATED_CLIENT_DIR: &str = "client/src/generated";
 const CLIENT_TEMPLATE_PATH: &str = "codegen/src/client.template.rs";
 
@@ -30,6 +31,12 @@ struct ActivityDetails {
 #[derive(Debug, serde::Deserialize)]
 struct ActivitiesFile {
     activities: HashMap<String, ActivityDetails>,
+}
+
+#[derive(Debug, Default, serde::Deserialize)]
+struct ActivityVersionCaps {
+    #[serde(default)]
+    pins: HashMap<String, String>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -96,6 +103,7 @@ fn main() {
         fs::read_to_string(ACTIVITIES_MAPPING_PATH).expect("cannot read activities.json");
     let parsed_activities: ActivitiesFile =
         serde_json::from_str(&activities_mapping_data).expect("cannot parse activities.json");
+    let activity_version_caps = load_activity_version_caps(ACTIVITY_VERSION_CAPS_PATH);
 
     let external_activity_proto = fs::read_to_string(EXTERNAL_ACTIVITY_PROTO_PATH)
         .expect("Failed to read external activity proto file");
@@ -154,9 +162,23 @@ fn main() {
                 // If the request type is "external.activity.v1.DeletePolicyRequest" the sanitized
                 // request type will be "DeletePolicyRequest", and we'll need to import it from the external activity namespace
                 let short_req_type = req_type.rsplit(".").next().unwrap();
-                let activity_type = request_to_activity_type
+                let proto_activity_type = request_to_activity_type
                         .get(short_req_type)
                         .unwrap_or_else(|| panic!("no activity type annotation found for {short_req_type} in external activity proto"));
+                let activity_type = resolve_activity_type(
+                    proto_activity_type,
+                    &activity_version_caps.pins,
+                    &parsed_activities.activities,
+                )
+                .unwrap_or_else(|err| panic!("{err}"));
+                if activity_type != *proto_activity_type {
+                    println!(
+                        "Applying activity version pin for {}: {} -> {}",
+                        activity_base(proto_activity_type),
+                        proto_activity_type,
+                        activity_type
+                    );
+                }
                 let activities_details = parsed_activities
                     .activities
                     .get(activity_type.as_str())
@@ -310,6 +332,48 @@ fn main() {
             fs::write(path, new_content).expect("cannot write to file");
         }
     }
+}
+
+fn load_activity_version_caps(path: &str) -> ActivityVersionCaps {
+    match fs::read_to_string(path) {
+        Ok(data) => serde_json::from_str(&data).expect("cannot parse activity version caps"),
+        Err(err) if err.kind() == ErrorKind::NotFound => ActivityVersionCaps::default(),
+        Err(err) => panic!("cannot read activity version caps: {err}"),
+    }
+}
+
+fn activity_base(activity_type: &str) -> &str {
+    if let Some((base, suffix)) = activity_type.rsplit_once("_V") {
+        if !suffix.is_empty() && suffix.chars().all(|ch| ch.is_ascii_digit()) {
+            return base;
+        }
+    }
+
+    activity_type
+}
+
+fn resolve_activity_type(
+    activity_type: &str,
+    pins: &HashMap<String, String>,
+    activities: &HashMap<String, ActivityDetails>,
+) -> Result<String, String> {
+    for (base, target) in pins {
+        if activity_base(target) != base {
+            return Err(format!(
+                "activity version cap for {base} points to {target}, but base families differ"
+            ));
+        }
+        if !activities.contains_key(target) {
+            return Err(format!(
+                "activity version cap for {base} points to {target}, which was not found in activities.json"
+            ));
+        }
+    }
+
+    Ok(pins
+        .get(activity_base(activity_type))
+        .cloned()
+        .unwrap_or_else(|| activity_type.to_string()))
 }
 
 fn parse_rpcs(proto: &str) -> Vec<Rpc> {
@@ -555,5 +619,87 @@ message BazRequest {
         assert!(set.contains("FooRequest"));
         assert!(!set.contains("BarRequest"));
         assert!(set.contains("BazRequest"));
+    }
+
+    #[test]
+    fn activity_base_strips_numeric_version_suffix() {
+        assert_eq!(
+            activity_base("ACTIVITY_TYPE_SIGN_TRANSACTION_V2"),
+            "ACTIVITY_TYPE_SIGN_TRANSACTION"
+        );
+        assert_eq!(
+            activity_base("ACTIVITY_TYPE_SIGN_TRANSACTION"),
+            "ACTIVITY_TYPE_SIGN_TRANSACTION"
+        );
+        assert_eq!(
+            activity_base("ACTIVITY_TYPE_SIGN_TRANSACTION_V10"),
+            "ACTIVITY_TYPE_SIGN_TRANSACTION"
+        );
+        assert_eq!(
+            activity_base("ACTIVITY_TYPE_EXPORT_WALLET_VAULT"),
+            "ACTIVITY_TYPE_EXPORT_WALLET_VAULT"
+        );
+    }
+
+    #[test]
+    fn resolve_activity_type_applies_matching_pin() {
+        let mut activities = HashMap::new();
+        activities.insert(
+            "ACTIVITY_TYPE_SIGN_TRANSACTION_V2".to_string(),
+            ActivityDetails {
+                intent_type: "SignTransactionIntentV2".to_string(),
+                result_type: "SignTransactionResultV2".to_string(),
+                internal: false,
+            },
+        );
+
+        let mut pins = HashMap::new();
+        pins.insert(
+            "ACTIVITY_TYPE_SIGN_TRANSACTION".to_string(),
+            "ACTIVITY_TYPE_SIGN_TRANSACTION_V2".to_string(),
+        );
+
+        assert_eq!(
+            resolve_activity_type("ACTIVITY_TYPE_SIGN_TRANSACTION_V3", &pins, &activities).unwrap(),
+            "ACTIVITY_TYPE_SIGN_TRANSACTION_V2"
+        );
+    }
+
+    #[test]
+    fn resolve_activity_type_leaves_unlisted_family_unchanged() {
+        let mut activities = HashMap::new();
+        activities.insert(
+            "ACTIVITY_TYPE_CREATE_USERS_V2".to_string(),
+            ActivityDetails {
+                intent_type: "CreateUsersIntentV2".to_string(),
+                result_type: "CreateUsersResultV2".to_string(),
+                internal: false,
+            },
+        );
+
+        assert_eq!(
+            resolve_activity_type(
+                "ACTIVITY_TYPE_CREATE_USERS_V2",
+                &HashMap::new(),
+                &activities
+            )
+            .unwrap(),
+            "ACTIVITY_TYPE_CREATE_USERS_V2"
+        );
+    }
+
+    #[test]
+    fn resolve_activity_type_rejects_nonexistent_pin_target() {
+        let mut pins = HashMap::new();
+        pins.insert(
+            "ACTIVITY_TYPE_SIGN_TRANSACTION".to_string(),
+            "ACTIVITY_TYPE_SIGN_TRANSACTION_V2".to_string(),
+        );
+
+        let error =
+            resolve_activity_type("ACTIVITY_TYPE_SIGN_TRANSACTION_V3", &pins, &HashMap::new())
+                .unwrap_err();
+
+        assert!(error.contains("not found in activities.json"));
     }
 }
