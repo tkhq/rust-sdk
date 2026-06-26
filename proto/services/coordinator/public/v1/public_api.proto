@@ -3,8 +3,10 @@ syntax = "proto3";
 package services.coordinator.public.v1;
 
 import "external/activity/v1/activity.proto";
+import "external/data/v1/mfa_status.proto";
 import "external/data/v1/organization_data.proto";
 import "external/data/v1/proofs.proto";
+import "external/data/v1/session_profile.proto";
 import "external/data/v1/smart_contract_interface.proto";
 import "external/data/v1/tvc.proto";
 import "external/data/v1/wallet_account.proto";
@@ -1899,6 +1901,18 @@ service PublicApiService {
     };
   }
 
+  rpc GetTvcDeploymentDebugLogs(GetTvcDeploymentDebugLogsRequest) returns (GetTvcDeploymentDebugLogsResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_tvc_deployment_debug_logs"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get a bounded window of application logs from a debug-mode TVC deployment. Returned lines are collected from every running replica and sorted by platform timestamp."
+      summary: "Get TVC Deployment debug logs"
+      tags: "TVC"
+    };
+  }
+
   rpc GetWalletAddressBalances(GetWalletAddressBalancesRequest) returns (GetWalletAddressBalancesResponse) {
     option (google.api.http) = {
       post: "/public/v1/query/get_wallet_address_balances"
@@ -2004,6 +2018,114 @@ service PublicApiService {
       description: "Generate a Lightning preimage and distribute Feldman shares to operators for a Spark Lightning receive. Does not perform FROST signing."
       summary: "Spark prepare Lightning receive"
       tags: "Signing"
+    };
+  }
+
+  rpc CreateMfaPolicy(external.activity.v1.CreateMfaPolicyRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/create_mfa_policy"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Create a new MFA policy for a user."
+      summary: "Create MFA policy"
+      tags: "MFA Policies"
+    };
+  }
+
+  rpc UpdateMfaPolicy(external.activity.v1.UpdateMfaPolicyRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/update_mfa_policy"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Update an MFA policy for a user."
+      summary: "Update MFA policy"
+      tags: "MFA Policies"
+    };
+  }
+
+  rpc DeleteMfaPolicy(external.activity.v1.DeleteMfaPolicyRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/delete_mfa_policy"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Delete an MFA policy for a user."
+      summary: "Delete MFA policy"
+      tags: "MFA Policies"
+    };
+  }
+
+  rpc GetMfaPolicy(GetMfaPolicyRequest) returns (GetMfaPolicyResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_mfa_policy"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get a single MFA policy for a user."
+      summary: "Get MFA policy"
+      tags: "MFA Policies"
+    };
+  }
+
+  rpc GetMfaPolicies(GetMfaPoliciesRequest) returns (GetMfaPoliciesResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_mfa_policies"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get all MFA policies for a user."
+      summary: "Get MFA policies"
+      tags: "MFA Policies"
+    };
+  }
+
+  rpc CreateSessionProfile(external.activity.v1.CreateSessionProfileRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/create_session_profile"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Create a new session profile for an organization."
+      summary: "Create session profile"
+      tags: "Session Profiles"
+    };
+  }
+
+  rpc GetSessionProfile(GetSessionProfileRequest) returns (GetSessionProfileResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_session_profile"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get a single session profile for an organization."
+      summary: "Get session profile"
+      tags: "Session Profiles"
+    };
+  }
+
+  rpc GetSessionProfiles(GetSessionProfilesRequest) returns (GetSessionProfilesResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_session_profiles"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get all session profiles for an organization."
+      summary: "Get session profiles"
+      tags: "Session Profiles"
+    };
+  }
+
+  rpc GetMfaStatus(GetMfaStatusRequest) returns (GetMfaStatusResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_mfa_status"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get the MFA status of an activity for a specific user or all voting users."
+      summary: "Get MFA status"
+      tags: "MFA Policies"
     };
   }
 
@@ -2727,7 +2849,9 @@ message GetNoncesRequest {
         "eip155:8453",
         "eip155:84532",
         "eip155:137",
-        "eip155:80002"
+        "eip155:80002",
+        "eip155:56",
+        "eip155:97"
       ]
     }
   ];
@@ -2916,6 +3040,37 @@ message GetAppStatusResponse {
   ];
 }
 
+message GetTvcDeploymentDebugLogsRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string deployment_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given TVC Deployment. The deployment must be running in debug mode."}
+  ];
+  int32 tail_lines = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Limit returned history to the last N lines per replica. If unset or zero, no tail-line limit is applied."}];
+  int64 since_seconds = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Return logs newer than this many seconds ago. If unset or zero, no since-time limit is applied. Useful for clients that poll to follow logs."}];
+}
+
+message TvcDeploymentDebugLogEntry {
+  external.data.v1.LogLine line = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Application log line with its platform timestamp."}
+  ];
+  string replica_label = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Public replica label that produced this log line, for example 'replica 2/3'."}
+  ];
+}
+
+message GetTvcDeploymentDebugLogsResponse {
+  repeated TvcDeploymentDebugLogEntry entries = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Application log entries sorted by platform timestamp."}
+  ];
+}
+
 message RefreshFeatureFlagsRequest {}
 
 message RefreshFeatureFlagsResponse {}
@@ -2941,7 +3096,11 @@ message GetWalletAddressBalancesRequest {
         "eip155:137",
         "eip155:80002",
         "eip155:42161",
+        "eip155:4217",
+        "eip155:42431",
         "eip155:421614",
+        "eip155:56",
+        "eip155:97",
         "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
         "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1"
       ]
@@ -2984,7 +3143,11 @@ message ListSupportedAssetsRequest {
         "eip155:137",
         "eip155:80002",
         "eip155:42161",
+        "eip155:4217",
+        "eip155:42431",
         "eip155:421614",
+        "eip155:56",
+        "eip155:97",
         "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
         "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1"
       ]
@@ -3041,4 +3204,95 @@ message IpAllowlist {
 
 message GetIpAllowlistResponse {
   IpAllowlist allowlist = 1 [(google.api.field_behavior) = REQUIRED];
+}
+
+message GetMfaPolicyRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+  ];
+  string user_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given user."}
+  ];
+  string mfa_policy_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given MFA policy."}
+  ];
+}
+
+message GetMfaPolicyResponse {
+  external.data.v1.MfaPolicy mfa_policy = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Multi-factor authentication policy for a user."}
+  ];
+}
+
+message GetMfaPoliciesRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+  ];
+  string user_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given user."}
+  ];
+}
+
+message GetMfaPoliciesResponse {
+  repeated external.data.v1.MfaPolicy mfa_policies = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of multi-factor authentication policies for a user."}
+  ];
+}
+
+message GetSessionProfileRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+  ];
+  string session_profile_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a session profile."}
+  ];
+}
+
+message GetSessionProfileResponse {
+  external.data.v1.SessionProfile session_profile = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Session profile for a user, including details about the user's authenticators, Oauth providers, API keys, and MFA policies."}
+  ];
+}
+
+message GetSessionProfilesRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+  ];
+}
+
+message GetSessionProfilesResponse {
+  repeated external.data.v1.SessionProfile session_profiles = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of session profiles for users in the organization."}
+  ];
+}
+
+message GetMfaStatusRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+  ];
+  string activity_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The unique identifier of the activity to get MFA status for."}
+  ];
+  optional string user_id = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional user ID to filter MFA status for a specific user."}];
+}
+
+message GetMfaStatusResponse {
+  repeated external.data.v1.MfaStatus mfa_statuses = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of MFA statuses for the activity's votes."}
+  ];
 }
