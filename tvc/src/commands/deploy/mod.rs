@@ -4,6 +4,7 @@ use crate::config::deploy::DeployConfig;
 
 pub mod approve;
 pub mod create;
+pub mod debug_logs;
 pub mod delete;
 pub mod get_status;
 pub mod init;
