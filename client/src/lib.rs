@@ -121,7 +121,7 @@ pub enum TurnkeyClientError {
     #[error("Activity failed processing: {0:?}")]
     ActivityFailed(Option<Status>),
 
-    #[error("This activity ({0}) requires consensus and needs extra approvals")]
+    #[error("This activity ({0}) requires extra approvals")]
     ActivityRequiresApproval(String),
 
     #[error("Maximum number of attempts reached (after {0} retries)")]
@@ -301,7 +301,7 @@ impl<S: Stamp> TurnkeyClient<S> {
     ///
     /// If the server errors with a validation error, a server error, a deserialization error, the proper variant of `TurnkeyClientError` is returned.
     /// If the activity is pending and exceeds the maximum amount of retries allowed, `TurnkeyClientError::ExceededRetries` is returned.
-    /// If the activity requires consensus, `TurnkeyClientError::ActivityRequiresApproval` is returned.
+    /// If the activity requires consensus or authenticators, `TurnkeyClientError::ActivityRequiresApproval` is returned.
     pub async fn process_activity<Request: Serialize>(
         &self,
         request: Request,
@@ -330,7 +330,7 @@ impl<S: Stamp> TurnkeyClient<S> {
                 ActivityStatus::Failed => {
                     return Err(TurnkeyClientError::ActivityFailed(activity.failure));
                 }
-                ActivityStatus::ConsensusNeeded => {
+                ActivityStatus::ConsensusNeeded | ActivityStatus::AuthenticatorsNeeded => {
                     return Err(TurnkeyClientError::ActivityRequiresApproval(activity.id));
                 }
                 ActivityStatus::Unspecified
@@ -654,6 +654,37 @@ mod test {
             "activity": {
                 "type": "ACTIVITY_TYPE_SIGN_RAW_PAYLOAD_V2",
                 "status": "ACTIVITY_STATUS_CONSENSUS_NEEDED",
+                "id": "some-activity-id",
+                "organizationId": "org-id",
+                "fingerprint": "fingerprint",
+            }
+        }));
+
+        Mock::given(method("POST"))
+            .respond_with(response)
+            .mount(&server)
+            .await;
+
+        let result = client
+            .process_activity(simple_activity_intent(), "/sign_raw_payload".to_string())
+            .await;
+
+        match result.unwrap_err() {
+            TurnkeyClientError::ActivityRequiresApproval(activity_id) => {
+                assert_eq!(activity_id, "some-activity-id");
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_activity_needs_authenticators() {
+        let (client, server) = setup_client_and_server().await;
+
+        let response = ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "activity": {
+                "type": "ACTIVITY_TYPE_SIGN_RAW_PAYLOAD_V2",
+                "status": "ACTIVITY_STATUS_AUTHENTICATORS_NEEDED",
                 "id": "some-activity-id",
                 "organizationId": "org-id",
                 "fingerprint": "fingerprint",
