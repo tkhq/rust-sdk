@@ -1029,30 +1029,6 @@ pub struct GetTvcDeploymentDebugLogsResponse {
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[derive(Clone, PartialEq)]
-pub struct GetEnclaveDebugLogsRequest {
-    pub organization_id: ::prost::alloc::string::String,
-    pub deployment_id: ::prost::alloc::string::String,
-    #[serde(default)]
-    pub follow: bool,
-    #[serde(default)]
-    pub tail_lines: i32,
-}
-#[derive(Debug)]
-#[derive(::serde::Serialize, ::serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[derive(Clone, PartialEq)]
-pub struct GetEnclaveDebugLogsResponse {
-    #[serde(default)]
-    pub lines: ::prost::alloc::vec::Vec<
-        super::super::super::super::external::data::v1::LogLine,
-    >,
-    pub pod_name: ::prost::alloc::string::String,
-    pub event: super::super::super::super::external::data::v1::LogEventType,
-}
-#[derive(Debug)]
-#[derive(::serde::Serialize, ::serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
 #[derive(Clone, Copy, PartialEq)]
 pub struct RefreshFeatureFlagsRequest {}
 #[derive(Debug)]
