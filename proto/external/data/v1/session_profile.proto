@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package external.data.v1;
+
+import "external/data/v1/common.proto";
+import "vendor/google/api/field_behavior.proto";
+import "vendor/protoc-gen-openapiv2/options/annotations.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/external/data/v1";
+
+// SessionProfile defines the constraints and capabilities of a session that can be created by a user.
+message SessionProfile {
+  string session_profile_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Session Profile."}
+  ];
+  string session_profile_name = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable name for a Session Profile."}
+  ];
+  string scope = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The specific scope that a session created with this profile is limited to."}
+  ];
+  optional string expiration_seconds = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional window (in seconds) indicating how long sessions created with this profile should last."}
+  ];
+  optional string notes = 5 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional human-readable notes added by a User to describe a particular Session Profile."}
+  ];
+  Timestamp created_at = 6 [(google.api.field_behavior) = REQUIRED];
+  Timestamp updated_at = 7 [(google.api.field_behavior) = REQUIRED];
+}

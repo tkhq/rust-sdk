@@ -186,3 +186,18 @@ message PolicyEvaluationMetrics {
   uint32 max_evaluation_steps_used = 2;
   uint32 max_elapsed_time_ms = 3;
 }
+
+message SessionProfilePayload {
+  string id = 1;
+  string name = 2;
+  string scope = 3;
+  optional string expiration_seconds = 4;
+  optional string notes = 5;
+  string organization_id = 6;
+}
+
+message SignedSessionProfile {
+  SessionProfilePayload payload = 1;
+  // Notarizer signature over hash(payload)
+  Signature signature = 2;
+}

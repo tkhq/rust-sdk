@@ -79,6 +79,8 @@ pub struct User {
     pub created_at: ::core::option::Option<Timestamp>,
     #[serde(default)]
     pub updated_at: ::core::option::Option<Timestamp>,
+    #[serde(default)]
+    pub mfa_policies: ::prost::alloc::vec::Vec<MfaPolicy>,
 }
 #[derive(Debug)]
 #[serde_with::serde_as]
@@ -128,6 +130,9 @@ pub struct Credential {
     pub public_key: ::prost::alloc::string::String,
     /// To distinguish the credential type (webauthn, API key)
     pub r#type: super::super::super::immutable::common::v1::CredentialType,
+    /// The session profile associated with this credential, if any (only CREDENTIAL_TYPE_LOGIN credentials)
+    #[serde(default)]
+    pub session_profile_id: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -288,6 +293,44 @@ pub struct FiatOnRampCredential {
     pub created_at: ::core::option::Option<Timestamp>,
     #[serde(default)]
     pub updated_at: ::core::option::Option<Timestamp>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct MfaPolicy {
+    pub mfa_policy_id: ::prost::alloc::string::String,
+    pub mfa_policy_name: ::prost::alloc::string::String,
+    pub condition: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub required_authentication_methods: ::prost::alloc::vec::Vec<
+        RequiredAuthenticationMethod,
+    >,
+    #[serde(default)]
+    pub order: u32,
+    #[serde(default)]
+    pub notes: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub created_at: ::core::option::Option<Timestamp>,
+    #[serde(default)]
+    pub updated_at: ::core::option::Option<Timestamp>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct RequiredAuthenticationMethod {
+    #[serde(default)]
+    pub any: ::prost::alloc::vec::Vec<AuthenticationMethod>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct AuthenticationMethod {
+    pub r#type: super::super::super::immutable::common::v1::AuthenticationType,
+    #[serde(default)]
+    pub id: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -498,6 +541,38 @@ impl AppProofType {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct MfaStatus {
+    pub mfa_policy_id: ::prost::alloc::string::String,
+    pub user_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub satisfied: bool,
+    #[serde(default)]
+    pub satisfied_methods: ::prost::alloc::vec::Vec<AuthenticationMethod>,
+    #[serde(default)]
+    pub required_methods: ::prost::alloc::vec::Vec<RequiredAuthenticationMethod>,
+}
+#[derive(Debug)]
+/// SessionProfile defines the constraints and capabilities of a session that can be created by a user.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SessionProfile {
+    pub session_profile_id: ::prost::alloc::string::String,
+    pub session_profile_name: ::prost::alloc::string::String,
+    pub scope: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub expiration_seconds: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub notes: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub created_at: ::core::option::Option<Timestamp>,
+    #[serde(default)]
+    pub updated_at: ::core::option::Option<Timestamp>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct SmartContractInterface {
     pub organization_id: ::prost::alloc::string::String,
     pub smart_contract_interface_id: ::prost::alloc::string::String,
@@ -666,6 +741,15 @@ pub struct AppStatus {
     pub targeted_deployment_id: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct LogLine {
+    pub content: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub ts: ::core::option::Option<Timestamp>,
+}
+#[derive(Debug)]
 /// An account derived from a Wallet
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -685,11 +769,13 @@ pub struct WalletAccount {
     pub updated_at: ::core::option::Option<Timestamp>,
     #[serde(default)]
     pub public_key: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub wallet_details: ::core::option::Option<Wallet>,
     /// TODO(tim): temporarily removing this since it's always "false"
     /// bool exported = 12 [
     ///   (google.api.field_behavior) = REQUIRED,
     ///   (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "True when a given Account is exported, false otherwise."}
     /// ];
     #[serde(default)]
-    pub wallet_details: ::core::option::Option<Wallet>,
+    pub name: ::core::option::Option<::prost::alloc::string::String>,
 }

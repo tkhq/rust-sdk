@@ -163,6 +163,11 @@ enum ActivityType {
   ACTIVITY_TYPE_SPARK_CLAIM_TRANSFER = 136;
   ACTIVITY_TYPE_SPARK_PREPARE_LIGHTNING_RECEIVE = 137;
   ACTIVITY_TYPE_POST_TVC_QUORUM_KEY_SHARE = 138;
+  ACTIVITY_TYPE_ETH_SEND_TRANSACTION_V2 = 139;
+  ACTIVITY_TYPE_CREATE_MFA_POLICY = 140;
+  ACTIVITY_TYPE_UPDATE_MFA_POLICY = 141;
+  ACTIVITY_TYPE_DELETE_MFA_POLICY = 142;
+  ACTIVITY_TYPE_CREATE_SESSION_PROFILE = 143;
 }
 
 // The current processing status of an Activity.
@@ -174,6 +179,7 @@ enum ActivityStatus {
   ACTIVITY_STATUS_FAILED = 4;
   ACTIVITY_STATUS_CONSENSUS_NEEDED = 5;
   ACTIVITY_STATUS_REJECTED = 6;
+  ACTIVITY_STATUS_AUTHENTICATORS_NEEDED = 7;
 }
 
 enum UsageVariant {
@@ -331,6 +337,11 @@ message Intent {
     SparkClaimTransferIntent spark_claim_transfer_intent = 137;
     SparkPrepareLightningReceiveIntent spark_prepare_lightning_receive_intent = 138;
     PostTvcQuorumKeyShareIntent post_tvc_quorum_key_share_intent = 139;
+    EthSendTransactionIntentV2 eth_send_transaction_intent_v2 = 140;
+    CreateMfaPolicyIntent create_mfa_policy_intent = 141;
+    UpdateMfaPolicyIntent update_mfa_policy_intent = 142;
+    DeleteMfaPolicyIntent delete_mfa_policy_intent = 143;
+    CreateSessionProfileIntent create_session_profile_intent = 144;
   }
 }
 
@@ -1562,7 +1573,9 @@ message EthSendTransactionIntent {
         "eip155:8453",
         "eip155:84532",
         "eip155:137",
-        "eip155:80002"
+        "eip155:80002",
+        "eip155:56",
+        "eip155:97"
       ]
     }
   ];
@@ -1636,6 +1649,128 @@ message EthSendTransactionIntent {
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
       description: "The gas station delegate contract nonce. Only used when sponsor=true. Include this if you want maximal security posture."
+      title: ""
+    }
+  ];
+}
+
+message EthCallParams {
+  // @inject_tag: validate:"required"
+  string to = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Recipient address as a hex string with 0x prefix."
+      title: ""
+    }
+  ];
+
+  optional string value = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Amount of native asset to send in wei."
+      title: ""
+    }
+  ];
+
+  optional string data = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Hex-encoded call data for contract interactions."
+      title: ""
+    }
+  ];
+}
+
+message EthSendTransactionIntentV2 {
+  // @inject_tag: validate:"required"
+  string from = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "A wallet or private key address to sign with. This does not support private key IDs."
+      title: ""
+    }
+  ];
+
+  // @inject_tag: validate:"required"
+  string caip2 = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "CAIP-2 chain ID (e.g., 'eip155:1' for Ethereum mainnet)."
+      enum: [
+        "eip155:1",
+        "eip155:11155111",
+        "eip155:8453",
+        "eip155:84532",
+        "eip155:137",
+        "eip155:80002",
+        "eip155:56",
+        "eip155:97"
+      ]
+    }
+  ];
+
+  // If false or unset, the EOA pays gas (EIP-1559 for single call, EIP-7702 self-delegation for batch). If true, Gas Station pays gas via EIP-7702.
+  optional bool sponsor = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Whether to sponsor this transaction via Gas Station. If false or unset, the EOA pays gas. A single call uses EIP-1559; multiple calls use EIP-7702 batch execution via Gas Station."
+      title: ""
+    }
+  ];
+
+  optional string nonce = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Outer transaction nonce. Omit to auto-fetch."
+      title: ""
+    }
+  ];
+
+  optional string gas_limit = 5 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Maximum amount of gas for the outer transaction. Omit to auto-estimate."
+      title: ""
+    }
+  ];
+
+  optional string max_fee_per_gas = 6 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Maximum total fee per gas unit (base fee + priority fee) in wei. Omit to auto-estimate."
+      title: ""
+    }
+  ];
+
+  optional string max_priority_fee_per_gas = 7 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Maximum priority fee (tip) per gas unit in wei. Omit to auto-estimate."
+      title: ""
+    }
+  ];
+
+  optional string deadline = 8 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Unix timestamp in seconds for EIP-712 execution deadline. Only used when sponsor=true."
+      title: ""
+    }
+  ];
+
+  optional string gas_station_nonce = 9 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The gas station delegate contract nonce. Only used when sponsor=true. Omit to auto-fetch."
+      title: ""
+    }
+  ];
+
+  // @inject_tag: validate:"required,min=1,max=50,dive"
+  repeated EthCallParams calls = 10 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Ordered list of calls to execute. Must contain between 1 and 50 entries. A single entry with sponsor=false uses EIP-1559; multiple entries use EIP-7702 batch execution via Gas Station."
       title: ""
     }
   ];
@@ -2281,6 +2416,160 @@ message InitImportPrivateKeyIntent {
   ];
 }
 
+message CreateMfaPolicyIntent {
+  // @inject_tag: validate:"required,uuid"
+  string user_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The ID of the User to add the MFA Policy to."
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"required,tk_label,tk_label_length"
+  string mfa_policy_name = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Human-readable name for a Policy."
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"required"
+  string condition = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "A condition expression that evaluates to true or false, determining when this MFA policy applies."
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"required"
+  repeated RequiredAuthenticationMethodParams required_authentication_methods = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "An ordered list of authentication requirements. Each requirement must be satisfied sequentially to complete MFA."
+      title: ""
+    }
+  ];
+  uint32 order = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The order in which this MFA policy is evaluated, starting from 0, relative to other MFA policies. Lower order values are evaluated first."
+      title: ""
+    }
+  ];
+  optional string notes = 6 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Notes for an MFA Policy."
+      title: ""
+    }
+  ];
+}
+
+message UpdateMfaPolicyIntent {
+  // @inject_tag: validate:"required,uuid"
+  string user_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The ID of the User to update the MFA Policy for."
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"required,uuid"
+  string mfa_policy_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Unique identifier for a given MFA Policy."
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"omitempty,tk_label,tk_label_length"
+  optional string mfa_policy_name = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Human-readable name for a Policy."
+      title: ""
+    }
+  ];
+  optional string condition = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "A condition expression that evaluates to true or false, determining when this MFA policy applies."
+      title: ""
+    }
+  ];
+  repeated RequiredAuthenticationMethodParams required_authentication_methods = 5 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "An ordered list of authentication requirements. Each requirement must be satisfied sequentially to complete MFA."
+      title: ""
+    }
+  ];
+  optional uint32 order = 6 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The order in which this MFA policy is evaluated, starting from 0, relative to other MFA policies. Lower order values are evaluated first."
+      title: ""
+    }
+  ];
+  optional string notes = 7 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Notes for an MFA Policy."
+      title: ""
+    }
+  ];
+}
+
+message DeleteMfaPolicyIntent {
+  // @inject_tag: validate:"required,uuid"
+  string user_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The ID of the User to delete the MFA Policy from."
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"required,uuid"
+  string mfa_policy_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Unique identifier for a given MFA Policy."
+      title: ""
+    }
+  ];
+}
+
+message CreateSessionProfileIntent {
+  string session_profile_name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Human-readable name for a Session Profile."
+      title: ""
+    }
+  ];
+  string scope = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The scope string that defines the permissions for this Session Profile."
+      title: ""
+    }
+  ];
+  optional string expiration_seconds = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The duration in seconds for which sessions created with this Session Profile are valid. If not set, expiration will be determined by the value passed in to the intent of login activities."
+      title: ""
+    }
+  ];
+  optional string notes = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Notes for a Session Profile."
+      title: ""
+    }
+  ];
+}
+
 message RootUserParams {
   // @inject_tag: validate:"required,tk_label_length,tk_label"
   string user_name = 2 [
@@ -2777,6 +3066,10 @@ message OauthLoginIntent {
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Invalidate all other previously generated Login API keys"}
   ];
+  optional string session_profile_id = 5 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional session profile ID to specify which Session Profile to use for this login. If not provided, the default read/write session will be used."}
+  ];
 }
 
 message StampLoginIntent {
@@ -2795,6 +3088,10 @@ message StampLoginIntent {
   optional bool invalidate_existing = 3 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Invalidate all other previously generated Login API keys"}
+  ];
+  optional string session_profile_id = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional session profile ID to specify which Session Profile to use for this login. If not provided, the default read/write session will be used."}
   ];
 }
 
@@ -2826,6 +3123,10 @@ message OtpLoginIntent {
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional signature proving authorization for this login. The signature is over the verification token ID and the public key. Only required if a public key was provided during the verification step."}
   ];
+  optional string session_profile_id = 6 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional session profile ID to specify which Session Profile to use for this login. If not provided, the default read/write session will be used."}
+  ];
 }
 
 message OtpLoginIntentV2 {
@@ -2855,6 +3156,10 @@ message OtpLoginIntentV2 {
   optional bool invalidate_existing = 5 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Invalidate all other previously generated Login sessions"}
+  ];
+  optional string session_profile_id = 6 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional session profile ID to specify which Session Profile to use for this login. If not provided, the default read/write session will be used."}
   ];
 }
 
@@ -4035,7 +4340,9 @@ message EthSendRawTransactionIntent {
         "eip155:8453",
         "eip155:84532",
         "eip155:137",
-        "eip155:80002"
+        "eip155:80002",
+        "eip155:56",
+        "eip155:97"
       ]
     }
   ];
@@ -4479,6 +4786,11 @@ message Result {
     SparkClaimTransferResult spark_claim_transfer_result = 116;
     SparkPrepareLightningReceiveResult spark_prepare_lightning_receive_result = 117;
     PostTvcQuorumKeyShareResult post_tvc_quorum_key_share_result = 118;
+    EthSendTransactionResultV2 eth_send_transaction_result_v2 = 119;
+    CreateMfaPolicyResult create_mfa_policy_result = 120;
+    UpdateMfaPolicyResult update_mfa_policy_result = 121;
+    DeleteMfaPolicyResult delete_mfa_policy_result = 122;
+    CreateSessionProfileResult create_session_profile_result = 123;
   }
 }
 
@@ -5363,6 +5675,13 @@ message EthSendTransactionResult {
   ];
 }
 
+message EthSendTransactionResultV2 {
+  string send_transaction_status_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The send_transaction_status ID associated with the transaction submission"}
+  ];
+}
+
 message SolSendTransactionResult {
   string send_transaction_status_id = 1 [
     (google.api.field_behavior) = REQUIRED,
@@ -5440,6 +5759,34 @@ message WebhookSubscriptionParams {
   optional bool is_active = 3 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether this subscription is active."}
+  ];
+}
+
+message CreateMfaPolicyResult {
+  string mfa_policy_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given MFA Policy."}
+  ];
+}
+
+message UpdateMfaPolicyResult {
+  string mfa_policy_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given MFA Policy."}
+  ];
+}
+
+message DeleteMfaPolicyResult {
+  string mfa_policy_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given MFA Policy."}
+  ];
+}
+
+message CreateSessionProfileResult {
+  string session_profile_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Session Profile."}
   ];
 }
 
@@ -5975,6 +6322,14 @@ message WalletAccountParams {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
       description: "Address format used to generate a wallet Acccount."
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"omitempty,tk_label_length,tk_label"
+  optional string name = 5 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Optional human-readable name for the account."
       title: ""
     }
   ];
@@ -6537,6 +6892,24 @@ message RestoreTvcDeploymentResult {
   string deployment_id = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The unique identifier of the restored TVC deployment."}
+  ];
+}
+
+message RequiredAuthenticationMethodParams {
+  repeated AuthenticationMethodParams any = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of authentication methods for this MFA step. If only one method is provided, it is required. If multiple are provided, the user must satisfy ANY one of them."}
+  ];
+}
+
+message AuthenticationMethodParams {
+  immutable.common.v1.AuthenticationType type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The type of authenticator (e.g., AUTHENTICATION_TYPE_PASSKEY for passkey authentication)."}
+  ];
+  optional string id = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional specific authenticator ID required (e.g., UUID of a passkey authenticator). If not provided, any authenticator of the specified type can be used."}
   ];
 }
 
