@@ -38,6 +38,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     path_format: PathFormat::Bip32,
                     path: "m/44'/60'/0'/0".to_string(),
                     address_format: AddressFormat::Ethereum,
+                    name: None,
                 }],
                 mnemonic_length: None, // Let that be the default
             },
