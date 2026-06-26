@@ -104,6 +104,8 @@ fn main() {
     let parsed_activities: ActivitiesFile =
         serde_json::from_str(&activities_mapping_data).expect("cannot parse activities.json");
     let activity_version_caps = load_activity_version_caps(ACTIVITY_VERSION_CAPS_PATH);
+    validate_activity_version_caps(&activity_version_caps.pins, &parsed_activities.activities)
+        .unwrap_or_else(|err| panic!("{err}"));
 
     let external_activity_proto = fs::read_to_string(EXTERNAL_ACTIVITY_PROTO_PATH)
         .expect("Failed to read external activity proto file");
@@ -165,12 +167,8 @@ fn main() {
                 let proto_activity_type = request_to_activity_type
                         .get(short_req_type)
                         .unwrap_or_else(|| panic!("no activity type annotation found for {short_req_type} in external activity proto"));
-                let activity_type = resolve_activity_type(
-                    proto_activity_type,
-                    &activity_version_caps.pins,
-                    &parsed_activities.activities,
-                )
-                .unwrap_or_else(|err| panic!("{err}"));
+                let activity_type =
+                    resolve_activity_type(proto_activity_type, &activity_version_caps.pins);
                 if activity_type != *proto_activity_type {
                     println!(
                         "Applying activity version pin for {}: {} -> {}",
@@ -352,11 +350,10 @@ fn activity_base(activity_type: &str) -> &str {
     activity_type
 }
 
-fn resolve_activity_type(
-    activity_type: &str,
+fn validate_activity_version_caps(
     pins: &HashMap<String, String>,
     activities: &HashMap<String, ActivityDetails>,
-) -> Result<String, String> {
+) -> Result<(), String> {
     for (base, target) in pins {
         if activity_base(target) != base {
             return Err(format!(
@@ -370,10 +367,13 @@ fn resolve_activity_type(
         }
     }
 
-    Ok(pins
-        .get(activity_base(activity_type))
+    Ok(())
+}
+
+fn resolve_activity_type(activity_type: &str, pins: &HashMap<String, String>) -> String {
+    pins.get(activity_base(activity_type))
         .cloned()
-        .unwrap_or_else(|| activity_type.to_string()))
+        .unwrap_or_else(|| activity_type.to_string())
 }
 
 fn parse_rpcs(proto: &str) -> Vec<Rpc> {
@@ -643,16 +643,6 @@ message BazRequest {
 
     #[test]
     fn resolve_activity_type_applies_matching_pin() {
-        let mut activities = HashMap::new();
-        activities.insert(
-            "ACTIVITY_TYPE_SIGN_TRANSACTION_V2".to_string(),
-            ActivityDetails {
-                intent_type: "SignTransactionIntentV2".to_string(),
-                result_type: "SignTransactionResultV2".to_string(),
-                internal: false,
-            },
-        );
-
         let mut pins = HashMap::new();
         pins.insert(
             "ACTIVITY_TYPE_SIGN_TRANSACTION".to_string(),
@@ -660,13 +650,34 @@ message BazRequest {
         );
 
         assert_eq!(
-            resolve_activity_type("ACTIVITY_TYPE_SIGN_TRANSACTION_V3", &pins, &activities).unwrap(),
+            resolve_activity_type("ACTIVITY_TYPE_SIGN_TRANSACTION_V3", &pins),
             "ACTIVITY_TYPE_SIGN_TRANSACTION_V2"
         );
     }
 
     #[test]
     fn resolve_activity_type_leaves_unlisted_family_unchanged() {
+        assert_eq!(
+            resolve_activity_type("ACTIVITY_TYPE_CREATE_USERS_V2", &HashMap::new()),
+            "ACTIVITY_TYPE_CREATE_USERS_V2"
+        );
+    }
+
+    #[test]
+    fn validate_activity_version_caps_rejects_nonexistent_pin_target() {
+        let mut pins = HashMap::new();
+        pins.insert(
+            "ACTIVITY_TYPE_SIGN_TRANSACTION".to_string(),
+            "ACTIVITY_TYPE_SIGN_TRANSACTION_V2".to_string(),
+        );
+
+        let error = validate_activity_version_caps(&pins, &HashMap::new()).unwrap_err();
+
+        assert!(error.contains("not found in activities.json"));
+    }
+
+    #[test]
+    fn validate_activity_version_caps_rejects_pin_across_base_families() {
         let mut activities = HashMap::new();
         activities.insert(
             "ACTIVITY_TYPE_CREATE_USERS_V2".to_string(),
@@ -677,29 +688,14 @@ message BazRequest {
             },
         );
 
-        assert_eq!(
-            resolve_activity_type(
-                "ACTIVITY_TYPE_CREATE_USERS_V2",
-                &HashMap::new(),
-                &activities
-            )
-            .unwrap(),
-            "ACTIVITY_TYPE_CREATE_USERS_V2"
-        );
-    }
-
-    #[test]
-    fn resolve_activity_type_rejects_nonexistent_pin_target() {
         let mut pins = HashMap::new();
         pins.insert(
             "ACTIVITY_TYPE_SIGN_TRANSACTION".to_string(),
-            "ACTIVITY_TYPE_SIGN_TRANSACTION_V2".to_string(),
+            "ACTIVITY_TYPE_CREATE_USERS_V2".to_string(),
         );
 
-        let error =
-            resolve_activity_type("ACTIVITY_TYPE_SIGN_TRANSACTION_V3", &pins, &HashMap::new())
-                .unwrap_err();
+        let error = validate_activity_version_caps(&pins, &activities).unwrap_err();
 
-        assert!(error.contains("not found in activities.json"));
+        assert!(error.contains("base families differ"));
     }
 }
