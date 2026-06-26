@@ -6,9 +6,11 @@ use clap::Args as ClapArgs;
 use std::collections::{HashSet, VecDeque};
 use std::time::Duration;
 use turnkey_client::TurnkeyP256ApiKey;
+#[cfg(test)]
+use turnkey_client::generated::TvcDeploymentDebugLogEntry;
 use turnkey_client::generated::external::data::v1::{LogLine, Timestamp};
 use turnkey_client::generated::{
-    GetTvcDeploymentDebugLogsRequest, GetTvcDeploymentDebugLogsResponse, TvcDeploymentDebugLogEntry,
+    GetTvcDeploymentDebugLogsRequest, GetTvcDeploymentDebugLogsResponse,
 };
 
 const DEFAULT_FOLLOW_POLL_INTERVAL_SECONDS: i64 = 2;
@@ -125,18 +127,15 @@ async fn query_debug_logs(
     client: &turnkey_client::TurnkeyClient<TurnkeyP256ApiKey>,
     request: &DebugLogQueryRequest,
 ) -> anyhow::Result<()> {
-    let mut printed_lines = RecentLogLines::new(RECENT_LOG_LINE_CAPACITY);
+    let mut log_printer =
+        DebugLogPrinter::new(request.include_platform_timestamp, RECENT_LOG_LINE_CAPACITY);
     let mut current_request = request.clone();
 
     let response = fetch_debug_logs(client, &current_request).await?;
     if request.follow {
         eprintln!("Connected; polling for debug logs...");
     }
-    print_debug_log_response(
-        &response,
-        &mut printed_lines,
-        request.include_platform_timestamp,
-    );
+    log_printer.print_response(&response);
 
     if !request.follow {
         return Ok(());
@@ -148,11 +147,7 @@ async fn query_debug_logs(
     loop {
         tokio::time::sleep(follow_poll_interval).await;
         let response = fetch_debug_logs(client, &current_request).await?;
-        print_debug_log_response(
-            &response,
-            &mut printed_lines,
-            request.include_platform_timestamp,
-        );
+        log_printer.print_response(&response);
     }
 }
 
@@ -274,41 +269,58 @@ impl RecentLogLines {
         true
     }
 
+    /// Records timestamped lines and returns whether they are new; untimestamped lines always pass.
+    ///
+    /// NOTE: Mutating filter
+    fn record_if_new(&mut self, replica: &str, line: &LogLine) -> bool {
+        match LogLineKey::new(replica, line) {
+            Some(key) => self.insert(key),
+            None => true,
+        }
+    }
+
     #[cfg(test)]
     fn len(&self) -> usize {
         self.seen.len()
     }
 }
 
-fn print_debug_log_response(
-    response: &GetTvcDeploymentDebugLogsResponse,
-    printed_lines: &mut RecentLogLines,
+#[derive(Debug)]
+struct DebugLogPrinter {
+    recent_lines: RecentLogLines,
     include_platform_timestamp: bool,
-) {
-    for entry in &response.entries {
-        print_debug_log_entry(entry, printed_lines, include_platform_timestamp);
-    }
 }
 
-fn print_debug_log_entry(
-    entry: &TvcDeploymentDebugLogEntry,
-    printed_lines: &mut RecentLogLines,
-    include_platform_timestamp: bool,
-) {
-    let Some(line) = entry.line.as_ref() else {
-        return;
-    };
-
-    if let Some(key) = LogLineKey::new(&entry.replica_label, line) {
-        if !printed_lines.insert(key) {
-            return;
+impl DebugLogPrinter {
+    fn new(include_platform_timestamp: bool, recent_line_capacity: usize) -> Self {
+        Self {
+            recent_lines: RecentLogLines::new(recent_line_capacity),
+            include_platform_timestamp,
         }
     }
 
-    println!(
-        "{}",
-        format_log_line(&entry.replica_label, line, include_platform_timestamp)
-    );
+    fn print_response(&mut self, response: &GetTvcDeploymentDebugLogsResponse) {
+        let recent_lines = &mut self.recent_lines;
+        let include_platform_timestamp = self.include_platform_timestamp;
+
+        // `record_if_new` updates the `recent_lines` cache while filtering duplicates.
+        response
+            .entries
+            .iter()
+            .filter_map(|entry| {
+                entry
+                    .line
+                    .as_ref()
+                    .map(|line| (entry.replica_label.as_str(), line))
+            })
+            .filter(|(replica, line)| recent_lines.record_if_new(replica, line))
+            .for_each(|(replica, line)| {
+                println!(
+                    "{}",
+                    format_log_line(replica, line, include_platform_timestamp)
+                );
+            });
+    }
 }
 
 fn format_log_line(replica: &str, line: &LogLine, include_platform_timestamp: bool) -> String {
@@ -536,7 +548,27 @@ mod tests {
     }
 
     #[test]
-    fn print_response_skips_empty_entries_and_dedupes_timestamped_lines() {
+    fn recent_log_lines_treats_untimestamped_lines_as_new() {
+        let line = log_line("hello", None);
+        let mut recent = RecentLogLines::new(RECENT_LOG_LINE_CAPACITY);
+
+        assert!(recent.record_if_new("replica 1/2", &line));
+        assert!(recent.record_if_new("replica 1/2", &line));
+        assert_eq!(recent.len(), 0);
+    }
+
+    #[test]
+    fn recent_log_lines_dedupes_timestamped_lines() {
+        let line = log_line("hello", Some(timestamp("1710000000", "1")));
+        let mut recent = RecentLogLines::new(RECENT_LOG_LINE_CAPACITY);
+
+        assert!(recent.record_if_new("replica 1/2", &line));
+        assert!(!recent.record_if_new("replica 1/2", &line));
+        assert_eq!(recent.len(), 1);
+    }
+
+    #[test]
+    fn debug_log_printer_skips_empty_entries_and_dedupes_timestamped_lines() {
         let response = GetTvcDeploymentDebugLogsResponse {
             entries: vec![
                 entry(
@@ -550,11 +582,11 @@ mod tests {
                 entry("replica 2/2", None),
             ],
         };
-        let mut printed = RecentLogLines::new(RECENT_LOG_LINE_CAPACITY);
+        let mut printer = DebugLogPrinter::new(false, RECENT_LOG_LINE_CAPACITY);
 
-        print_debug_log_response(&response, &mut printed, false);
+        printer.print_response(&response);
 
-        assert_eq!(printed.len(), 1);
+        assert_eq!(printer.recent_lines.len(), 1);
     }
 
     #[test]
