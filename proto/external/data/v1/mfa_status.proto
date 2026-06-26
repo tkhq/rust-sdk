@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package external.data.v1;
+
+import "external/data/v1/organization_data.proto";
+import "vendor/google/api/field_behavior.proto";
+import "vendor/protoc-gen-openapiv2/options/annotations.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/external/data/v1";
+
+message MfaStatus {
+  string mfa_policy_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given MFA Policy."}
+  ];
+  string user_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given User."}
+  ];
+  bool satisfied = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether the MFA policy requirements are currently satisfied."}
+  ];
+  repeated external.data.v1.AuthenticationMethod satisfied_methods = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of authentication methods already satisfied for this MFA policy."}
+  ];
+  repeated external.data.v1.RequiredAuthenticationMethod required_methods = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "An ordered list of authentication requirements needed to satisfy this MFA policy."}
+  ];
+}

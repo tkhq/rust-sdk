@@ -3484,11 +3484,11 @@ impl<S: Stamp> TurnkeyClient<S> {
         &self,
         organization_id: String,
         timestamp_ms: u128,
-        params: immutable_activity::EthSendTransactionIntent,
-    ) -> Result<ActivityResult<immutable_activity::EthSendTransactionResult>, TurnkeyClientError>
+        params: immutable_activity::EthSendTransactionIntentV2,
+    ) -> Result<ActivityResult<immutable_activity::EthSendTransactionResultV2>, TurnkeyClientError>
     {
         let request = external_activity::EthSendTransactionRequest {
-            r#type: "ACTIVITY_TYPE_ETH_SEND_TRANSACTION".to_string(),
+            r#type: "ACTIVITY_TYPE_ETH_SEND_TRANSACTION_V2".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
@@ -3506,7 +3506,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             .inner
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         let result = match inner {
-            immutable_activity::result::Inner::EthSendTransactionResult(res) => res,
+            immutable_activity::result::Inner::EthSendTransactionResultV2(res) => res,
             other => {
                 return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
                     serde_json::to_string(&other)?,
@@ -4001,6 +4001,19 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/get_app_status".to_string())
             .await
     }
+    /// Get TVC Deployment debug logs
+    ///
+    /// Get a bounded window of application logs from a debug-mode TVC deployment. Returned lines are collected from every running replica and sorted by platform timestamp.
+    pub async fn get_tvc_deployment_debug_logs(
+        &self,
+        request: coordinator::GetTvcDeploymentDebugLogsRequest,
+    ) -> Result<coordinator::GetTvcDeploymentDebugLogsResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/get_tvc_deployment_debug_logs".to_string(),
+        )
+        .await
+    }
     /// Get balances
     ///
     /// Get balances of supported assets for an address on the specified network. Only non-zero balances are returned.
@@ -4284,5 +4297,214 @@ impl<S: Stamp> TurnkeyClient<S> {
             status: activity.status,
             app_proofs: activity.app_proofs,
         })
+    }
+    /// Create MFA policy
+    ///
+    /// Create a new MFA policy for a user.
+    pub async fn create_mfa_policy(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::CreateMfaPolicyIntent,
+    ) -> Result<ActivityResult<immutable_activity::CreateMfaPolicyResult>, TurnkeyClientError> {
+        let request = external_activity::CreateMfaPolicyRequest {
+            r#type: "ACTIVITY_TYPE_CREATE_MFA_POLICY".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(&request, "/public/v1/submit/create_mfa_policy".to_string())
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::CreateMfaPolicyResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Update MFA policy
+    ///
+    /// Update an MFA policy for a user.
+    pub async fn update_mfa_policy(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::UpdateMfaPolicyIntent,
+    ) -> Result<ActivityResult<immutable_activity::UpdateMfaPolicyResult>, TurnkeyClientError> {
+        let request = external_activity::UpdateMfaPolicyRequest {
+            r#type: "ACTIVITY_TYPE_UPDATE_MFA_POLICY".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(&request, "/public/v1/submit/update_mfa_policy".to_string())
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::UpdateMfaPolicyResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Delete MFA policy
+    ///
+    /// Delete an MFA policy for a user.
+    pub async fn delete_mfa_policy(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::DeleteMfaPolicyIntent,
+    ) -> Result<ActivityResult<immutable_activity::DeleteMfaPolicyResult>, TurnkeyClientError> {
+        let request = external_activity::DeleteMfaPolicyRequest {
+            r#type: "ACTIVITY_TYPE_DELETE_MFA_POLICY".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(&request, "/public/v1/submit/delete_mfa_policy".to_string())
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::DeleteMfaPolicyResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Get MFA policy
+    ///
+    /// Get a single MFA policy for a user.
+    pub async fn get_mfa_policy(
+        &self,
+        request: coordinator::GetMfaPolicyRequest,
+    ) -> Result<coordinator::GetMfaPolicyResponse, TurnkeyClientError> {
+        self.process_request(&request, "/public/v1/query/get_mfa_policy".to_string())
+            .await
+    }
+    /// Get MFA policies
+    ///
+    /// Get all MFA policies for a user.
+    pub async fn get_mfa_policies(
+        &self,
+        request: coordinator::GetMfaPoliciesRequest,
+    ) -> Result<coordinator::GetMfaPoliciesResponse, TurnkeyClientError> {
+        self.process_request(&request, "/public/v1/query/get_mfa_policies".to_string())
+            .await
+    }
+    /// Create session profile
+    ///
+    /// Create a new session profile for an organization.
+    pub async fn create_session_profile(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::CreateSessionProfileIntent,
+    ) -> Result<ActivityResult<immutable_activity::CreateSessionProfileResult>, TurnkeyClientError>
+    {
+        let request = external_activity::CreateSessionProfileRequest {
+            r#type: "ACTIVITY_TYPE_CREATE_SESSION_PROFILE".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/create_session_profile".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::CreateSessionProfileResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Get session profile
+    ///
+    /// Get a single session profile for an organization.
+    pub async fn get_session_profile(
+        &self,
+        request: coordinator::GetSessionProfileRequest,
+    ) -> Result<coordinator::GetSessionProfileResponse, TurnkeyClientError> {
+        self.process_request(&request, "/public/v1/query/get_session_profile".to_string())
+            .await
+    }
+    /// Get session profiles
+    ///
+    /// Get all session profiles for an organization.
+    pub async fn get_session_profiles(
+        &self,
+        request: coordinator::GetSessionProfilesRequest,
+    ) -> Result<coordinator::GetSessionProfilesResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/get_session_profiles".to_string(),
+        )
+        .await
+    }
+    /// Get MFA status
+    ///
+    /// Get the MFA status of an activity for a specific user or all voting users.
+    pub async fn get_mfa_status(
+        &self,
+        request: coordinator::GetMfaStatusRequest,
+    ) -> Result<coordinator::GetMfaStatusResponse, TurnkeyClientError> {
+        self.process_request(&request, "/public/v1/query/get_mfa_status".to_string())
+            .await
     }
 }

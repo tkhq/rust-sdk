@@ -1776,7 +1776,7 @@ message EthSendTransactionRequest {
   string type = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      enum: ["ACTIVITY_TYPE_ETH_SEND_TRANSACTION"]
+      enum: ["ACTIVITY_TYPE_ETH_SEND_TRANSACTION_V2"]
     }
   ];
   string timestamp_ms = 2 [
@@ -1787,7 +1787,7 @@ message EthSendTransactionRequest {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
-  immutable.activity.v1.EthSendTransactionIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  immutable.activity.v1.EthSendTransactionIntentV2 parameters = 4 [(google.api.field_behavior) = REQUIRED];
   optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
 }
 
@@ -2142,4 +2142,76 @@ message SparkPrepareLightningReceiveRequest {
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   immutable.activity.v1.SparkPrepareLightningReceiveIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+}
+
+message CreateMfaPolicyRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_CREATE_MFA_POLICY"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.CreateMfaPolicyIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+}
+
+message UpdateMfaPolicyRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_UPDATE_MFA_POLICY"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.UpdateMfaPolicyIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+}
+
+message DeleteMfaPolicyRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_DELETE_MFA_POLICY"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.DeleteMfaPolicyIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+}
+
+message CreateSessionProfileRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_CREATE_SESSION_PROFILE"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.CreateSessionProfileIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
 }

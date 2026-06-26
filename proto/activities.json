@@ -304,6 +304,10 @@
       "intentType": "EthSendTransactionIntent",
       "resultType": "EthSendTransactionResult"
     },
+    "ACTIVITY_TYPE_ETH_SEND_TRANSACTION_V2": {
+      "intentType": "EthSendTransactionIntentV2",
+      "resultType": "EthSendTransactionResultV2"
+    },
     "ACTIVITY_TYPE_SOL_SEND_TRANSACTION": {
       "intentType": "SolSendTransactionIntent",
       "resultType": "SolSendTransactionResult"
@@ -566,6 +570,22 @@
       "intentType": "UpsertGasUsageConfigIntent",
       "resultType": "UpsertGasUsageConfigResult",
       "internal": true
+    },
+    "ACTIVITY_TYPE_CREATE_MFA_POLICY": {
+      "intentType": "CreateMfaPolicyIntent",
+      "resultType": "CreateMfaPolicyResult"
+    },
+    "ACTIVITY_TYPE_UPDATE_MFA_POLICY": {
+      "intentType": "UpdateMfaPolicyIntent",
+      "resultType": "UpdateMfaPolicyResult"
+    },
+    "ACTIVITY_TYPE_DELETE_MFA_POLICY": {
+      "intentType": "DeleteMfaPolicyIntent",
+      "resultType": "DeleteMfaPolicyResult"
+    },
+    "ACTIVITY_TYPE_CREATE_SESSION_PROFILE": {
+      "intentType": "CreateSessionProfileIntent",
+      "resultType": "CreateSessionProfileResult"
     },
     "ACTIVITY_TYPE_UNSPECIFIED": {
       "intentType": "*",

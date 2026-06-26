@@ -1199,6 +1199,8 @@ pub enum Outcome {
     Rejected = 5,
     #[serde(rename = "OUTCOME_ERROR")]
     Error = 6,
+    #[serde(rename = "OUTCOME_REQUIRES_AUTHENTICATORS")]
+    RequiresAuthenticators = 7,
 }
 impl Outcome {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -1214,6 +1216,7 @@ impl Outcome {
             Self::RequiresConsensus => "OUTCOME_REQUIRES_CONSENSUS",
             Self::Rejected => "OUTCOME_REJECTED",
             Self::Error => "OUTCOME_ERROR",
+            Self::RequiresAuthenticators => "OUTCOME_REQUIRES_AUTHENTICATORS",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -1226,6 +1229,7 @@ impl Outcome {
             "OUTCOME_REQUIRES_CONSENSUS" => Some(Self::RequiresConsensus),
             "OUTCOME_REJECTED" => Some(Self::Rejected),
             "OUTCOME_ERROR" => Some(Self::Error),
+            "OUTCOME_REQUIRES_AUTHENTICATORS" => Some(Self::RequiresAuthenticators),
             _ => None,
         }
     }
@@ -1360,6 +1364,54 @@ impl TvcHealthCheckType {
             "TVC_HEALTH_CHECK_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
             "TVC_HEALTH_CHECK_TYPE_HTTP" => Some(Self::Http),
             "TVC_HEALTH_CHECK_TYPE_GRPC" => Some(Self::Grpc),
+            _ => None,
+        }
+    }
+}
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum AuthenticationType {
+    #[serde(rename = "AUTHENTICATION_TYPE_UNSPECIFIED")]
+    Unspecified = 0,
+    #[serde(rename = "AUTHENTICATION_TYPE_EMAIL_OTP")]
+    EmailOtp = 1,
+    #[serde(rename = "AUTHENTICATION_TYPE_SMS_OTP")]
+    SmsOtp = 2,
+    #[serde(rename = "AUTHENTICATION_TYPE_PASSKEY")]
+    Passkey = 3,
+    #[serde(rename = "AUTHENTICATION_TYPE_API_KEY")]
+    ApiKey = 4,
+    #[serde(rename = "AUTHENTICATION_TYPE_OAUTH")]
+    Oauth = 5,
+    #[serde(rename = "AUTHENTICATION_TYPE_SESSION")]
+    Session = 6,
+}
+impl AuthenticationType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "AUTHENTICATION_TYPE_UNSPECIFIED",
+            Self::EmailOtp => "AUTHENTICATION_TYPE_EMAIL_OTP",
+            Self::SmsOtp => "AUTHENTICATION_TYPE_SMS_OTP",
+            Self::Passkey => "AUTHENTICATION_TYPE_PASSKEY",
+            Self::ApiKey => "AUTHENTICATION_TYPE_API_KEY",
+            Self::Oauth => "AUTHENTICATION_TYPE_OAUTH",
+            Self::Session => "AUTHENTICATION_TYPE_SESSION",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "AUTHENTICATION_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+            "AUTHENTICATION_TYPE_EMAIL_OTP" => Some(Self::EmailOtp),
+            "AUTHENTICATION_TYPE_SMS_OTP" => Some(Self::SmsOtp),
+            "AUTHENTICATION_TYPE_PASSKEY" => Some(Self::Passkey),
+            "AUTHENTICATION_TYPE_API_KEY" => Some(Self::ApiKey),
+            "AUTHENTICATION_TYPE_OAUTH" => Some(Self::Oauth),
+            "AUTHENTICATION_TYPE_SESSION" => Some(Self::Session),
             _ => None,
         }
     }
