@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package immutable.data.v17;
+
+import "immutable/common/v1/common.proto";
+import "immutable/data/v1/common.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/immutable/data/v17";
+
+// MFA Policy defines the multi-factor authentication requirements for a user.
+message MfaPolicy {
+  string uuid = 1;
+  string label = 2;
+  string condition = 3;
+  repeated immutable.data.v17.RequiredAuthenticationMethod required_authentication_methods = 4;
+  uint32 order = 5;
+  optional string notes = 6;
+  immutable.data.v1.Timestamp created_at = 7;
+  immutable.data.v1.Timestamp updated_at = 8;
+}
+
+// RequiredAuthenticationMethod specifies a set of authentication methods,
+// any one of which must be satisfied to meet the MFA requirement.
+message RequiredAuthenticationMethod {
+  repeated AuthenticationMethod any = 1;
+}
+
+message AuthenticationMethod {
+  immutable.common.v1.AuthenticationType type = 1;
+  optional string id = 2;
+}

@@ -57,6 +57,10 @@ message WalletAccount {
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Wallet details for this account. This is only present when include_wallet_details=true."}
   ];
+  optional string name = 13 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable name for this Wallet Account, unique within the organization."}
+  ];
   // TODO(tim): temporarily removing this since it's always "false"
   //bool exported = 12 [
   //  (google.api.field_behavior) = REQUIRED,

@@ -153,6 +153,11 @@ pub mod intent {
         SparkClaimTransferIntent(super::SparkClaimTransferIntent),
         SparkPrepareLightningReceiveIntent(super::SparkPrepareLightningReceiveIntent),
         PostTvcQuorumKeyShareIntent(super::PostTvcQuorumKeyShareIntent),
+        EthSendTransactionIntentV2(super::EthSendTransactionIntentV2),
+        CreateMfaPolicyIntent(super::CreateMfaPolicyIntent),
+        UpdateMfaPolicyIntent(super::UpdateMfaPolicyIntent),
+        DeleteMfaPolicyIntent(super::DeleteMfaPolicyIntent),
+        CreateSessionProfileIntent(super::CreateSessionProfileIntent),
     }
 }
 #[derive(Debug)]
@@ -859,6 +864,46 @@ pub struct EthSendTransactionIntent {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct EthCallParams {
+    /// @inject_tag: validate:"required"
+    pub to: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub value: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub data: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct EthSendTransactionIntentV2 {
+    /// @inject_tag: validate:"required"
+    pub from: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub caip2: ::prost::alloc::string::String,
+    /// If false or unset, the EOA pays gas (EIP-1559 for single call, EIP-7702 self-delegation for batch). If true, Gas Station pays gas via EIP-7702.
+    #[serde(default)]
+    pub sponsor: ::core::option::Option<bool>,
+    #[serde(default)]
+    pub nonce: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub gas_limit: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub max_fee_per_gas: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub max_priority_fee_per_gas: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub deadline: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub gas_station_nonce: ::core::option::Option<::prost::alloc::string::String>,
+    /// @inject_tag: validate:"required,min=1,max=50,dive"
+    #[serde(default)]
+    pub calls: ::prost::alloc::vec::Vec<EthCallParams>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct ApproveActivityIntent {
     /// @inject_tag: validate:"required"
     pub fingerprint: ::prost::alloc::string::String,
@@ -1206,6 +1251,72 @@ pub struct InitImportPrivateKeyIntent {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct CreateMfaPolicyIntent {
+    /// @inject_tag: validate:"required,uuid"
+    pub user_id: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required,tk_label,tk_label_length"
+    pub mfa_policy_name: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub condition: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    #[serde(default)]
+    pub required_authentication_methods: ::prost::alloc::vec::Vec<
+        RequiredAuthenticationMethodParams,
+    >,
+    #[serde(default)]
+    pub order: u32,
+    #[serde(default)]
+    pub notes: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct UpdateMfaPolicyIntent {
+    /// @inject_tag: validate:"required,uuid"
+    pub user_id: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required,uuid"
+    pub mfa_policy_id: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"omitempty,tk_label,tk_label_length"
+    #[serde(default)]
+    pub mfa_policy_name: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub condition: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub required_authentication_methods: ::prost::alloc::vec::Vec<
+        RequiredAuthenticationMethodParams,
+    >,
+    #[serde(default)]
+    pub order: ::core::option::Option<u32>,
+    #[serde(default)]
+    pub notes: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeleteMfaPolicyIntent {
+    /// @inject_tag: validate:"required,uuid"
+    pub user_id: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required,uuid"
+    pub mfa_policy_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateSessionProfileIntent {
+    pub session_profile_name: ::prost::alloc::string::String,
+    pub scope: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub expiration_seconds: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub notes: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct RootUserParams {
     /// @inject_tag: validate:"required,tk_label_length,tk_label"
     pub user_name: ::prost::alloc::string::String,
@@ -1474,6 +1585,8 @@ pub struct OauthLoginIntent {
     pub expiration_seconds: ::core::option::Option<::prost::alloc::string::String>,
     #[serde(default)]
     pub invalidate_existing: ::core::option::Option<bool>,
+    #[serde(default)]
+    pub session_profile_id: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -1486,6 +1599,8 @@ pub struct StampLoginIntent {
     pub expiration_seconds: ::core::option::Option<::prost::alloc::string::String>,
     #[serde(default)]
     pub invalidate_existing: ::core::option::Option<bool>,
+    #[serde(default)]
+    pub session_profile_id: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -1501,6 +1616,8 @@ pub struct OtpLoginIntent {
     pub invalidate_existing: ::core::option::Option<bool>,
     #[serde(default)]
     pub client_signature: ::core::option::Option<ClientSignature>,
+    #[serde(default)]
+    pub session_profile_id: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -1516,6 +1633,8 @@ pub struct OtpLoginIntentV2 {
     pub expiration_seconds: ::core::option::Option<::prost::alloc::string::String>,
     #[serde(default)]
     pub invalidate_existing: ::core::option::Option<bool>,
+    #[serde(default)]
+    pub session_profile_id: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -2446,6 +2565,11 @@ pub mod result {
         SparkClaimTransferResult(super::SparkClaimTransferResult),
         SparkPrepareLightningReceiveResult(super::SparkPrepareLightningReceiveResult),
         PostTvcQuorumKeyShareResult(super::PostTvcQuorumKeyShareResult),
+        EthSendTransactionResultV2(super::EthSendTransactionResultV2),
+        CreateMfaPolicyResult(super::CreateMfaPolicyResult),
+        UpdateMfaPolicyResult(super::UpdateMfaPolicyResult),
+        DeleteMfaPolicyResult(super::DeleteMfaPolicyResult),
+        CreateSessionProfileResult(super::CreateSessionProfileResult),
     }
 }
 #[derive(Debug)]
@@ -3271,6 +3395,13 @@ pub struct EthSendTransactionResult {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct EthSendTransactionResultV2 {
+    pub send_transaction_status_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct SolSendTransactionResult {
     pub send_transaction_status_id: ::prost::alloc::string::String,
 }
@@ -3325,6 +3456,34 @@ pub struct WebhookSubscriptionParams {
     pub filters_json: ::core::option::Option<::prost::alloc::string::String>,
     #[serde(default)]
     pub is_active: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateMfaPolicyResult {
+    pub mfa_policy_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct UpdateMfaPolicyResult {
+    pub mfa_policy_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeleteMfaPolicyResult {
+    pub mfa_policy_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateSessionProfileResult {
+    pub session_profile_id: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -3594,6 +3753,9 @@ pub struct WalletAccountParams {
     pub path: ::prost::alloc::string::String,
     /// @inject_tag: validate:"required"
     pub address_format: super::super::common::v1::AddressFormat,
+    /// @inject_tag: validate:"omitempty,tk_label_length,tk_label"
+    #[serde(default)]
+    pub name: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -4045,6 +4207,23 @@ pub struct RestoreTvcDeploymentResult {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct RequiredAuthenticationMethodParams {
+    #[serde(default)]
+    pub any: ::prost::alloc::vec::Vec<AuthenticationMethodParams>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct AuthenticationMethodParams {
+    pub r#type: super::super::common::v1::AuthenticationType,
+    #[serde(default)]
+    pub id: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct SparkKeyDerivation {
     #[serde(default)]
     pub key: ::core::option::Option<spark_key_derivation::Key>,
@@ -4381,6 +4560,16 @@ pub enum ActivityType {
     SparkPrepareLightningReceive = 137,
     #[serde(rename = "ACTIVITY_TYPE_POST_TVC_QUORUM_KEY_SHARE")]
     PostTvcQuorumKeyShare = 138,
+    #[serde(rename = "ACTIVITY_TYPE_ETH_SEND_TRANSACTION_V2")]
+    EthSendTransactionV2 = 139,
+    #[serde(rename = "ACTIVITY_TYPE_CREATE_MFA_POLICY")]
+    CreateMfaPolicy = 140,
+    #[serde(rename = "ACTIVITY_TYPE_UPDATE_MFA_POLICY")]
+    UpdateMfaPolicy = 141,
+    #[serde(rename = "ACTIVITY_TYPE_DELETE_MFA_POLICY")]
+    DeleteMfaPolicy = 142,
+    #[serde(rename = "ACTIVITY_TYPE_CREATE_SESSION_PROFILE")]
+    CreateSessionProfile = 143,
 }
 impl ActivityType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4550,6 +4739,11 @@ impl ActivityType {
                 "ACTIVITY_TYPE_SPARK_PREPARE_LIGHTNING_RECEIVE"
             }
             Self::PostTvcQuorumKeyShare => "ACTIVITY_TYPE_POST_TVC_QUORUM_KEY_SHARE",
+            Self::EthSendTransactionV2 => "ACTIVITY_TYPE_ETH_SEND_TRANSACTION_V2",
+            Self::CreateMfaPolicy => "ACTIVITY_TYPE_CREATE_MFA_POLICY",
+            Self::UpdateMfaPolicy => "ACTIVITY_TYPE_UPDATE_MFA_POLICY",
+            Self::DeleteMfaPolicy => "ACTIVITY_TYPE_DELETE_MFA_POLICY",
+            Self::CreateSessionProfile => "ACTIVITY_TYPE_CREATE_SESSION_PROFILE",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4750,6 +4944,11 @@ impl ActivityType {
             "ACTIVITY_TYPE_POST_TVC_QUORUM_KEY_SHARE" => {
                 Some(Self::PostTvcQuorumKeyShare)
             }
+            "ACTIVITY_TYPE_ETH_SEND_TRANSACTION_V2" => Some(Self::EthSendTransactionV2),
+            "ACTIVITY_TYPE_CREATE_MFA_POLICY" => Some(Self::CreateMfaPolicy),
+            "ACTIVITY_TYPE_UPDATE_MFA_POLICY" => Some(Self::UpdateMfaPolicy),
+            "ACTIVITY_TYPE_DELETE_MFA_POLICY" => Some(Self::DeleteMfaPolicy),
+            "ACTIVITY_TYPE_CREATE_SESSION_PROFILE" => Some(Self::CreateSessionProfile),
             _ => None,
         }
     }
@@ -4772,6 +4971,8 @@ pub enum ActivityStatus {
     ConsensusNeeded = 5,
     #[serde(rename = "ACTIVITY_STATUS_REJECTED")]
     Rejected = 6,
+    #[serde(rename = "ACTIVITY_STATUS_AUTHENTICATORS_NEEDED")]
+    AuthenticatorsNeeded = 7,
 }
 impl ActivityStatus {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4787,6 +4988,7 @@ impl ActivityStatus {
             Self::Failed => "ACTIVITY_STATUS_FAILED",
             Self::ConsensusNeeded => "ACTIVITY_STATUS_CONSENSUS_NEEDED",
             Self::Rejected => "ACTIVITY_STATUS_REJECTED",
+            Self::AuthenticatorsNeeded => "ACTIVITY_STATUS_AUTHENTICATORS_NEEDED",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4799,6 +5001,7 @@ impl ActivityStatus {
             "ACTIVITY_STATUS_FAILED" => Some(Self::Failed),
             "ACTIVITY_STATUS_CONSENSUS_NEEDED" => Some(Self::ConsensusNeeded),
             "ACTIVITY_STATUS_REJECTED" => Some(Self::Rejected),
+            "ACTIVITY_STATUS_AUTHENTICATORS_NEEDED" => Some(Self::AuthenticatorsNeeded),
             _ => None,
         }
     }

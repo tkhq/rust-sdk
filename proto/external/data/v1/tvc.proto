@@ -238,3 +238,11 @@ message AppStatus {
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The deployment ID currently serving traffic for this app"}
   ];
 }
+
+message LogLine {
+  string content = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "One log line, exactly as the application printed it (without the trailing newline)"}
+  ];
+  Timestamp ts = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "When the line was logged. Stable across replays, so lines can be chronologically merged across pods"}];
+}

@@ -256,6 +256,31 @@ pub struct PolicyEvaluationMetrics {
     #[serde(default)]
     pub max_elapsed_time_ms: u32,
 }
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SessionProfilePayload {
+    pub id: ::prost::alloc::string::String,
+    pub name: ::prost::alloc::string::String,
+    pub scope: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub expiration_seconds: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub notes: ::core::option::Option<::prost::alloc::string::String>,
+    pub organization_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SignedSessionProfile {
+    #[serde(default)]
+    pub payload: ::core::option::Option<SessionProfilePayload>,
+    /// Notarizer signature over hash(payload)
+    #[serde(default)]
+    pub signature: ::core::option::Option<Signature>,
+}
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum SignatureScheme {

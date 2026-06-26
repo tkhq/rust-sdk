@@ -101,6 +101,10 @@ message User {
   ];
   Timestamp created_at = 9 [(google.api.field_behavior) = REQUIRED];
   Timestamp updated_at = 10 [(google.api.field_behavior) = REQUIRED];
+  repeated MfaPolicy mfa_policies = 11 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of MFA Policies that define multi-factor authentication requirements for this user."}
+  ];
 }
 
 message ApiKey {
@@ -165,6 +169,11 @@ message Credential {
   ];
   // To distinguish the credential type (webauthn, API key)
   immutable.common.v1.CredentialType type = 2 [(google.api.field_behavior) = REQUIRED];
+  // The session profile associated with this credential, if any (only CREDENTIAL_TYPE_LOGIN credentials)
+  optional string session_profile_id = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The session profile associated with this credential, if any. This field is only applicable for credentials of type CREDENTIAL_TYPE_LOGIN."}
+  ];
 }
 
 message Policy {
@@ -400,4 +409,51 @@ message FiatOnRampCredential {
   ];
   Timestamp created_at = 9 [(google.api.field_behavior) = REQUIRED];
   Timestamp updated_at = 10 [(google.api.field_behavior) = REQUIRED];
+}
+
+message MfaPolicy {
+  string mfa_policy_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given MFA Policy."}
+  ];
+  string mfa_policy_name = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable name for an MFA Policy."}
+  ];
+  string condition = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A condition expression that evaluates to true or false, determining when this MFA policy applies."}
+  ];
+  repeated RequiredAuthenticationMethod required_authentication_methods = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "An ordered list of authentication requirements. Each requirement must be satisfied sequentially to complete MFA."}
+  ];
+  uint32 order = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The order in which this policy is evaluated relative to other MFA policies."}
+  ];
+  optional string notes = 6 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional human-readable notes added by a User to describe a particular MFA policy."}
+  ];
+  Timestamp created_at = 7 [(google.api.field_behavior) = REQUIRED];
+  Timestamp updated_at = 8 [(google.api.field_behavior) = REQUIRED];
+}
+
+message RequiredAuthenticationMethod {
+  repeated AuthenticationMethod any = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of authentication methods for this MFA step. If only one method is provided, it is required. If multiple are provided, the user must satisfy ANY one of them."}
+  ];
+}
+
+message AuthenticationMethod {
+  immutable.common.v1.AuthenticationType type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The type of authenticator (e.g., AUTHENTICATION_TYPE_EMAIL, AUTHENTICATION_TYPE_SESSION) required for this MFA step."}
+  ];
+  optional string id = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional specific authenticator ID required (e.g., for requiring a specific session profile id)"}
+  ];
 }

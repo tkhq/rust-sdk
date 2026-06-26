@@ -994,6 +994,39 @@ pub struct GetAppStatusResponse {
     >,
 }
 #[derive(Debug)]
+#[serde_with::serde_as]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetTvcDeploymentDebugLogsRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub deployment_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub tail_lines: i32,
+    #[serde(default)]
+    #[serde_as(as = "serde_with::DisplayFromStr")]
+    pub since_seconds: i64,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct TvcDeploymentDebugLogEntry {
+    #[serde(default)]
+    pub line: ::core::option::Option<
+        super::super::super::super::external::data::v1::LogLine,
+    >,
+    pub replica_label: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetTvcDeploymentDebugLogsResponse {
+    #[serde(default)]
+    pub entries: ::prost::alloc::vec::Vec<TvcDeploymentDebugLogEntry>,
+}
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, Copy, PartialEq)]
@@ -1112,4 +1145,96 @@ pub struct IpAllowlist {
 pub struct GetIpAllowlistResponse {
     #[serde(default)]
     pub allowlist: ::core::option::Option<IpAllowlist>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetMfaPolicyRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub user_id: ::prost::alloc::string::String,
+    pub mfa_policy_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetMfaPolicyResponse {
+    #[serde(default)]
+    pub mfa_policy: ::core::option::Option<
+        super::super::super::super::external::data::v1::MfaPolicy,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetMfaPoliciesRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub user_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetMfaPoliciesResponse {
+    #[serde(default)]
+    pub mfa_policies: ::prost::alloc::vec::Vec<
+        super::super::super::super::external::data::v1::MfaPolicy,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetSessionProfileRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub session_profile_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetSessionProfileResponse {
+    #[serde(default)]
+    pub session_profile: ::core::option::Option<
+        super::super::super::super::external::data::v1::SessionProfile,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetSessionProfilesRequest {
+    pub organization_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetSessionProfilesResponse {
+    #[serde(default)]
+    pub session_profiles: ::prost::alloc::vec::Vec<
+        super::super::super::super::external::data::v1::SessionProfile,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetMfaStatusRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub activity_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub user_id: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetMfaStatusResponse {
+    #[serde(default)]
+    pub mfa_statuses: ::prost::alloc::vec::Vec<
+        super::super::super::super::external::data::v1::MfaStatus,
+    >,
 }
