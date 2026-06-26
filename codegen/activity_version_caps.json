@@ -1,0 +1,4 @@
+{
+  "$comment": "Explicit activity-version pins for codegen. Maps a base ACTIVITY_TYPE_* (the family identity) to the EXACT ACTIVITY_TYPE_* literal codegen should emit, overriding the version from the proto annotation. An activity NOT listed here emits whatever the proto annotation specifies (latest). Adding/bumping a pin is a deliberate, reviewed opt-in to a specific activity version that MUST already be released in production. Mirrors the TS SDK VERSIONED_ACTIVITY_TYPES map.",
+  "pins": {}
+}
