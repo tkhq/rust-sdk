@@ -60,10 +60,12 @@ pub struct Args {
     #[arg(long, env = "TVC_OPERATOR_ID")]
     pub operator_id: Option<String>,
 
-    /// Path to the file containing the master seed for the operator key.
-    /// If not provided, uses the operator key from the logged-in org config.
-    #[arg(long, value_name = "PATH", env = "TVC_OPERATOR_SEED")]
-    pub operator_seed: Option<PathBuf>,
+    /// Source of the operator key's hex master seed: a file path (back-compatible),
+    /// `env:NAME` (an environment variable), `stdin` (or `-`), or `file://<path>` —
+    /// so the seed needn't be written to disk. If not provided, uses the operator
+    /// key from the logged-in org config.
+    #[arg(long, value_name = "SOURCE", env = "TVC_OPERATOR_SEED")]
+    pub operator_seed: Option<String>,
 
     /// Walk through manifest approval prompts but do not generate an approval.
     #[arg(long, env = "TVC_DRY_RUN")]
@@ -96,7 +98,7 @@ struct PostTarget {
 
 struct ResolvedApproveInputs {
     manifest: Manifest,
-    operator_seed: Option<PathBuf>,
+    operator_seed: Option<String>,
     approval_out: Option<PathBuf>,
     dry_run: bool,
     post_target: Option<PostTarget>,
@@ -250,7 +252,7 @@ async fn load_manifest(args: &Args) -> anyhow::Result<(Manifest, Option<String>)
 }
 
 async fn sign_and_output(
-    operator_seed: Option<&Path>,
+    operator_seed: Option<&str>,
     approval_out: Option<&Path>,
     manifest: &Manifest,
 ) -> anyhow::Result<Approval> {
