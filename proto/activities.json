@@ -312,6 +312,30 @@
       "intentType": "SolSendTransactionIntent",
       "resultType": "SolSendTransactionResult"
     },
+    "ACTIVITY_TYPE_EARN_DEPLOY_WRAPPER": {
+      "intentType": "EarnDeployWrapperIntent",
+      "resultType": "EarnDeployWrapperResult"
+    },
+    "ACTIVITY_TYPE_EARN_DEPOSIT": {
+      "intentType": "EarnDepositIntent",
+      "resultType": "EarnDepositResult"
+    },
+    "ACTIVITY_TYPE_EARN_WITHDRAW": {
+      "intentType": "EarnWithdrawIntent",
+      "resultType": "EarnWithdrawResult"
+    },
+    "ACTIVITY_TYPE_UPSERT_EARN_CLIENT_FEE_CONFIG": {
+      "intentType": "UpsertEarnClientFeeConfigIntent",
+      "resultType": "UpsertEarnClientFeeConfigResult"
+    },
+    "ACTIVITY_TYPE_EXECUTE_SWAP": {
+      "intentType": "ExecuteSwapIntent",
+      "resultType": "ExecuteSwapResult"
+    },
+    "ACTIVITY_TYPE_UPSERT_SWAP_CONFIG": {
+      "intentType": "UpsertSwapConfigIntent",
+      "resultType": "UpsertSwapConfigResult"
+    },
     "ACTIVITY_TYPE_CREATE_TVC_APP": {
       "intentType": "CreateTvcAppIntent",
       "resultType": "CreateTvcAppResult"

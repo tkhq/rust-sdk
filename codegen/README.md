@@ -16,3 +16,5 @@ This crate contains the code necessary to generate the `generated` portion of th
 [`activity_version_caps.json`](./activity_version_caps.json) contains explicit activity-version pins for codegen. Each entry in `pins` maps a base `ACTIVITY_TYPE_*` family identity to the exact `ACTIVITY_TYPE_*` literal that generated client methods should emit, overriding the activity version from the proto annotation.
 
 Activities not listed in `pins` emit whatever the proto annotation specifies, usually the latest version. Adding or bumping a pin is a deliberate, reviewed opt-in to a specific activity version, and the pinned target must already exist in [`activities.json`](../proto/activities.json). This mirrors the version-capping convention used by other Turnkey SDKs, such as the TypeScript SDK's `VERSIONED_ACTIVITY_TYPES` map.
+
+Keep this file in sync with `VERSIONED_ACTIVITY_TYPES` in the public [`tkhq/sdk`](https://github.com/tkhq/sdk) repo, currently in `packages/sdk-server/scripts/codegen.js`; treat that map as the canonical source.

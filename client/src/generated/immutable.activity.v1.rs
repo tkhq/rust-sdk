@@ -158,6 +158,12 @@ pub mod intent {
         UpdateMfaPolicyIntent(super::UpdateMfaPolicyIntent),
         DeleteMfaPolicyIntent(super::DeleteMfaPolicyIntent),
         CreateSessionProfileIntent(super::CreateSessionProfileIntent),
+        EarnDeployWrapperIntent(super::EarnDeployWrapperIntent),
+        EarnDepositIntent(super::EarnDepositIntent),
+        EarnWithdrawIntent(super::EarnWithdrawIntent),
+        UpsertEarnClientFeeConfigIntent(super::UpsertEarnClientFeeConfigIntent),
+        ExecuteSwapIntent(super::ExecuteSwapIntent),
+        UpsertSwapConfigIntent(super::UpsertSwapConfigIntent),
     }
 }
 #[derive(Debug)]
@@ -235,6 +241,22 @@ pub struct EnableAuthProxyIntent {}
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, Copy, PartialEq)]
 pub struct DisableAuthProxyIntent {}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct UpsertSwapConfigIntent {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub fee_receiver_wallet_address: ::core::option::Option<
+        ::prost::alloc::string::String,
+    >,
+    #[serde(default)]
+    pub fee_bps: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub provider: ::core::option::Option<::prost::alloc::string::String>,
+}
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -904,6 +926,26 @@ pub struct EthSendTransactionIntentV2 {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct ExecuteSwapIntent {
+    /// @inject_tag: validate:"required"
+    pub input_token: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub output_token: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub input_amount: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub wallet_account: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub sponsor: ::core::option::Option<bool>,
+    #[serde(default)]
+    pub slippage: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub provider: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct ApproveActivityIntent {
     /// @inject_tag: validate:"required"
     pub fingerprint: ::prost::alloc::string::String,
@@ -1312,6 +1354,62 @@ pub struct CreateSessionProfileIntent {
     pub expiration_seconds: ::core::option::Option<::prost::alloc::string::String>,
     #[serde(default)]
     pub notes: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct EarnDeployWrapperIntent {
+    /// @inject_tag: validate:"required"
+    pub vault_address: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub chain_caip2: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct EarnDepositIntent {
+    /// @inject_tag: validate:"required"
+    pub vault_address: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub sign_with: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub assets: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub chain_caip2: ::prost::alloc::string::String,
+    /// If true, Turnkey acts as fee payer via Gas Station.
+    #[serde(default)]
+    pub sponsor: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct EarnWithdrawIntent {
+    /// @inject_tag: validate:"required"
+    pub vault_address: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub sign_with: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub chain_caip2: ::prost::alloc::string::String,
+    /// If true, Turnkey acts as fee payer via Gas Station.
+    #[serde(default)]
+    pub sponsor: ::core::option::Option<bool>,
+    /// @inject_tag: validate:"required"
+    pub amount_type: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub amount_value: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct UpsertEarnClientFeeConfigIntent {
+    /// @inject_tag: validate:"required"
+    pub client_fee_bps: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub client_fee_wallet: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -2570,6 +2668,12 @@ pub mod result {
         UpdateMfaPolicyResult(super::UpdateMfaPolicyResult),
         DeleteMfaPolicyResult(super::DeleteMfaPolicyResult),
         CreateSessionProfileResult(super::CreateSessionProfileResult),
+        EarnDeployWrapperResult(super::EarnDeployWrapperResult),
+        EarnDepositResult(super::EarnDepositResult),
+        EarnWithdrawResult(super::EarnWithdrawResult),
+        UpsertEarnClientFeeConfigResult(super::UpsertEarnClientFeeConfigResult),
+        ExecuteSwapResult(super::ExecuteSwapResult),
+        UpsertSwapConfigResult(super::UpsertSwapConfigResult),
     }
 }
 #[derive(Debug)]
@@ -2592,6 +2696,20 @@ pub struct EnableAuthProxyResult {
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, Copy, PartialEq)]
 pub struct DisableAuthProxyResult {}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct UpsertSwapConfigResult {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub fee_receiver_wallet_address: ::core::option::Option<
+        ::prost::alloc::string::String,
+    >,
+    #[serde(default)]
+    pub fee_bps: ::core::option::Option<::prost::alloc::string::String>,
+}
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -3409,6 +3527,17 @@ pub struct SolSendTransactionResult {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct ExecuteSwapResult {
+    pub send_transaction_status_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub provider: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub quote_id: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct WebhookEndpointData {
     pub endpoint_id: ::prost::alloc::string::String,
     pub organization_id: ::prost::alloc::string::String,
@@ -3484,6 +3613,42 @@ pub struct DeleteMfaPolicyResult {
 #[derive(Clone, PartialEq)]
 pub struct CreateSessionProfileResult {
     pub session_profile_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct EarnDeployWrapperResult {
+    pub wrapper_address: ::prost::alloc::string::String,
+    pub splitter_address: ::prost::alloc::string::String,
+    pub deploy_tx_hash: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct EarnDepositResult {
+    pub deposit_tx_hash: ::prost::alloc::string::String,
+    pub shares_minted: ::prost::alloc::string::String,
+    pub wrapper_address: ::prost::alloc::string::String,
+    pub deposit_request_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct EarnWithdrawResult {
+    pub withdraw_tx_hash: ::prost::alloc::string::String,
+    pub withdraw_request_id: ::prost::alloc::string::String,
+    pub assets_received: ::prost::alloc::string::String,
+    pub shares_burned: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct UpsertEarnClientFeeConfigResult {
+    pub fee_update_tx_hash: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -4570,6 +4735,18 @@ pub enum ActivityType {
     DeleteMfaPolicy = 142,
     #[serde(rename = "ACTIVITY_TYPE_CREATE_SESSION_PROFILE")]
     CreateSessionProfile = 143,
+    #[serde(rename = "ACTIVITY_TYPE_EARN_DEPLOY_WRAPPER")]
+    EarnDeployWrapper = 144,
+    #[serde(rename = "ACTIVITY_TYPE_EARN_DEPOSIT")]
+    EarnDeposit = 145,
+    #[serde(rename = "ACTIVITY_TYPE_EARN_WITHDRAW")]
+    EarnWithdraw = 146,
+    #[serde(rename = "ACTIVITY_TYPE_UPSERT_EARN_CLIENT_FEE_CONFIG")]
+    UpsertEarnClientFeeConfig = 147,
+    #[serde(rename = "ACTIVITY_TYPE_EXECUTE_SWAP")]
+    ExecuteSwap = 148,
+    #[serde(rename = "ACTIVITY_TYPE_UPSERT_SWAP_CONFIG")]
+    UpsertSwapConfig = 149,
 }
 impl ActivityType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4744,6 +4921,14 @@ impl ActivityType {
             Self::UpdateMfaPolicy => "ACTIVITY_TYPE_UPDATE_MFA_POLICY",
             Self::DeleteMfaPolicy => "ACTIVITY_TYPE_DELETE_MFA_POLICY",
             Self::CreateSessionProfile => "ACTIVITY_TYPE_CREATE_SESSION_PROFILE",
+            Self::EarnDeployWrapper => "ACTIVITY_TYPE_EARN_DEPLOY_WRAPPER",
+            Self::EarnDeposit => "ACTIVITY_TYPE_EARN_DEPOSIT",
+            Self::EarnWithdraw => "ACTIVITY_TYPE_EARN_WITHDRAW",
+            Self::UpsertEarnClientFeeConfig => {
+                "ACTIVITY_TYPE_UPSERT_EARN_CLIENT_FEE_CONFIG"
+            }
+            Self::ExecuteSwap => "ACTIVITY_TYPE_EXECUTE_SWAP",
+            Self::UpsertSwapConfig => "ACTIVITY_TYPE_UPSERT_SWAP_CONFIG",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4949,6 +5134,14 @@ impl ActivityType {
             "ACTIVITY_TYPE_UPDATE_MFA_POLICY" => Some(Self::UpdateMfaPolicy),
             "ACTIVITY_TYPE_DELETE_MFA_POLICY" => Some(Self::DeleteMfaPolicy),
             "ACTIVITY_TYPE_CREATE_SESSION_PROFILE" => Some(Self::CreateSessionProfile),
+            "ACTIVITY_TYPE_EARN_DEPLOY_WRAPPER" => Some(Self::EarnDeployWrapper),
+            "ACTIVITY_TYPE_EARN_DEPOSIT" => Some(Self::EarnDeposit),
+            "ACTIVITY_TYPE_EARN_WITHDRAW" => Some(Self::EarnWithdraw),
+            "ACTIVITY_TYPE_UPSERT_EARN_CLIENT_FEE_CONFIG" => {
+                Some(Self::UpsertEarnClientFeeConfig)
+            }
+            "ACTIVITY_TYPE_EXECUTE_SWAP" => Some(Self::ExecuteSwap),
+            "ACTIVITY_TYPE_UPSERT_SWAP_CONFIG" => Some(Self::UpsertSwapConfig),
             _ => None,
         }
     }

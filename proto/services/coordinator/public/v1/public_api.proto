@@ -1693,6 +1693,163 @@ service PublicApiService {
       tags: "Broadcasting"
     };
   }
+
+  rpc EarnDeployWrapper(external.activity.v1.EarnDeployWrapperRequest) returns (ActivityResponse) {
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/submit/earn_deploy_wrapper"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Enable a yield vault for an organization by deploying its fee wrapper. Must be called before any deposits into the vault."
+      summary: "Deploy Earn wrapper"
+      tags: "Earn"
+    };
+  }
+
+  rpc EarnDeposit(external.activity.v1.EarnDepositRequest) returns (ActivityResponse) {
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/submit/earn_deposit"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Deposit assets from a wallet into an enabled yield vault."
+      summary: "Deposit into Earn vault"
+      tags: "Earn"
+    };
+  }
+
+  rpc EarnWithdraw(external.activity.v1.EarnWithdrawRequest) returns (ActivityResponse) {
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/submit/earn_withdraw"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Withdraw assets or redeem shares from an enabled yield vault."
+      summary: "Withdraw from Earn vault"
+      tags: "Earn"
+    };
+  }
+
+  rpc UpsertEarnClientFeeConfig(external.activity.v1.UpsertEarnClientFeeConfigRequest) returns (ActivityResponse) {
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/submit/upsert_earn_client_fee_config"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Set the client's Earn fee rate and payout wallet for the organization."
+      summary: "Upsert Earn client fee config"
+      tags: "Earn"
+    };
+  }
+
+  rpc EarnVaults(EarnVaultsRequest) returns (EarnVaultsResponse) {
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/query/earn_vaults"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get the catalog of all wrappable yield vaults across supported chains, enriched with live TVL and APY. Annotates which vaults the organization has already enabled."
+      summary: "Get Earn vault catalog"
+      tags: "Earn"
+    };
+  }
+
+  rpc EarnEnabledVaults(EarnEnabledVaultsRequest) returns (EarnEnabledVaultsResponse) {
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/query/earn_enabled_vaults"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get the organization's deployed wrappers with on-chain total deposited and live APY. The management view, distinct from per-wallet positions."
+      summary: "Get Earn enabled vaults"
+      tags: "Earn"
+    };
+  }
+
+  rpc EarnPositions(EarnPositionsRequest) returns (EarnPositionsResponse) {
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/query/earn_positions"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get the active Earn positions for a specific wallet, including current value, cost basis, yield, and projected fees."
+      summary: "Get Earn positions"
+      tags: "Earn"
+    };
+  }
+
+  rpc EarnWithdrawStatus(EarnWithdrawStatusRequest) returns (EarnWithdrawStatusResponse) {
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/query/earn_withdraw_status"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Poll the status of a withdrawal by its withdraw_request_id."
+      summary: "Get Earn withdraw status"
+      tags: "Earn"
+    };
+  }
+
+  rpc EarnDepositStatus(EarnDepositStatusRequest) returns (EarnDepositStatusResponse) {
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/query/earn_deposit_status"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Poll the status of a deposit by its deposit_request_id (for the async/sponsored deposit path)."
+      summary: "Get Earn deposit status"
+      tags: "Earn"
+    };
+  }
+
+  rpc GetSwapQuote(GetSwapQuoteRequest) returns (GetSwapQuoteResponse) {
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/query/get_swap_quote"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get a swap quote for an EVM same-chain swap. Asset chains are derived from CAIP-19 asset IDs."
+      summary: "Get swap quote"
+      tags: "Swaps"
+    };
+  }
+
+  rpc ExecuteSwap(external.activity.v1.ExecuteSwapRequest) returns (ActivityResponse) {
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/submit/execute_swap"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Execute a quoted same-chain swap through the activity pipeline and Turnkey broadcasting."
+      summary: "Execute swap"
+      tags: "Swaps"
+    };
+  }
+
+  rpc UpsertSwapConfig(external.activity.v1.UpsertSwapConfigRequest) returns (ActivityResponse) {
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/submit/upsert_swap_config"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Enable or disable swap configuration for an organization."
+      summary: "Upsert swap config"
+      tags: "Swaps"
+    };
+  }
+
   rpc GetGasUsage(GetGasUsageRequest) returns (GetGasUsageResponse) {
     option (google.api.http) = {
       post: "/public/v1/query/get_gas_usage"
@@ -2126,6 +2283,18 @@ service PublicApiService {
       description: "Get the MFA status of an activity for a specific user or all voting users."
       summary: "Get MFA status"
       tags: "MFA Policies"
+    };
+  }
+
+  rpc ListEmailEvents(ListEmailEventsRequest) returns (ListEmailEventsResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/list_email_events"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "List email events for the organization."
+      summary: "List email events"
+      tags: "Email"
     };
   }
 
@@ -2808,6 +2977,67 @@ message ListFiatOnRampCredentialsResponse {
   repeated external.data.v1.FiatOnRampCredential fiat_on_ramp_credentials = 1 [(google.api.field_behavior) = REQUIRED];
 }
 
+message GetSwapQuoteRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string input_token = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-19 asset ID for the input asset. The chain is derived from this value."}
+  ];
+  string output_token = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-19 asset ID for the output asset. Must currently be on the same chain as `input_token`."}
+  ];
+  string input_amount = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Base-unit amount of the input asset."}
+  ];
+  optional string slippage = 5 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Maximum allowed slippage in basis points."}
+  ];
+}
+
+message GetSwapQuoteResponse {
+  string input_token = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-19 asset ID for the input asset."}
+  ];
+  string output_token = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-19 asset ID for the output asset."}
+  ];
+  string input_amount = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Base-unit amount of the input asset."}
+  ];
+  repeated SwapQuoteOption quotes = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "One quote per available swap provider."}
+  ];
+}
+
+message SwapQuoteOption {
+  string quote_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Identifier for this provider quote."}
+  ];
+  string provider = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Swap provider that produced this quote. Pass this value to execute_swap to force a specific provider."}
+  ];
+  string output_amount = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Estimated base-unit amount of the output asset."}
+  ];
+  optional string min_output_amount = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Minimum acceptable base-unit amount of the output asset after slippage."}
+  ];
+}
+
 message GetGasUsageRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
@@ -2828,6 +3058,131 @@ message GetGasUsageResponse {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The total gas usage (in USD) of all sponsored transactions processed over the last `window_duration_minutes`"}
   ];
+}
+
+message EarnVaultsRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization. Annotates which vaults the organization has already enabled."}
+  ];
+}
+
+message EarnVault {
+  string vault_address = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address of the underlying yield vault."}];
+  string chain_caip2 = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-2 chain ID the vault lives on."}];
+  string provider = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Yield provider for the vault ('morpho' or 'aave')."}];
+  string asset = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Symbol of the vault's underlying asset (e.g., 'USDC')."}];
+  string asset_address = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Token address of the vault's underlying asset."}];
+  string tvl = 6 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Total value locked in the vault, in raw on-chain units of the underlying asset."}];
+  string apy_pct = 7 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Current annual percentage yield, expressed as a decimal fraction (e.g., '0.0812' for 8.12%)."}];
+  bool enabled = 8 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether the organization has enabled this vault."}];
+}
+
+message EarnVaultsResponse {
+  repeated EarnVault vaults = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The catalog of wrappable vaults, sorted by TVL descending."}];
+}
+
+message EarnEnabledVaultsRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+}
+
+message EarnEnabledVault {
+  string vault_address = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address of the underlying yield vault."}];
+  string wrapper_address = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address of the deployed fee wrapper (the deposit target)."}];
+  string splitter_address = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address of the deployed fee splitter."}];
+  string chain_caip2 = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-2 chain ID the vault lives on."}];
+  string provider = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Yield provider for the vault ('morpho' or 'aave')."}];
+  string asset = 6 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Symbol of the vault's underlying asset (e.g., 'USDC')."}];
+  string apy_pct = 7 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Current annual percentage yield, expressed as a decimal fraction."}];
+  string total_deposited = 8 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Total deposited through this wrapper (wrapper TVL), in raw on-chain units of the underlying asset."}];
+}
+
+message EarnEnabledVaultsResponse {
+  repeated EarnEnabledVault enabled_vaults = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The organization's deployed wrappers."}];
+}
+
+message EarnPositionsRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string wallet_address = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The wallet address to return positions for."}
+  ];
+}
+
+message EarnPosition {
+  string vault_address = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address of the underlying yield vault."}];
+  string wrapper_address = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address of the fee wrapper holding the position."}];
+  string chain_caip2 = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-2 chain ID the vault lives on."}];
+  string provider = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Yield provider for the vault ('morpho' or 'aave')."}];
+  string asset = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Symbol of the vault's underlying asset (e.g., 'USDC')."}];
+  string shares = 6 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Number of wrapper shares held, in raw on-chain units."}];
+  string current_value = 7 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Current value of the position in the underlying asset, in raw on-chain units (already net of the wrapper fee)."}];
+  string cost_basis = 8 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Net amount deposited, in raw on-chain units."}];
+  string gross_yield = 9 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Yield grossed up for display, in raw on-chain units."}];
+  string projected_fee = 10 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Combined Turnkey + client fee on the yield, in raw on-chain units."}];
+  string yield_less_fees = 11 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Yield net of fees, in raw on-chain units."}];
+}
+
+message EarnPositionsResponse {
+  repeated EarnPosition positions = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The wallet's active Earn positions."}];
+}
+
+message EarnWithdrawStatusRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string withdraw_request_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The withdraw_request_id returned by EarnWithdraw."}
+  ];
+}
+
+message EarnWithdrawStatusResponse {
+  string status = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Status of the withdrawal."
+      enum: [
+        "PENDING",
+        "COMPLETE",
+        "FAILED"
+      ]
+    }
+  ];
+  optional string withdraw_tx_hash = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Transaction hash of the withdrawal, once available."}];
+}
+
+message EarnDepositStatusRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string deposit_request_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The deposit_request_id returned by EarnDeposit."}
+  ];
+}
+
+message EarnDepositStatusResponse {
+  string status = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Status of the deposit."
+      enum: [
+        "PENDING",
+        "COMPLETE",
+        "FAILED"
+      ]
+    }
+  ];
+  optional string deposit_tx_hash = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Transaction hash of the deposit, once available."}];
 }
 
 message GetNoncesRequest {
@@ -3294,5 +3649,101 @@ message GetMfaStatusResponse {
   repeated external.data.v1.MfaStatus mfa_statuses = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of MFA statuses for the activity's votes."}
+  ];
+}
+
+message ListEmailEventsRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization"}
+  ];
+  string email = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Recipient email address to list email events for"}
+  ];
+  string event_type = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional email event type to filter by. Examples include Send, Delivery, Bounce, and DeliveryDelay"}
+  ];
+  external.options.v1.Pagination pagination_options = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Parameters used for cursor-based pagination"}
+  ];
+}
+
+message ListEmailEventsResponse {
+  repeated EmailEvent email_events = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Email events matching the requested filters, ordered by most recent event first."}
+  ];
+}
+
+message EmailEvent {
+  string id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for the email event"}
+  ];
+  string organization_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for the organization associated with the email event"}
+  ];
+  string message_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Provider message identifier. Multiple events can share the same message ID"}
+  ];
+  string event_type = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Email event type, such as Send, Delivery, Bounce, or DeliveryDelay"}
+  ];
+  string from_address = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Sender email address"}
+  ];
+  string to_address = 6 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Recipient email address"}
+  ];
+  string sender_tenant = 7 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "SES tenant that sent the email, when available"}
+  ];
+  string timestamp = 8 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Event timestamp as millisecond epoch string"}
+  ];
+  string created_at = 9 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Creation timestamp as millisecond epoch string"}
+  ];
+  EmailEventDetails details = 10 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Parsed email event details. Fields are populated based on event type and available provider metadata"}
+  ];
+}
+
+message EmailEventDetails {
+  string bounce_type = 1 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Bounce type for Bounce events"}
+  ];
+  string bounce_sub_type = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Bounce subtype for Bounce events"}
+  ];
+  string diagnostic_code = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Diagnostic text for Bounce or DeliveryDelay events"}
+  ];
+  string delivery_smtp_response = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "SMTP response for Delivery events"}
+  ];
+  uint64 delivery_processing_time_millis = 5 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Processing time in milliseconds for Delivery events"}
+  ];
+  string delivery_delay_type = 6 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Delay type for DeliveryDelay events"}
   ];
 }

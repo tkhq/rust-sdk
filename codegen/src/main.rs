@@ -190,6 +190,17 @@ fn main() {
                 let activity_result = activities_details.result_type.clone();
                 let app_proofs_field =
                     build_generate_app_proofs_field(short_req_type, &requests_with_app_proofs);
+                let is_pinned_activity = activity_type != *proto_activity_type;
+                let request_type = if is_pinned_activity {
+                    "PinnedActivityRequest".to_string()
+                } else {
+                    format!("external_activity::{short_req_type}")
+                };
+                let pinned_request_struct = build_pinned_activity_request_struct(
+                    short_req_type,
+                    is_pinned_activity,
+                    &requests_with_app_proofs,
+                );
 
                 // Approve and Reject activity functions are a bit different than the rest
                 // In the mapping they have a resultType set to "*" (because they can indeed reference ANY activity.
@@ -200,7 +211,8 @@ fn main() {
                             ///
                             /// {description}
                             pub async fn {fn_name}(&self, organization_id: String, timestamp_ms: u128, params: immutable_activity::{activity_intent}) -> Result<external_activity::Activity, TurnkeyClientError> {{
-                                let request = external_activity::{short_req_type} {{
+                                {pinned_request_struct}
+                                let request = {request_type} {{
                                     r#type: "{activity_type}".to_string(),
                                     timestamp_ms: timestamp_ms.to_string(),
                                     parameters: Some(params),
@@ -219,7 +231,8 @@ fn main() {
                             ///
                             /// {description}
                             pub async fn {fn_name}(&self, organization_id: String, timestamp_ms: u128, params: immutable_activity::{activity_intent}) -> Result<ActivityResult<immutable_activity::{activity_result}>, TurnkeyClientError> {{
-                                let request = external_activity::{short_req_type} {{
+                                {pinned_request_struct}
+                                let request = {request_type} {{
                                     r#type: "{activity_type}".to_string(),
                                     timestamp_ms: timestamp_ms.to_string(),
                                     parameters: Some(params),
@@ -423,6 +436,38 @@ fn build_generate_app_proofs_field(
     }
 }
 
+fn build_pinned_activity_request_struct(
+    req_type: &str,
+    is_pinned: bool,
+    requests_with_app_proofs: &HashSet<String>,
+) -> String {
+    if !is_pinned {
+        return String::new();
+    }
+
+    let app_proofs_field = if requests_with_app_proofs.contains(req_type) {
+        r#"
+            #[serde(skip_serializing_if = "Option::is_none")]
+            generate_app_proofs: Option<bool>,"#
+    } else {
+        ""
+    };
+
+    format!(
+        r#"
+            #[derive(::serde::Serialize)]
+            #[serde(rename_all = "camelCase")]
+            struct PinnedActivityRequest<P> {{
+                r#type: String,
+                timestamp_ms: String,
+                organization_id: String,
+                parameters: Option<P>,
+                {app_proofs_field}
+            }}
+        "#
+    )
+}
+
 fn request_to_activity_types(proto: &str) -> HashMap<String, String> {
     let message_re = Regex::new(r"(?ms)^message\s+(\w+)\s*\{\n(.*?)\n\}").unwrap();
     let enum_annotation_re = Regex::new(r#"enum:\s*\["(ACTIVITY_TYPE_[^"]+)"\]"#).unwrap();
@@ -596,6 +641,27 @@ service PublicApiService {
             build_generate_app_proofs_field("CreateTvcAppRequest", &requests),
             ""
         );
+    }
+
+    #[test]
+    fn pinned_activity_request_struct_is_emitted_only_for_pins() {
+        let mut requests = HashSet::new();
+        requests.insert("EthSendTransactionRequest".to_string());
+
+        assert_eq!(
+            build_pinned_activity_request_struct("EthSendTransactionRequest", false, &requests),
+            ""
+        );
+
+        let request_struct =
+            build_pinned_activity_request_struct("EthSendTransactionRequest", true, &requests);
+        assert!(request_struct.contains("struct PinnedActivityRequest<P>"));
+        assert!(request_struct.contains("generate_app_proofs"));
+
+        let request_struct =
+            build_pinned_activity_request_struct("CreateTvcAppRequest", true, &requests);
+        assert!(request_struct.contains("struct PinnedActivityRequest<P>"));
+        assert!(!request_struct.contains("generate_app_proofs"));
     }
 
     #[test]
