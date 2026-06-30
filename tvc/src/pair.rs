@@ -7,20 +7,16 @@ use std::pin::Pin;
 use std::sync::Arc;
 use zeroize::Zeroizing;
 
+/// Boxed future returned by key pair operations.
+pub type PairFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+
 /// Something that can do key pair operations with the QOS p256 scheme.
-#[allow(clippy::type_complexity)]
 pub trait Pair: Send + Sync {
     /// Sign the given message.
-    fn sign(
-        &self,
-        message: Vec<u8>,
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Vec<u8>>> + Send + '_>>;
+    fn sign(&self, message: Vec<u8>) -> PairFuture<'_, anyhow::Result<Vec<u8>>>;
 
     /// Decrypt the given ciphertext.
-    fn decrypt(
-        &self,
-        ciphertext: Vec<u8>,
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Zeroizing<Vec<u8>>>> + Send + '_>>;
+    fn decrypt(&self, ciphertext: Vec<u8>) -> PairFuture<'_, anyhow::Result<Zeroizing<Vec<u8>>>>;
 
     /// The public key for this pair.
     fn public_key(&self) -> Vec<u8>;
@@ -56,10 +52,7 @@ impl LocalPair {
 }
 
 impl Pair for LocalPair {
-    fn sign(
-        &self,
-        message: Vec<u8>,
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Vec<u8>>> + Send + '_>> {
+    fn sign(&self, message: Vec<u8>) -> PairFuture<'_, anyhow::Result<Vec<u8>>> {
         let pair2 = Arc::clone(&self.pair);
 
         Box::pin(async move {
@@ -76,10 +69,7 @@ impl Pair for LocalPair {
         self.pair.public_key().to_bytes()
     }
 
-    fn decrypt(
-        &self,
-        ciphertext: Vec<u8>,
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Zeroizing<Vec<u8>>>> + Send + '_>> {
+    fn decrypt(&self, ciphertext: Vec<u8>) -> PairFuture<'_, anyhow::Result<Zeroizing<Vec<u8>>>> {
         let pair2 = Arc::clone(&self.pair);
 
         Box::pin(async move {
