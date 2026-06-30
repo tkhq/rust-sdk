@@ -636,6 +636,8 @@ pub enum FeatureName {
     AuthProxy = 8,
     #[serde(rename = "FEATURE_NAME_SOLANA_RENT_PREFUND_ENABLED")]
     SolanaRentPrefundEnabled = 9,
+    #[serde(rename = "FEATURE_NAME_SWAP_CONFIG")]
+    SwapConfig = 10,
 }
 impl FeatureName {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -654,6 +656,7 @@ impl FeatureName {
             Self::OtpEmailAuth => "FEATURE_NAME_OTP_EMAIL_AUTH",
             Self::AuthProxy => "FEATURE_NAME_AUTH_PROXY",
             Self::SolanaRentPrefundEnabled => "FEATURE_NAME_SOLANA_RENT_PREFUND_ENABLED",
+            Self::SwapConfig => "FEATURE_NAME_SWAP_CONFIG",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -671,6 +674,7 @@ impl FeatureName {
             "FEATURE_NAME_SOLANA_RENT_PREFUND_ENABLED" => {
                 Some(Self::SolanaRentPrefundEnabled)
             }
+            "FEATURE_NAME_SWAP_CONFIG" => Some(Self::SwapConfig),
             _ => None,
         }
     }

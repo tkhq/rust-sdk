@@ -168,6 +168,12 @@ enum ActivityType {
   ACTIVITY_TYPE_UPDATE_MFA_POLICY = 141;
   ACTIVITY_TYPE_DELETE_MFA_POLICY = 142;
   ACTIVITY_TYPE_CREATE_SESSION_PROFILE = 143;
+  ACTIVITY_TYPE_EARN_DEPLOY_WRAPPER = 144;
+  ACTIVITY_TYPE_EARN_DEPOSIT = 145;
+  ACTIVITY_TYPE_EARN_WITHDRAW = 146;
+  ACTIVITY_TYPE_UPSERT_EARN_CLIENT_FEE_CONFIG = 147;
+  ACTIVITY_TYPE_EXECUTE_SWAP = 148;
+  ACTIVITY_TYPE_UPSERT_SWAP_CONFIG = 149;
 }
 
 // The current processing status of an Activity.
@@ -342,6 +348,12 @@ message Intent {
     UpdateMfaPolicyIntent update_mfa_policy_intent = 142;
     DeleteMfaPolicyIntent delete_mfa_policy_intent = 143;
     CreateSessionProfileIntent create_session_profile_intent = 144;
+    EarnDeployWrapperIntent earn_deploy_wrapper_intent = 145;
+    EarnDepositIntent earn_deposit_intent = 146;
+    EarnWithdrawIntent earn_withdraw_intent = 147;
+    UpsertEarnClientFeeConfigIntent upsert_earn_client_fee_config_intent = 148;
+    ExecuteSwapIntent execute_swap_intent = 149;
+    UpsertSwapConfigIntent upsert_swap_config_intent = 150;
   }
 }
 
@@ -461,6 +473,13 @@ message UpdateAuthProxyConfigResult {
 message EnableAuthProxyIntent {} // This intent is used to enable auth proxied authentication for business org
 
 message DisableAuthProxyIntent {} // This intent is used to disable auth proxied authentication for business org
+
+message UpsertSwapConfigIntent {
+  bool enabled = 1 [(google.api.field_behavior) = REQUIRED];
+  optional string fee_receiver_wallet_address = 2 [(google.api.field_behavior) = OPTIONAL];
+  optional string fee_bps = 3 [(google.api.field_behavior) = OPTIONAL];
+  optional string provider = 4 [(google.api.field_behavior) = OPTIONAL];
+}
 
 message CreateOrganizationIntent {
   // @inject_tag: validate:"required,tk_label_length"
@@ -1776,6 +1795,68 @@ message EthSendTransactionIntentV2 {
   ];
 }
 
+message ExecuteSwapIntent {
+  // @inject_tag: validate:"required"
+  string input_token = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "CAIP-19 asset ID for the input asset. The chain is derived from this value."
+      title: ""
+    }
+  ];
+
+  // @inject_tag: validate:"required"
+  string output_token = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "CAIP-19 asset ID for the output asset. Must currently be on the same chain as `input_token`."
+      title: ""
+    }
+  ];
+
+  // @inject_tag: validate:"required"
+  string input_amount = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Base-unit amount of the input asset."
+      title: ""
+    }
+  ];
+
+  // @inject_tag: validate:"required"
+  string wallet_account = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Wallet account address to sign and submit the swap transaction from. Cross-wallet swaps are not supported."
+      title: ""
+    }
+  ];
+
+  optional bool sponsor = 5 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Whether to sponsor the resulting swap transaction via Gas Station when supported by the chain."
+      title: ""
+    }
+  ];
+
+  optional string slippage = 6 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Maximum allowed slippage in basis points."
+      title: ""
+    }
+  ];
+
+  optional string provider = 7 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Swap provider to execute with, as returned by get_swap_quote. When omitted, execution uses the default provider."
+      title: ""
+    }
+  ];
+}
+
 message ApproveActivityIntent {
   // @inject_tag: validate:"required"
   string fingerprint = 1 [
@@ -2565,6 +2646,173 @@ message CreateSessionProfileIntent {
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
       description: "Notes for a Session Profile."
+      title: ""
+    }
+  ];
+}
+
+message EarnDeployWrapperIntent {
+  // @inject_tag: validate:"required"
+  string vault_address = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Address of the underlying yield vault to wrap (from the EarnVaults catalog)."
+      title: ""
+    }
+  ];
+
+  // @inject_tag: validate:"required"
+  string chain_caip2 = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "CAIP-2 chain ID the vault lives on (e.g., 'eip155:8453' for Base)."
+      enum: [
+        "eip155:1",
+        "eip155:8453",
+        "eip155:42161",
+        "eip155:137",
+        "eip155:56",
+        "eip155:4217"
+      ]
+    }
+  ];
+}
+
+message EarnDepositIntent {
+  // @inject_tag: validate:"required"
+  string vault_address = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Address of the underlying yield vault to deposit into. The org must have an enabled wrapper for this vault."
+      title: ""
+    }
+  ];
+
+  // @inject_tag: validate:"required"
+  string sign_with = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "A Wallet account address or Private Key address to deposit from and sign with. Must be an on-chain address; Private Key identifiers are not supported."
+      title: ""
+    }
+  ];
+
+  // @inject_tag: validate:"required"
+  string assets = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Amount of the underlying asset to deposit, in raw on-chain units (e.g., '1000000' for 1 USDC at 6 decimals)."
+      title: ""
+    }
+  ];
+
+  // @inject_tag: validate:"required"
+  string chain_caip2 = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "CAIP-2 chain ID the vault lives on (e.g., 'eip155:8453' for Base)."
+      enum: [
+        "eip155:1",
+        "eip155:8453",
+        "eip155:42161",
+        "eip155:137",
+        "eip155:56",
+        "eip155:4217"
+      ]
+    }
+  ];
+
+  // If true, Turnkey acts as fee payer via Gas Station.
+  optional bool sponsor = 5 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Whether to sponsor this transaction via Gas Station."
+      title: ""
+    }
+  ];
+}
+
+message EarnWithdrawIntent {
+  // @inject_tag: validate:"required"
+  string vault_address = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Address of the underlying yield vault to withdraw from. The org must have an enabled wrapper for this vault."
+      title: ""
+    }
+  ];
+
+  // @inject_tag: validate:"required"
+  string sign_with = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "A Wallet account address or Private Key address to withdraw to and sign with. Must be an on-chain address; Private Key identifiers are not supported."
+      title: ""
+    }
+  ];
+
+  // @inject_tag: validate:"required"
+  string chain_caip2 = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "CAIP-2 chain ID the vault lives on (e.g., 'eip155:8453' for Base)."
+      enum: [
+        "eip155:1",
+        "eip155:8453",
+        "eip155:42161",
+        "eip155:137",
+        "eip155:56",
+        "eip155:4217"
+      ]
+    }
+  ];
+
+  // If true, Turnkey acts as fee payer via Gas Station.
+  optional bool sponsor = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Whether to sponsor this transaction via Gas Station."
+      title: ""
+    }
+  ];
+
+  // @inject_tag: validate:"required"
+  string amount_type = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Whether amount_value is denominated in shares or assets. 'SHARES' redeems wrapper shares (calls redeem()); 'ASSETS' withdraws underlying assets (calls withdraw(), enabling yield-only claims)."
+      enum: [
+        "SHARES",
+        "ASSETS"
+      ]
+    }
+  ];
+
+  // @inject_tag: validate:"required"
+  string amount_value = 6 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The amount to withdraw, in raw on-chain units, interpreted according to amount_type."
+      title: ""
+    }
+  ];
+}
+
+message UpsertEarnClientFeeConfigIntent {
+  // @inject_tag: validate:"required"
+  string client_fee_bps = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Your performance fee on gross yield, in basis points (e.g., '2000' for 20%). Your fee plus Turnkey's fee cannot exceed 50% of yield."
+      title: ""
+    }
+  ];
+
+  // @inject_tag: validate:"required"
+  string client_fee_wallet = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The wallet address that receives the client's fee payouts on-chain. Must be a Turnkey-managed wallet address."
       title: ""
     }
   ];
@@ -4791,6 +5039,12 @@ message Result {
     UpdateMfaPolicyResult update_mfa_policy_result = 121;
     DeleteMfaPolicyResult delete_mfa_policy_result = 122;
     CreateSessionProfileResult create_session_profile_result = 123;
+    EarnDeployWrapperResult earn_deploy_wrapper_result = 124;
+    EarnDepositResult earn_deposit_result = 125;
+    EarnWithdrawResult earn_withdraw_result = 126;
+    UpsertEarnClientFeeConfigResult upsert_earn_client_fee_config_result = 127;
+    ExecuteSwapResult execute_swap_result = 128;
+    UpsertSwapConfigResult upsert_swap_config_result = 131;
   }
 }
 
@@ -4809,6 +5063,12 @@ message EnableAuthProxyResult {
   ];
 }
 message DisableAuthProxyResult {}
+
+message UpsertSwapConfigResult {
+  bool enabled = 1 [(google.api.field_behavior) = REQUIRED];
+  optional string fee_receiver_wallet_address = 2 [(google.api.field_behavior) = OPTIONAL];
+  optional string fee_bps = 3 [(google.api.field_behavior) = OPTIONAL];
+}
 
 message CreateOrganizationResult {
   string organization_id = 1 [
@@ -5689,6 +5949,21 @@ message SolSendTransactionResult {
   ];
 }
 
+message ExecuteSwapResult {
+  string send_transaction_status_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The send_transaction_status ID associated with the swap transaction submission"}
+  ];
+  optional string provider = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Swap provider used to build the transaction."}
+  ];
+  optional string quote_id = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Quote identifier used for execution, if any."}
+  ];
+}
+
 message WebhookEndpointData {
   string endpoint_id = 1 [
     (google.api.field_behavior) = REQUIRED,
@@ -5787,6 +6062,66 @@ message CreateSessionProfileResult {
   string session_profile_id = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Session Profile."}
+  ];
+}
+
+message EarnDeployWrapperResult {
+  string wrapper_address = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address of the deployed fee wrapper (the deposit target)."}
+  ];
+  string splitter_address = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address of the deployed fee splitter (PaymentSplitter for Morpho, RevenueSplitterOwner for Aave)."}
+  ];
+  string deploy_tx_hash = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Transaction hash of the wrapper deployment."}
+  ];
+}
+
+message EarnDepositResult {
+  string deposit_tx_hash = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Transaction hash of the deposit."}
+  ];
+  string shares_minted = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Number of wrapper shares minted to the depositor, in raw on-chain units."}
+  ];
+  string wrapper_address = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address of the fee wrapper the deposit was routed to."}
+  ];
+  string deposit_request_id = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Identifier to poll deposit status via EarnDepositStatus (for the async/sponsored path)."}
+  ];
+}
+
+message EarnWithdrawResult {
+  string withdraw_tx_hash = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Transaction hash of the withdrawal."}
+  ];
+  string withdraw_request_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Identifier to poll withdrawal status via EarnWithdrawStatus."}
+  ];
+  string assets_received = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Amount of the underlying asset received, in raw on-chain units."}
+  ];
+  string shares_burned = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Number of wrapper shares burned, in raw on-chain units."}
+  ];
+}
+
+message UpsertEarnClientFeeConfigResult {
+  string fee_update_tx_hash = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Transaction hash of the fee configuration update."}
   ];
 }
 

@@ -3484,11 +3484,21 @@ impl<S: Stamp> TurnkeyClient<S> {
         &self,
         organization_id: String,
         timestamp_ms: u128,
-        params: immutable_activity::EthSendTransactionIntentV2,
-    ) -> Result<ActivityResult<immutable_activity::EthSendTransactionResultV2>, TurnkeyClientError>
+        params: immutable_activity::EthSendTransactionIntent,
+    ) -> Result<ActivityResult<immutable_activity::EthSendTransactionResult>, TurnkeyClientError>
     {
-        let request = external_activity::EthSendTransactionRequest {
-            r#type: "ACTIVITY_TYPE_ETH_SEND_TRANSACTION_V2".to_string(),
+        #[derive(::serde::Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct PinnedActivityRequest<P> {
+            r#type: String,
+            timestamp_ms: String,
+            organization_id: String,
+            parameters: Option<P>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            generate_app_proofs: Option<bool>,
+        }
+        let request = PinnedActivityRequest {
+            r#type: "ACTIVITY_TYPE_ETH_SEND_TRANSACTION".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
@@ -3506,7 +3516,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             .inner
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         let result = match inner {
-            immutable_activity::result::Inner::EthSendTransactionResultV2(res) => res,
+            immutable_activity::result::Inner::EthSendTransactionResult(res) => res,
             other => {
                 return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
                     serde_json::to_string(&other)?,
@@ -4505,6 +4515,16 @@ impl<S: Stamp> TurnkeyClient<S> {
         request: coordinator::GetMfaStatusRequest,
     ) -> Result<coordinator::GetMfaStatusResponse, TurnkeyClientError> {
         self.process_request(&request, "/public/v1/query/get_mfa_status".to_string())
+            .await
+    }
+    /// List email events
+    ///
+    /// List email events for the organization.
+    pub async fn list_email_events(
+        &self,
+        request: coordinator::ListEmailEventsRequest,
+    ) -> Result<coordinator::ListEmailEventsResponse, TurnkeyClientError> {
+        self.process_request(&request, "/public/v1/query/list_email_events".to_string())
             .await
     }
 }
