@@ -3,8 +3,7 @@
 use anyhow::{Context, anyhow, bail};
 use aws_nitro_enclaves_nsm_api::api::AttestationDoc;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
-use qos_core::protocol::QosHash;
-use qos_core::protocol::services::boot::ManifestEnvelope;
+use qos_core::protocol::services::boot::VersionedManifestEnvelope;
 use qos_p256::P256Public;
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -13,7 +12,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ProvisionBundle {
     attestation_document_cose_sign1_base64: String,
-    manifest_envelope: ManifestEnvelope,
+    manifest_envelope: VersionedManifestEnvelope,
     fetched_at_unix_ms: u64,
     deployment_id: String,
     ephemeral_public_key_hex: String,
@@ -23,7 +22,7 @@ impl ProvisionBundle {
     pub(crate) fn new(
         deployment_id: String,
         attestation_document: &[u8],
-        manifest_envelope: ManifestEnvelope,
+        manifest_envelope: VersionedManifestEnvelope,
         fetched_at_unix_ms: u64,
         ephemeral_public_key: &[u8],
     ) -> Self {
@@ -44,7 +43,7 @@ impl ProvisionBundle {
         &self.ephemeral_public_key_hex
     }
 
-    pub(crate) fn manifest_envelope(&self) -> &ManifestEnvelope {
+    pub(crate) fn manifest_envelope(&self) -> &VersionedManifestEnvelope {
         &self.manifest_envelope
     }
 
@@ -70,14 +69,11 @@ impl ProvisionBundle {
             .decode(&self.attestation_document_cose_sign1_base64)
             .context("failed to decode attestation document in provision bundle")?;
 
-        let attestation_doc = verify_provisioning_details(
-            &attestation_document,
-            &self.manifest_envelope,
-            validation_time_override,
-        )?;
-
+        let unsafe_attestation_doc =
+            qos_nsm::nitro::unsafe_attestation_doc_from_der(&attestation_document)
+                .context("failed to parse attestation document in provision bundle")?;
         let attested_public_key = extract_ephemeral_public_key_bytes(
-            attestation_doc
+            unsafe_attestation_doc
                 .public_key
                 .as_ref()
                 .map(|public_key| public_key.as_ref()),
@@ -87,13 +83,19 @@ impl ProvisionBundle {
             bail!("provision bundle ephemeral public key does not match attestation document");
         }
 
+        verify_provisioning_details(
+            &attestation_document,
+            &self.manifest_envelope,
+            validation_time_override,
+        )?;
+
         Ok(bundled_public_key)
     }
 }
 
 pub(crate) fn verify_provisioning_details(
     cose_sign1_der: &[u8],
-    manifest_envelope: &ManifestEnvelope,
+    manifest_envelope: &VersionedManifestEnvelope,
     validation_time_override: Option<u64>,
 ) -> anyhow::Result<AttestationDoc> {
     manifest_envelope
@@ -108,13 +110,19 @@ pub(crate) fn verify_provisioning_details(
     )
     .context("failed to parse and verify attestation document")?;
 
-    qos_nsm::nitro::verify_attestation_doc_against_user_input(
+    let manifest_hash = manifest_envelope.manifest_hash();
+    let manifest = manifest_envelope.clone().manifest();
+    let enclave = manifest.enclave();
+
+    qos_nsm::nitro::verify_attestation_doc_against_manifest_setup(
         &attestation_doc,
-        &manifest_envelope.manifest.qos_hash(),
-        &manifest_envelope.manifest.enclave.pcr0,
-        &manifest_envelope.manifest.enclave.pcr1,
-        &manifest_envelope.manifest.enclave.pcr2,
-        &manifest_envelope.manifest.enclave.pcr3,
+        qos_nsm::nitro::ManifestAttestationInput {
+            manifest_hash: &manifest_hash,
+            pcr0: &enclave.pcr0,
+            pcr1: &enclave.pcr1,
+            pcr2: &enclave.pcr2,
+            pcr3: &enclave.pcr3,
+        },
     )
     .context("attestation document did not match manifest expectations")?;
 
@@ -154,7 +162,7 @@ fn validation_time_secs(validation_time_override: Option<u64>) -> anyhow::Result
 mod tests {
     use super::{ProvisionBundle, extract_ephemeral_public_key_bytes, verify_provisioning_details};
     use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
-    use qos_core::protocol::services::boot::ManifestEnvelope;
+    use qos_core::protocol::services::boot::{ManifestEnvelope, VersionedManifestEnvelope};
     use qos_p256::P256Pair;
     use serde::Deserialize;
     use serde_json::json;
@@ -163,15 +171,15 @@ mod tests {
     struct ValidProvisioningDetailsFixture {
         validation_time_secs: u64,
         attestation_document_cose_sign1_base64: String,
-        manifest_envelope: ManifestEnvelope,
+        manifest_envelope: VersionedManifestEnvelope,
     }
 
     fn valid_provisioning_details_fixture() -> ValidProvisioningDetailsFixture {
         serde_json::from_str(include_str!("../fixtures/valid_provisioning_details.json")).unwrap()
     }
 
-    fn sample_manifest_envelope() -> ManifestEnvelope {
-        serde_json::from_value(json!({
+    fn sample_manifest_envelope() -> VersionedManifestEnvelope {
+        let envelope: ManifestEnvelope = serde_json::from_value(json!({
             "manifest": {
                 "namespace": {
                     "name": "test-namespace",
@@ -218,7 +226,8 @@ mod tests {
             }],
             "shareSetApprovals": []
         }))
-        .unwrap()
+        .unwrap();
+        envelope.into()
     }
 
     #[test]
@@ -286,7 +295,11 @@ mod tests {
             .decode(&fixture.attestation_document_cose_sign1_base64)
             .unwrap();
         let mut manifest_envelope = fixture.manifest_envelope;
-        manifest_envelope.manifest_set_approvals.clear();
+        match &mut manifest_envelope {
+            VersionedManifestEnvelope::V2(envelope) => envelope.manifest_set_approvals.clear(),
+            VersionedManifestEnvelope::V1(envelope) => envelope.manifest_set_approvals.clear(),
+            VersionedManifestEnvelope::V0(envelope) => envelope.manifest_set_approvals.clear(),
+        }
 
         assert!(
             verify_provisioning_details(

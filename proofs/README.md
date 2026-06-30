@@ -6,11 +6,11 @@ This crate contains utilities to parse and verify Turnkey secure enclave proofs.
 
 ## Boot proofs
 
-Boot Proof: a proof that a particular AWS Nitro Enclave booted with a particular configuration.
+Boot Proof: a proof that a particular AWS Nitro Enclave booted with a particular approved manifest envelope and configuration.
 
 A boot proof contains
-- AWS attestation document, which contains PCR measurements, a ceritifaction chain that proves the document was signed by AWS's root cert, a public key which is the ephemeral key unique to this particular enclave, and hash of the QOS Manifest
-- A signed QOS Manifest, the validity of which is attested to by the Attestation Document. A hash of the application binary, the quorum public key, and more.
+- AWS attestation document, which contains PCR measurements, a certification chain that proves the document was signed by AWS's root cert, a public key which is the ephemeral key unique to this particular enclave, and `user_data` containing the approved QOS manifest hash.
+- A QOS manifest and manifest envelope. The envelope is the authoritative source for the schema-aware manifest hash and approval set; the standalone manifest is checked for consistency with that envelope.
 
 Resources on AWS Nitro Enclaves, attestations, and verifying attestations can be found at the following:
 
@@ -22,12 +22,13 @@ Resources on AWS Nitro Enclaves, attestations, and verifying attestations can be
 
 ## App Proofs
 
-App Proof: a signature by an enclave ephemeral key to prove application-specific facts about functionality. An app proof, when combined with a boot proof, proves that your request was process:
-- in the context of your Turnkey organization 
-- with Turnkey’s signer application
-- inside of a legitimate and precise version of QuorumOS
-- inside of a legitimate AWS Nitro Enclave
-- inside Turnkey’s canonical AWS production account
+App Proof: a signature by an enclave ephemeral key to prove application-specific facts about functionality. An app proof, when combined with a boot proof, proves that your request was processed:
+- by the enclave ephemeral key named in the AWS attestation document
+- inside of an AWS Nitro Enclave whose attestation chain verifies to the AWS Nitro root
+- with PCR measurements, including the live manifest/key commitment, that match the approved QOS manifest envelope
+- with a standalone QOS manifest that is consistent with the approved manifest envelope
+
+This is a cryptographic self-consistency and AWS enclave authenticity claim. It is not, by itself, a global proof that a manifest set is the canonical Turnkey production manifest set. Callers that need that claim must pin or independently obtain the expected manifest policy, operator set, or other Turnkey trust anchor they intend to trust.
 
 ## Usage
 
@@ -40,7 +41,10 @@ This verification goes through the following steps:
  - Verify app proof signature
  - Verify the boot proof
    - Attestation doc was signed by AWS
-   - Attestation doc's `user_data` is the hash of the qos manifest
+   - Manifest envelope approvals are internally valid
+   - Standalone QOS manifest hash matches the manifest envelope hash
+   - Attestation doc's `user_data` is the approved manifest envelope hash
+   - Attestation PCRs match the manifest enclave PCRs and PCR17 live manifest/key commitment
  - Verify the app proof / boot proof connection - that the ephemeral keys match
 
 ### Attestation Document Verification
@@ -71,6 +75,8 @@ println!("PCR0: {}", hex::encode(attestation.pcrs.get(&0).unwrap()));
 println!("PCR1: {}", hex::encode(attestation.pcrs.get(&1).unwrap()));
 println!("PCR2: {}", hex::encode(attestation.pcrs.get(&2).unwrap()));
 println!("PCR3: {}", hex::encode(attestation.pcrs.get(&3).unwrap()));
+println!("PCR16: {}", hex::encode(attestation.pcrs.get(&16).unwrap()));
+println!("PCR17: {}", hex::encode(attestation.pcrs.get(&17).unwrap()));
 
 // Display user data and public key fields
 println!("user_data: {}", hex::encode(attestation.user_data.unwrap()));
@@ -79,5 +85,13 @@ println!(
    hex::encode(attestation.public_key.unwrap())
 );
 ```
+
+For full QoS manifest verification of a parsed attestation document, use the
+phase-specific helpers re-exported from QoS:
+`verify_attestation_doc_against_manifest_live` checks the live/app
+manifest/key commitment in PCR17 and is almost always the right choice for
+application proof verification. `verify_attestation_doc_against_manifest_setup`
+checks the setup/boot manifest/key commitment in PCR16 for provisioning and
+bootstrap flows.
 
 Head over to the [QuorumOS](https://github.com/tkhq/qos) repository if you're looking to reproduce these PCR values independently.

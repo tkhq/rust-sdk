@@ -30,6 +30,8 @@ webpki.workspace = true
 x509-cert.workspace = true
 x509-parser.workspace = true
 hex.workspace = true
+qos_core.workspace = true
+qos_nsm.workspace = true
 turnkey_client.workspace = true
 turnkey_api_key_stamper.workspace = true
 

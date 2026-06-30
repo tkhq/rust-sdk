@@ -7,11 +7,9 @@ use crate::quorum_key_metadata::QuorumKeyMetadata;
 use crate::util::{read_json_file, write_file};
 use anyhow::{Context, anyhow};
 use clap::Args as ClapArgs;
-use qos_core::protocol::QosHash;
-use qos_core::protocol::services::boot::{Approval, ManifestEnvelope, QuorumMember};
+use qos_core::protocol::services::boot::{Approval, QuorumMember, VersionedManifestEnvelope};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use zeroize::Zeroizing;
 
 /// Re-encrypt a share with an ephemeral key.
 #[derive(Debug, ClapArgs)]
@@ -33,7 +31,7 @@ pub struct Args {
     #[arg(long, value_name = "PATH", env = "TVC_OPERATOR_SEED")]
     pub operator_seed: Option<PathBuf>,
 
-    /// Never use for sensitive applications! Skip attestation and manifest approval verification.
+    /// Never use for sensitive applications! Skip attestation, PCR, and manifest approval verification.
     #[arg(long, env = "TVC_DANGEROUS_SKIP_VERIFICATION")]
     pub dangerous_skip_verification: bool,
 
@@ -55,7 +53,7 @@ pub(crate) struct ReEncryptedShareOutput {
 pub async fn run(args: Args) -> anyhow::Result<()> {
     if args.dangerous_skip_verification {
         eprintln!(
-            "WARNING: Skipping verification! This is dangerous and should not be used for sensitive applications."
+            "WARNING: Skipping attestation, PCR, and manifest approval verification! This is dangerous and should not be used for sensitive applications."
         );
     }
 
@@ -91,12 +89,10 @@ async fn build_re_encrypted_share_output(
     let member = find_share_set_member(provision_bundle.manifest_envelope(), &operator_public_key)?;
 
     let re_encrypted_share = {
-        let plaintext_share = Zeroizing::new(
-            operator_pair
-                .decrypt(encrypted_share)
-                .await
-                .context("failed to decrypt share with operator key")?,
-        );
+        let plaintext_share = operator_pair
+            .decrypt(encrypted_share)
+            .await
+            .context("failed to decrypt share with operator key")?;
 
         ephemeral_public_key
             .encrypt(plaintext_share.as_slice())
@@ -107,8 +103,7 @@ async fn build_re_encrypted_share_output(
         .sign(
             provision_bundle
                 .manifest_envelope()
-                .manifest
-                .qos_hash()
+                .manifest_hash()
                 .to_vec(),
         )
         .await
@@ -128,11 +123,8 @@ fn ensure_quorum_key_matches_manifest(
     provision_bundle: &ProvisionBundle,
 ) -> anyhow::Result<()> {
     let metadata_quorum_key = quorum_key_metadata.quorum_key_public_bytes()?;
-    let manifest_quorum_key = &provision_bundle
-        .manifest_envelope()
-        .manifest
-        .namespace
-        .quorum_key;
+    let manifest = provision_bundle.manifest_envelope().clone().manifest();
+    let manifest_quorum_key = &manifest.namespace().quorum_key;
 
     if metadata_quorum_key.as_slice() != manifest_quorum_key.as_slice() {
         anyhow::bail!(
@@ -146,12 +138,13 @@ fn ensure_quorum_key_matches_manifest(
 }
 
 fn find_share_set_member(
-    manifest_envelope: &ManifestEnvelope,
+    manifest_envelope: &VersionedManifestEnvelope,
     operator_public_key: &[u8],
 ) -> anyhow::Result<QuorumMember> {
     manifest_envelope
-        .manifest
-        .share_set
+        .clone()
+        .manifest()
+        .share_set()
         .members
         .iter()
         .find(|member| member.pub_key == operator_public_key)
@@ -187,10 +180,9 @@ mod tests {
     use crate::pair::LocalPair;
     use crate::provisioning::ProvisionBundle;
     use crate::quorum_key_metadata::{EncryptedShareMetadata, QuorumKeyMetadata};
-    use qos_core::protocol::QosHash;
     use qos_core::protocol::services::boot::{
         Approval, Manifest, ManifestEnvelope, ManifestSet, Namespace, NitroConfig, PatchSet,
-        PivotConfig, QuorumMember, RestartPolicy, ShareSet,
+        PivotConfig, QuorumMember, RestartPolicy, ShareSet, VersionedManifestEnvelope,
     };
     use qos_p256::{P256Pair, P256Public};
     use serde_json::json;
@@ -198,8 +190,8 @@ mod tests {
     fn sample_manifest_envelope(
         quorum_key: Vec<u8>,
         share_set_members: Vec<QuorumMember>,
-    ) -> ManifestEnvelope {
-        ManifestEnvelope {
+    ) -> VersionedManifestEnvelope {
+        let envelope = ManifestEnvelope {
             manifest: Manifest {
                 namespace: Namespace {
                     name: "test-namespace".to_string(),
@@ -236,7 +228,8 @@ mod tests {
             },
             manifest_set_approvals: vec![],
             share_set_approvals: vec![],
-        }
+        };
+        envelope.into()
     }
 
     fn bundle_with_ephemeral_key(
@@ -448,7 +441,7 @@ mod tests {
             P256Public::from_bytes(&output.share_approval.member.pub_key).unwrap();
         approval_public_key
             .verify(
-                &bundle.manifest_envelope().manifest.qos_hash(),
+                &bundle.manifest_envelope().manifest_hash(),
                 &output.share_approval.signature,
             )
             .unwrap();

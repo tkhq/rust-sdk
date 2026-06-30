@@ -119,7 +119,7 @@ fn generate_and_encrypt_shares(
         .map(|(operator_public, share)| {
             let encrypted_share = operator_public
                 .public
-                .encrypt(share)
+                .encrypt(share.as_slice())
                 .map_err(|e| anyhow::anyhow!("failed to encrypt quorum key share: {e:?}"))?;
 
             Ok(EncryptedShareMetadata {
