@@ -10,3 +10,9 @@ This crate contains the code necessary to generate the `generated` portion of th
   * replaces `i32` enum types with proper types (e.g. `pub effect: i32` -> `pub effect: super::super::super::immutable::common::v1::Effect,`)
   * transform enums: remove `#[derive(...)]` prost traits, remove `#[prost(...)]` attributes, remove `#[repr(i32)]`, and add `#[serde(rename = "ENUM_NAME_VARIANT")]` (necesary for JSON serialization and deserialization to work correctly)
   * transform structs: remove `#[prost(...)]` attributes, add `#[serde(default)]` to help with deserialization of empty lists or optional params, add `#[serde(flatten)]` to ignore the `Inner` struct which is a result of the `oneof` structure of activity intent and results. The serialized JSON doesn't have "inner".
+
+## Activity Version Caps
+
+[`activity_version_caps.json`](./activity_version_caps.json) contains explicit activity-version pins for codegen. Each entry in `pins` maps a base `ACTIVITY_TYPE_*` family identity to the exact `ACTIVITY_TYPE_*` literal that generated client methods should emit, overriding the activity version from the proto annotation.
+
+Activities not listed in `pins` emit whatever the proto annotation specifies, usually the latest version. Adding or bumping a pin is a deliberate, reviewed opt-in to a specific activity version, and the pinned target must already exist in [`activities.json`](../proto/activities.json). This mirrors the version-capping convention used by other Turnkey SDKs, such as the TypeScript SDK's `VERSIONED_ACTIVITY_TYPES` map.
