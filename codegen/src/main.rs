@@ -179,7 +179,7 @@ fn main() {
                 }
                 let activities_details = parsed_activities
                     .activities
-                    .get(activity_type.as_str())
+                    .get(activity_type)
                     .unwrap_or_else(|| {
                         panic!("activity type {activity_type} not found in activities.json")
                     });
@@ -370,10 +370,10 @@ fn validate_activity_version_caps(
     Ok(())
 }
 
-fn resolve_activity_type(activity_type: &str, pins: &HashMap<String, String>) -> String {
+fn resolve_activity_type<'a>(activity_type: &'a str, pins: &'a HashMap<String, String>) -> &'a str {
     pins.get(activity_base(activity_type))
-        .cloned()
-        .unwrap_or_else(|| activity_type.to_string())
+        .map(String::as_str)
+        .unwrap_or(activity_type)
 }
 
 fn parse_rpcs(proto: &str) -> Vec<Rpc> {
