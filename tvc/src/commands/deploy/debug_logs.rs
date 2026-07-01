@@ -13,7 +13,6 @@ use turnkey_client::generated::{
 
 const DEFAULT_FOLLOW_POLL_INTERVAL_SECONDS: i64 = 2;
 const FOLLOW_OVERLAP_SECONDS: i64 = 2;
-const RECENT_LOG_LINE_CAPACITY: usize = 1000;
 
 fn follow_poll_interval_seconds_parser() -> clap::builder::RangedI64ValueParser<i64> {
     clap::value_parser!(i64).range(1..=i64::MAX - FOLLOW_OVERLAP_SECONDS)
@@ -25,6 +24,10 @@ fn non_negative_i32_parser() -> clap::builder::RangedI64ValueParser<i32> {
 
 fn non_negative_i64_parser() -> clap::builder::RangedI64ValueParser<i64> {
     clap::value_parser!(i64).range(0..)
+}
+
+fn positive_usize_parser() -> clap::builder::RangedU64ValueParser<usize> {
+    clap::builder::RangedU64ValueParser::<usize>::new().range(1..)
 }
 
 pub(crate) const LONG_ABOUT: &str = r#"
@@ -94,6 +97,16 @@ pub struct Args {
     /// Include the platform timestamp prepended by the Kubernetes log stream.
     #[arg(long, env = "TVC_DEBUG_LOGS_INCLUDE_PLATFORM_TIMESTAMP")]
     pub include_platform_timestamp: bool,
+
+    /// Number of recently printed timestamped lines retained for follow-mode dedupe. This should
+    /// only be increased if high-volume logs still show duplicates across poll overlap windows.
+    #[arg(
+        long,
+        env = "TVC_DEBUG_LOGS_RECENT_LINE_CAPACITY",
+        default_value_t = 1000,
+        value_parser = positive_usize_parser()
+    )]
+    pub recent_line_capacity: usize,
 }
 
 /// Run the `deploy debug-logs` command.
@@ -108,6 +121,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         tail_lines: args.tail_lines,
         since_seconds: args.since_seconds,
         include_platform_timestamp: args.include_platform_timestamp,
+        recent_line_capacity: args.recent_line_capacity,
     };
 
     query_debug_logs(&auth.client, request).await
@@ -122,6 +136,7 @@ struct DebugLogQueryRequest {
     tail_lines: i32,
     since_seconds: i64,
     include_platform_timestamp: bool,
+    recent_line_capacity: usize,
 }
 
 impl From<DebugLogQueryRequest> for GetTvcDeploymentDebugLogsRequest {
@@ -149,8 +164,10 @@ async fn query_debug_logs(
     client: &turnkey_client::TurnkeyClient<TurnkeyP256ApiKey>,
     request: DebugLogQueryRequest,
 ) -> anyhow::Result<()> {
-    let mut log_printer =
-        DebugLogPrinter::new(request.include_platform_timestamp, RECENT_LOG_LINE_CAPACITY);
+    let mut log_printer = DebugLogPrinter::new(
+        request.include_platform_timestamp,
+        request.recent_line_capacity,
+    );
 
     let (current_request, followup_request) = if request.follow {
         (request.clone(), Some(request.into_followup_request()))
@@ -195,15 +212,13 @@ struct LogLineKey {
 }
 
 impl LogLineKey {
-    fn new(replica: &str, line: &LogLine) -> Option<Self> {
-        let ts = line.ts.as_ref()?;
-
-        Some(Self {
+    fn new(replica: &str, ts: Timestamp, content: String) -> Self {
+        Self {
             replica: replica.into(),
-            content: line.content.clone(),
-            seconds: ts.seconds.clone(),
-            nanos: ts.nanos.clone(),
-        })
+            content,
+            seconds: ts.seconds,
+            nanos: ts.nanos,
+        }
     }
 }
 
@@ -211,34 +226,33 @@ impl LogLineKey {
 struct RecentLogLines {
     seen: HashSet<LogLineKey>,
     order: VecDeque<LogLineKey>,
-    capacity: usize,
 }
 
 impl RecentLogLines {
     fn new(capacity: usize) -> Self {
+        assert!(capacity > 0, "recent log line capacity must be positive");
+
         Self {
-            seen: HashSet::new(),
-            order: VecDeque::new(),
-            capacity,
+            seen: HashSet::with_capacity(capacity),
+            order: VecDeque::with_capacity(capacity),
         }
     }
 
     fn insert(&mut self, key: LogLineKey) -> bool {
-        if self.capacity == 0 {
-            return true;
-        }
-
-        if !self.seen.insert(key.clone()) {
+        if self.seen.contains(&key) {
             return false;
         }
 
-        self.order.push_back(key);
-
-        while self.order.len() > self.capacity {
-            if let Some(oldest) = self.order.pop_front() {
-                self.seen.remove(&oldest);
-            }
+        if self.order.len() == self.order.capacity() {
+            let oldest = self
+                .order
+                .pop_front()
+                .expect("full recent log line cache should contain an oldest key");
+            self.seen.remove(&oldest);
         }
+
+        self.seen.insert(key.clone());
+        self.order.push_back(key);
 
         true
     }
@@ -247,15 +261,24 @@ impl RecentLogLines {
     ///
     /// NOTE: Mutating filter
     fn record_if_new(&mut self, replica: &str, line: &LogLine) -> bool {
-        match LogLineKey::new(replica, line) {
-            Some(key) => self.insert(key),
-            None => true,
-        }
+        let LogLine { content, ts } = line;
+        let Some(ts) = ts else {
+            return true;
+        };
+
+        let key = LogLineKey::new(replica, ts.clone(), content.clone());
+
+        self.insert(key)
     }
 
     #[cfg(test)]
     fn len(&self) -> usize {
         self.seen.len()
+    }
+
+    #[cfg(test)]
+    fn capacity(&self) -> usize {
+        self.order.capacity()
     }
 }
 
@@ -342,6 +365,10 @@ mod tests {
         }
     }
 
+    fn log_line_key(replica: &str, content: &str, seconds: &str, nanos: &str) -> LogLineKey {
+        LogLineKey::new(replica, timestamp(seconds, nanos), content.to_string())
+    }
+
     #[test]
     fn request_maps_to_unary_api_request() {
         let request = DebugLogQueryRequest {
@@ -352,6 +379,7 @@ mod tests {
             tail_lines: 10,
             since_seconds: 30,
             include_platform_timestamp: true,
+            recent_line_capacity: 1000,
         };
 
         let api_request: GetTvcDeploymentDebugLogsRequest = request.into();
@@ -372,6 +400,7 @@ mod tests {
             tail_lines: 100,
             since_seconds: 0,
             include_platform_timestamp: false,
+            recent_line_capacity: 1000,
         };
 
         let followup = request.clone().into_followup_request();
@@ -384,19 +413,20 @@ mod tests {
 
     #[test]
     fn log_line_key_matches_duplicate_lines() {
-        let line = log_line("hello", Some(timestamp("1710000000", "123456789")));
-
         assert_eq!(
-            LogLineKey::new("replica 1/3", &line),
-            LogLineKey::new("replica 1/3", &line)
+            log_line_key("replica 1/3", "hello", "1710000000", "123456789"),
+            log_line_key("replica 1/3", "hello", "1710000000", "123456789")
         );
     }
 
     #[test]
-    fn log_line_key_requires_timestamp() {
+    fn record_if_new_treats_missing_timestamp_as_new() {
         let line = log_line("hello", None);
+        let mut recent = RecentLogLines::new(1000);
 
-        assert_eq!(LogLineKey::new("replica 1/3", &line), None);
+        assert!(recent.record_if_new("replica 1/3", &line));
+        assert!(recent.record_if_new("replica 1/3", &line));
+        assert_eq!(recent.len(), 0);
     }
 
     #[test]
@@ -440,9 +470,9 @@ mod tests {
     }
 
     #[test]
-    fn recent_log_lines_treats_untimestamped_lines_as_new() {
+    fn recent_log_lines_treats_non_timestamped_lines_as_new() {
         let line = log_line("hello", None);
-        let mut recent = RecentLogLines::new(RECENT_LOG_LINE_CAPACITY);
+        let mut recent = RecentLogLines::new(1000);
 
         assert!(recent.record_if_new("replica 1/2", &line));
         assert!(recent.record_if_new("replica 1/2", &line));
@@ -452,11 +482,17 @@ mod tests {
     #[test]
     fn recent_log_lines_dedupes_timestamped_lines() {
         let line = log_line("hello", Some(timestamp("1710000000", "1")));
-        let mut recent = RecentLogLines::new(RECENT_LOG_LINE_CAPACITY);
+        let mut recent = RecentLogLines::new(1000);
 
         assert!(recent.record_if_new("replica 1/2", &line));
         assert!(!recent.record_if_new("replica 1/2", &line));
         assert_eq!(recent.len(), 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "recent log line capacity must be positive")]
+    fn recent_log_lines_requires_positive_capacity() {
+        RecentLogLines::new(0);
     }
 
     #[test]
@@ -474,7 +510,7 @@ mod tests {
                 entry("replica 2/2", None),
             ],
         };
-        let mut printer = DebugLogPrinter::new(false, RECENT_LOG_LINE_CAPACITY);
+        let mut printer = DebugLogPrinter::new(false, 1000);
 
         printer.print_response(&response);
 
@@ -483,21 +519,9 @@ mod tests {
 
     #[test]
     fn recent_log_lines_evicts_oldest_entries() {
-        let first = LogLineKey::new(
-            "replica 1/2",
-            &log_line("first", Some(timestamp("1710000000", "1"))),
-        )
-        .unwrap();
-        let second = LogLineKey::new(
-            "replica 1/2",
-            &log_line("second", Some(timestamp("1710000000", "2"))),
-        )
-        .unwrap();
-        let third = LogLineKey::new(
-            "replica 1/2",
-            &log_line("third", Some(timestamp("1710000000", "3"))),
-        )
-        .unwrap();
+        let first = log_line_key("replica 1/2", "first", "1710000000", "1");
+        let second = log_line_key("replica 1/2", "second", "1710000000", "2");
+        let third = log_line_key("replica 1/2", "third", "1710000000", "3");
         let mut recent = RecentLogLines::new(2);
 
         assert!(recent.insert(first.clone()));
@@ -508,5 +532,21 @@ mod tests {
         assert_eq!(recent.len(), 2);
         assert!(recent.insert(first));
         assert_eq!(recent.len(), 2);
+    }
+
+    #[test]
+    fn recent_log_lines_does_not_grow_past_initial_capacity() {
+        let first = log_line_key("replica 1/2", "first", "1710000000", "1");
+        let second = log_line_key("replica 1/2", "second", "1710000000", "2");
+        let third = log_line_key("replica 1/2", "third", "1710000000", "3");
+        let mut recent = RecentLogLines::new(2);
+        let initial_capacity = recent.capacity();
+
+        assert!(recent.insert(first));
+        assert!(recent.insert(second));
+        assert!(recent.insert(third));
+
+        assert_eq!(recent.len(), 2);
+        assert_eq!(recent.capacity(), initial_capacity);
     }
 }

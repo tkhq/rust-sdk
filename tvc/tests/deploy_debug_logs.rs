@@ -38,8 +38,14 @@ fn debug_logs_help_lists_expected_flags() {
             "--follow-poll-interval-seconds <FOLLOW_POLL_INTERVAL_SECONDS>",
         ))
         .stdout(predicate::str::contains("--include-platform-timestamp"))
+        .stdout(predicate::str::contains(
+            "--recent-line-capacity <RECENT_LINE_CAPACITY>",
+        ))
         .stdout(predicate::str::contains("--since-seconds <SINCE_SECONDS>"))
         .stdout(predicate::str::contains("--tail-lines <TAIL_LINES>"))
+        .stdout(predicate::str::contains(
+            "This should only be increased if high-volume logs still show duplicates",
+        ))
         .stdout(predicate::str::contains(
             "Limit raw pod log history requested per replica",
         ))
@@ -77,6 +83,8 @@ fn debug_logs_accepts_flags_before_authentication() {
         .arg("--since-seconds")
         .arg("30")
         .arg("--include-platform-timestamp")
+        .arg("--recent-line-capacity")
+        .arg("2000")
         .assert()
         .failure()
         .stderr(predicate::str::contains("No active organization"));
@@ -168,4 +176,22 @@ fn debug_logs_rejects_negative_since_seconds_before_authentication() {
         .stderr(predicate::str::contains("invalid value '-1'"))
         .stderr(predicate::str::contains("--since-seconds <SINCE_SECONDS>"))
         .stderr(predicate::str::contains("is not in 0.."));
+}
+
+#[test]
+fn debug_logs_rejects_zero_recent_line_capacity_before_authentication() {
+    let temp = TempDir::new().unwrap();
+
+    debug_logs_cmd(&temp)
+        .arg("--deploy-id")
+        .arg("deploy-123")
+        .arg("--recent-line-capacity")
+        .arg("0")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("invalid value '0'"))
+        .stderr(predicate::str::contains(
+            "--recent-line-capacity <RECENT_LINE_CAPACITY>",
+        ))
+        .stderr(predicate::str::contains("is not in 1.."));
 }
