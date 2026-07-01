@@ -1,13 +1,11 @@
 //! Deploy debug-logs command.
 
-use anyhow::{Context, bail};
+use anyhow::Context;
 use chrono::{DateTime, SecondsFormat, Utc};
 use clap::Args as ClapArgs;
 use std::collections::{HashSet, VecDeque};
 use std::time::Duration;
 use turnkey_client::TurnkeyP256ApiKey;
-#[cfg(test)]
-use turnkey_client::generated::TvcDeploymentDebugLogEntry;
 use turnkey_client::generated::external::data::v1::{LogLine, Timestamp};
 use turnkey_client::generated::{
     GetTvcDeploymentDebugLogsRequest, GetTvcDeploymentDebugLogsResponse,
@@ -16,6 +14,18 @@ use turnkey_client::generated::{
 const DEFAULT_FOLLOW_POLL_INTERVAL_SECONDS: i64 = 2;
 const FOLLOW_OVERLAP_SECONDS: i64 = 2;
 const RECENT_LOG_LINE_CAPACITY: usize = 1000;
+
+fn follow_poll_interval_seconds_parser() -> clap::builder::RangedI64ValueParser<i64> {
+    clap::value_parser!(i64).range(1..=i64::MAX - FOLLOW_OVERLAP_SECONDS)
+}
+
+fn non_negative_i32_parser() -> clap::builder::RangedI64ValueParser<i32> {
+    clap::value_parser!(i32).range(0..)
+}
+
+fn non_negative_i64_parser() -> clap::builder::RangedI64ValueParser<i64> {
+    clap::value_parser!(i64).range(0..)
+}
 
 pub(crate) const LONG_ABOUT: &str = r#"
 Fetch debug logs for a deployment.
@@ -55,17 +65,31 @@ pub struct Args {
     #[arg(
         long,
         env = "TVC_DEBUG_LOGS_FOLLOW_POLL_INTERVAL_SECONDS",
+        default_value_t = DEFAULT_FOLLOW_POLL_INTERVAL_SECONDS,
+        value_parser = follow_poll_interval_seconds_parser(),
         allow_hyphen_values = true
     )]
-    pub follow_poll_interval_seconds: Option<i64>,
+    pub follow_poll_interval_seconds: i64,
 
     /// Limit raw pod log history requested per replica. Filtered output may contain (many) fewer lines.
-    #[arg(long, env = "TVC_DEBUG_LOGS_TAIL_LINES", allow_hyphen_values = true)]
-    pub tail_lines: Option<i32>,
+    #[arg(
+        long,
+        env = "TVC_DEBUG_LOGS_TAIL_LINES",
+        default_value_t = 0,
+        value_parser = non_negative_i32_parser(),
+        allow_hyphen_values = true
+    )]
+    pub tail_lines: i32,
 
     /// Return logs newer than this many seconds ago.
-    #[arg(long, env = "TVC_DEBUG_LOGS_SINCE_SECONDS", allow_hyphen_values = true)]
-    pub since_seconds: Option<i64>,
+    #[arg(
+        long,
+        env = "TVC_DEBUG_LOGS_SINCE_SECONDS",
+        default_value_t = 0,
+        value_parser = non_negative_i64_parser(),
+        allow_hyphen_values = true
+    )]
+    pub since_seconds: i64,
 
     /// Include the platform timestamp prepended by the Kubernetes log stream.
     #[arg(long, env = "TVC_DEBUG_LOGS_INCLUDE_PLATFORM_TIMESTAMP")]
@@ -74,23 +98,19 @@ pub struct Args {
 
 /// Run the `deploy debug-logs` command.
 pub async fn run(args: Args) -> anyhow::Result<()> {
-    let tail_lines = tail_lines_or_default(args.tail_lines)?;
-    let since_seconds = since_seconds_or_default(args.since_seconds)?;
-    let follow_poll_interval_seconds =
-        follow_poll_interval_seconds_or_default(args.follow, args.follow_poll_interval_seconds)?;
     let auth = crate::client::build_client().await?;
 
     let request = DebugLogQueryRequest {
         organization_id: auth.org_id,
         deployment_id: args.deploy_id,
         follow: args.follow,
-        follow_poll_interval_seconds,
-        tail_lines,
-        since_seconds,
+        follow_poll_interval_seconds: args.follow_poll_interval_seconds,
+        tail_lines: args.tail_lines,
+        since_seconds: args.since_seconds,
         include_platform_timestamp: args.include_platform_timestamp,
     };
 
-    query_debug_logs(&auth.client, &request).await
+    query_debug_logs(&auth.client, request).await
 }
 
 #[derive(Clone, Debug)]
@@ -104,112 +124,66 @@ struct DebugLogQueryRequest {
     include_platform_timestamp: bool,
 }
 
-impl DebugLogQueryRequest {
-    fn to_api_request(&self) -> GetTvcDeploymentDebugLogsRequest {
-        GetTvcDeploymentDebugLogsRequest {
-            organization_id: self.organization_id.clone(),
-            deployment_id: self.deployment_id.clone(),
-            tail_lines: self.tail_lines,
-            since_seconds: self.since_seconds,
+impl From<DebugLogQueryRequest> for GetTvcDeploymentDebugLogsRequest {
+    fn from(req: DebugLogQueryRequest) -> Self {
+        Self {
+            organization_id: req.organization_id,
+            deployment_id: req.deployment_id,
+            tail_lines: req.tail_lines,
+            since_seconds: req.since_seconds,
         }
     }
+}
 
-    fn followup_request(&self) -> Self {
+impl DebugLogQueryRequest {
+    fn into_followup_request(self) -> Self {
         Self {
             tail_lines: 0,
             since_seconds: self.follow_poll_interval_seconds + FOLLOW_OVERLAP_SECONDS,
-            ..self.clone()
+            ..self
         }
     }
 }
 
 async fn query_debug_logs(
     client: &turnkey_client::TurnkeyClient<TurnkeyP256ApiKey>,
-    request: &DebugLogQueryRequest,
+    request: DebugLogQueryRequest,
 ) -> anyhow::Result<()> {
     let mut log_printer =
         DebugLogPrinter::new(request.include_platform_timestamp, RECENT_LOG_LINE_CAPACITY);
-    let mut current_request = request.clone();
 
-    let response = fetch_debug_logs(client, &current_request).await?;
-    if request.follow {
-        eprintln!("Connected; polling for debug logs...");
-    }
+    let (current_request, followup_request) = if request.follow {
+        (request.clone(), Some(request.into_followup_request()))
+    } else {
+        (request, None)
+    };
+
+    let response = fetch_debug_logs(client, current_request).await?;
     log_printer.print_response(&response);
 
-    if !request.follow {
+    let Some(followup_request) = followup_request else {
         return Ok(());
-    }
+    };
 
-    current_request = request.followup_request();
+    eprintln!("Connected; polling for debug logs...");
 
-    let follow_poll_interval = Duration::from_secs(request.follow_poll_interval_seconds as u64);
+    let follow_poll_interval =
+        Duration::from_secs(followup_request.follow_poll_interval_seconds as u64);
     loop {
         tokio::time::sleep(follow_poll_interval).await;
-        let response = fetch_debug_logs(client, &current_request).await?;
+        let response = fetch_debug_logs(client, followup_request.clone()).await?;
         log_printer.print_response(&response);
     }
 }
 
 async fn fetch_debug_logs(
     client: &turnkey_client::TurnkeyClient<TurnkeyP256ApiKey>,
-    request: &DebugLogQueryRequest,
+    request: DebugLogQueryRequest,
 ) -> anyhow::Result<GetTvcDeploymentDebugLogsResponse> {
     client
-        .get_tvc_deployment_debug_logs(request.to_api_request())
+        .get_tvc_deployment_debug_logs(request.into())
         .await
         .context("failed to fetch debug logs")
-}
-
-fn tail_lines_or_default(tail_lines: Option<i32>) -> anyhow::Result<i32> {
-    let Some(tail_lines) = tail_lines else {
-        return Ok(0);
-    };
-
-    if tail_lines < 0 {
-        bail!("--tail-lines must be greater than or equal to 0");
-    }
-
-    Ok(tail_lines)
-}
-
-fn since_seconds_or_default(since_seconds: Option<i64>) -> anyhow::Result<i64> {
-    let Some(since_seconds) = since_seconds else {
-        return Ok(0);
-    };
-
-    if since_seconds < 0 {
-        bail!("--since-seconds must be greater than or equal to 0");
-    }
-
-    Ok(since_seconds)
-}
-
-fn follow_poll_interval_seconds_or_default(
-    follow: bool,
-    follow_poll_interval_seconds: Option<i64>,
-) -> anyhow::Result<i64> {
-    if !follow {
-        if follow_poll_interval_seconds.is_some() {
-            eprintln!(
-                "--follow is disabled, disregarding value for --follow-poll-interval-seconds"
-            );
-        }
-        return Ok(DEFAULT_FOLLOW_POLL_INTERVAL_SECONDS);
-    }
-
-    let follow_poll_interval_seconds =
-        follow_poll_interval_seconds.unwrap_or(DEFAULT_FOLLOW_POLL_INTERVAL_SECONDS);
-
-    if follow_poll_interval_seconds <= 0 {
-        bail!("--follow-poll-interval-seconds must be greater than 0");
-    }
-
-    if follow_poll_interval_seconds > i64::MAX - FOLLOW_OVERLAP_SECONDS {
-        bail!("--follow-poll-interval-seconds is too large");
-    }
-
-    Ok(follow_poll_interval_seconds)
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -269,7 +243,7 @@ impl RecentLogLines {
         true
     }
 
-    /// Records timestamped lines and returns whether they are new; untimestamped lines always pass.
+    /// Records timestamped lines and returns whether they are new; lines missing timestamps always pass.
     ///
     /// NOTE: Mutating filter
     fn record_if_new(&mut self, replica: &str, line: &LogLine) -> bool {
@@ -345,6 +319,7 @@ fn format_timestamp(timestamp: &Timestamp) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use turnkey_client::generated::TvcDeploymentDebugLogEntry;
 
     fn log_line(content: &str, ts: Option<Timestamp>) -> LogLine {
         LogLine {
@@ -368,89 +343,6 @@ mod tests {
     }
 
     #[test]
-    fn tail_lines_defaults_to_zero_when_omitted() {
-        assert_eq!(tail_lines_or_default(None).unwrap(), 0);
-    }
-
-    #[test]
-    fn tail_lines_accepts_zero_and_positive_values() {
-        assert_eq!(tail_lines_or_default(Some(0)).unwrap(), 0);
-        assert_eq!(tail_lines_or_default(Some(25)).unwrap(), 25);
-    }
-
-    #[test]
-    fn tail_lines_rejects_negative_values() {
-        let err = tail_lines_or_default(Some(-1)).unwrap_err();
-        assert!(err.to_string().contains("--tail-lines"));
-    }
-
-    #[test]
-    fn since_seconds_defaults_to_zero_when_omitted() {
-        assert_eq!(since_seconds_or_default(None).unwrap(), 0);
-    }
-
-    #[test]
-    fn since_seconds_accepts_zero_and_positive_values() {
-        assert_eq!(since_seconds_or_default(Some(0)).unwrap(), 0);
-        assert_eq!(since_seconds_or_default(Some(25)).unwrap(), 25);
-    }
-
-    #[test]
-    fn since_seconds_rejects_negative_values() {
-        let err = since_seconds_or_default(Some(-1)).unwrap_err();
-        assert!(err.to_string().contains("--since-seconds"));
-    }
-
-    #[test]
-    fn follow_poll_interval_seconds_defaults_to_two_when_omitted() {
-        assert_eq!(
-            follow_poll_interval_seconds_or_default(true, None).unwrap(),
-            DEFAULT_FOLLOW_POLL_INTERVAL_SECONDS
-        );
-    }
-
-    #[test]
-    fn follow_poll_interval_seconds_accepts_positive_values() {
-        assert_eq!(
-            follow_poll_interval_seconds_or_default(true, Some(1)).unwrap(),
-            1
-        );
-        assert_eq!(
-            follow_poll_interval_seconds_or_default(true, Some(25)).unwrap(),
-            25
-        );
-    }
-
-    #[test]
-    fn follow_poll_interval_seconds_rejects_zero_and_negative_values() {
-        let zero_err = follow_poll_interval_seconds_or_default(true, Some(0)).unwrap_err();
-        assert!(
-            zero_err
-                .to_string()
-                .contains("--follow-poll-interval-seconds")
-        );
-
-        let negative_err = follow_poll_interval_seconds_or_default(true, Some(-1)).unwrap_err();
-        assert!(
-            negative_err
-                .to_string()
-                .contains("--follow-poll-interval-seconds")
-        );
-    }
-
-    #[test]
-    fn follow_poll_interval_seconds_ignores_values_without_follow() {
-        assert_eq!(
-            follow_poll_interval_seconds_or_default(false, Some(0)).unwrap(),
-            DEFAULT_FOLLOW_POLL_INTERVAL_SECONDS
-        );
-        assert_eq!(
-            follow_poll_interval_seconds_or_default(false, Some(-1)).unwrap(),
-            DEFAULT_FOLLOW_POLL_INTERVAL_SECONDS
-        );
-    }
-
-    #[test]
     fn request_maps_to_unary_api_request() {
         let request = DebugLogQueryRequest {
             organization_id: "org".to_string(),
@@ -462,7 +354,7 @@ mod tests {
             include_platform_timestamp: true,
         };
 
-        let api_request = request.to_api_request();
+        let api_request: GetTvcDeploymentDebugLogsRequest = request.into();
 
         assert_eq!(api_request.organization_id, "org");
         assert_eq!(api_request.deployment_id, "deployment");
@@ -471,7 +363,7 @@ mod tests {
     }
 
     #[test]
-    fn followup_request_uses_overlapping_since_window() {
+    fn into_followup_request_uses_overlapping_since_window() {
         let request = DebugLogQueryRequest {
             organization_id: "org".to_string(),
             deployment_id: "deployment".to_string(),
@@ -482,7 +374,7 @@ mod tests {
             include_platform_timestamp: false,
         };
 
-        let followup = request.followup_request();
+        let followup = request.clone().into_followup_request();
 
         assert_eq!(followup.tail_lines, 0);
         assert_eq!(followup.since_seconds, 9);

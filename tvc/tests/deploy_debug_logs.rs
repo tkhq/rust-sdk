@@ -93,9 +93,9 @@ fn debug_logs_rejects_negative_tail_lines_before_authentication() {
         .arg("-1")
         .assert()
         .failure()
-        .stderr(predicate::str::contains(
-            "--tail-lines must be greater than or equal to 0",
-        ));
+        .stderr(predicate::str::contains("invalid value '-1'"))
+        .stderr(predicate::str::contains("--tail-lines <TAIL_LINES>"))
+        .stderr(predicate::str::contains("is not in 0.."));
 }
 
 #[test]
@@ -110,9 +110,11 @@ fn debug_logs_rejects_zero_follow_poll_interval_before_authentication() {
         .arg("0")
         .assert()
         .failure()
+        .stderr(predicate::str::contains("invalid value '0'"))
         .stderr(predicate::str::contains(
-            "--follow-poll-interval-seconds must be greater than 0",
-        ));
+            "--follow-poll-interval-seconds <FOLLOW_POLL_INTERVAL_SECONDS>",
+        ))
+        .stderr(predicate::str::contains("is not in 1.."));
 }
 
 #[test]
@@ -127,13 +129,15 @@ fn debug_logs_rejects_negative_follow_poll_interval_before_authentication() {
         .arg("-1")
         .assert()
         .failure()
+        .stderr(predicate::str::contains("invalid value '-1'"))
         .stderr(predicate::str::contains(
-            "--follow-poll-interval-seconds must be greater than 0",
-        ));
+            "--follow-poll-interval-seconds <FOLLOW_POLL_INTERVAL_SECONDS>",
+        ))
+        .stderr(predicate::str::contains("is not in 1.."));
 }
 
 #[test]
-fn debug_logs_ignores_follow_poll_interval_without_follow() {
+fn debug_logs_rejects_zero_follow_poll_interval_without_follow_before_authentication() {
     let temp = TempDir::new().unwrap();
 
     debug_logs_cmd(&temp)
@@ -143,7 +147,11 @@ fn debug_logs_ignores_follow_poll_interval_without_follow() {
         .arg("0")
         .assert()
         .failure()
-        .stderr(predicate::str::contains("No active organization"));
+        .stderr(predicate::str::contains("invalid value '0'"))
+        .stderr(predicate::str::contains(
+            "--follow-poll-interval-seconds <FOLLOW_POLL_INTERVAL_SECONDS>",
+        ))
+        .stderr(predicate::str::contains("is not in 1.."));
 }
 
 #[test]
@@ -157,7 +165,7 @@ fn debug_logs_rejects_negative_since_seconds_before_authentication() {
         .arg("-1")
         .assert()
         .failure()
-        .stderr(predicate::str::contains(
-            "--since-seconds must be greater than or equal to 0",
-        ));
+        .stderr(predicate::str::contains("invalid value '-1'"))
+        .stderr(predicate::str::contains("--since-seconds <SINCE_SECONDS>"))
+        .stderr(predicate::str::contains("is not in 0.."));
 }
