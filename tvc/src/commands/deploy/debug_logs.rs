@@ -11,11 +11,11 @@ use turnkey_client::generated::{
     GetTvcDeploymentDebugLogsRequest, GetTvcDeploymentDebugLogsResponse,
 };
 
-const DEFAULT_FOLLOW_POLL_INTERVAL_SECONDS: i64 = 2;
-const FOLLOW_OVERLAP_SECONDS: i64 = 2;
+const DEFAULT_POLL_INTERVAL_SECONDS: i64 = 2;
+const POLL_OVERLAP_SECONDS: i64 = 2;
 
-fn follow_poll_interval_seconds_parser() -> clap::builder::RangedI64ValueParser<i64> {
-    clap::value_parser!(i64).range(1..=i64::MAX - FOLLOW_OVERLAP_SECONDS)
+fn poll_interval_seconds_parser() -> clap::builder::RangedI64ValueParser<i64> {
+    clap::value_parser!(i64).range(1..=i64::MAX - POLL_OVERLAP_SECONDS)
 }
 
 fn non_negative_i32_parser() -> clap::builder::RangedI64ValueParser<i32> {
@@ -44,9 +44,9 @@ The specific deployment must also be created in debug mode with
 debug logs retroactively. Create a new debug-mode deployment, then pass that
 deployment ID to this command.
 
-Use `--follow` to keep polling for new log lines after the initial log window.
-Follow mode polls every 2 seconds by default and requests a 2-second overlap
-on each follow-up poll to avoid missing late-arriving log lines.
+Use `--poll` to keep polling for new log lines after the initial log window.
+Poll mode polls every 2 seconds by default and requests a 2-second overlap
+on each subsequent poll to avoid missing late-arriving log lines.
 By default, output omits the platform timestamp that Kubernetes prepends to each
 log line; pass `--include-platform-timestamp` to show it.
 See `tvc app create --help`, `tvc deploy create --help`, and `tvc --help`
@@ -61,18 +61,18 @@ pub struct Args {
     pub deploy_id: String,
 
     /// Keep polling for new lines.
-    #[arg(long, env = "TVC_DEBUG_LOGS_FOLLOW")]
-    pub follow: bool,
+    #[arg(long, env = "TVC_DEBUG_LOGS_POLL")]
+    pub poll: bool,
 
-    /// Seconds to wait between follow-mode polls.
+    /// Seconds to wait between polls.
     #[arg(
         long,
-        env = "TVC_DEBUG_LOGS_FOLLOW_POLL_INTERVAL_SECONDS",
-        default_value_t = DEFAULT_FOLLOW_POLL_INTERVAL_SECONDS,
-        value_parser = follow_poll_interval_seconds_parser(),
+        env = "TVC_DEBUG_LOGS_POLL_INTERVAL_SECONDS",
+        default_value_t = DEFAULT_POLL_INTERVAL_SECONDS,
+        value_parser = poll_interval_seconds_parser(),
         allow_hyphen_values = true
     )]
-    pub follow_poll_interval_seconds: i64,
+    pub poll_interval_seconds: i64,
 
     /// Limit raw pod log history requested per replica. Filtered output may contain (many) fewer lines.
     #[arg(
@@ -98,7 +98,7 @@ pub struct Args {
     #[arg(long, env = "TVC_DEBUG_LOGS_INCLUDE_PLATFORM_TIMESTAMP")]
     pub include_platform_timestamp: bool,
 
-    /// Number of recently printed timestamped lines retained for follow-mode dedupe. This should
+    /// Number of recently printed timestamped lines retained for poll-mode dedupe. This should
     /// only be increased if high-volume logs still show duplicates across poll overlap windows.
     #[arg(
         long,
@@ -116,8 +116,8 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     let request = DebugLogQueryRequest {
         organization_id: auth.org_id,
         deployment_id: args.deploy_id,
-        follow: args.follow,
-        follow_poll_interval_seconds: args.follow_poll_interval_seconds,
+        poll: args.poll,
+        poll_interval_seconds: args.poll_interval_seconds,
         tail_lines: args.tail_lines,
         since_seconds: args.since_seconds,
         include_platform_timestamp: args.include_platform_timestamp,
@@ -131,8 +131,8 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
 struct DebugLogQueryRequest {
     organization_id: String,
     deployment_id: String,
-    follow: bool,
-    follow_poll_interval_seconds: i64,
+    poll: bool,
+    poll_interval_seconds: i64,
     tail_lines: i32,
     since_seconds: i64,
     include_platform_timestamp: bool,
@@ -151,10 +151,10 @@ impl From<DebugLogQueryRequest> for GetTvcDeploymentDebugLogsRequest {
 }
 
 impl DebugLogQueryRequest {
-    fn into_followup_request(self) -> Self {
+    fn into_poll_request(self) -> Self {
         Self {
             tail_lines: 0,
-            since_seconds: self.follow_poll_interval_seconds + FOLLOW_OVERLAP_SECONDS,
+            since_seconds: self.poll_interval_seconds + POLL_OVERLAP_SECONDS,
             ..self
         }
     }
@@ -169,8 +169,8 @@ async fn query_debug_logs(
         request.recent_line_capacity,
     );
 
-    let (current_request, followup_request) = if request.follow {
-        (request.clone(), Some(request.into_followup_request()))
+    let (current_request, poll_request) = if request.poll {
+        (request.clone(), Some(request.into_poll_request()))
     } else {
         (request, None)
     };
@@ -178,17 +178,16 @@ async fn query_debug_logs(
     let response = fetch_debug_logs(client, current_request).await?;
     log_printer.print_response(&response);
 
-    let Some(followup_request) = followup_request else {
+    let Some(poll_request) = poll_request else {
         return Ok(());
     };
 
     eprintln!("Connected; polling for debug logs...");
 
-    let follow_poll_interval =
-        Duration::from_secs(followup_request.follow_poll_interval_seconds as u64);
+    let poll_interval = Duration::from_secs(poll_request.poll_interval_seconds as u64);
     loop {
-        tokio::time::sleep(follow_poll_interval).await;
-        let response = fetch_debug_logs(client, followup_request.clone()).await?;
+        tokio::time::sleep(poll_interval).await;
+        let response = fetch_debug_logs(client, poll_request.clone()).await?;
         log_printer.print_response(&response);
     }
 }
@@ -374,8 +373,8 @@ mod tests {
         let request = DebugLogQueryRequest {
             organization_id: "org".to_string(),
             deployment_id: "deployment".to_string(),
-            follow: true,
-            follow_poll_interval_seconds: DEFAULT_FOLLOW_POLL_INTERVAL_SECONDS,
+            poll: true,
+            poll_interval_seconds: DEFAULT_POLL_INTERVAL_SECONDS,
             tail_lines: 10,
             since_seconds: 30,
             include_platform_timestamp: true,
@@ -391,24 +390,24 @@ mod tests {
     }
 
     #[test]
-    fn into_followup_request_uses_overlapping_since_window() {
+    fn into_poll_request_uses_overlapping_since_window() {
         let request = DebugLogQueryRequest {
             organization_id: "org".to_string(),
             deployment_id: "deployment".to_string(),
-            follow: true,
-            follow_poll_interval_seconds: 7,
+            poll: true,
+            poll_interval_seconds: 7,
             tail_lines: 100,
             since_seconds: 0,
             include_platform_timestamp: false,
             recent_line_capacity: 1000,
         };
 
-        let followup = request.clone().into_followup_request();
+        let poll_request = request.clone().into_poll_request();
 
-        assert_eq!(followup.tail_lines, 0);
-        assert_eq!(followup.since_seconds, 9);
-        assert_eq!(followup.organization_id, request.organization_id);
-        assert_eq!(followup.deployment_id, request.deployment_id);
+        assert_eq!(poll_request.tail_lines, 0);
+        assert_eq!(poll_request.since_seconds, 9);
+        assert_eq!(poll_request.organization_id, request.organization_id);
+        assert_eq!(poll_request.deployment_id, request.deployment_id);
     }
 
     #[test]

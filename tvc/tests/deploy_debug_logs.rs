@@ -33,9 +33,9 @@ fn debug_logs_help_lists_expected_flags() {
         .assert()
         .success()
         .stdout(predicate::str::contains("--deploy-id <DEPLOY_ID>"))
-        .stdout(predicate::str::contains("--follow"))
+        .stdout(predicate::str::contains("--poll"))
         .stdout(predicate::str::contains(
-            "--follow-poll-interval-seconds <FOLLOW_POLL_INTERVAL_SECONDS>",
+            "--poll-interval-seconds <POLL_INTERVAL_SECONDS>",
         ))
         .stdout(predicate::str::contains("--include-platform-timestamp"))
         .stdout(predicate::str::contains(
@@ -75,8 +75,8 @@ fn debug_logs_accepts_flags_before_authentication() {
     debug_logs_cmd(&temp)
         .arg("--deploy-id")
         .arg("deploy-123")
-        .arg("--follow")
-        .arg("--follow-poll-interval-seconds")
+        .arg("--poll")
+        .arg("--poll-interval-seconds")
         .arg("3")
         .arg("--tail-lines")
         .arg("10")
@@ -107,57 +107,57 @@ fn debug_logs_rejects_negative_tail_lines_before_authentication() {
 }
 
 #[test]
-fn debug_logs_rejects_zero_follow_poll_interval_before_authentication() {
+fn debug_logs_rejects_zero_poll_interval_before_authentication() {
     let temp = TempDir::new().unwrap();
 
     debug_logs_cmd(&temp)
         .arg("--deploy-id")
         .arg("deploy-123")
-        .arg("--follow")
-        .arg("--follow-poll-interval-seconds")
+        .arg("--poll")
+        .arg("--poll-interval-seconds")
         .arg("0")
         .assert()
         .failure()
         .stderr(predicate::str::contains("invalid value '0'"))
         .stderr(predicate::str::contains(
-            "--follow-poll-interval-seconds <FOLLOW_POLL_INTERVAL_SECONDS>",
+            "--poll-interval-seconds <POLL_INTERVAL_SECONDS>",
         ))
         .stderr(predicate::str::contains("is not in 1.."));
 }
 
 #[test]
-fn debug_logs_rejects_negative_follow_poll_interval_before_authentication() {
+fn debug_logs_rejects_negative_poll_interval_before_authentication() {
     let temp = TempDir::new().unwrap();
 
     debug_logs_cmd(&temp)
         .arg("--deploy-id")
         .arg("deploy-123")
-        .arg("--follow")
-        .arg("--follow-poll-interval-seconds")
+        .arg("--poll")
+        .arg("--poll-interval-seconds")
         .arg("-1")
         .assert()
         .failure()
         .stderr(predicate::str::contains("invalid value '-1'"))
         .stderr(predicate::str::contains(
-            "--follow-poll-interval-seconds <FOLLOW_POLL_INTERVAL_SECONDS>",
+            "--poll-interval-seconds <POLL_INTERVAL_SECONDS>",
         ))
         .stderr(predicate::str::contains("is not in 1.."));
 }
 
 #[test]
-fn debug_logs_rejects_zero_follow_poll_interval_without_follow_before_authentication() {
+fn debug_logs_rejects_zero_poll_interval_without_poll_before_authentication() {
     let temp = TempDir::new().unwrap();
 
     debug_logs_cmd(&temp)
         .arg("--deploy-id")
         .arg("deploy-123")
-        .arg("--follow-poll-interval-seconds")
+        .arg("--poll-interval-seconds")
         .arg("0")
         .assert()
         .failure()
         .stderr(predicate::str::contains("invalid value '0'"))
         .stderr(predicate::str::contains(
-            "--follow-poll-interval-seconds <FOLLOW_POLL_INTERVAL_SECONDS>",
+            "--poll-interval-seconds <POLL_INTERVAL_SECONDS>",
         ))
         .stderr(predicate::str::contains("is not in 1.."));
 }
