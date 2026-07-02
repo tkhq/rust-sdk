@@ -275,9 +275,11 @@ async fn generate_api_key(org_config: &OrgConfig) -> Result<StoredApiKey> {
     println!("Public Key: {public_key}");
     println!();
     println!("Add this API key to your Turnkey dashboard:");
-    println!("  1. Go to https://app.turnkey.com/dashboard/users");
-    println!("  2. Click your user > Create API Key > Generate API Keys via CLI > Continue");
-    println!("  3. Paste the public key > Name it \"TVC CLI\" > Continue > Approve");
+    println!("  1. Go to https://app.turnkey.com/dashboard/v2/users");
+    println!(
+        "  2. Click your user > New API Key > Advanced Settings: Generate API Keys via CLI > Paste in the key created above"
+    );
+    println!("  3. Name it \"TVC CLI\" > Continue > Approve");
     println!();
 
     Ok(api_key)
