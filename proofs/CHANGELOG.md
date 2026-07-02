@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.8.0](https://github.com/tkhq/rust-sdk/compare/turnkey_proofs-v0.7.0...turnkey_proofs-v0.8.0) - 2026-06-30
+
 ### Added
 
 - Re-exported the QoS setup/live manifest attestation verification helpers so
@@ -20,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not hash to the same value.
 - App/boot proof verification now validates the Nitro attestation's live
   manifest/key commitment PCR in addition to the manifest hash in `user_data`.
+- Updated the crate to Rust edition 2024.
 
 ## [0.7.0](https://github.com/tkhq/rust-sdk/compare/turnkey_proofs-v0.6.2...turnkey_proofs-v0.7.0) - 2026-05-19
 
