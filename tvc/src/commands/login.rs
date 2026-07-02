@@ -2,6 +2,7 @@
 
 use crate::config::turnkey::{
     API_BASE_URL_PROD, Config, KeyCurve, OrgConfig, StoredApiKey, StoredQosOperatorKey,
+    dashboard_base_url,
 };
 use crate::prompts::{self, error_required_in_non_interactive};
 use anyhow::{Context, Result, anyhow, bail};
@@ -274,8 +275,9 @@ async fn generate_api_key(org_config: &OrgConfig) -> Result<StoredApiKey> {
     println!();
     println!("Public Key: {public_key}");
     println!();
+    let dashboard_url = dashboard_base_url(&org_config.api_base_url);
     println!("Add this API key to your Turnkey dashboard:");
-    println!("  1. Go to https://app.turnkey.com/dashboard/v2/users and click your user");
+    println!("  1. Go to {dashboard_url}/dashboard/v2/users and click your user");
     println!(
         "  2. Click \"New API Key\", expand \"Advanced Settings\", then check \"Generate API key via CLI\""
     );
@@ -417,6 +419,33 @@ mod tests {
     #[test]
     fn new_org_api_base_url_uses_override() {
         assert_eq!(new_org_api_base_url(Some(OVERRIDE_URL)), OVERRIDE_URL);
+    }
+
+    #[test]
+    fn dashboard_url_matches_selected_environment() {
+        use crate::config::turnkey::{
+            API_BASE_URL_DEV, API_BASE_URL_PREPROD, DASHBOARD_URL_DEV, DASHBOARD_URL_PREPROD,
+            DASHBOARD_URL_PROD,
+        };
+
+        assert_eq!(dashboard_base_url(API_BASE_URL_PROD), DASHBOARD_URL_PROD);
+        assert_eq!(
+            dashboard_base_url(API_BASE_URL_PREPROD),
+            DASHBOARD_URL_PREPROD
+        );
+        assert_eq!(dashboard_base_url(API_BASE_URL_DEV), DASHBOARD_URL_DEV);
+    }
+
+    #[test]
+    fn dashboard_url_falls_back_to_prod_for_unknown_hosts() {
+        use crate::config::turnkey::DASHBOARD_URL_PROD;
+
+        // Local and other unrecognized hosts fall back to the prod dashboard.
+        assert_eq!(dashboard_base_url(OVERRIDE_URL), DASHBOARD_URL_PROD);
+        assert_eq!(
+            dashboard_base_url("https://api.staging.turnkey.engineering"),
+            DASHBOARD_URL_PROD
+        );
     }
 
     #[test]
