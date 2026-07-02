@@ -9,13 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.8.0](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.7.0...turnkey_client-v0.8.0) - 2026-06-30
 
-### Other
+### Changed
 
-- *(rust-sdk)* sync protos
-- *(rust-sdk)* sync protos
-- *(rust-sdk)* sync protos
-- Update to edition 2024
-- *(tvc)* sync protos and fix tests ([#152](https://github.com/tkhq/rust-sdk/pull/152))
+- Synced protos to update the generated client API.
+- Updated the crate to Rust edition 2024.
 
 ## [0.7.0](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.6.2...turnkey_client-v0.7.0) - 2026-05-19
 

@@ -11,40 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- breaking rename external connectivity in config to enable egress to match api
-- *(tvc)* debug mode in app and deployment intents ([#132](https://github.com/tkhq/rust-sdk/pull/132))
-- *(tvc)* implement tvc app list command
-- *(tvc)* default login API URL to prod
-- *(tvc)* interactive prompts and non-interactive guard
-- *(tvc)* interactive prompts and non-interactive guard
-- *(tvc)* interactive prompts and non-interactive guard
-- *(tvc)* interactive prompts and non-interactive guard
-- *(tvc)* add deploy post-share command
-
-### Fixed
-
-- *(tvc)* remove manual update to changelog
-
-### Other
-
-- Update qos
-- Avoid cloning decrypted local pair plaintext
-- Fix QoS 0.10.2 CI compatibility
-- Merge pull request #158 from tkhq/zeke/more-egress-viz
-- short import for fetch_tvc_app
-- Address egress display review feedback
-- Address review feedback: unify egress display helper
-- Add visibility for egress
-- *(tvc)* fix cli ([#155](https://github.com/tkhq/rust-sdk/pull/155))
-- Merge pull request #151 from tkhq/am/feat/list_apps
-- *(tvc)* add unit and integration tests for app list command
-- *(tvc)* update changelog for app list command
-- *(tvc)* add render_app helper to list apps command
-- Merge pull-request #145
-- Merge pull request #141 from tkhq/richard/tvc-58-add-client-side-debug-logging-to-tvc-cli
+- Added debug mode for app and deployment intents ([#132](https://github.com/tkhq/rust-sdk/pull/132)).
+- Added the `tvc app list` command.
+- Added the `tvc deploy post-share` command.
+- Added interactive prompts with a non-interactive guard for CLI commands.
+- Added egress visibility to deployment provisioning details.
+- `tvc deploy provisioning-details` now includes PCR16 and PCR17 in its
+  attestation summary output with manifest/key commitment labels.
 
 ### Changed
 
+- **Breaking:** Renamed the `external_connectivity` config field to `enable_egress`
+  to match the API.
+- The login API URL now defaults to production.
 - Deployment approval, provisioning, and share re-encryption flows now parse
   versioned QOS manifests and manifest envelopes.
 - Provisioning verification now checks manifest envelope approvals, PCR0-PCR3,
@@ -53,10 +32,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Share re-encryption now signs the versioned manifest envelope hash for share
   approvals.
 
-### Added
+### Fixed
 
-- `tvc deploy provisioning-details` now includes PCR16 and PCR17 in its
-  attestation summary output with manifest/key commitment labels.
+- Fixed the TVC CLI ([#155](https://github.com/tkhq/rust-sdk/pull/155)).
 
 ## [0.7.0](https://github.com/tkhq/rust-sdk/compare/tvc-v0.6.2...tvc-v0.7.0) - 2026-05-19
 
