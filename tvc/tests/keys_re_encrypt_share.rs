@@ -96,7 +96,7 @@ fn re_encrypt_share_help_lists_expected_flags() {
         .success()
         .stdout(predicate::str::contains("--quorum-key-metadata <PATH>"))
         .stdout(predicate::str::contains("--provision-bundle <PATH>"))
-        .stdout(predicate::str::contains("--operator-seed <PATH>"))
+        .stdout(predicate::str::contains("--operator-seed <SOURCE>"))
         .stdout(predicate::str::contains("--dangerous-skip-verification"))
         .stdout(predicate::str::contains("--re-encrypted-out <PATH>"));
 }
