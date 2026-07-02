@@ -33,6 +33,7 @@ fn debug_logs_help_lists_expected_flags() {
         .assert()
         .success()
         .stdout(predicate::str::contains("--deploy-id <DEPLOY_ID>"))
+        .stdout(predicate::str::contains("--disable-dedupe"))
         .stdout(predicate::str::contains("--poll"))
         .stdout(predicate::str::contains(
             "--poll-interval-seconds <POLL_INTERVAL_SECONDS>",
@@ -83,6 +84,7 @@ fn debug_logs_accepts_flags_before_authentication() {
         .arg("--since-seconds")
         .arg("30")
         .arg("--include-platform-timestamp")
+        .arg("--disable-dedupe")
         .arg("--recent-line-capacity")
         .arg("2000")
         .assert()

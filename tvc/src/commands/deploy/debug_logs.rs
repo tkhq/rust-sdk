@@ -49,6 +49,8 @@ Poll mode polls every 2 seconds by default and requests a 2-second overlap
 on each subsequent poll to avoid missing late-arriving log lines.
 By default, output omits the platform timestamp that Kubernetes prepends to each
 log line; pass `--include-platform-timestamp` to show it.
+The CLI dedupes timestamped lines with identical content across poll overlap windows
+by default; pass `--disable-dedupe` to print every returned line.
 See `tvc app create --help`, `tvc deploy create --help`, and `tvc --help`
 for more info."#;
 
@@ -98,6 +100,10 @@ pub struct Args {
     #[arg(long, env = "TVC_DEBUG_LOGS_INCLUDE_PLATFORM_TIMESTAMP")]
     pub include_platform_timestamp: bool,
 
+    /// Disable client-side dedupe across poll overlap windows.
+    #[arg(long, env = "TVC_DEBUG_LOGS_DISABLE_DEDUPE")]
+    pub disable_dedupe: bool,
+
     /// Number of recently printed timestamped lines retained for poll-mode dedupe. This should
     /// only be increased if high-volume logs still show duplicates across poll overlap windows.
     #[arg(
@@ -121,6 +127,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         tail_lines: args.tail_lines,
         since_seconds: args.since_seconds,
         include_platform_timestamp: args.include_platform_timestamp,
+        disable_dedupe: args.disable_dedupe,
         recent_line_capacity: args.recent_line_capacity,
     };
 
@@ -136,6 +143,7 @@ struct DebugLogQueryRequest {
     tail_lines: i32,
     since_seconds: i64,
     include_platform_timestamp: bool,
+    disable_dedupe: bool,
     recent_line_capacity: usize,
 }
 
@@ -167,6 +175,7 @@ async fn query_debug_logs(
     let mut log_printer = DebugLogPrinter::new(
         request.include_platform_timestamp,
         request.recent_line_capacity,
+        request.disable_dedupe,
     );
 
     let (current_request, poll_request) = if request.poll {
@@ -222,12 +231,12 @@ impl LogLineKey {
 }
 
 #[derive(Debug)]
-struct RecentLogLines {
+struct RecentLogLineDeduper {
     seen: HashSet<LogLineKey>,
     order: VecDeque<LogLineKey>,
 }
 
-impl RecentLogLines {
+impl RecentLogLineDeduper {
     fn new(capacity: usize) -> Self {
         assert!(capacity > 0, "recent log line capacity must be positive");
 
@@ -283,39 +292,49 @@ impl RecentLogLines {
 
 #[derive(Debug)]
 struct DebugLogPrinter {
-    recent_lines: RecentLogLines,
+    deduper: Option<RecentLogLineDeduper>,
     include_platform_timestamp: bool,
 }
 
 impl DebugLogPrinter {
-    fn new(include_platform_timestamp: bool, recent_line_capacity: usize) -> Self {
+    fn new(
+        include_platform_timestamp: bool,
+        recent_line_capacity: usize,
+        disable_dedupe: bool,
+    ) -> Self {
+        let deduper = if disable_dedupe {
+            None
+        } else {
+            Some(RecentLogLineDeduper::new(recent_line_capacity))
+        };
+
         Self {
-            recent_lines: RecentLogLines::new(recent_line_capacity),
+            deduper,
             include_platform_timestamp,
         }
     }
 
-    fn print_response(&mut self, response: &GetTvcDeploymentDebugLogsResponse) {
-        let recent_lines = &mut self.recent_lines;
-        let include_platform_timestamp = self.include_platform_timestamp;
+    fn should_print_line(&mut self, replica: &str, line: &LogLine) -> bool {
+        match self.deduper.as_mut() {
+            Some(deduper) => deduper.record_if_new(replica, line),
+            None => true,
+        }
+    }
 
-        // `record_if_new` updates the `recent_lines` cache while filtering duplicates.
-        response
-            .entries
-            .iter()
-            .filter_map(|entry| {
-                entry
-                    .line
-                    .as_ref()
-                    .map(|line| (entry.replica_label.as_str(), line))
-            })
-            .filter(|(replica, line)| recent_lines.record_if_new(replica, line))
-            .for_each(|(replica, line)| {
+    fn print_response(&mut self, response: &GetTvcDeploymentDebugLogsResponse) {
+        for entry in &response.entries {
+            let Some(line) = entry.line.as_ref() else {
+                continue;
+            };
+            let replica = entry.replica_label.as_str();
+
+            if self.should_print_line(replica, line) {
                 println!(
                     "{}",
-                    format_log_line(replica, line, include_platform_timestamp)
+                    format_log_line(replica, line, self.include_platform_timestamp)
                 );
-            });
+            }
+        }
     }
 }
 
@@ -378,6 +397,7 @@ mod tests {
             tail_lines: 10,
             since_seconds: 30,
             include_platform_timestamp: true,
+            disable_dedupe: false,
             recent_line_capacity: 1000,
         };
 
@@ -399,6 +419,7 @@ mod tests {
             tail_lines: 100,
             since_seconds: 0,
             include_platform_timestamp: false,
+            disable_dedupe: false,
             recent_line_capacity: 1000,
         };
 
@@ -421,11 +442,11 @@ mod tests {
     #[test]
     fn record_if_new_treats_missing_timestamp_as_new() {
         let line = log_line("hello", None);
-        let mut recent = RecentLogLines::new(1000);
+        let mut deduper = RecentLogLineDeduper::new(1000);
 
-        assert!(recent.record_if_new("replica 1/3", &line));
-        assert!(recent.record_if_new("replica 1/3", &line));
-        assert_eq!(recent.len(), 0);
+        assert!(deduper.record_if_new("replica 1/3", &line));
+        assert!(deduper.record_if_new("replica 1/3", &line));
+        assert_eq!(deduper.len(), 0);
     }
 
     #[test]
@@ -469,29 +490,29 @@ mod tests {
     }
 
     #[test]
-    fn recent_log_lines_treats_non_timestamped_lines_as_new() {
+    fn recent_log_line_deduper_treats_non_timestamped_lines_as_new() {
         let line = log_line("hello", None);
-        let mut recent = RecentLogLines::new(1000);
+        let mut deduper = RecentLogLineDeduper::new(1000);
 
-        assert!(recent.record_if_new("replica 1/2", &line));
-        assert!(recent.record_if_new("replica 1/2", &line));
-        assert_eq!(recent.len(), 0);
+        assert!(deduper.record_if_new("replica 1/2", &line));
+        assert!(deduper.record_if_new("replica 1/2", &line));
+        assert_eq!(deduper.len(), 0);
     }
 
     #[test]
-    fn recent_log_lines_dedupes_timestamped_lines() {
+    fn recent_log_line_deduper_dedupes_timestamped_lines() {
         let line = log_line("hello", Some(timestamp("1710000000", "1")));
-        let mut recent = RecentLogLines::new(1000);
+        let mut deduper = RecentLogLineDeduper::new(1000);
 
-        assert!(recent.record_if_new("replica 1/2", &line));
-        assert!(!recent.record_if_new("replica 1/2", &line));
-        assert_eq!(recent.len(), 1);
+        assert!(deduper.record_if_new("replica 1/2", &line));
+        assert!(!deduper.record_if_new("replica 1/2", &line));
+        assert_eq!(deduper.len(), 1);
     }
 
     #[test]
     #[should_panic(expected = "recent log line capacity must be positive")]
-    fn recent_log_lines_requires_positive_capacity() {
-        RecentLogLines::new(0);
+    fn recent_log_line_deduper_requires_positive_capacity() {
+        RecentLogLineDeduper::new(0);
     }
 
     #[test]
@@ -509,43 +530,53 @@ mod tests {
                 entry("replica 2/2", None),
             ],
         };
-        let mut printer = DebugLogPrinter::new(false, 1000);
+        let mut printer = DebugLogPrinter::new(false, 1000, false);
 
         printer.print_response(&response);
 
-        assert_eq!(printer.recent_lines.len(), 1);
+        assert_eq!(printer.deduper.as_ref().unwrap().len(), 1);
     }
 
     #[test]
-    fn recent_log_lines_evicts_oldest_entries() {
-        let first = log_line_key("replica 1/2", "first", "1710000000", "1");
-        let second = log_line_key("replica 1/2", "second", "1710000000", "2");
-        let third = log_line_key("replica 1/2", "third", "1710000000", "3");
-        let mut recent = RecentLogLines::new(2);
+    fn debug_log_printer_prints_duplicate_timestamped_lines_when_dedupe_is_disabled() {
+        let line = log_line("hello", Some(timestamp("1710000000", "1")));
+        let mut printer = DebugLogPrinter::new(false, 1000, true);
 
-        assert!(recent.insert(first.clone()));
-        assert!(recent.insert(second.clone()));
-        assert!(!recent.insert(first.clone()));
-        assert!(recent.insert(third));
-
-        assert_eq!(recent.len(), 2);
-        assert!(recent.insert(first));
-        assert_eq!(recent.len(), 2);
+        assert!(printer.should_print_line("replica 1/2", &line));
+        assert!(printer.should_print_line("replica 1/2", &line));
+        assert!(printer.deduper.is_none());
     }
 
     #[test]
-    fn recent_log_lines_does_not_grow_past_initial_capacity() {
+    fn recent_log_line_deduper_evicts_oldest_entries() {
         let first = log_line_key("replica 1/2", "first", "1710000000", "1");
         let second = log_line_key("replica 1/2", "second", "1710000000", "2");
         let third = log_line_key("replica 1/2", "third", "1710000000", "3");
-        let mut recent = RecentLogLines::new(2);
-        let initial_capacity = recent.capacity();
+        let mut deduper = RecentLogLineDeduper::new(2);
 
-        assert!(recent.insert(first));
-        assert!(recent.insert(second));
-        assert!(recent.insert(third));
+        assert!(deduper.insert(first.clone()));
+        assert!(deduper.insert(second.clone()));
+        assert!(!deduper.insert(first.clone()));
+        assert!(deduper.insert(third));
 
-        assert_eq!(recent.len(), 2);
-        assert_eq!(recent.capacity(), initial_capacity);
+        assert_eq!(deduper.len(), 2);
+        assert!(deduper.insert(first));
+        assert_eq!(deduper.len(), 2);
+    }
+
+    #[test]
+    fn recent_log_line_deduper_does_not_grow_past_initial_capacity() {
+        let first = log_line_key("replica 1/2", "first", "1710000000", "1");
+        let second = log_line_key("replica 1/2", "second", "1710000000", "2");
+        let third = log_line_key("replica 1/2", "third", "1710000000", "3");
+        let mut deduper = RecentLogLineDeduper::new(2);
+        let initial_capacity = deduper.capacity();
+
+        assert!(deduper.insert(first));
+        assert!(deduper.insert(second));
+        assert!(deduper.insert(third));
+
+        assert_eq!(deduper.len(), 2);
+        assert_eq!(deduper.capacity(), initial_capacity);
     }
 }
