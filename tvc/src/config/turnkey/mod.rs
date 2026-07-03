@@ -56,12 +56,12 @@ pub const DASHBOARD_URL_DEV: &str = "https://app.dev.turnkey.engineering";
 ///
 /// Any URL that isn't a known Turnkey environment (e.g. a local API) falls back
 /// to the production dashboard.
-pub fn dashboard_base_url(api_base_url: &str) -> String {
+pub fn dashboard_base_url(api_base_url: &str) -> &'static str {
     match api_base_url {
-        API_BASE_URL_PROD => DASHBOARD_URL_PROD.to_string(),
-        API_BASE_URL_PREPROD => DASHBOARD_URL_PREPROD.to_string(),
-        API_BASE_URL_DEV => DASHBOARD_URL_DEV.to_string(),
-        _ => DASHBOARD_URL_PROD.to_string(),
+        API_BASE_URL_PROD => DASHBOARD_URL_PROD,
+        API_BASE_URL_PREPROD => DASHBOARD_URL_PREPROD,
+        API_BASE_URL_DEV => DASHBOARD_URL_DEV,
+        _ => DASHBOARD_URL_PROD,
     }
 }
 
