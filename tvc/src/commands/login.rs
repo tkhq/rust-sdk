@@ -274,7 +274,7 @@ async fn generate_api_key(org_config: &OrgConfig) -> Result<StoredApiKey> {
     println!();
     println!("API Key Generated!");
     println!();
-    println!("API key public key: {public_key}");
+    println!("API public key: {public_key}");
     println!();
     let dashboard_url = dashboard_base_url(&org_config.api_base_url);
     println!("Add this API key to your Turnkey dashboard:");
@@ -393,7 +393,7 @@ fn print_success(
     println!("Active Org: {alias}");
     println!();
     println!("Credentials");
-    println!("  API key public key:    {}", api_key.public_key);
+    println!("  API public key:        {}", api_key.public_key);
     println!("  Operator public key:   {}", operator_key.public_key);
     println!();
     println!("Saved to");
