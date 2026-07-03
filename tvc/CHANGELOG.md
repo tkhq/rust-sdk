@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.9.0](https://github.com/tkhq/rust-sdk/compare/tvc-v0.8.0...tvc-v0.9.0) - 2026-07-03
+
+### Added
+
+- *(tvc)* add deploy debug-logs command ([#169](https://github.com/tkhq/rust-sdk/pull/169))
+
+### Fixed
+
+- *(tvc)* remove extra word in API key lines
+- *(tvc)* clarify API key vs operator key labels in login output
+- *(tvc)* derive org ID welcome link from selected environment
+- *(tvc)* derive API key registration dashboard URL from environment
+- *(tvc)* formatting
+
+### Other
+
+- *(tvc)* hoist turnkey imports to top of tests module
+- *(tvc)* avoid unnecessary allocation in dashboard_base_url
+- *(tvc)* update login API key instructions for dashboard v2
+- Merge pull request #175 from tkhq/avi/followup
+
 ## [0.8.0](https://github.com/tkhq/rust-sdk/compare/tvc-v0.7.0...tvc-v0.8.0) - 2026-06-30
 
 ### Added
