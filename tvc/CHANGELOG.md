@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.9.0](https://github.com/tkhq/rust-sdk/compare/tvc-v0.8.0...tvc-v0.9.0) - 2026-07-03
+
+### Added
+
+- Added `tvc deploy debug-logs` to fetch deployment debug logs ([#169](https://github.com/tkhq/rust-sdk/pull/169)).
+
+### Fixed
+
+- Clarified `tvc login` API key and operator key labels, dashboard v2 instructions, and environment-specific dashboard links.
+
 ## [0.8.0](https://github.com/tkhq/rust-sdk/compare/tvc-v0.7.0...tvc-v0.8.0) - 2026-06-30
 
 ### Added
