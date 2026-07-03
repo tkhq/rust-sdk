@@ -47,6 +47,24 @@ pub const API_BASE_URL_PREPROD: &str = "https://api.preprod.turnkey.engineering"
 pub const API_BASE_URL_DEV: &str = "https://api.dev.turnkey.engineering";
 pub const API_BASE_URL_LOCAL: &str = "http://localhost:8081";
 
+/// Dashboard base URLs corresponding to each environment.
+pub const DASHBOARD_URL_PROD: &str = "https://app.turnkey.com";
+pub const DASHBOARD_URL_PREPROD: &str = "https://app.preprod.turnkey.engineering";
+pub const DASHBOARD_URL_DEV: &str = "https://app.dev.turnkey.engineering";
+
+/// Maps an API base URL to the dashboard base URL for the same environment.
+///
+/// Any URL that isn't a known Turnkey environment (e.g. a local API) falls back
+/// to the production dashboard.
+pub fn dashboard_base_url(api_base_url: &str) -> &'static str {
+    match api_base_url {
+        API_BASE_URL_PROD => DASHBOARD_URL_PROD,
+        API_BASE_URL_PREPROD => DASHBOARD_URL_PREPROD,
+        API_BASE_URL_DEV => DASHBOARD_URL_DEV,
+        _ => DASHBOARD_URL_PROD,
+    }
+}
+
 /// Configuration for a single organization
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrgConfig {

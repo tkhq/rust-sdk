@@ -2,6 +2,7 @@
 
 use crate::config::turnkey::{
     API_BASE_URL_PROD, Config, KeyCurve, OrgConfig, StoredApiKey, StoredQosOperatorKey,
+    dashboard_base_url,
 };
 use crate::prompts::{self, error_required_in_non_interactive};
 use anyhow::{Context, Result, anyhow, bail};
@@ -63,7 +64,7 @@ pub async fn run(args: Args, is_non_interactive: bool) -> Result<()> {
 fn build_login_plan_interactive(args: Args, config: &Config) -> Result<LoginPlan> {
     let org = match args.org {
         Some(query) => OrgPlan::Existing(query),
-        None => prompt_for_org_plan(config)?,
+        None => prompt_for_org_plan(config, args.api_base_url.as_deref())?,
     };
     Ok(LoginPlan {
         org,
@@ -142,7 +143,7 @@ async fn execute_login(mut config: Config, plan: LoginPlan) -> Result<()> {
     print_success(&alias, &org_config, &api_key, &operator_key, &whoami)
 }
 
-fn prompt_for_org_plan(config: &Config) -> Result<OrgPlan> {
+fn prompt_for_org_plan(config: &Config, api_base_url_override: Option<&str>) -> Result<OrgPlan> {
     debug!(
         configured_org_count = config.orgs.len(),
         active_org = ?config.active_org,
@@ -152,7 +153,7 @@ fn prompt_for_org_plan(config: &Config) -> Result<OrgPlan> {
     if config.orgs.is_empty() {
         debug!("no organizations configured; prompting for new organization");
         println!("No organization configured.");
-        return prompt_for_new_org_inputs();
+        return prompt_for_new_org_inputs(api_base_url_override);
     }
 
     let mut options: Vec<OrgChoice> = config
@@ -174,12 +175,13 @@ fn prompt_for_org_plan(config: &Config) -> Result<OrgPlan> {
 
     match prompts::select("Select organization", options)? {
         OrgChoice::Existing { alias, .. } => Ok(OrgPlan::Existing(alias)),
-        OrgChoice::New => prompt_for_new_org_inputs(),
+        OrgChoice::New => prompt_for_new_org_inputs(api_base_url_override),
     }
 }
 
-fn prompt_for_new_org_inputs() -> Result<OrgPlan> {
-    println!("You can find your Organization ID at: https://app.turnkey.com/dashboard/welcome");
+fn prompt_for_new_org_inputs(api_base_url_override: Option<&str>) -> Result<OrgPlan> {
+    let dashboard_url = dashboard_base_url(api_base_url_override.unwrap_or(API_BASE_URL_PROD));
+    println!("You can find your Organization ID at: {dashboard_url}/dashboard/welcome");
     println!();
 
     let id = prompts::text("Organization ID", None)?;
@@ -274,8 +276,9 @@ async fn generate_api_key(org_config: &OrgConfig) -> Result<StoredApiKey> {
     println!();
     println!("Public Key: {public_key}");
     println!();
+    let dashboard_url = dashboard_base_url(&org_config.api_base_url);
     println!("Add this API key to your Turnkey dashboard:");
-    println!("  1. Go to https://app.turnkey.com/dashboard/v2/users and click your user");
+    println!("  1. Go to {dashboard_url}/dashboard/v2/users and click your user");
     println!(
         "  2. Click \"New API Key\", expand \"Advanced Settings\", then check \"Generate API key via CLI\""
     );
@@ -404,6 +407,10 @@ fn print_success(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::turnkey::{
+        API_BASE_URL_DEV, API_BASE_URL_PREPROD, DASHBOARD_URL_DEV, DASHBOARD_URL_PREPROD,
+        DASHBOARD_URL_PROD,
+    };
     use std::collections::HashMap;
     use std::path::PathBuf;
 
@@ -417,6 +424,26 @@ mod tests {
     #[test]
     fn new_org_api_base_url_uses_override() {
         assert_eq!(new_org_api_base_url(Some(OVERRIDE_URL)), OVERRIDE_URL);
+    }
+
+    #[test]
+    fn dashboard_url_matches_selected_environment() {
+        assert_eq!(dashboard_base_url(API_BASE_URL_PROD), DASHBOARD_URL_PROD);
+        assert_eq!(
+            dashboard_base_url(API_BASE_URL_PREPROD),
+            DASHBOARD_URL_PREPROD
+        );
+        assert_eq!(dashboard_base_url(API_BASE_URL_DEV), DASHBOARD_URL_DEV);
+    }
+
+    #[test]
+    fn dashboard_url_falls_back_to_prod_for_unknown_hosts() {
+        // Local and other unrecognized hosts fall back to the prod dashboard.
+        assert_eq!(dashboard_base_url(OVERRIDE_URL), DASHBOARD_URL_PROD);
+        assert_eq!(
+            dashboard_base_url("https://api.staging.turnkey.engineering"),
+            DASHBOARD_URL_PROD
+        );
     }
 
     #[test]
