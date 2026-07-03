@@ -274,7 +274,7 @@ async fn generate_api_key(org_config: &OrgConfig) -> Result<StoredApiKey> {
     println!();
     println!("API Key Generated!");
     println!();
-    println!("Public Key: {public_key}");
+    println!("API key public key: {public_key}");
     println!();
     let dashboard_url = dashboard_base_url(&org_config.api_base_url);
     println!("Add this API key to your Turnkey dashboard:");
@@ -325,7 +325,7 @@ async fn find_or_generate_operator_key(org_config: &OrgConfig) -> Result<StoredQ
     println!();
     println!("Operator Key Generated!");
     println!();
-    println!("Public Key: {public_key}");
+    println!("Operator public key: {public_key}");
     println!();
     println!("This key will be used for approving deployment manifests.");
     println!("Make sure to register this as an operator in your organization.");
@@ -391,15 +391,21 @@ fn print_success(
     );
     println!("User: {} ({})", whoami.username, whoami.user_id);
     println!("Active Org: {alias}");
-    println!("API Key: {}", api_key.public_key);
-    println!("Operator Key: {}", operator_key.public_key);
     println!();
+    println!("Credentials");
+    println!("  API key public key:    {}", api_key.public_key);
+    println!("  Operator public key:   {}", operator_key.public_key);
+    println!();
+    println!("Saved to");
     println!(
-        "Config: {}",
+        "  Config file:    {}",
         crate::config::turnkey::config_file_path()?.display()
     );
-    println!("API Key: {}", org_config.api_key_path.display());
-    println!("Operator Key: {}", org_config.operator_key_path.display());
+    println!("  API key:        {}", org_config.api_key_path.display());
+    println!(
+        "  Operator key:   {}",
+        org_config.operator_key_path.display()
+    );
 
     Ok(())
 }
