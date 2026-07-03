@@ -18,10 +18,10 @@ resolver = "2"
 
 [workspace.dependencies]
 # QuorumOS
-qos_core = { version = "0.11", default-features = false }
-qos_crypto = { version = "0.11", default-features = false }
-qos_nsm = { version = "0.11", default-features = false }
-qos_p256 = { version = "0.11", default-features = false }
+qos_core = { version = "0.12", default-features = false }
+qos_crypto = { version = "0.12", default-features = false }
+qos_nsm = { version = "0.12", default-features = false }
+qos_p256 = { version = "0.12", default-features = false }
 
 # Encoding and serialization
 base64 = { version = "0.22.0", default-features = false, features = ["std"] }
