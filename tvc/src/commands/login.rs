@@ -407,6 +407,10 @@ fn print_success(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::turnkey::{
+        API_BASE_URL_DEV, API_BASE_URL_PREPROD, DASHBOARD_URL_DEV, DASHBOARD_URL_PREPROD,
+        DASHBOARD_URL_PROD,
+    };
     use std::collections::HashMap;
     use std::path::PathBuf;
 
@@ -424,11 +428,6 @@ mod tests {
 
     #[test]
     fn dashboard_url_matches_selected_environment() {
-        use crate::config::turnkey::{
-            API_BASE_URL_DEV, API_BASE_URL_PREPROD, DASHBOARD_URL_DEV, DASHBOARD_URL_PREPROD,
-            DASHBOARD_URL_PROD,
-        };
-
         assert_eq!(dashboard_base_url(API_BASE_URL_PROD), DASHBOARD_URL_PROD);
         assert_eq!(
             dashboard_base_url(API_BASE_URL_PREPROD),
@@ -439,8 +438,6 @@ mod tests {
 
     #[test]
     fn dashboard_url_falls_back_to_prod_for_unknown_hosts() {
-        use crate::config::turnkey::DASHBOARD_URL_PROD;
-
         // Local and other unrecognized hosts fall back to the prod dashboard.
         assert_eq!(dashboard_base_url(OVERRIDE_URL), DASHBOARD_URL_PROD);
         assert_eq!(
