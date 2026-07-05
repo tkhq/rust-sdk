@@ -26,6 +26,20 @@ pub struct Args {
     pub api_base_url: Option<String>,
 }
 
+/// Permanently delete a saved login profile, including its API and operator
+/// key files on disk.
+#[derive(Debug, ClapArgs)]
+#[command(about, long_about = None)]
+pub struct DeleteArgs {
+    /// Organization alias or ID of the profile to delete.
+    /// If not provided, will prompt interactively.
+    #[arg(long, value_name = "ORG")]
+    pub org: Option<String>,
+    /// Skip the confirmation prompt (required to delete in non-interactive mode).
+    #[arg(long)]
+    pub yes: bool,
+}
+
 enum OrgPlan {
     Existing(String),
     New { id: String, alias: String },
@@ -59,6 +73,135 @@ pub async fn run(args: Args, is_non_interactive: bool) -> Result<()> {
     };
 
     execute_login(config, plan).await
+}
+
+/// Permanently delete a saved login profile: its config entry and its API and
+/// operator key files on disk.
+pub async fn run_delete(args: DeleteArgs, is_non_interactive: bool) -> Result<()> {
+    debug!(
+        non_interactive = is_non_interactive,
+        org_arg_present = args.org.is_some(),
+        skip_confirm = args.yes,
+        "running login delete command"
+    );
+
+    let mut config = Config::load().await?;
+    let alias = resolve_profile_alias(&config, args.org, is_non_interactive)?;
+    let org_id = config
+        .orgs
+        .get(&alias)
+        .map(|org| org.id.clone())
+        .unwrap_or_default();
+
+    if !args.yes {
+        if is_non_interactive {
+            bail!(
+                "Refusing to delete profile '{alias}' ({org_id}) without confirmation. \
+                 Pass --yes to confirm in non-interactive mode."
+            );
+        }
+        prompts::confirm_or_bail(
+            &format!("Permanently delete profile '{alias}' ({org_id}) and its key files?"),
+            "deletion",
+        )?;
+    }
+
+    let removed = config
+        .remove_org(&alias)
+        .expect("alias was resolved from config");
+    config.save().await?;
+
+    let mut deleted = Vec::new();
+    for path in [&removed.api_key_path, &removed.operator_key_path] {
+        match tokio::fs::remove_file(path).await {
+            Ok(()) => deleted.push(path.display().to_string()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => {
+                return Err(e)
+                    .with_context(|| format!("failed to delete key file: {}", path.display()));
+            }
+        }
+    }
+
+    // Best-effort cleanup of the default per-org directory; ignore errors so a
+    // missing or shared/non-empty directory doesn't fail the delete.
+    if let Ok(dir) = crate::config::turnkey::default_org_dir(&alias) {
+        let _ = tokio::fs::remove_dir(&dir).await;
+    }
+
+    println!("Deleted login profile '{alias}' ({}).", removed.id);
+    if deleted.is_empty() {
+        println!("No key files were found on disk.");
+    } else {
+        println!();
+        println!("Removed key files:");
+        for path in deleted {
+            println!("  {path}");
+        }
+    }
+
+    Ok(())
+}
+
+/// Resolve the alias of a configured profile to delete. Prompts interactively
+/// with a picker when no query is given. Bails if no profiles are configured or
+/// the query matches none.
+fn resolve_profile_alias(
+    config: &Config,
+    org: Option<String>,
+    is_non_interactive: bool,
+) -> Result<String> {
+    if config.orgs.is_empty() {
+        bail!("No login profiles are configured. Run `tvc login` to add one.");
+    }
+
+    match org {
+        Some(query) => match find_org(config, &query) {
+            Some((alias, _)) => Ok(alias.clone()),
+            None => bail!(
+                "Login profile '{query}' not found. \
+                 Run `tvc login` to see configured profiles."
+            ),
+        },
+        None => {
+            if is_non_interactive {
+                return Err(error_required_in_non_interactive("--org"));
+            }
+            let choices: Vec<ProfileChoice> = config
+                .orgs
+                .iter()
+                .map(|(alias, org)| {
+                    let suffix = if config.active_org.as_ref() == Some(alias) {
+                        " (active)"
+                    } else {
+                        ""
+                    };
+                    ProfileChoice::new(alias, &org.id, suffix)
+                })
+                .collect();
+            Ok(prompts::select("Select profile to delete", choices)?.alias)
+        }
+    }
+}
+
+struct ProfileChoice {
+    display: String,
+    alias: String,
+}
+
+impl ProfileChoice {
+    fn new(alias: &str, org_id: &str, suffix: &str) -> Self {
+        ProfileChoice {
+            display: format!("{alias} ({org_id}){suffix}"),
+            alias: alias.to_string(),
+        }
+    }
+}
+
+impl std::fmt::Display for ProfileChoice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.display)
+    }
 }
 
 fn build_login_plan_interactive(args: Args, config: &Config) -> Result<LoginPlan> {

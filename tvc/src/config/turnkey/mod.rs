@@ -188,6 +188,24 @@ impl Config {
         Ok(())
     }
 
+    /// Remove an organization from the config, along with the convenience state
+    /// (last app ID, last operator IDs) tracked for it. If the removed org was
+    /// the active one, the active org is cleared.
+    ///
+    /// Returns the removed [`OrgConfig`], or `None` if no org with that alias
+    /// was configured. This only touches the config registry; deleting the
+    /// org's key files on disk is the caller's responsibility.
+    pub fn remove_org(&mut self, alias: &str) -> Option<OrgConfig> {
+        let removed = self.orgs.remove(alias)?;
+        debug!(org_alias = alias, "removing organization config");
+        self.last_created_app_id.remove(alias);
+        self.last_operator_ids.remove(alias);
+        if self.active_org.as_deref() == Some(alias) {
+            self.active_org = None;
+        }
+        Some(removed)
+    }
+
     /// Set the active organization
     pub fn set_active_org(&mut self, alias: &str) -> Result<()> {
         debug!(org_alias = alias, "setting active organization");
