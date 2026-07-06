@@ -100,6 +100,19 @@ pub async fn run_delete(args: DeleteArgs, is_non_interactive: bool) -> Result<()
                  Pass --yes to confirm in non-interactive mode."
             );
         }
+        let dashboard_url = config
+            .orgs
+            .get(&alias)
+            .map(|org| dashboard_base_url(&org.api_base_url))
+            .unwrap_or_default();
+        eprintln!();
+        eprintln!("WARNING: This permanently deletes login profile '{alias}' ({org_id}).");
+        eprintln!("  - Removes the local config entry and deletes the API and operator key");
+        eprintln!("    files from disk. This cannot be undone.");
+        eprintln!("  - It does NOT touch the Turnkey dashboard ({dashboard_url}). If this API");
+        eprintln!("    key is registered there, it stays valid until you remove it");
+        eprintln!("    (instructions are printed after deletion).");
+        eprintln!();
         prompts::confirm_or_bail(
             &format!("Permanently delete profile '{alias}' ({org_id}) and its key files?"),
             "deletion",
@@ -110,6 +123,15 @@ pub async fn run_delete(args: DeleteArgs, is_non_interactive: bool) -> Result<()
         .remove_org(&alias)
         .expect("alias was resolved from config");
     config.save().await?;
+
+    // Read the API key's public key before deleting its file, so the
+    // dashboard-revocation reminder below can name exactly which key to remove.
+    // Best-effort: a missing or unreadable key file just omits the value.
+    let api_public_key = StoredApiKey::load(&removed)
+        .await
+        .ok()
+        .flatten()
+        .map(|key| key.public_key);
 
     let mut deleted = Vec::new();
     for path in [&removed.api_key_path, &removed.operator_key_path] {
@@ -138,6 +160,24 @@ pub async fn run_delete(args: DeleteArgs, is_non_interactive: bool) -> Result<()
         for path in deleted {
             println!("  {path}");
         }
+    }
+
+    // A local delete does not touch or inspect the dashboard-registered API key.
+    // We can't tell whether one is still registered (the user may have already
+    // removed it), so surface the steps without asserting its state.
+    let dashboard_url = dashboard_base_url(&removed.api_base_url);
+    println!();
+    println!(
+        "IMPORTANT: This did not touch the Turnkey dashboard. If this API key is still registered"
+    );
+    println!("there, it remains valid until you remove it. If you haven't already:");
+    println!("  1. Go to {dashboard_url}/dashboard/v2/users and click your user");
+    match api_public_key {
+        Some(public_key) => {
+            println!("  2. Delete the API key with public key (if present):");
+            println!("       {public_key}");
+        }
+        None => println!("  2. Delete the API key associated with this profile (if present)"),
     }
 
     Ok(())
