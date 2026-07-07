@@ -91,6 +91,7 @@ mod tests {
             manifest_approvals: vec![],
             qos_version: "qos-v1".to_string(),
             pivot_container: None,
+            debug_mode: false,
             created_at: None,
             updated_at: None,
             delete,
