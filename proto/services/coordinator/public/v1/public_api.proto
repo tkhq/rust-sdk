@@ -1818,8 +1818,21 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Get a swap quote for an EVM same-chain swap. Asset chains are derived from CAIP-19 asset IDs."
+      description: "Get a swap quote. Asset chains are derived from CAIP-19 asset IDs; cross-chain quotes are supported."
       summary: "Get swap quote"
+      tags: "Swaps"
+    };
+  }
+
+  rpc GetSwapStatus(GetSwapStatusRequest) returns (GetSwapStatusResponse) {
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/query/get_swap_status"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get the status of a swap by the send_transaction_status_id returned from execute_swap. Covers same-chain and cross-chain swaps."
+      summary: "Get swap status"
       tags: "Swaps"
     };
   }
@@ -1831,7 +1844,7 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Execute a quoted same-chain swap through the activity pipeline and Turnkey broadcasting."
+      description: "Execute a quoted swap through the activity pipeline and Turnkey broadcasting."
       summary: "Execute swap"
       tags: "Swaps"
     };
@@ -1882,6 +1895,19 @@ service PublicApiService {
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Create a new TVC application"
       summary: "Create a TVC App"
+      tags: "TVC"
+    };
+  }
+
+  rpc CreateTvcOperator(external.activity.v1.CreateTvcOperatorRequest) returns (ActivityResponse) {
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/submit/create_tvc_operator"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Create a TVC Operator backed by uncompressed P-256 Turnkey wallet accounts"
+      summary: "Create TVC Operator"
       tags: "TVC"
     };
   }
@@ -2042,6 +2068,32 @@ service PublicApiService {
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Post re-encrypted quorum key share for a TVC deployment."
       summary: "Post TVC Quorum Key Share"
+      tags: "TVC"
+    };
+  }
+
+  rpc CreateTvcQuorumKey(external.activity.v1.CreateTvcQuorumKeyRequest) returns (ActivityResponse) {
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/submit/create_tvc_quorum_key"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Create a hosted TVC quorum key and encrypted shares."
+      summary: "Create TVC Quorum Key"
+      tags: "TVC"
+    };
+  }
+
+  rpc ReEncryptTvcQuorumKeyShare(external.activity.v1.ReEncryptTvcQuorumKeyShareRequest) returns (ActivityResponse) {
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/submit/re_encrypt_tvc_quorum_key_share"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Re-encrypt a hosted TVC quorum key share for a deployment."
+      summary: "Re-encrypt TVC Quorum Key Share"
       tags: "TVC"
     };
   }
@@ -2988,7 +3040,7 @@ message GetSwapQuoteRequest {
   ];
   string output_token = 3 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-19 asset ID for the output asset. Must currently be on the same chain as `input_token`."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-19 asset ID for the output asset."}
   ];
   string input_amount = 4 [
     (google.api.field_behavior) = REQUIRED,
@@ -3016,6 +3068,76 @@ message GetSwapQuoteResponse {
   repeated SwapQuoteOption quotes = 4 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "One quote per available swap provider."}
+  ];
+}
+
+message GetSwapStatusRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string send_transaction_status_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Identifier returned in the execute_swap activity result."}
+  ];
+}
+
+message GetSwapStatusResponse {
+  string status = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Normalized swap status. One of PENDING, COMPLETED, FAILED."}
+  ];
+  string swap_kind = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "SAME_CHAIN or CROSS_CHAIN."}
+  ];
+  optional string provider = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Swap provider that executed the swap."}
+  ];
+  string input_token = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-19 asset ID for the input asset."}
+  ];
+  string output_token = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-19 asset ID for the output asset."}
+  ];
+  string input_amount = 6 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Base-unit amount of the input asset."}
+  ];
+  optional string origin_tx_hash = 7 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Final included origin-chain transaction hash, when known."}
+  ];
+  optional string destination_tx_hash = 8 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Destination-chain fill transaction hash; cross-chain COMPLETED only."}
+  ];
+  optional string output_amount = 9 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Actual base-unit output amount on COMPLETED, when known."}
+  ];
+  optional string settled_asset = 10 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-19 of the asset the user holds after a FAILED swap, when recoverable."}
+  ];
+  optional string settled_amount = 11 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Base-unit amount of settled_asset."}
+  ];
+  optional string settlement_tx_hash = 12 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Transaction that delivered the settled funds, when applicable."}
+  ];
+  optional string provider_status = 13 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Non-normative raw provider status passthrough; cross-chain only."}
+  ];
+  string updated_at = 14 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp of the last swap status change, as millisecond epoch string."}
   ];
 }
 

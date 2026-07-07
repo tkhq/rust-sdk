@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package immutable.data.v1;
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/immutable/data/v1";
+
+// The org's Earn configuration, stored in Org Data (enclave-signed) as a
+// JSON-serialized value under the FEATURE_NAME_EARN_CONFIG feature. There are
+// no Postgres tables for Earn data: wrapper addresses and the full fee config
+// live here so the enclave can trust them when signing deposits/withdrawals.
+message EarnConfig {
+  // Schema version of this config blob. Bump on breaking shape changes so readers
+  // can migrate older stored configs.
+  uint32 version = 1;
+  // One entry per vault the org has enabled via DeployEarnWrapper.
+  repeated EarnWrapper wrappers = 2;
+  // The client's performance-fee cut of gross yield, in basis points (e.g. "2000" for 20%).
+  string client_fee_bps = 3;
+  // The wallet address that receives the client's fee payouts on-chain.
+  string client_fee_wallet = 4;
+  // Turnkey's performance-fee cut of gross yield, in basis points. Seeded from a
+  // hardcoded V1 default; stored per-org so enterprise orgs can carry a custom rate.
+  string turnkey_fee_bps = 5;
+  // The wallet address that receives Turnkey's fee payouts on-chain.
+  string turnkey_fee_wallet = 6;
+}
+
+// A single deployed Earn wrapper stack for one (vault, chain) the org enabled.
+// Written by the enclave when a DeployEarnWrapper activity is processed.
+message EarnWrapper {
+  // The underlying yield vault being wrapped.
+  string vault_address = 1;
+  // CAIP-2 chain identifier the vault lives on (e.g. "eip155:8453").
+  string chain_caip2 = 2;
+  // The deployed fee wrapper (Morpho FeeWrapper / Aave ATokenVault) - the deposit target.
+  string wrapper_address = 3;
+  // The deployed fee splitter (Morpho PaymentSplitter / Aave RevenueSplitterOwner).
+  string splitter_address = 4;
+  // The provider that owns this wrapper.
+  EarnProvider provider = 5;
+}
+
+// The yield protocol backing an Earn wrapper.
+enum EarnProvider {
+  EARN_PROVIDER_UNSPECIFIED = 0;
+  EARN_PROVIDER_MORPHO = 1;
+  EARN_PROVIDER_AAVE = 2;
+}

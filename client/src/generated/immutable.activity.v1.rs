@@ -164,6 +164,9 @@ pub mod intent {
         UpsertEarnClientFeeConfigIntent(super::UpsertEarnClientFeeConfigIntent),
         ExecuteSwapIntent(super::ExecuteSwapIntent),
         UpsertSwapConfigIntent(super::UpsertSwapConfigIntent),
+        CreateTvcOperatorIntent(super::CreateTvcOperatorIntent),
+        CreateTvcQuorumKeyIntent(super::CreateTvcQuorumKeyIntent),
+        ReEncryptTvcQuorumKeyShareIntent(super::ReEncryptTvcQuorumKeyShareIntent),
     }
 }
 #[derive(Debug)]
@@ -246,8 +249,6 @@ pub struct DisableAuthProxyIntent {}
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct UpsertSwapConfigIntent {
-    #[serde(default)]
-    pub enabled: bool,
     #[serde(default)]
     pub fee_receiver_wallet_address: ::core::option::Option<
         ::prost::alloc::string::String,
@@ -2395,6 +2396,22 @@ pub struct CreateTvcAppIntent {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct CreateTvcOperatorIntent {
+    /// @inject_tag: validate:"omitempty,tk_label_length,tk_label"
+    #[serde(default)]
+    pub wallet_name: ::core::option::Option<::prost::alloc::string::String>,
+    /// @inject_tag: validate:"omitempty,uuid"
+    #[serde(default)]
+    pub wallet_id: ::core::option::Option<::prost::alloc::string::String>,
+    /// @inject_tag: validate:"required"
+    pub path: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub operator_name: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct TvcOperatorSetParams {
     /// @inject_tag: validate:"required"
     pub name: ::prost::alloc::string::String,
@@ -2492,6 +2509,36 @@ pub struct QuorumKeyShareApprovalBundle {
     pub re_encrypted_share_hex: ::prost::alloc::string::String,
     /// @inject_tag: validate:"required"
     pub signature: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateTvcQuorumKeyIntent {
+    /// @inject_tag: validate:"required"
+    #[serde(default)]
+    pub threshold: u32,
+    /// @inject_tag: validate:"required"
+    #[serde(default)]
+    pub operator_encrypt_keys: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct ReEncryptTvcQuorumKeyShareIntent {
+    /// @inject_tag: validate:"required"
+    pub attestation_doc_b64: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub manifest_b64: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub operator_encrypt_key: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub operator_sign_key: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required,uuid"
+    pub deployment_id: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub app_quorum_key: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -2674,6 +2721,9 @@ pub mod result {
         UpsertEarnClientFeeConfigResult(super::UpsertEarnClientFeeConfigResult),
         ExecuteSwapResult(super::ExecuteSwapResult),
         UpsertSwapConfigResult(super::UpsertSwapConfigResult),
+        CreateTvcOperatorResult(super::CreateTvcOperatorResult),
+        CreateTvcQuorumKeyResult(super::CreateTvcQuorumKeyResult),
+        ReEncryptTvcQuorumKeyShareResult(super::ReEncryptTvcQuorumKeyShareResult),
     }
 }
 #[derive(Debug)]
@@ -2701,8 +2751,6 @@ pub struct DisableAuthProxyResult {}
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct UpsertSwapConfigResult {
-    #[serde(default)]
-    pub enabled: bool,
     #[serde(default)]
     pub fee_receiver_wallet_address: ::core::option::Option<
         ::prost::alloc::string::String,
@@ -3472,6 +3520,33 @@ pub struct CreateTvcManifestApprovalsResult {
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct PostTvcQuorumKeyShareResult {
+    pub provisioning_share_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateTvcOperatorResult {
+    pub wallet_id: ::prost::alloc::string::String,
+    pub operator_id: ::prost::alloc::string::String,
+    pub encrypt_public_key: ::prost::alloc::string::String,
+    pub sign_public_key: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateTvcQuorumKeyResult {
+    pub quorum_key_id: ::prost::alloc::string::String,
+    pub quorum_public_key: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub share_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct ReEncryptTvcQuorumKeyShareResult {
     pub provisioning_share_id: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
@@ -4747,6 +4822,12 @@ pub enum ActivityType {
     ExecuteSwap = 148,
     #[serde(rename = "ACTIVITY_TYPE_UPSERT_SWAP_CONFIG")]
     UpsertSwapConfig = 149,
+    #[serde(rename = "ACTIVITY_TYPE_CREATE_TVC_OPERATOR")]
+    CreateTvcOperator = 150,
+    #[serde(rename = "ACTIVITY_TYPE_CREATE_TVC_QUORUM_KEY")]
+    CreateTvcQuorumKey = 151,
+    #[serde(rename = "ACTIVITY_TYPE_RE_ENCRYPT_TVC_QUORUM_KEY_SHARE")]
+    ReEncryptTvcQuorumKeyShare = 152,
 }
 impl ActivityType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4929,6 +5010,11 @@ impl ActivityType {
             }
             Self::ExecuteSwap => "ACTIVITY_TYPE_EXECUTE_SWAP",
             Self::UpsertSwapConfig => "ACTIVITY_TYPE_UPSERT_SWAP_CONFIG",
+            Self::CreateTvcOperator => "ACTIVITY_TYPE_CREATE_TVC_OPERATOR",
+            Self::CreateTvcQuorumKey => "ACTIVITY_TYPE_CREATE_TVC_QUORUM_KEY",
+            Self::ReEncryptTvcQuorumKeyShare => {
+                "ACTIVITY_TYPE_RE_ENCRYPT_TVC_QUORUM_KEY_SHARE"
+            }
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -5142,6 +5228,11 @@ impl ActivityType {
             }
             "ACTIVITY_TYPE_EXECUTE_SWAP" => Some(Self::ExecuteSwap),
             "ACTIVITY_TYPE_UPSERT_SWAP_CONFIG" => Some(Self::UpsertSwapConfig),
+            "ACTIVITY_TYPE_CREATE_TVC_OPERATOR" => Some(Self::CreateTvcOperator),
+            "ACTIVITY_TYPE_CREATE_TVC_QUORUM_KEY" => Some(Self::CreateTvcQuorumKey),
+            "ACTIVITY_TYPE_RE_ENCRYPT_TVC_QUORUM_KEY_SHARE" => {
+                Some(Self::ReEncryptTvcQuorumKeyShare)
+            }
             _ => None,
         }
     }

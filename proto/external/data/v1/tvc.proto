@@ -96,6 +96,10 @@ message TvcDeployment {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether or not the user wants this deployment deleted from the cluster."}
   ];
+  bool debug_mode = 15 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether this deployment is running in debug mode. Debug-mode deployments expose enclave logs and cannot be remotely attested."}
+  ];
 }
 
 message TvcContainerSpec {
