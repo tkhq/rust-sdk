@@ -1848,6 +1848,25 @@ message UpsertSwapConfigRequest {
   optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
 }
 
+message CreateTvcOperatorRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_CREATE_TVC_OPERATOR"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.CreateTvcOperatorIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
+}
+
 message CreateTvcAppRequest {
   string type = 1 [
     (google.api.field_behavior) = REQUIRED,
@@ -1937,6 +1956,44 @@ message PostTvcQuorumKeyShareRequest {
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   immutable.activity.v1.PostTvcQuorumKeyShareIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+}
+
+message CreateTvcQuorumKeyRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_CREATE_TVC_QUORUM_KEY"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.CreateTvcQuorumKeyIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
+}
+
+message ReEncryptTvcQuorumKeyShareRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_RE_ENCRYPT_TVC_QUORUM_KEY_SHARE"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.ReEncryptTvcQuorumKeyShareIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
 }
 
 message CreateWebhookEndpointRequest {

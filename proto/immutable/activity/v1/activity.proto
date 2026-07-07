@@ -174,6 +174,9 @@ enum ActivityType {
   ACTIVITY_TYPE_UPSERT_EARN_CLIENT_FEE_CONFIG = 147;
   ACTIVITY_TYPE_EXECUTE_SWAP = 148;
   ACTIVITY_TYPE_UPSERT_SWAP_CONFIG = 149;
+  ACTIVITY_TYPE_CREATE_TVC_OPERATOR = 150;
+  ACTIVITY_TYPE_CREATE_TVC_QUORUM_KEY = 151;
+  ACTIVITY_TYPE_RE_ENCRYPT_TVC_QUORUM_KEY_SHARE = 152;
 }
 
 // The current processing status of an Activity.
@@ -354,6 +357,9 @@ message Intent {
     UpsertEarnClientFeeConfigIntent upsert_earn_client_fee_config_intent = 148;
     ExecuteSwapIntent execute_swap_intent = 149;
     UpsertSwapConfigIntent upsert_swap_config_intent = 150;
+    CreateTvcOperatorIntent create_tvc_operator_intent = 151;
+    CreateTvcQuorumKeyIntent create_tvc_quorum_key_intent = 152;
+    ReEncryptTvcQuorumKeyShareIntent re_encrypt_tvc_quorum_key_share_intent = 153;
   }
 }
 
@@ -475,10 +481,9 @@ message EnableAuthProxyIntent {} // This intent is used to enable auth proxied a
 message DisableAuthProxyIntent {} // This intent is used to disable auth proxied authentication for business org
 
 message UpsertSwapConfigIntent {
-  bool enabled = 1 [(google.api.field_behavior) = REQUIRED];
-  optional string fee_receiver_wallet_address = 2 [(google.api.field_behavior) = OPTIONAL];
-  optional string fee_bps = 3 [(google.api.field_behavior) = OPTIONAL];
-  optional string provider = 4 [(google.api.field_behavior) = OPTIONAL];
+  optional string fee_receiver_wallet_address = 1 [(google.api.field_behavior) = OPTIONAL];
+  optional string fee_bps = 2 [(google.api.field_behavior) = OPTIONAL];
+  optional string provider = 3 [(google.api.field_behavior) = OPTIONAL];
 }
 
 message CreateOrganizationIntent {
@@ -1809,7 +1814,7 @@ message ExecuteSwapIntent {
   string output_token = 2 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      description: "CAIP-19 asset ID for the output asset. Must currently be on the same chain as `input_token`."
+      description: "CAIP-19 asset ID for the output asset. May be on a different chain than `input_token` for cross-chain swaps."
       title: ""
     }
   ];
@@ -4714,6 +4719,29 @@ message CreateTvcAppIntent {
   ];
 }
 
+message CreateTvcOperatorIntent {
+  // @inject_tag: validate:"omitempty,tk_label_length,tk_label"
+  optional string wallet_name = 1 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable name for a new wallet created for this TVC operator"}
+  ];
+  // @inject_tag: validate:"omitempty,uuid"
+  optional string wallet_id = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for an existing wallet to reuse for this TVC operator"}
+  ];
+  // @inject_tag: validate:"required"
+  string path = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Base derivation path for creating TVC operator wallet accounts"}
+  ];
+  // @inject_tag: validate:"required"
+  string operator_name = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable name for this new TVC operator"}
+  ];
+}
+
 message TvcOperatorSetParams {
   // @inject_tag: validate:"required"
   string name = 1 [
@@ -4864,6 +4892,52 @@ message QuorumKeyShareApprovalBundle {
   string signature = 3 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Signature from the share set operator approving the manifest"}
+  ];
+}
+
+message CreateTvcQuorumKeyIntent {
+  // @inject_tag: validate:"required"
+  uint32 threshold = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The threshold of operators needed to reassemble this TVC quorum key"}
+  ];
+  // @inject_tag: validate:"required"
+  repeated string operator_encrypt_keys = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Operator public keys used to encrypt and later approve the generated TVC quorum key shares"}
+  ];
+}
+
+message ReEncryptTvcQuorumKeyShareIntent {
+  // @inject_tag: validate:"required"
+  string attestation_doc_b64 = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Base64-encoded attestation document for the TVC deployment provisioning enclave"}
+  ];
+  // @inject_tag: validate:"required"
+  string manifest_b64 = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Base64-encoded manifest for the TVC deployment"}
+  ];
+  // @inject_tag: validate:"required"
+  string operator_encrypt_key = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Operator encryption public key used to encrypt the hosted TVC quorum key share"}
+  ];
+  // @inject_tag: validate:"required"
+  string operator_sign_key = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Operator signing public key used to approve the TVC manifest"}
+  ];
+  // @inject_tag: validate:"required,uuid"
+  string deployment_id = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier of the TVC deployment receiving the re-encrypted quorum key share"}
+  ];
+  // @inject_tag: validate:"required"
+  string app_quorum_key = 6 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Quorum key for the TVC application"}
   ];
 }
 
@@ -5045,6 +5119,9 @@ message Result {
     UpsertEarnClientFeeConfigResult upsert_earn_client_fee_config_result = 127;
     ExecuteSwapResult execute_swap_result = 128;
     UpsertSwapConfigResult upsert_swap_config_result = 131;
+    CreateTvcOperatorResult create_tvc_operator_result = 132;
+    CreateTvcQuorumKeyResult create_tvc_quorum_key_result = 133;
+    ReEncryptTvcQuorumKeyShareResult re_encrypt_tvc_quorum_key_share_result = 134;
   }
 }
 
@@ -5065,9 +5142,8 @@ message EnableAuthProxyResult {
 message DisableAuthProxyResult {}
 
 message UpsertSwapConfigResult {
-  bool enabled = 1 [(google.api.field_behavior) = REQUIRED];
-  optional string fee_receiver_wallet_address = 2 [(google.api.field_behavior) = OPTIONAL];
-  optional string fee_bps = 3 [(google.api.field_behavior) = OPTIONAL];
+  optional string fee_receiver_wallet_address = 1 [(google.api.field_behavior) = OPTIONAL];
+  optional string fee_bps = 2 [(google.api.field_behavior) = OPTIONAL];
 }
 
 message CreateOrganizationResult {
@@ -5895,6 +5971,47 @@ message CreateTvcManifestApprovalsResult {
 }
 
 message PostTvcQuorumKeyShareResult {
+  string provisioning_share_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The unique identifier for the provisioning quorum key share"}
+  ];
+}
+
+message CreateTvcOperatorResult {
+  string wallet_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The unique identifier for the wallet containing TVC operator accounts"}
+  ];
+  string operator_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The unique identifier for the TVC operator"}
+  ];
+  string encrypt_public_key = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Public encryption key for this TVC operator"}
+  ];
+  string sign_public_key = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Public signing key for this TVC operator"}
+  ];
+}
+
+message CreateTvcQuorumKeyResult {
+  string quorum_key_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The unique identifier for the TVC quorum key"}
+  ];
+  string quorum_public_key = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Public key for the generated TVC quorum key"}
+  ];
+  repeated string share_ids = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The unique identifier(s) for the generated TVC quorum key shares"}
+  ];
+}
+
+message ReEncryptTvcQuorumKeyShareResult {
   string provisioning_share_id = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The unique identifier for the provisioning quorum key share"}

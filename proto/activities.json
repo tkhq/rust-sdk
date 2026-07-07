@@ -364,9 +364,21 @@
       "intentType": "CreateTvcManifestApprovalsIntent",
       "resultType": "CreateTvcManifestApprovalsResult"
     },
+    "ACTIVITY_TYPE_CREATE_TVC_OPERATOR": {
+      "intentType": "CreateTvcOperatorIntent",
+      "resultType": "CreateTvcOperatorResult"
+    },
     "ACTIVITY_TYPE_POST_TVC_QUORUM_KEY_SHARE": {
       "intentType": "PostTvcQuorumKeyShareIntent",
       "resultType": "PostTvcQuorumKeyShareResult"
+    },
+    "ACTIVITY_TYPE_CREATE_TVC_QUORUM_KEY": {
+      "intentType": "CreateTvcQuorumKeyIntent",
+      "resultType": "CreateTvcQuorumKeyResult"
+    },
+    "ACTIVITY_TYPE_RE_ENCRYPT_TVC_QUORUM_KEY_SHARE": {
+      "intentType": "ReEncryptTvcQuorumKeyShareIntent",
+      "resultType": "ReEncryptTvcQuorumKeyShareResult"
     },
     "ACTIVITY_TYPE_CREATE_WEBHOOK_ENDPOINT": {
       "intentType": "CreateWebhookEndpointIntent",
