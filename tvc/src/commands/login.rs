@@ -211,40 +211,32 @@ fn resolve_profile_alias(config: &Config, org: Option<String>) -> Result<String>
             if config.orgs.is_empty() {
                 bail!("No login profiles to delete.");
             }
-            let choices: Vec<ProfileChoice> = config
+            let choices: Vec<_> = config
                 .orgs
                 .iter()
-                .map(|(alias, org)| {
-                    let suffix = if config.active_org.as_ref() == Some(alias) {
-                        " (active)"
-                    } else {
-                        ""
-                    };
-                    ProfileChoice::new(alias, &org.id, suffix)
+                .map(|(alias, org)| ProfileChoice {
+                    alias: alias.as_str(),
+                    org_id: org.id.as_str(),
+                    is_active: config.active_org.as_deref() == Some(alias.as_str()),
                 })
                 .collect();
-            Ok(prompts::select("Select profile to delete", choices)?.alias)
+            Ok(prompts::select("Select profile to delete", choices)?
+                .alias
+                .to_string())
         }
     }
 }
 
-struct ProfileChoice {
-    display: String,
-    alias: String,
+struct ProfileChoice<'a> {
+    alias: &'a str,
+    org_id: &'a str,
+    is_active: bool,
 }
 
-impl ProfileChoice {
-    fn new(alias: &str, org_id: &str, suffix: &str) -> Self {
-        ProfileChoice {
-            display: format!("{alias} ({org_id}){suffix}"),
-            alias: alias.to_string(),
-        }
-    }
-}
-
-impl std::fmt::Display for ProfileChoice {
+impl std::fmt::Display for ProfileChoice<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.display)
+        let suffix = if self.is_active { " (active)" } else { "" };
+        write!(f, "{} ({}){suffix}", self.alias, self.org_id)
     }
 }
 
