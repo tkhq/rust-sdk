@@ -190,17 +190,13 @@ pub async fn run_delete(args: DeleteArgs, is_non_interactive: bool) -> Result<()
 }
 
 /// Resolve the alias of a configured profile to delete. Prompts interactively
-/// with a picker when no query is given. Bails if no profiles are configured or
-/// the query matches none.
+/// with a picker when no query is given; a query that matches nothing is handled
+/// by `find_org` returning `None`.
 fn resolve_profile_alias(
     config: &Config,
     org: Option<String>,
     is_non_interactive: bool,
 ) -> Result<String> {
-    if config.orgs.is_empty() {
-        bail!("No login profiles are configured. Run `tvc login` to add one.");
-    }
-
     match org {
         Some(query) => match find_org(config, &query) {
             Some((alias, _)) => Ok(alias.clone()),
@@ -212,6 +208,9 @@ fn resolve_profile_alias(
         None => {
             if is_non_interactive {
                 return Err(error_required_in_non_interactive("--org"));
+            }
+            if config.orgs.is_empty() {
+                bail!("No login profiles to delete.");
             }
             let choices: Vec<ProfileChoice> = config
                 .orgs
