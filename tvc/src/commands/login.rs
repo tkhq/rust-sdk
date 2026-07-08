@@ -2,7 +2,7 @@
 
 use crate::config::turnkey::{
     API_BASE_URL_PROD, Config, KeyCurve, OrgConfig, StoredApiKey, StoredQosOperatorKey,
-    dashboard_base_url,
+    dashboard_base_url, default_api_key_path, default_operator_key_path, default_org_dir,
 };
 use crate::prompts::{self, error_required_in_non_interactive};
 use anyhow::{Context, Result, anyhow, bail};
@@ -139,40 +139,41 @@ pub async fn run_delete(args: DeleteArgs, is_non_interactive: bool) -> Result<()
         .flatten()
         .map(|key| key.public_key);
 
-    let mut deleted = Vec::new();
-    for path in [&removed.api_key_path, &removed.operator_key_path] {
-        match tokio::fs::remove_file(path).await {
-            Ok(()) => deleted.push(path.display().to_string()),
+    // The default layout stores both key files in the per-org directory, so a
+    // default profile is removed by deleting that whole directory. Custom
+    // (hand-edited) key paths are left untouched with a warning, since the user
+    // placed them deliberately and they may live outside our config tree.
+    let uses_default_layout = removed.api_key_path == default_api_key_path(&alias)?
+        && removed.operator_key_path == default_operator_key_path(&alias)?;
+
+    let removed_dir = if uses_default_layout {
+        let dir = default_org_dir(&alias)?;
+        match tokio::fs::remove_dir_all(&dir).await {
+            Ok(()) => Some(dir),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                eprintln!(
-                    "WARNING: expected key file was not on disk, skipping: {}",
-                    path.display()
-                );
+                eprintln!("WARNING: key directory was not on disk: {}", dir.display());
+                None
             }
             Err(e) => {
                 return Err(e)
-                    .with_context(|| format!("failed to delete key file: {}", path.display()));
+                    .with_context(|| format!("failed to delete key directory: {}", dir.display()));
             }
         }
-    }
+    } else {
+        eprintln!("WARNING: custom key paths are configured and were NOT deleted.");
+        eprintln!("Remove them manually if no longer needed:");
+        eprintln!("  {}", removed.api_key_path.display());
+        eprintln!("  {}", removed.operator_key_path.display());
+        None
+    };
 
-    // Save last: if a key-file step above fails, the profile stays listed and the
-    // delete is retryable, rather than de-listed with its files stranded on disk.
+    // Save last: persist the config removal only after the on-disk cleanup above
+    // succeeds, so a failure leaves the profile listed and the delete retryable.
     config.save().await?;
 
-    // Best-effort cleanup of the default per-org directory; ignore errors so a
-    // missing or shared/non-empty directory doesn't fail the delete.
-    if let Ok(dir) = crate::config::turnkey::default_org_dir(&alias) {
-        let _ = tokio::fs::remove_dir(&dir).await;
-    }
-
     println!("Deleted login profile '{alias}' ({}).", removed.id);
-    if !deleted.is_empty() {
-        println!();
-        println!("Removed key files:");
-        for path in deleted {
-            println!("  {path}");
-        }
+    if let Some(dir) = removed_dir {
+        println!("Removed key directory: {}", dir.display());
     }
 
     // A local delete does not touch the dashboard-registered API key, and we
