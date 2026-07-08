@@ -175,22 +175,19 @@ pub async fn run_delete(args: DeleteArgs, is_non_interactive: bool) -> Result<()
         }
     }
 
-    // A local delete does not touch or inspect the dashboard-registered API key.
-    // We can't tell whether one is still registered (the user may have already
-    // removed it), so surface the steps without asserting its state.
+    // A local delete does not touch the dashboard-registered API key, and we
+    // can't tell whether it is still there, so hedge with "may" and give steps.
     let dashboard_url = dashboard_base_url(&removed.api_base_url);
     println!();
-    println!(
-        "IMPORTANT: This did not touch the Turnkey dashboard. If this API key is still registered"
-    );
-    println!("there, it remains valid until you remove it. If you haven't already:");
+    println!("IMPORTANT: The API key may still be registered on the Turnkey dashboard.");
+    println!("It will remain valid until it is manually removed. To remove it:");
     println!("  1. Go to {dashboard_url}/dashboard/v2/users and click your user");
     match api_public_key {
         Some(public_key) => {
-            println!("  2. Delete the API key with public key (if present):");
+            println!("  2. Delete the API key with public key:");
             println!("       {public_key}");
         }
-        None => println!("  2. Delete the API key associated with this profile (if present)"),
+        None => println!("  2. Delete the API key associated with this profile"),
     }
 
     Ok(())
