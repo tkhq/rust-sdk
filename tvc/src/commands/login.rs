@@ -33,10 +33,10 @@ pub struct Args {
 pub struct DeleteArgs {
     /// Organization alias or ID of the profile to delete.
     /// If not provided, will prompt interactively.
-    #[arg(long, value_name = "ORG")]
+    #[arg(short, long, value_name = "ORG")]
     pub org: Option<String>,
     /// Skip the confirmation prompt (required to delete in non-interactive mode).
-    #[arg(long)]
+    #[arg(short, long)]
     pub yes: bool,
 }
 
