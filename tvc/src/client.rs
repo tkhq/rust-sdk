@@ -4,9 +4,13 @@ use crate::config::turnkey::{Config, StoredApiKey};
 use anyhow::{Context, Result, anyhow, bail};
 use tracing::debug;
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
-use turnkey_client::TurnkeyClient;
-use turnkey_client::generated::GetTvcAppRequest;
-use turnkey_client::generated::external::data::v1::TvcApp;
+use turnkey_client::{
+    TurnkeyClient,
+    generated::{
+        GetTvcAppRequest, GetTvcDeploymentRequest,
+        external::data::v1::{TvcApp, TvcDeployment},
+    },
+};
 
 /// Number of *required* auth env vars: org_id, api_key_public, api_key_private.
 /// `TVC_API_BASE_URL` is optional and defaults to `DEFAULT_API_BASE_URL`.
@@ -68,6 +72,25 @@ pub async fn fetch_tvc_app(auth: &AuthenticatedClient, app_id: &str) -> Result<T
     response
         .tvc_app
         .ok_or_else(|| anyhow!("app not found: {app_id}"))
+}
+
+pub async fn fetch_tvc_deployment(
+    auth: &AuthenticatedClient,
+    organization_id: String,
+    deployment_id: String,
+) -> Result<TvcDeployment> {
+    let response = auth
+        .client
+        .get_tvc_deployment(GetTvcDeploymentRequest {
+            organization_id,
+            deployment_id,
+        })
+        .await
+        .context("failed to fetch deployment")?;
+
+    response
+        .tvc_deployment
+        .ok_or_else(|| anyhow!("deployment not found"))
 }
 
 async fn load_credentials_from_config() -> Result<(String, String, String, String)> {
