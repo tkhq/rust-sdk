@@ -77,8 +77,8 @@ async fn execute(args: Args) -> Result<()> {
     // Seed the config either from an existing deployment or a blank template.
     let mut config = match from_deployment {
         Some(deploy_id) => {
-            // TODO:
-            // see other TODO. TL;DR split fetching the data/resources separately
+            // TODO (TVC-154):
+            // TL;DR split fetching the data/resources separately
             // from building the client
             let auth = build_client().await?;
             let org_id = auth.org_id.clone();

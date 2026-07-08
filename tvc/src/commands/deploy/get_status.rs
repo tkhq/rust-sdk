@@ -27,7 +27,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         deploy_id: deployment_id,
     } = args;
 
-    // TODO:
+    // TODO (TVC-154):
     // this is a little backwards, all the variables that are needed to build the client
     // are resolved INSIDE the `build-client`. Instead, all the necessary data for the client
     // should be resolved, then passed into an infallible constructor
