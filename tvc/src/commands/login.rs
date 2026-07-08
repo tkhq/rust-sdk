@@ -85,21 +85,28 @@ pub async fn run_delete(args: DeleteArgs, is_non_interactive: bool) -> Result<()
         "running login delete command"
     );
 
+    // Validate inputs before any business logic: non-interactive mode cannot
+    // prompt, so it requires --org (which profile) and --yes (confirmation).
+    if is_non_interactive {
+        if args.org.is_none() {
+            return Err(error_required_in_non_interactive("--org"));
+        }
+        if !args.yes {
+            return Err(error_required_in_non_interactive("--yes"));
+        }
+    }
+
     let mut config = Config::load().await?;
-    let alias = resolve_profile_alias(&config, args.org, is_non_interactive)?;
+    let alias = resolve_profile_alias(&config, args.org)?;
     let org_id = config
         .orgs
         .get(&alias)
         .map(|org| org.id.clone())
         .unwrap_or_default();
 
+    // Interactive confirmation. A non-interactive run without --yes was rejected
+    // up front, so reaching here with !args.yes means we can prompt.
     if !args.yes {
-        if is_non_interactive {
-            bail!(
-                "Refusing to delete profile '{alias}' ({org_id}) without confirmation. \
-                 Pass --yes to confirm in non-interactive mode."
-            );
-        }
         let dashboard_url = config
             .orgs
             .get(&alias)
@@ -192,11 +199,7 @@ pub async fn run_delete(args: DeleteArgs, is_non_interactive: bool) -> Result<()
 /// Resolve the alias of a configured profile to delete. Prompts interactively
 /// with a picker when no query is given; a query that matches nothing is handled
 /// by `find_org` returning `None`.
-fn resolve_profile_alias(
-    config: &Config,
-    org: Option<String>,
-    is_non_interactive: bool,
-) -> Result<String> {
+fn resolve_profile_alias(config: &Config, org: Option<String>) -> Result<String> {
     match org {
         Some(query) => match find_org(config, &query) {
             Some((alias, _)) => Ok(alias.clone()),
@@ -206,9 +209,8 @@ fn resolve_profile_alias(
             ),
         },
         None => {
-            if is_non_interactive {
-                return Err(error_required_in_non_interactive("--org"));
-            }
+            // Reached only in interactive mode; a non-interactive run without
+            // --org is rejected up front in `run_delete` before we get here.
             if config.orgs.is_empty() {
                 bail!("No login profiles to delete.");
             }
