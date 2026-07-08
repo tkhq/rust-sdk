@@ -136,7 +136,12 @@ pub async fn run_delete(args: DeleteArgs, is_non_interactive: bool) -> Result<()
     for path in [&removed.api_key_path, &removed.operator_key_path] {
         match tokio::fs::remove_file(path).await {
             Ok(()) => deleted.push(path.display().to_string()),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                eprintln!(
+                    "WARNING: expected key file was not on disk, skipping: {}",
+                    path.display()
+                );
+            }
             Err(e) => {
                 return Err(e)
                     .with_context(|| format!("failed to delete key file: {}", path.display()));
@@ -155,9 +160,7 @@ pub async fn run_delete(args: DeleteArgs, is_non_interactive: bool) -> Result<()
     }
 
     println!("Deleted login profile '{alias}' ({}).", removed.id);
-    if deleted.is_empty() {
-        println!("No key files were found on disk.");
-    } else {
+    if !deleted.is_empty() {
         println!();
         println!("Removed key files:");
         for path in deleted {
