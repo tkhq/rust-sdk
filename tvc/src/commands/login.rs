@@ -122,7 +122,6 @@ pub async fn run_delete(args: DeleteArgs, is_non_interactive: bool) -> Result<()
     let removed = config
         .remove_org(&alias)
         .expect("alias was resolved from config");
-    config.save().await?;
 
     // Read the API key's public key before deleting its file, so the
     // dashboard-revocation reminder below can name exactly which key to remove.
@@ -144,6 +143,10 @@ pub async fn run_delete(args: DeleteArgs, is_non_interactive: bool) -> Result<()
             }
         }
     }
+
+    // Save last: if a key-file step above fails, the profile stays listed and the
+    // delete is retryable, rather than de-listed with its files stranded on disk.
+    config.save().await?;
 
     // Best-effort cleanup of the default per-org directory; ignore errors so a
     // missing or shared/non-empty directory doesn't fail the delete.
