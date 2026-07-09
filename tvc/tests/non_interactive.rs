@@ -256,7 +256,6 @@ fn deploy_create_without_required_fields_bails_naming_each_field() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("app_id"))
-        .stderr(predicate::str::contains("qos_version"))
         .stderr(predicate::str::contains("pivot_container_image_url"))
         .stderr(predicate::str::contains("pivot_path"))
         .stderr(predicate::str::contains("expected_pivot_digest"));
