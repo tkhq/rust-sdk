@@ -1425,6 +1425,21 @@ pub struct UpsertSwapConfigRequest {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct CreateTvcOperatorRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::CreateTvcOperatorIntent,
+    >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct CreateTvcAppRequest {
     pub r#type: ::prost::alloc::string::String,
     pub timestamp_ms: ::prost::alloc::string::String,
@@ -1487,6 +1502,36 @@ pub struct PostTvcQuorumKeyShareRequest {
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::PostTvcQuorumKeyShareIntent,
     >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateTvcQuorumKeyRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::CreateTvcQuorumKeyIntent,
+    >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct ReEncryptTvcQuorumKeyShareRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::ReEncryptTvcQuorumKeyShareIntent,
+    >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]

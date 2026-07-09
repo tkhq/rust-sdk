@@ -636,6 +636,8 @@ pub struct TvcDeployment {
     pub updated_at: ::core::option::Option<Timestamp>,
     #[serde(default)]
     pub delete: bool,
+    #[serde(default)]
+    pub debug_mode: bool,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]

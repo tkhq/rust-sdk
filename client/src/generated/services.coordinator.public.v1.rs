@@ -747,6 +747,42 @@ pub struct GetSwapQuoteResponse {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct GetSwapStatusRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub send_transaction_status_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetSwapStatusResponse {
+    pub status: ::prost::alloc::string::String,
+    pub swap_kind: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub provider: ::core::option::Option<::prost::alloc::string::String>,
+    pub input_token: ::prost::alloc::string::String,
+    pub output_token: ::prost::alloc::string::String,
+    pub input_amount: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub origin_tx_hash: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub destination_tx_hash: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub output_amount: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub settled_asset: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub settled_amount: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub settlement_tx_hash: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub provider_status: ::core::option::Option<::prost::alloc::string::String>,
+    pub updated_at: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct SwapQuoteOption {
     pub quote_id: ::prost::alloc::string::String,
     pub provider: ::prost::alloc::string::String,

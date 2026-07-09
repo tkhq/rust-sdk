@@ -2,11 +2,15 @@
 
 use anyhow::{Context, anyhow};
 use clap::Args as ClapArgs;
-use turnkey_client::generated::external::data::v1::{AppStatus, DeploymentStatus};
-use turnkey_client::generated::{GetAppStatusRequest, GetTvcDeploymentRequest};
+use turnkey_client::generated::{
+    GetAppStatusRequest,
+    external::data::v1::{AppStatus, DeploymentStatus},
+};
 
-use crate::client::fetch_tvc_app;
-use crate::commands::display::format_egress_enabled;
+use crate::{
+    client::{fetch_tvc_app, fetch_tvc_deployment},
+    commands::display::format_egress_enabled,
+};
 
 /// Get the live status of a deployment from the app status API.
 #[derive(Debug, ClapArgs)]
@@ -19,25 +23,21 @@ pub struct Args {
 
 /// Run the deploy get-status command.
 pub async fn run(args: Args) -> anyhow::Result<()> {
+    let Args {
+        deploy_id: deployment_id,
+    } = args;
+
+    // TODO (TVC-154):
+    // this is a little backwards, all the variables that are needed to build the client
+    // are resolved INSIDE the `build-client`. Instead, all the necessary data for the client
+    // should be resolved, then passed into an infallible constructor
     let auth = crate::client::build_client().await?;
+    let org_id = auth.org_id.clone();
 
-    let deployment_request = GetTvcDeploymentRequest {
-        organization_id: auth.org_id.clone(),
-        deployment_id: args.deploy_id.clone(),
-    };
-
-    let deployment_response = auth
-        .client
-        .get_tvc_deployment(deployment_request)
-        .await
-        .context("failed to fetch deployment")?;
-
-    let deployment = deployment_response
-        .tvc_deployment
-        .ok_or_else(|| anyhow!("deployment not found: {}", args.deploy_id))?;
+    let deployment = fetch_tvc_deployment(&auth, org_id.clone(), deployment_id.clone()).await?;
 
     let app_request = GetAppStatusRequest {
-        organization_id: auth.org_id.clone(),
+        organization_id: org_id.clone(),
         app_id: deployment.app_id.clone(),
     };
 
@@ -59,13 +59,13 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     println!("{}", format_egress_enabled(app.enable_egress));
     println!(
         "Is Targeted Deployment: {}",
-        if app_status.targeted_deployment_id == args.deploy_id {
+        if app_status.targeted_deployment_id == deployment_id {
             "yes"
         } else {
             "no"
         }
     );
-    if let Some(deployment_status) = find_deployment_status(&app_status, &args.deploy_id) {
+    if let Some(deployment_status) = find_deployment_status(&app_status, &deployment_id) {
         println!(
             "{}",
             crate::commands::app_status::format_replica_status(deployment_status)

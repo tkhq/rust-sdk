@@ -179,7 +179,8 @@ enum DeployCommands {
         after_help = commands::deploy::PORT_GUIDANCE
     )]
     Create(commands::deploy::create::Args),
-    /// Generate a template deployment configuration file.
+    /// Generate a deployment configuration file
+    #[command(long_about = commands::deploy::init::LONG_ABOUT)]
     Init(commands::deploy::init::Args),
     /// Fetch debug logs for a deployment.
     #[command(long_about = commands::deploy::debug_logs::LONG_ABOUT)]
