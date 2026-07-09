@@ -16,6 +16,9 @@ use turnkey_client::generated::{
 /// (private image). Treated as a placeholder by [`DeployConfig::has_placeholders`].
 const PULL_SECRET_PLACEHOLDER: &str = "<REMOVE_ME_IF_PIVOT_CONTAINER_URL_IS_PUBLIC>";
 
+/// Default QOS version selected for new deployments.
+pub const DEFAULT_QOS_VERSION: &str = "0.12.1";
+
 /// Deployment configuration loaded from JSON file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -112,7 +115,7 @@ impl DeployConfig {
     pub fn template(app_id: Option<&str>) -> Self {
         Self {
             app_id: app_id.unwrap_or("<FILL_IN_APP_ID>").to_string(),
-            qos_version: "<FILL_IN_QOS_VERSION>".to_string(),
+            qos_version: DEFAULT_QOS_VERSION.to_string(),
             pivot_container_image_url: "<FILL_IN_PIVOT_CONTAINER_IMAGE_URL>".to_string(),
             pivot_path: "<FILL_IN_PIVOT_PATH>".to_string(),
             pivot_args: vec![],

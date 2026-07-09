@@ -571,7 +571,6 @@ mod tests {
         let err = run_resolve(&Default::default()).unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("app_id"), "{msg}");
-        assert!(msg.contains("qos_version"), "{msg}");
         assert!(msg.contains("pivot_container_image_url"), "{msg}");
         assert!(msg.contains("pivot_path"), "{msg}");
         assert!(msg.contains("expected_pivot_digest"), "{msg}");
