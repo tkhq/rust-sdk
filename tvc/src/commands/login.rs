@@ -2,7 +2,7 @@
 
 use crate::config::turnkey::{
     API_BASE_URL_PROD, Config, KeyCurve, OrgConfig, StoredApiKey, StoredQosOperatorKey,
-    dashboard_base_url,
+    dashboard_base_url, default_api_key_path, default_operator_key_path, default_org_dir,
 };
 use crate::prompts::{self, error_required_in_non_interactive};
 use anyhow::{Context, Result, anyhow, bail};
@@ -24,6 +24,20 @@ pub struct Args {
     /// Turnkey API base URL. Defaults to production for newly configured orgs.
     #[arg(long, env = "TVC_API_BASE_URL", value_name = "URL")]
     pub api_base_url: Option<String>,
+}
+
+/// Permanently delete a saved login profile, including its API and operator
+/// key files on disk.
+#[derive(Debug, ClapArgs)]
+#[command(about, long_about = None)]
+pub struct DeleteArgs {
+    /// Organization alias or ID of the profile to delete.
+    /// If not provided, will prompt interactively.
+    #[arg(short, long, value_name = "ORG")]
+    pub org: Option<String>,
+    /// Skip the confirmation prompt (required to delete in non-interactive mode).
+    #[arg(short, long)]
+    pub yes: bool,
 }
 
 enum OrgPlan {
@@ -59,6 +73,172 @@ pub async fn run(args: Args, is_non_interactive: bool) -> Result<()> {
     };
 
     execute_login(config, plan).await
+}
+
+/// Permanently delete a saved login profile: its config entry and its API and
+/// operator key files on disk.
+pub async fn run_delete(args: DeleteArgs, is_non_interactive: bool) -> Result<()> {
+    debug!(
+        non_interactive = is_non_interactive,
+        org_arg_present = args.org.is_some(),
+        skip_confirm = args.yes,
+        "running login delete command"
+    );
+
+    // Validate inputs before any business logic: non-interactive mode cannot
+    // prompt, so it requires --org (which profile) and --yes (confirmation).
+    if is_non_interactive {
+        if args.org.is_none() {
+            return Err(error_required_in_non_interactive("--org"));
+        }
+        if !args.yes {
+            return Err(error_required_in_non_interactive("--yes"));
+        }
+    }
+
+    let mut config = Config::load().await?;
+    let alias = resolve_profile_alias(&config, args.org)?;
+    let org_id = config
+        .orgs
+        .get(&alias)
+        .map(|org| org.id.clone())
+        .unwrap_or_default();
+
+    // Interactive confirmation. A non-interactive run without --yes was rejected
+    // up front, so reaching here with !args.yes means we can prompt.
+    if !args.yes {
+        let dashboard_url = config
+            .orgs
+            .get(&alias)
+            .map(|org| dashboard_base_url(&org.api_base_url))
+            .unwrap_or_default();
+        eprintln!();
+        eprintln!("WARNING: This permanently deletes login profile '{alias}' ({org_id}).");
+        eprintln!("  - Removes the local config entry and deletes the API and operator key");
+        eprintln!("    files from disk. This cannot be undone.");
+        eprintln!("  - It does NOT touch the Turnkey dashboard ({dashboard_url}). If this API");
+        eprintln!("    key is registered there, it stays valid until you remove it");
+        eprintln!("    (instructions are printed after deletion).");
+        eprintln!();
+        prompts::confirm_or_bail(
+            &format!("Permanently delete profile '{alias}' ({org_id}) and its key files?"),
+            "deletion",
+        )?;
+    }
+
+    let removed = config
+        .remove_org(&alias)
+        .expect("alias was resolved from config");
+
+    // Read the API key's public key before deleting its file, so the
+    // dashboard-revocation reminder below can name exactly which key to remove.
+    // Best-effort: a missing or unreadable key file just omits the value.
+    let api_public_key = StoredApiKey::load(&removed)
+        .await
+        .ok()
+        .flatten()
+        .map(|key| key.public_key);
+
+    // The default layout stores both key files in the per-org directory, so a
+    // default profile is removed by deleting that whole directory. Custom
+    // (hand-edited) key paths are left untouched with a warning, since the user
+    // placed them deliberately and they may live outside our config tree.
+    let uses_default_layout = removed.api_key_path == default_api_key_path(&alias)?
+        && removed.operator_key_path == default_operator_key_path(&alias)?;
+
+    let removed_dir = if uses_default_layout {
+        let dir = default_org_dir(&alias)?;
+        match tokio::fs::remove_dir_all(&dir).await {
+            Ok(()) => Some(dir),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                eprintln!("WARNING: key directory was not on disk: {}", dir.display());
+                None
+            }
+            Err(e) => {
+                return Err(e)
+                    .with_context(|| format!("failed to delete key directory: {}", dir.display()));
+            }
+        }
+    } else {
+        eprintln!("WARNING: custom key paths are configured and were NOT deleted.");
+        eprintln!("Remove them manually if no longer needed:");
+        eprintln!("  {}", removed.api_key_path.display());
+        eprintln!("  {}", removed.operator_key_path.display());
+        None
+    };
+
+    // Save last: persist the config removal only after the on-disk cleanup above
+    // succeeds, so a failure leaves the profile listed and the delete retryable.
+    config.save().await?;
+
+    println!("Deleted login profile '{alias}' ({}).", removed.id);
+    if let Some(dir) = removed_dir {
+        println!("Removed key directory: {}", dir.display());
+    }
+
+    // A local delete does not touch the dashboard-registered API key, and we
+    // can't tell whether it is still there, so hedge with "may" and give steps.
+    let dashboard_url = dashboard_base_url(&removed.api_base_url);
+    println!();
+    println!("IMPORTANT: The API key may still be registered on the Turnkey dashboard.");
+    println!("It will remain valid until it is manually removed. To remove it:");
+    println!("  1. Go to {dashboard_url}/dashboard/v2/users and click your user");
+    match api_public_key {
+        Some(public_key) => {
+            println!("  2. Delete the API key with public key:");
+            println!("       {public_key}");
+        }
+        None => println!("  2. Delete the API key associated with this profile"),
+    }
+
+    Ok(())
+}
+
+/// Resolve the alias of a configured profile to delete. Prompts interactively
+/// with a picker when no query is given; a query that matches nothing is handled
+/// by `find_org` returning `None`.
+fn resolve_profile_alias(config: &Config, org: Option<String>) -> Result<String> {
+    match org {
+        Some(query) => match find_org(config, &query) {
+            Some((alias, _)) => Ok(alias.clone()),
+            None => bail!(
+                "Login profile '{query}' not found. \
+                 Run `tvc login` to see configured profiles."
+            ),
+        },
+        None => {
+            // Reached only in interactive mode; a non-interactive run without
+            // --org is rejected up front in `run_delete` before we get here.
+            if config.orgs.is_empty() {
+                bail!("No login profiles to delete.");
+            }
+            let choices: Vec<_> = config
+                .orgs
+                .iter()
+                .map(|(alias, org)| ProfileChoice {
+                    alias: alias.as_str(),
+                    org_id: org.id.as_str(),
+                    is_active: config.active_org.as_deref() == Some(alias.as_str()),
+                })
+                .collect();
+            Ok(prompts::select("Select profile to delete", choices)?
+                .alias
+                .to_string())
+        }
+    }
+}
+
+struct ProfileChoice<'a> {
+    alias: &'a str,
+    org_id: &'a str,
+    is_active: bool,
+}
+
+impl std::fmt::Display for ProfileChoice<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let suffix = if self.is_active { " (active)" } else { "" };
+        write!(f, "{} ({}){suffix}", self.alias, self.org_id)
+    }
 }
 
 fn build_login_plan_interactive(args: Args, config: &Config) -> Result<LoginPlan> {

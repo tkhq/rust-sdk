@@ -106,14 +106,24 @@ impl Cli {
                 }
             },
             Commands::Login(args) => commands::login::run(args, non_interactive).await,
+            Commands::Profile { command } => match command {
+                ProfileCommands::Delete(delete_args) => {
+                    commands::login::run_delete(delete_args, non_interactive).await
+                }
+            },
         }
     }
 }
 
 #[derive(Debug, Subcommand)]
 enum Commands {
-    /// Authenticate with Turnkey and set up local credentials.
+    /// Authenticate with Turnkey.
     Login(commands::login::Args),
+    /// Manage saved login profiles.
+    Profile {
+        #[command(subcommand)]
+        command: ProfileCommands,
+    },
     /// Manage deployments.
     Deploy {
         #[command(subcommand)]
@@ -135,11 +145,20 @@ impl Commands {
     fn name(&self) -> &'static str {
         match self {
             Commands::Login(_) => "login",
+            Commands::Profile { command } => match command {
+                ProfileCommands::Delete(_) => "profile delete",
+            },
             Commands::Deploy { command } => command.name(),
             Commands::App { command } => command.name(),
             Commands::Keys { command } => command.name(),
         }
     }
+}
+
+#[derive(Debug, Subcommand)]
+enum ProfileCommands {
+    /// Permanently delete a saved login profile and its key files.
+    Delete(commands::login::DeleteArgs),
 }
 
 #[derive(Debug, Subcommand)]
