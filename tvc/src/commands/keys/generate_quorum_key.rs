@@ -1,14 +1,17 @@
 //! Generate quorum key command - generates and encrypts a quorum key from a given config.
 
 use crate::config::quorum_key::QuorumKeyConfig;
+use crate::output::Shell;
 use crate::quorum_key_metadata::{
     EncryptedShareMetadata, QuorumKeyMetadata, decode_p256_public_key_hex,
 };
+use crate::shell_line;
 use crate::util::read_json_file;
 use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
 use qos_p256::{P256Pair, P256Public};
 use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
 use zeroize::Zeroizing;
 
@@ -38,7 +41,7 @@ struct OperatorPublicKey {
 struct PlaintextShares(Vec<Zeroizing<Vec<u8>>>);
 
 /// Run the quorum key generation command.
-pub async fn run(args: Args) -> Result<()> {
+pub async fn run<O: Write, E: Write>(args: Args, shell: &mut Shell<O, E>) -> Result<()> {
     let config: QuorumKeyConfig =
         read_json_file(&args.config_file, "quorum key config file").await?;
     config.validate()?;
@@ -63,13 +66,14 @@ pub async fn run(args: Args) -> Result<()> {
         )
     })?;
 
-    println!(
+    shell_line!(
+        shell,
         "Quorum key metadata written to: {}",
         args.quorum_key_metadata_out.display()
-    );
+    )?;
 
-    println!("Quorum Public Key: {quorum_key_public}");
-    println!("Threshold: {}", config.threshold);
+    shell_line!(shell, "Quorum Public Key: {quorum_key_public}")?;
+    shell_line!(shell, "Threshold: {}", config.threshold)?;
 
     Ok(())
 }

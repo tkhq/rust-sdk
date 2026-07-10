@@ -2,8 +2,12 @@
 
 use anyhow::Context;
 use clap::Args as ClapArgs;
+use std::io::Write;
 use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::RestoreTvcDeploymentIntent;
+
+use crate::output::Shell;
+use crate::shell_line;
 
 /// Restore a deleted deployment.
 #[derive(Debug, ClapArgs)]
@@ -15,7 +19,7 @@ pub struct Args {
 }
 
 /// Run the deploy restore command.
-pub async fn run(args: Args) -> anyhow::Result<()> {
+pub async fn run<O: Write, E: Write>(args: Args, shell: &mut Shell<O, E>) -> anyhow::Result<()> {
     let auth = crate::client::build_client().await?;
 
     let intent = RestoreTvcDeploymentIntent {
@@ -33,10 +37,15 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         .await
         .context("failed to restore TVC deployment")?;
 
-    print!(
-        "\nDeployment restore accepted; deployment is no longer marked for deletion.\n\nDeployment ID: {}\nActivity ID: {}\nActivity Status: {:?}\n",
-        result.result.deployment_id, result.activity_id, result.status
-    );
+    shell_line!(shell)?;
+    shell_line!(
+        shell,
+        "Deployment restore accepted; deployment is no longer marked for deletion."
+    )?;
+    shell_line!(shell)?;
+    shell_line!(shell, "Deployment ID: {}", result.result.deployment_id)?;
+    shell_line!(shell, "Activity ID: {}", result.activity_id)?;
+    shell_line!(shell, "Activity Status: {:?}", result.status)?;
 
     Ok(())
 }
