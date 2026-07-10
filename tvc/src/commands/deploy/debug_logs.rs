@@ -1,9 +1,12 @@
 //! Deploy debug-logs command.
 
+use crate::output::Shell;
+use crate::{shell_err_line, shell_line};
 use anyhow::Context;
 use chrono::{DateTime, SecondsFormat, Utc};
 use clap::Args as ClapArgs;
 use std::collections::{HashSet, VecDeque};
+use std::io::Write;
 use std::time::Duration;
 use turnkey_client::TurnkeyP256ApiKey;
 use turnkey_client::generated::external::data::v1::{LogLine, Timestamp};
@@ -116,7 +119,7 @@ pub struct Args {
 }
 
 /// Run the `deploy debug-logs` command.
-pub async fn run(args: Args) -> anyhow::Result<()> {
+pub async fn run<O: Write, E: Write>(args: Args, shell: &mut Shell<O, E>) -> anyhow::Result<()> {
     let auth = crate::client::build_client().await?;
 
     let request = DebugLogQueryRequest {
@@ -131,7 +134,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         recent_line_capacity: args.recent_line_capacity,
     };
 
-    query_debug_logs(&auth.client, request).await
+    query_debug_logs(&auth.client, request, shell).await
 }
 
 #[derive(Clone, Debug)]
@@ -168,9 +171,10 @@ impl DebugLogQueryRequest {
     }
 }
 
-async fn query_debug_logs(
+async fn query_debug_logs<O: Write, E: Write>(
     client: &turnkey_client::TurnkeyClient<TurnkeyP256ApiKey>,
     request: DebugLogQueryRequest,
+    shell: &mut Shell<O, E>,
 ) -> anyhow::Result<()> {
     let mut log_printer = DebugLogPrinter::new(
         request.include_platform_timestamp,
@@ -185,19 +189,19 @@ async fn query_debug_logs(
     };
 
     let response = fetch_debug_logs(client, current_request).await?;
-    log_printer.print_response(&response);
+    log_printer.print_response(&response, shell)?;
 
     let Some(poll_request) = poll_request else {
         return Ok(());
     };
 
-    eprintln!("Connected; polling for debug logs...");
+    shell_err_line!(shell, "Connected; polling for debug logs...")?;
 
     let poll_interval = Duration::from_secs(poll_request.poll_interval_seconds as u64);
     loop {
         tokio::time::sleep(poll_interval).await;
         let response = fetch_debug_logs(client, poll_request.clone()).await?;
-        log_printer.print_response(&response);
+        log_printer.print_response(&response, shell)?;
     }
 }
 
@@ -321,7 +325,11 @@ impl DebugLogPrinter {
         }
     }
 
-    fn print_response(&mut self, response: &GetTvcDeploymentDebugLogsResponse) {
+    fn print_response<O: Write, E: Write>(
+        &mut self,
+        response: &GetTvcDeploymentDebugLogsResponse,
+        shell: &mut Shell<O, E>,
+    ) -> anyhow::Result<()> {
         for entry in &response.entries {
             let Some(line) = entry.line.as_ref() else {
                 continue;
@@ -329,12 +337,14 @@ impl DebugLogPrinter {
             let replica = entry.replica_label.as_str();
 
             if self.should_print_line(replica, line) {
-                println!(
+                shell_line!(
+                    shell,
                     "{}",
                     format_log_line(replica, line, self.include_platform_timestamp)
-                );
+                )?;
             }
         }
+        Ok(())
     }
 }
 
@@ -531,8 +541,9 @@ mod tests {
             ],
         };
         let mut printer = DebugLogPrinter::new(false, 1000, false);
+        let mut shell = Shell::from_write(Vec::new(), crate::output::MessageFormat::Human);
 
-        printer.print_response(&response);
+        printer.print_response(&response, &mut shell).unwrap();
 
         assert_eq!(printer.deduper.as_ref().unwrap().len(), 1);
     }

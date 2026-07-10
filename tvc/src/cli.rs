@@ -117,7 +117,9 @@ impl Cli {
                 DeployCommands::Init(args) => {
                     commands::deploy::init::run(args, non_interactive, shell).await
                 }
-                DeployCommands::DebugLogs(args) => commands::deploy::debug_logs::run(args).await,
+                DeployCommands::DebugLogs(args) => {
+                    commands::deploy::debug_logs::run(args, shell).await
+                }
                 DeployCommands::Delete(args) => commands::deploy::delete::run(args, shell).await,
                 DeployCommands::Restore(args) => commands::deploy::restore::run(args, shell).await,
             },
