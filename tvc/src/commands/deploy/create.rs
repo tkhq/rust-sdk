@@ -4,7 +4,7 @@ use super::format_port_summary;
 use crate::client::{build_client, fetch_tvc_app};
 use crate::config::deploy::{DeployConfig, DeployConfigValidationErrors};
 use crate::config::turnkey::Config;
-use crate::output::Shell;
+use crate::output::Ctx;
 use crate::prompts;
 use crate::pull_secret::encrypt_pivot_pull_secret;
 use crate::shell_line;
@@ -147,23 +147,19 @@ struct ResolvedDeployInputs {
     pivot_pull_secret: Option<String>,
 }
 
-pub async fn run<O: Write, E: Write>(
-    args: Args,
-    is_non_interactive: bool,
-    shell: &mut Shell<O, E>,
-) -> Result<()> {
-    let inputs = if is_non_interactive {
+pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
+    let inputs = if ctx.is_non_interactive() {
         build_inputs_non_interactive(args).await?
     } else {
-        build_inputs_interactive(args, shell).await?
+        build_inputs_interactive(ctx, args).await?
     };
 
-    run_with_resolved_inputs(inputs, shell).await
+    run_with_resolved_inputs(ctx, inputs).await
 }
 
-async fn build_inputs_interactive<O: Write, E: Write>(
+async fn build_inputs_interactive<W: Write>(
+    ctx: &mut Ctx<W>,
     args: Args,
-    shell: &mut Shell<O, E>,
 ) -> Result<ResolvedDeployInputs> {
     let Args {
         config_file: config_path,
@@ -192,13 +188,13 @@ async fn build_inputs_interactive<O: Write, E: Write>(
             _ => {
                 config_updated = true;
                 let saved_app_id = Config::load().await.ok().and_then(|c| c.get_last_app_id());
-                config.fill_interactively(saved_app_id.as_deref(), shell)?;
+                config.fill_interactively(ctx, saved_app_id.as_deref())?;
             }
         }
     }
 
     if config_updated && let Some(path) = &config_path {
-        offer_to_save_config(path, &config, file_loaded, shell)?;
+        offer_to_save_config(ctx, path, &config, file_loaded)?;
     }
     let pivot_pull_secret = read_pivot_pull_secret(pivot_pull_secret.as_deref()).await?;
 
@@ -317,11 +313,11 @@ fn invalid_deploy_config_error(errors: DeployConfigValidationErrors) -> anyhow::
 /// Ask the user whether to write the updated config back to disk.
 /// `file_loaded` distinguishes "saving over an existing file" from
 /// "creating a new file at this path" in the prompt wording.
-fn offer_to_save_config<O: Write, E: Write>(
+fn offer_to_save_config<W: Write>(
+    ctx: &mut Ctx<W>,
     path: &Path,
     config: &DeployConfig,
     file_loaded: bool,
-    shell: &mut Shell<O, E>,
 ) -> Result<()> {
     let prompt = if file_loaded {
         format!("Save filled config to {}?", path.display())
@@ -332,7 +328,7 @@ fn offer_to_save_config<O: Write, E: Write>(
         let json = serde_json::to_string_pretty(config).context("failed to serialize config")?;
         std::fs::write(path, json)
             .with_context(|| format!("failed to write config file: {}", path.display()))?;
-        shell_line!(shell, "Wrote {}", path.display())?;
+        shell_line!(ctx, "Wrote {}", path.display())?;
     }
     Ok(())
 }
@@ -378,19 +374,19 @@ fn pin_image_url(image_url: &str, resolved_digest: &str) -> String {
     }
 }
 
-async fn run_with_resolved_inputs<O: Write, E: Write>(
+async fn run_with_resolved_inputs<W: Write>(
+    ctx: &mut Ctx<W>,
     inputs: ResolvedDeployInputs,
-    shell: &mut Shell<O, E>,
 ) -> Result<()> {
     let deploy_config = inputs.config;
 
     shell_line!(
-        shell,
+        ctx,
         "Creating deployment for app '{}'...",
         deploy_config.app_id
     )?;
-    shell_line!(shell, "{}", format_port_summary(&deploy_config))?;
-    shell_line!(shell)?;
+    shell_line!(ctx, "{}", format_port_summary(&deploy_config))?;
+    shell_line!(ctx)?;
 
     let auth = build_client().await?;
 
@@ -421,7 +417,7 @@ async fn run_with_resolved_inputs<O: Write, E: Write>(
 
     if pinned_image_url != deploy_config.pivot_container_image_url {
         shell_line!(
-            shell,
+            ctx,
             "Using pinned image reference for deployment request: {pinned_image_url}"
         )?;
     }
@@ -443,23 +439,23 @@ async fn run_with_resolved_inputs<O: Write, E: Write>(
         .await
         .context("failed to create TVC deployment")?;
 
-    shell_line!(shell)?;
-    shell_line!(shell, "Deployment created successfully!")?;
-    shell_line!(shell)?;
-    shell_line!(shell, "Deployment ID: {}", result.result.deployment_id)?;
-    shell_line!(shell, "App ID: {}", deploy_config.app_id)?;
+    shell_line!(ctx)?;
+    shell_line!(ctx, "Deployment created successfully!")?;
+    shell_line!(ctx)?;
+    shell_line!(ctx, "Deployment ID: {}", result.result.deployment_id)?;
+    shell_line!(ctx, "App ID: {}", deploy_config.app_id)?;
     if let Some(path) = &inputs.config_path {
-        shell_line!(shell, "Config: {}", path.display())?;
+        shell_line!(ctx, "Config: {}", path.display())?;
     }
-    shell_line!(shell)?;
-    shell_line!(shell, "Next steps:")?;
+    shell_line!(ctx)?;
+    shell_line!(ctx, "Next steps:")?;
     shell_line!(
-        shell,
+        ctx,
         "  - Run `tvc deploy status --deploy-id {}` to check deployment status",
         result.result.deployment_id
     )?;
     shell_line!(
-        shell,
+        ctx,
         "  - Run `tvc deploy approve --deploy-id {} --operator-id <operator-id>` to approve the manifest",
         result.result.deployment_id
     )?;

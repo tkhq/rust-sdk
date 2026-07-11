@@ -7,7 +7,7 @@ use turnkey_client::generated::GetTvcAppsRequest;
 use turnkey_client::generated::external::data::v1::TvcApp;
 
 use crate::commands::display::format_egress_enabled;
-use crate::output::Shell;
+use crate::output::Ctx;
 use crate::shell_line;
 
 const SEPARATOR_WIDTH: usize = 40;
@@ -22,7 +22,7 @@ pub struct Args {
 }
 
 /// Run the app list command.
-pub async fn run<O: Write, E: Write>(args: Args, shell: &mut Shell<O, E>) -> anyhow::Result<()> {
+pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> anyhow::Result<()> {
     let auth = crate::client::build_client().await?;
 
     let response = auth
@@ -38,12 +38,12 @@ pub async fn run<O: Write, E: Write>(args: Args, shell: &mut Shell<O, E>) -> any
     filter_by_name(&mut apps, args.name.as_deref());
 
     if apps.is_empty() {
-        shell_line!(shell, "No apps found.")?;
+        shell_line!(ctx, "No apps found.")?;
         return Ok(());
     }
 
     for app in &apps {
-        render_app(shell, app)?;
+        render_app(ctx, app)?;
     }
 
     Ok(())
@@ -55,7 +55,7 @@ fn filter_by_name(apps: &mut Vec<TvcApp>, name: Option<&str>) {
     }
 }
 
-fn render_app<O: Write, E: Write>(shell: &mut Shell<O, E>, app: &TvcApp) -> anyhow::Result<()> {
+fn render_app<W: Write>(ctx: &mut Ctx<W>, app: &TvcApp) -> anyhow::Result<()> {
     let live = app.live_deployment_id.as_deref().unwrap_or("(none)");
     let mut lines = vec![
         format!("Name: {}", app.name),
@@ -71,7 +71,7 @@ fn render_app<O: Write, E: Write>(shell: &mut Shell<O, E>, app: &TvcApp) -> anyh
 
     lines.push("─".repeat(SEPARATOR_WIDTH));
 
-    shell_line!(shell, "{}", lines.join("\n"))?;
+    shell_line!(ctx, "{}", lines.join("\n"))?;
     Ok(())
 }
 

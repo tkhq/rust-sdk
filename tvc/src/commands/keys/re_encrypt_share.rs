@@ -1,7 +1,7 @@
 //! Re-encrypt share command.
 
 use crate::operator_key::{OperatorSeedSource, load_operator_pair};
-use crate::output::{Message, Shell};
+use crate::output::{Ctx, Message};
 use crate::pair::{HexSeed, Pair};
 use crate::provisioning::ProvisionBundle;
 use crate::quorum_key_metadata::QuorumKeyMetadata;
@@ -78,13 +78,13 @@ impl Message for ReEncryptedShareOutput {
 }
 
 /// Run the re-encrypt-share command.
-pub async fn run<O: Write, E: Write>(args: Args, shell: &mut Shell<O, E>) -> anyhow::Result<()> {
+pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> anyhow::Result<()> {
     let operator_seed_source =
         OperatorSeedSource::from_args(args.operator_seed, args.operator_seed_path)?;
 
     if args.dangerous_skip_verification {
         shell_err_line!(
-            shell,
+            ctx,
             "WARNING: Skipping attestation, PCR, and manifest approval verification! This is dangerous and should not be used for sensitive applications."
         )?;
     }
@@ -103,7 +103,7 @@ pub async fn run<O: Write, E: Write>(args: Args, shell: &mut Shell<O, E>) -> any
     )
     .await?;
 
-    write_output(args.re_encrypted_out.as_deref(), &output, shell).await
+    write_output(ctx, args.re_encrypted_out.as_deref(), &output).await
 }
 
 async fn build_re_encrypted_share_output(
@@ -189,21 +189,21 @@ fn find_share_set_member(
         })
 }
 
-async fn write_output<O: Write, E: Write>(
+async fn write_output<W: Write>(
+    ctx: &mut Ctx<W>,
     path: Option<&Path>,
     output: &ReEncryptedShareOutput,
-    shell: &mut Shell<O, E>,
 ) -> anyhow::Result<()> {
     if let Some(path) = path {
         let contents = serde_json::to_string_pretty(output)
             .context("failed to serialize re-encrypted share")?;
         write_file(path, &contents).await?;
-        shell_err_line!(shell, "Re-encrypted share written to: {}", path.display())?;
+        shell_err_line!(ctx, "Re-encrypted share written to: {}", path.display())?;
     } else {
         // Emit the share output as the machine-relevant payload. In human mode
         // this prints pretty JSON exactly as before; in JSON mode it is wrapped
         // in a stable `reason` envelope so the share survives suppression.
-        shell.emit(output)?;
+        ctx.shell().emit(output)?;
     }
 
     Ok(())

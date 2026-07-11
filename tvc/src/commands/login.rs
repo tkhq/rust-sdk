@@ -4,9 +4,9 @@ use crate::config::turnkey::{
     API_BASE_URL_PROD, Config, KeyCurve, OrgConfig, StoredApiKey, StoredQosOperatorKey,
     dashboard_base_url, default_api_key_path, default_operator_key_path, default_org_dir,
 };
-use crate::output::Shell;
+use crate::output::Ctx;
 use crate::prompts::{self, error_required_in_non_interactive};
-use crate::{shell_line, shell_print};
+use crate::{shell_err_line, shell_line, shell_print};
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Args as ClapArgs;
 use qos_p256::P256Pair;
@@ -58,13 +58,9 @@ struct LoginPlan {
     api_key_policy: ApiKeyPolicy,
 }
 
-pub async fn run<O: Write, E: Write>(
-    args: Args,
-    is_non_interactive: bool,
-    shell: &mut Shell<O, E>,
-) -> Result<()> {
+pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
     debug!(
-        non_interactive = is_non_interactive,
+        non_interactive = ctx.is_non_interactive(),
         org_arg_present = args.org.is_some(),
         api_base_url_override_present = args.api_base_url.is_some(),
         "running login command"
@@ -72,18 +68,19 @@ pub async fn run<O: Write, E: Write>(
 
     let config = Config::load().await?;
 
-    let plan = if is_non_interactive {
+    let plan = if ctx.is_non_interactive() {
         build_login_plan_non_interactive(args)?
     } else {
-        build_login_plan_interactive(args, &config, shell)?
+        build_login_plan_interactive(ctx, args, &config)?
     };
 
-    execute_login(config, plan, shell).await
+    execute_login(ctx, config, plan).await
 }
 
 /// Permanently delete a saved login profile: its config entry and its API and
 /// operator key files on disk.
-pub async fn run_delete(args: DeleteArgs, is_non_interactive: bool) -> Result<()> {
+pub async fn run_delete<W: Write>(ctx: &mut Ctx<W>, args: DeleteArgs) -> Result<()> {
+    let is_non_interactive = ctx.is_non_interactive();
     debug!(
         non_interactive = is_non_interactive,
         org_arg_present = args.org.is_some(),
@@ -118,14 +115,26 @@ pub async fn run_delete(args: DeleteArgs, is_non_interactive: bool) -> Result<()
             .get(&alias)
             .map(|org| dashboard_base_url(&org.api_base_url))
             .unwrap_or_default();
-        eprintln!();
-        eprintln!("WARNING: This permanently deletes login profile '{alias}' ({org_id}).");
-        eprintln!("  - Removes the local config entry and deletes the API and operator key");
-        eprintln!("    files from disk. This cannot be undone.");
-        eprintln!("  - It does NOT touch the Turnkey dashboard ({dashboard_url}). If this API");
-        eprintln!("    key is registered there, it stays valid until you remove it");
-        eprintln!("    (instructions are printed after deletion).");
-        eprintln!();
+        shell_err_line!(ctx, "")?;
+        shell_err_line!(
+            ctx,
+            "WARNING: This permanently deletes login profile '{alias}' ({org_id})."
+        )?;
+        shell_err_line!(
+            ctx,
+            "  - Removes the local config entry and deletes the API and operator key"
+        )?;
+        shell_err_line!(ctx, "    files from disk. This cannot be undone.")?;
+        shell_err_line!(
+            ctx,
+            "  - It does NOT touch the Turnkey dashboard ({dashboard_url}). If this API"
+        )?;
+        shell_err_line!(
+            ctx,
+            "    key is registered there, it stays valid until you remove it"
+        )?;
+        shell_err_line!(ctx, "    (instructions are printed after deletion).")?;
+        shell_err_line!(ctx, "")?;
         prompts::confirm_or_bail(
             &format!("Permanently delete profile '{alias}' ({org_id}) and its key files?"),
             "deletion",
@@ -157,7 +166,11 @@ pub async fn run_delete(args: DeleteArgs, is_non_interactive: bool) -> Result<()
         match tokio::fs::remove_dir_all(&dir).await {
             Ok(()) => Some(dir),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                eprintln!("WARNING: key directory was not on disk: {}", dir.display());
+                shell_err_line!(
+                    ctx,
+                    "WARNING: key directory was not on disk: {}",
+                    dir.display()
+                )?;
                 None
             }
             Err(e) => {
@@ -166,10 +179,13 @@ pub async fn run_delete(args: DeleteArgs, is_non_interactive: bool) -> Result<()
             }
         }
     } else {
-        eprintln!("WARNING: custom key paths are configured and were NOT deleted.");
-        eprintln!("Remove them manually if no longer needed:");
-        eprintln!("  {}", removed.api_key_path.display());
-        eprintln!("  {}", removed.operator_key_path.display());
+        shell_err_line!(
+            ctx,
+            "WARNING: custom key paths are configured and were NOT deleted."
+        )?;
+        shell_err_line!(ctx, "Remove them manually if no longer needed:")?;
+        shell_err_line!(ctx, "  {}", removed.api_key_path.display())?;
+        shell_err_line!(ctx, "  {}", removed.operator_key_path.display())?;
         None
     };
 
@@ -177,24 +193,33 @@ pub async fn run_delete(args: DeleteArgs, is_non_interactive: bool) -> Result<()
     // succeeds, so a failure leaves the profile listed and the delete retryable.
     config.save().await?;
 
-    println!("Deleted login profile '{alias}' ({}).", removed.id);
+    shell_line!(ctx, "Deleted login profile '{alias}' ({}).", removed.id)?;
     if let Some(dir) = removed_dir {
-        println!("Removed key directory: {}", dir.display());
+        shell_line!(ctx, "Removed key directory: {}", dir.display())?;
     }
 
     // A local delete does not touch the dashboard-registered API key, and we
     // can't tell whether it is still there, so hedge with "may" and give steps.
     let dashboard_url = dashboard_base_url(&removed.api_base_url);
-    println!();
-    println!("IMPORTANT: The API key may still be registered on the Turnkey dashboard.");
-    println!("It will remain valid until it is manually removed. To remove it:");
-    println!("  1. Go to {dashboard_url}/dashboard/v2/users and click your user");
+    shell_line!(ctx)?;
+    shell_line!(
+        ctx,
+        "IMPORTANT: The API key may still be registered on the Turnkey dashboard."
+    )?;
+    shell_line!(
+        ctx,
+        "It will remain valid until it is manually removed. To remove it:"
+    )?;
+    shell_line!(
+        ctx,
+        "  1. Go to {dashboard_url}/dashboard/v2/users and click your user"
+    )?;
     match api_public_key {
         Some(public_key) => {
-            println!("  2. Delete the API key with public key:");
-            println!("       {public_key}");
+            shell_line!(ctx, "  2. Delete the API key with public key:")?;
+            shell_line!(ctx, "       {public_key}")?;
         }
-        None => println!("  2. Delete the API key associated with this profile"),
+        None => shell_line!(ctx, "  2. Delete the API key associated with this profile")?,
     }
 
     Ok(())
@@ -247,14 +272,14 @@ impl std::fmt::Display for ProfileChoice<'_> {
     }
 }
 
-fn build_login_plan_interactive<O: Write, E: Write>(
+fn build_login_plan_interactive<W: Write>(
+    ctx: &mut Ctx<W>,
     args: Args,
     config: &Config,
-    shell: &mut Shell<O, E>,
 ) -> Result<LoginPlan> {
     let org = match args.org {
         Some(query) => OrgPlan::Existing(query),
-        None => prompt_for_org_plan(config, args.api_base_url.as_deref(), shell)?,
+        None => prompt_for_org_plan(ctx, config, args.api_base_url.as_deref())?,
     };
     Ok(LoginPlan {
         org,
@@ -275,10 +300,10 @@ fn build_login_plan_non_interactive(args: Args) -> Result<LoginPlan> {
     })
 }
 
-async fn execute_login<O: Write, E: Write>(
+async fn execute_login<W: Write>(
+    ctx: &mut Ctx<W>,
     mut config: Config,
     plan: LoginPlan,
-    shell: &mut Shell<O, E>,
 ) -> Result<()> {
     let (alias, org_config) = match plan.org {
         OrgPlan::Existing(query) => {
@@ -303,7 +328,7 @@ async fn execute_login<O: Write, E: Write>(
         }
     };
 
-    shell_line!(shell, "Selected org: {} ({})", alias, org_config.id)?;
+    shell_line!(ctx, "Selected org: {} ({})", alias, org_config.id)?;
 
     config.set_active_org(&alias)?;
     config.save().await?;
@@ -311,13 +336,13 @@ async fn execute_login<O: Write, E: Write>(
     let api_key = match StoredApiKey::load(&org_config).await? {
         Some(api_key) => {
             debug!("using existing API key");
-            shell_line!(shell, "Using existing API key.")?;
+            shell_line!(ctx, "Using existing API key.")?;
             api_key
         }
         None => match plan.api_key_policy {
             ApiKeyPolicy::AllowGenerate => {
-                let api_key = generate_api_key(&org_config, shell).await?;
-                wait_for_dashboard_registration(shell)?;
+                let api_key = generate_api_key(ctx, &org_config).await?;
+                wait_for_dashboard_registration(ctx)?;
                 api_key
             }
             ApiKeyPolicy::RequireExisting => bail!(
@@ -328,19 +353,19 @@ async fn execute_login<O: Write, E: Write>(
         },
     };
 
-    shell_line!(shell)?;
-    shell_line!(shell, "Verifying credentials...")?;
+    shell_line!(ctx)?;
+    shell_line!(ctx, "Verifying credentials...")?;
 
     let whoami = verify_credentials(&api_key, &org_config.id, &org_config.api_base_url).await?;
-    let operator_key = find_or_generate_operator_key(&org_config, shell).await?;
+    let operator_key = find_or_generate_operator_key(ctx, &org_config).await?;
 
-    print_success(&alias, &org_config, &api_key, &operator_key, &whoami, shell)
+    print_success(ctx, &alias, &org_config, &api_key, &operator_key, &whoami)
 }
 
-fn prompt_for_org_plan<O: Write, E: Write>(
+fn prompt_for_org_plan<W: Write>(
+    ctx: &mut Ctx<W>,
     config: &Config,
     api_base_url_override: Option<&str>,
-    shell: &mut Shell<O, E>,
 ) -> Result<OrgPlan> {
     debug!(
         configured_org_count = config.orgs.len(),
@@ -350,8 +375,8 @@ fn prompt_for_org_plan<O: Write, E: Write>(
 
     if config.orgs.is_empty() {
         debug!("no organizations configured; prompting for new organization");
-        shell_line!(shell, "No organization configured.")?;
-        return prompt_for_new_org_inputs(api_base_url_override, shell);
+        shell_line!(ctx, "No organization configured.")?;
+        return prompt_for_new_org_inputs(ctx, api_base_url_override);
     }
 
     let mut options: Vec<OrgChoice> = config
@@ -373,20 +398,20 @@ fn prompt_for_org_plan<O: Write, E: Write>(
 
     match prompts::select("Select organization", options)? {
         OrgChoice::Existing { alias, .. } => Ok(OrgPlan::Existing(alias)),
-        OrgChoice::New => prompt_for_new_org_inputs(api_base_url_override, shell),
+        OrgChoice::New => prompt_for_new_org_inputs(ctx, api_base_url_override),
     }
 }
 
-fn prompt_for_new_org_inputs<O: Write, E: Write>(
+fn prompt_for_new_org_inputs<W: Write>(
+    ctx: &mut Ctx<W>,
     api_base_url_override: Option<&str>,
-    shell: &mut Shell<O, E>,
 ) -> Result<OrgPlan> {
     let dashboard_url = dashboard_base_url(api_base_url_override.unwrap_or(API_BASE_URL_PROD));
     shell_line!(
-        shell,
+        ctx,
         "You can find your Organization ID at: {dashboard_url}/dashboard/welcome"
     )?;
-    shell_line!(shell)?;
+    shell_line!(ctx)?;
 
     let id = prompts::text("Organization ID", None)?;
     if id.is_empty() {
@@ -458,13 +483,13 @@ fn update_api_base_url_from_override(
     }
 }
 
-async fn generate_api_key<O: Write, E: Write>(
+async fn generate_api_key<W: Write>(
+    ctx: &mut Ctx<W>,
     org_config: &OrgConfig,
-    shell: &mut Shell<O, E>,
 ) -> Result<StoredApiKey> {
     debug!("generating new API key");
-    shell_line!(shell)?;
-    shell_line!(shell, "Generating API key...")?;
+    shell_line!(ctx)?;
+    shell_line!(ctx, "Generating API key...")?;
 
     let stamper = TurnkeyP256ApiKey::generate();
     let public_key = hex::encode(stamper.compressed_public_key());
@@ -478,53 +503,53 @@ async fn generate_api_key<O: Write, E: Write>(
 
     api_key.save(org_config).await?;
 
-    shell_line!(shell)?;
-    shell_line!(shell, "API Key Generated!")?;
-    shell_line!(shell)?;
-    shell_line!(shell, "API public key: {public_key}")?;
-    shell_line!(shell)?;
+    shell_line!(ctx)?;
+    shell_line!(ctx, "API Key Generated!")?;
+    shell_line!(ctx)?;
+    shell_line!(ctx, "API public key: {public_key}")?;
+    shell_line!(ctx)?;
     let dashboard_url = dashboard_base_url(&org_config.api_base_url);
-    shell_line!(shell, "Add this API key to your Turnkey dashboard:")?;
+    shell_line!(ctx, "Add this API key to your Turnkey dashboard:")?;
     shell_line!(
-        shell,
+        ctx,
         "  1. Go to {dashboard_url}/dashboard/v2/users and click your user"
     )?;
     shell_line!(
-        shell,
+        ctx,
         "  2. Click \"New API Key\", expand \"Advanced Settings\", then check \"Generate API key via CLI\""
     )?;
     shell_line!(
-        shell,
+        ctx,
         "  3. Name it \"TVC CLI\", paste the public key above, then Continue > Approve"
     )?;
-    shell_line!(shell)?;
+    shell_line!(ctx)?;
 
     Ok(api_key)
 }
 
-fn wait_for_dashboard_registration<O: Write, E: Write>(shell: &mut Shell<O, E>) -> Result<()> {
-    shell_print!(shell, "Press Enter when done...")?;
+fn wait_for_dashboard_registration<W: Write>(ctx: &mut Ctx<W>) -> Result<()> {
+    shell_print!(ctx, "Press Enter when done...")?;
 
     let mut input = String::new();
     std::io::stdin().lock().read_line(&mut input)?;
     Ok(())
 }
 
-async fn find_or_generate_operator_key<O: Write, E: Write>(
+async fn find_or_generate_operator_key<W: Write>(
+    ctx: &mut Ctx<W>,
     org_config: &OrgConfig,
-    shell: &mut Shell<O, E>,
 ) -> Result<StoredQosOperatorKey> {
     debug!(operator_key_path = %org_config.operator_key_path.display(), "resolving operator key");
 
     if let Some(operator_key) = StoredQosOperatorKey::load(org_config).await? {
         debug!("using existing operator key");
-        shell_line!(shell, "Using existing operator key.")?;
+        shell_line!(ctx, "Using existing operator key.")?;
         return Ok(operator_key);
     }
 
     debug!("generating new operator key");
-    shell_line!(shell)?;
-    shell_line!(shell, "Generating operator key...")?;
+    shell_line!(ctx)?;
+    shell_line!(ctx, "Generating operator key...")?;
 
     let pair =
         P256Pair::generate().map_err(|e| anyhow!("failed to generate operator key: {e:?}"))?;
@@ -538,17 +563,17 @@ async fn find_or_generate_operator_key<O: Write, E: Write>(
 
     operator_key.save(org_config).await?;
 
-    shell_line!(shell)?;
-    shell_line!(shell, "Operator Key Generated!")?;
-    shell_line!(shell)?;
-    shell_line!(shell, "Operator public key: {public_key}")?;
-    shell_line!(shell)?;
+    shell_line!(ctx)?;
+    shell_line!(ctx, "Operator Key Generated!")?;
+    shell_line!(ctx)?;
+    shell_line!(ctx, "Operator public key: {public_key}")?;
+    shell_line!(ctx)?;
     shell_line!(
-        shell,
+        ctx,
         "This key will be used for approving deployment manifests."
     )?;
     shell_line!(
-        shell,
+        ctx,
         "Make sure to register this as an operator in your organization."
     )?;
 
@@ -597,47 +622,43 @@ async fn verify_credentials(
     })
 }
 
-fn print_success<O: Write, E: Write>(
+fn print_success<W: Write>(
+    ctx: &mut Ctx<W>,
     alias: &str,
     org_config: &OrgConfig,
     api_key: &StoredApiKey,
     operator_key: &StoredQosOperatorKey,
     whoami: &WhoamiResult,
-    shell: &mut Shell<O, E>,
 ) -> Result<()> {
-    shell_line!(shell)?;
-    shell_line!(shell, "Successfully logged in!")?;
-    shell_line!(shell)?;
+    shell_line!(ctx)?;
+    shell_line!(ctx, "Successfully logged in!")?;
+    shell_line!(ctx)?;
     shell_line!(
-        shell,
+        ctx,
         "Organization: {} ({})",
         whoami.organization_name,
         whoami.organization_id
     )?;
-    shell_line!(shell, "User: {} ({})", whoami.username, whoami.user_id)?;
-    shell_line!(shell, "Active Org: {alias}")?;
-    shell_line!(shell)?;
-    shell_line!(shell, "Credentials")?;
-    shell_line!(shell, "  API public key:        {}", api_key.public_key)?;
+    shell_line!(ctx, "User: {} ({})", whoami.username, whoami.user_id)?;
+    shell_line!(ctx, "Active Org: {alias}")?;
+    shell_line!(ctx)?;
+    shell_line!(ctx, "Credentials")?;
+    shell_line!(ctx, "  API public key:        {}", api_key.public_key)?;
+    shell_line!(ctx, "  Operator public key:   {}", operator_key.public_key)?;
+    shell_line!(ctx)?;
+    shell_line!(ctx, "Saved to")?;
     shell_line!(
-        shell,
-        "  Operator public key:   {}",
-        operator_key.public_key
-    )?;
-    shell_line!(shell)?;
-    shell_line!(shell, "Saved to")?;
-    shell_line!(
-        shell,
+        ctx,
         "  Config file:    {}",
         crate::config::turnkey::config_file_path()?.display()
     )?;
     shell_line!(
-        shell,
+        ctx,
         "  API key:        {}",
         org_config.api_key_path.display()
     )?;
     shell_line!(
-        shell,
+        ctx,
         "  Operator key:   {}",
         org_config.operator_key_path.display()
     )?;

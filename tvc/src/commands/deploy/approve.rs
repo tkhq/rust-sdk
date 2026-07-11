@@ -2,7 +2,7 @@
 
 use crate::config::turnkey::Config;
 use crate::operator_key::{OperatorSeedSource, load_operator_pair};
-use crate::output::{Message, Shell};
+use crate::output::{Ctx, Message};
 use crate::pair::HexSeed;
 use crate::prompts;
 use crate::prompts::{bail_required_in_non_interactive, stdin_can_prompt};
@@ -120,27 +120,23 @@ struct ResolvedApproveInputs {
     post_target: Option<PostTarget>,
 }
 
-pub async fn run<O: IoWrite, E: IoWrite>(
-    mut args: Args,
-    is_non_interactive: bool,
-    shell: &mut Shell<O, E>,
-) -> anyhow::Result<()> {
+pub async fn run<W: IoWrite>(ctx: &mut Ctx<W>, mut args: Args) -> anyhow::Result<()> {
     let operator_seed_source =
         OperatorSeedSource::from_args(args.operator_seed.take(), args.operator_seed_path.take())?;
 
-    let inputs = if is_non_interactive {
-        build_inputs_non_interactive(args, operator_seed_source, shell).await?
+    let inputs = if ctx.is_non_interactive() {
+        build_inputs_non_interactive(ctx, args, operator_seed_source).await?
     } else {
-        build_inputs_interactive(args, operator_seed_source, shell).await?
+        build_inputs_interactive(ctx, args, operator_seed_source).await?
     };
 
-    run_with_resolved_inputs(inputs, shell).await
+    run_with_resolved_inputs(ctx, inputs).await
 }
 
-async fn build_inputs_interactive<O: IoWrite, E: IoWrite>(
+async fn build_inputs_interactive<W: IoWrite>(
+    ctx: &mut Ctx<W>,
     args: Args,
     operator_seed_source: Option<OperatorSeedSource>,
-    shell: &mut Shell<O, E>,
 ) -> anyhow::Result<ResolvedApproveInputs> {
     let do_prompt_user = !args.dangerous_skip_interactive;
 
@@ -150,10 +146,10 @@ async fn build_inputs_interactive<O: IoWrite, E: IoWrite>(
         bail_required_in_non_interactive("--dangerous-skip-interactive")?;
     }
 
-    let (manifest, fetched_manifest_id) = load_manifest(&args, shell).await?;
+    let (manifest, fetched_manifest_id) = load_manifest(ctx, &args).await?;
 
     if do_prompt_user {
-        interactive_approve(&manifest, shell)?;
+        interactive_approve(ctx, &manifest)?;
     }
 
     let post_target = if !args.dry_run && !args.skip_post {
@@ -198,16 +194,16 @@ async fn build_inputs_interactive<O: IoWrite, E: IoWrite>(
     })
 }
 
-async fn build_inputs_non_interactive<O: IoWrite, E: IoWrite>(
+async fn build_inputs_non_interactive<W: IoWrite>(
+    ctx: &mut Ctx<W>,
     args: Args,
     operator_seed_source: Option<OperatorSeedSource>,
-    shell: &mut Shell<O, E>,
 ) -> anyhow::Result<ResolvedApproveInputs> {
     if !args.dangerous_skip_interactive {
         bail_required_in_non_interactive("--dangerous-skip-interactive")?;
     }
 
-    let (manifest, fetched_manifest_id) = load_manifest(&args, shell).await?;
+    let (manifest, fetched_manifest_id) = load_manifest(ctx, &args).await?;
 
     let post_target = if !args.dry_run && !args.skip_post {
         let manifest_id = resolve_manifest_id(&args, fetched_manifest_id.as_deref())?;
@@ -246,20 +242,20 @@ async fn build_inputs_non_interactive<O: IoWrite, E: IoWrite>(
     })
 }
 
-async fn run_with_resolved_inputs<O: IoWrite, E: IoWrite>(
+async fn run_with_resolved_inputs<W: IoWrite>(
+    ctx: &mut Ctx<W>,
     inputs: ResolvedApproveInputs,
-    shell: &mut Shell<O, E>,
 ) -> anyhow::Result<()> {
     if inputs.dry_run {
-        shell_line!(shell, "Dry run complete. No approval generated.")?;
+        shell_line!(ctx, "Dry run complete. No approval generated.")?;
         return Ok(());
     }
 
     let approval = sign_and_output(
+        ctx,
         inputs.operator_seed_source,
         inputs.approval_out.as_deref(),
         &inputs.manifest,
-        shell,
     )
     .await?;
 
@@ -269,31 +265,31 @@ async fn run_with_resolved_inputs<O: IoWrite, E: IoWrite>(
             operator_id: target.operator_id.as_str(),
             deploy_id: target.deploy_id.as_deref(),
         };
-        post_approval_to_api(plan, &approval, shell).await?;
+        post_approval_to_api(ctx, plan, &approval).await?;
     }
 
     Ok(())
 }
 
-async fn load_manifest<O: IoWrite, E: IoWrite>(
+async fn load_manifest<W: IoWrite>(
+    ctx: &mut Ctx<W>,
     args: &Args,
-    shell: &mut Shell<O, E>,
 ) -> anyhow::Result<(VersionedManifest, Option<String>)> {
     match (&args.manifest, &args.deploy_id) {
         (Some(path), _) => Ok((read_manifest_from_path(path).await?, None)),
         (_, Some(deploy_id)) => {
-            let (manifest, manifest_id) = fetch_manifest_from_deploy(deploy_id, shell).await?;
+            let (manifest, manifest_id) = fetch_manifest_from_deploy(ctx, deploy_id).await?;
             Ok((manifest, Some(manifest_id)))
         }
         (None, None) => bail!("a manifest source is required"),
     }
 }
 
-async fn sign_and_output<O: IoWrite, E: IoWrite>(
+async fn sign_and_output<W: IoWrite>(
+    ctx: &mut Ctx<W>,
     operator_seed_source: Option<OperatorSeedSource>,
     approval_out: Option<&Path>,
     manifest: &VersionedManifest,
-    shell: &mut Shell<O, E>,
 ) -> anyhow::Result<Approval> {
     let pair: Box<dyn crate::pair::Pair> =
         Box::new(load_operator_pair(operator_seed_source).await?);
@@ -303,12 +299,12 @@ async fn sign_and_output<O: IoWrite, E: IoWrite>(
     if let Some(path) = approval_out {
         let json = serde_json::to_string_pretty(&approval)?;
         write_file(path, &json).await?;
-        shell_line!(shell, "Approval written to: {}", path.display())?;
+        shell_line!(ctx, "Approval written to: {}", path.display())?;
     } else {
         // Emit the approval as the machine-relevant payload. In human mode this
         // prints the pretty JSON exactly as before; in JSON mode it is wrapped
         // in a stable `reason` envelope so the approval survives suppression.
-        shell.emit(&ManifestApprovalGenerated {
+        ctx.shell().emit(&ManifestApprovalGenerated {
             approval: &approval,
         })?;
     }
@@ -350,13 +346,13 @@ async fn load_saved_operator_ids() -> anyhow::Result<Vec<String>> {
     Ok(config.get_last_operator_ids().unwrap_or_default())
 }
 
-async fn post_approval_to_api<O: IoWrite, E: IoWrite>(
+async fn post_approval_to_api<W: IoWrite>(
+    ctx: &mut Ctx<W>,
     plan: PostApprovalPlan<'_>,
     approval: &Approval,
-    shell: &mut Shell<O, E>,
 ) -> anyhow::Result<()> {
-    shell_line!(shell)?;
-    shell_line!(shell, "Posting approval to Turnkey...")?;
+    shell_line!(ctx)?;
+    shell_line!(ctx, "Posting approval to Turnkey...")?;
 
     let auth = crate::client::build_client().await?;
 
@@ -381,12 +377,12 @@ async fn post_approval_to_api<O: IoWrite, E: IoWrite>(
         .await
         .context("failed to post manifest approval")?;
 
-    shell_line!(shell)?;
-    shell_line!(shell, "Approval posted successfully!")?;
-    shell_line!(shell)?;
-    shell_line!(shell, "Approval IDs: {:?}", result.result.approval_ids)?;
-    shell_line!(shell, "Manifest ID: {}", plan.manifest_id)?;
-    shell_line!(shell, "Operator ID: {}", plan.operator_id)?;
+    shell_line!(ctx)?;
+    shell_line!(ctx, "Approval posted successfully!")?;
+    shell_line!(ctx)?;
+    shell_line!(ctx, "Approval IDs: {:?}", result.result.approval_ids)?;
+    shell_line!(ctx, "Manifest ID: {}", plan.manifest_id)?;
+    shell_line!(ctx, "Operator ID: {}", plan.operator_id)?;
 
     if let Some(deploy_id) = plan.deploy_id {
         let request = GetTvcDeploymentRequest {
@@ -396,17 +392,17 @@ async fn post_approval_to_api<O: IoWrite, E: IoWrite>(
 
         match auth.client.get_tvc_deployment(request).await {
             Ok(response) => {
-                shell_line!(shell)?;
+                shell_line!(ctx)?;
 
                 if response
                     .tvc_deployment
                     .as_ref()
                     .is_some_and(manifest_approval_quorum_reached)
                 {
-                    shell_line!(shell, "{QUORUM_REACHED_MESSAGE}")?;
+                    shell_line!(ctx, "{QUORUM_REACHED_MESSAGE}")?;
                 } else {
                     shell_line!(
-                        shell,
+                        ctx,
                         "Your approval has been posted. Deployment requires additional manifest approvals before it can be deployed on TVC."
                     )?;
                 };
@@ -473,23 +469,23 @@ async fn generate_approval(
 }
 
 /// Walk the user through each section of the manifest for approval.
-fn interactive_approve<O: IoWrite, E: IoWrite>(
+fn interactive_approve<W: IoWrite>(
+    ctx: &mut Ctx<W>,
     manifest: &VersionedManifest,
-    shell: &mut Shell<O, E>,
 ) -> anyhow::Result<()> {
-    shell_line!(shell, "\n========================================")?;
-    shell_line!(shell, "         MANIFEST APPROVAL")?;
-    shell_line!(shell, "========================================\n")?;
+    shell_line!(ctx, "\n========================================")?;
+    shell_line!(ctx, "         MANIFEST APPROVAL")?;
+    shell_line!(ctx, "========================================\n")?;
 
-    review_namespace(manifest.namespace(), shell)?;
-    review_enclave(manifest.enclave(), shell)?;
-    review_pivot(manifest, shell)?;
-    review_manifest_set(manifest.manifest_set(), shell)?;
-    review_share_set(manifest.share_set(), shell)?;
+    review_namespace(ctx, manifest.namespace())?;
+    review_enclave(ctx, manifest.enclave())?;
+    review_pivot(ctx, manifest)?;
+    review_manifest_set(ctx, manifest.manifest_set())?;
+    review_share_set(ctx, manifest.share_set())?;
 
-    shell_line!(shell, "\n========================================")?;
-    shell_line!(shell, "    ALL SECTIONS APPROVED")?;
-    shell_line!(shell, "========================================\n")?;
+    shell_line!(ctx, "\n========================================")?;
+    shell_line!(ctx, "    ALL SECTIONS APPROVED")?;
+    shell_line!(ctx, "========================================\n")?;
 
     Ok(())
 }
@@ -505,11 +501,8 @@ fn render_namespace(namespace: &Namespace) -> String {
     s
 }
 
-fn review_namespace<O: IoWrite, E: IoWrite>(
-    namespace: &Namespace,
-    shell: &mut Shell<O, E>,
-) -> anyhow::Result<()> {
-    shell_print!(shell, "{}", render_namespace(namespace))?;
+fn review_namespace<W: IoWrite>(ctx: &mut Ctx<W>, namespace: &Namespace) -> anyhow::Result<()> {
+    shell_print!(ctx, "{}", render_namespace(namespace))?;
     prompts::confirm_or_bail("Approve namespace?", "approval")
 }
 
@@ -526,11 +519,8 @@ fn render_enclave(enclave: &NitroConfig) -> String {
     s
 }
 
-fn review_enclave<O: IoWrite, E: IoWrite>(
-    enclave: &NitroConfig,
-    shell: &mut Shell<O, E>,
-) -> anyhow::Result<()> {
-    shell_print!(shell, "{}", render_enclave(enclave))?;
+fn review_enclave<W: IoWrite>(ctx: &mut Ctx<W>, enclave: &NitroConfig) -> anyhow::Result<()> {
+    shell_print!(ctx, "{}", render_enclave(enclave))?;
     prompts::confirm_or_bail("Approve enclave configuration?", "approval")
 }
 
@@ -552,11 +542,8 @@ fn render_pivot(manifest: &VersionedManifest) -> String {
     s
 }
 
-fn review_pivot<O: IoWrite, E: IoWrite>(
-    manifest: &VersionedManifest,
-    shell: &mut Shell<O, E>,
-) -> anyhow::Result<()> {
-    shell_print!(shell, "{}", render_pivot(manifest))?;
+fn review_pivot<W: IoWrite>(ctx: &mut Ctx<W>, manifest: &VersionedManifest) -> anyhow::Result<()> {
+    shell_print!(ctx, "{}", render_pivot(manifest))?;
     prompts::confirm_or_bail("Approve pivot binary?", "approval")
 }
 
@@ -579,11 +566,8 @@ fn render_manifest_set(set: &ManifestSet) -> String {
     s
 }
 
-fn review_manifest_set<O: IoWrite, E: IoWrite>(
-    set: &ManifestSet,
-    shell: &mut Shell<O, E>,
-) -> anyhow::Result<()> {
-    shell_print!(shell, "{}", render_manifest_set(set))?;
+fn review_manifest_set<W: IoWrite>(ctx: &mut Ctx<W>, set: &ManifestSet) -> anyhow::Result<()> {
+    shell_print!(ctx, "{}", render_manifest_set(set))?;
     prompts::confirm_or_bail("Approve manifest set?", "approval")
 }
 
@@ -598,11 +582,8 @@ fn render_share_set(set: &ShareSet) -> String {
     s
 }
 
-fn review_share_set<O: IoWrite, E: IoWrite>(
-    set: &ShareSet,
-    shell: &mut Shell<O, E>,
-) -> anyhow::Result<()> {
-    shell_print!(shell, "{}", render_share_set(set))?;
+fn review_share_set<W: IoWrite>(ctx: &mut Ctx<W>, set: &ShareSet) -> anyhow::Result<()> {
+    shell_print!(ctx, "{}", render_share_set(set))?;
     prompts::confirm_or_bail("Approve share set?", "approval")
 }
 
@@ -615,11 +596,11 @@ async fn read_manifest_from_path(path: &Path) -> anyhow::Result<VersionedManifes
 
 /// Fetch manifest from Turnkey using GetTvcDeployment API.
 /// Returns the manifest and its Turnkey manifest_id.
-async fn fetch_manifest_from_deploy<O: IoWrite, E: IoWrite>(
+async fn fetch_manifest_from_deploy<W: IoWrite>(
+    ctx: &mut Ctx<W>,
     deploy_id: &str,
-    shell: &mut Shell<O, E>,
 ) -> anyhow::Result<(VersionedManifest, String)> {
-    shell_line!(shell, "Fetching deployment {deploy_id}...")?;
+    shell_line!(ctx, "Fetching deployment {deploy_id}...")?;
 
     let auth = crate::client::build_client().await?;
 
@@ -645,11 +626,7 @@ async fn fetch_manifest_from_deploy<O: IoWrite, E: IoWrite>(
     let manifest = VersionedManifest::try_from_slice_compat(&tvc_manifest.manifest)
         .context("failed to parse manifest from deployment")?;
 
-    shell_line!(
-        shell,
-        "✓ Manifest loaded (manifest_id: {})",
-        tvc_manifest.id
-    )?;
+    shell_line!(ctx, "✓ Manifest loaded (manifest_id: {})", tvc_manifest.id)?;
 
     Ok((manifest, tvc_manifest.id))
 }

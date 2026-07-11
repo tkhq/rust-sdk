@@ -4,7 +4,7 @@ use super::PORT_GUIDANCE;
 use crate::{
     client::{build_client, fetch_tvc_deployment},
     config::{deploy::DeployConfig, turnkey},
-    output::{Message, Shell},
+    output::{Ctx, Message},
     prompts::{bail_interactive_conflicts_with_non_interactive, ensure_stdin_is_tty},
 };
 use anyhow::{Context, Result, bail};
@@ -46,22 +46,18 @@ pub struct Args {
 }
 
 /// Run the deploy init command.
-pub async fn run<O: Write, E: Write>(
-    args: Args,
-    is_non_interactive: bool,
-    shell: &mut Shell<O, E>,
-) -> Result<()> {
+pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
     if args.interactive {
-        if is_non_interactive {
+        if ctx.is_non_interactive() {
             bail_interactive_conflicts_with_non_interactive()?;
         } else {
             ensure_stdin_is_tty()?;
         }
     }
-    execute(args, shell).await
+    execute(ctx, args).await
 }
 
-async fn execute<O: Write, E: Write>(args: Args, shell: &mut Shell<O, E>) -> Result<()> {
+async fn execute<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
     let Args {
         output,
         from_deployment,
@@ -111,7 +107,7 @@ async fn execute<O: Write, E: Write>(args: Args, shell: &mut Shell<O, E>) -> Res
             .await
             .ok()
             .and_then(|config| config.get_last_app_id());
-        config.fill_interactively(saved_app_id.as_deref(), shell)?;
+        config.fill_interactively(ctx, saved_app_id.as_deref())?;
     }
 
     let needs_pull_secret = config.pull_secret_is_placeholder();
@@ -122,7 +118,7 @@ async fn execute<O: Write, E: Write>(args: Args, shell: &mut Shell<O, E>) -> Res
     std::fs::write(&output, json)
         .with_context(|| format!("failed to write file: {}", output.display()))?;
 
-    shell.emit(&DeploymentConfigCreated {
+    ctx.shell().emit(&DeploymentConfigCreated {
         command: "deploy init",
         path: output.display().to_string(),
         template: !is_interactive,

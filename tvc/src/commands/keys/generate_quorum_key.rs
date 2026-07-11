@@ -1,7 +1,7 @@
 //! Generate quorum key command - generates and encrypts a quorum key from a given config.
 
 use crate::config::quorum_key::QuorumKeyConfig;
-use crate::output::Shell;
+use crate::output::Ctx;
 use crate::quorum_key_metadata::{
     EncryptedShareMetadata, QuorumKeyMetadata, decode_p256_public_key_hex,
 };
@@ -41,7 +41,7 @@ struct OperatorPublicKey {
 struct PlaintextShares(Vec<Zeroizing<Vec<u8>>>);
 
 /// Run the quorum key generation command.
-pub async fn run<O: Write, E: Write>(args: Args, shell: &mut Shell<O, E>) -> Result<()> {
+pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
     let config: QuorumKeyConfig =
         read_json_file(&args.config_file, "quorum key config file").await?;
     config.validate()?;
@@ -67,13 +67,13 @@ pub async fn run<O: Write, E: Write>(args: Args, shell: &mut Shell<O, E>) -> Res
     })?;
 
     shell_line!(
-        shell,
+        ctx,
         "Quorum key metadata written to: {}",
         args.quorum_key_metadata_out.display()
     )?;
 
-    shell_line!(shell, "Quorum Public Key: {quorum_key_public}")?;
-    shell_line!(shell, "Threshold: {}", config.threshold)?;
+    shell_line!(ctx, "Quorum Public Key: {quorum_key_public}")?;
+    shell_line!(ctx, "Threshold: {}", config.threshold)?;
 
     Ok(())
 }

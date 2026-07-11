@@ -27,11 +27,6 @@ pub enum ColorChoice {
     Never,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Verbosity {
-    Normal,
-}
-
 pub trait Message: Serialize {
     fn reason(&self) -> &'static str;
 
@@ -53,16 +48,15 @@ pub trait Message: Serialize {
     }
 }
 
-pub struct Shell<O: Write = Box<dyn Write + Send>, E: Write = Box<dyn Write + Send>> {
-    stdout: O,
-    stderr: E,
-    verbosity: Verbosity,
+pub struct Shell<W: Write = Box<dyn Write + Send>> {
+    stdout: W,
+    stderr: W,
     color: ColorChoice,
     use_color: bool,
     message_format: MessageFormat,
 }
 
-impl Shell<Box<dyn Write + Send>, Box<dyn Write + Send>> {
+impl Shell<Box<dyn Write + Send>> {
     pub fn standard(message_format: MessageFormat, color: ColorChoice) -> Self {
         let use_color = match color {
             ColorChoice::Auto => io::stderr().is_terminal(),
@@ -73,7 +67,6 @@ impl Shell<Box<dyn Write + Send>, Box<dyn Write + Send>> {
         Self {
             stdout: Box::new(io::stdout()),
             stderr: Box::new(io::stderr()),
-            verbosity: Verbosity::Normal,
             color,
             use_color,
             message_format,
@@ -81,12 +74,11 @@ impl Shell<Box<dyn Write + Send>, Box<dyn Write + Send>> {
     }
 }
 
-impl Shell<Vec<u8>, Vec<u8>> {
+impl Shell<Vec<u8>> {
     pub fn from_write(stdout: Vec<u8>, message_format: MessageFormat) -> Self {
         Self {
             stdout,
             stderr: Vec::new(),
-            verbosity: Verbosity::Normal,
             color: ColorChoice::Never,
             use_color: false,
             message_format,
@@ -102,7 +94,7 @@ impl Shell<Vec<u8>, Vec<u8>> {
     }
 }
 
-impl<O: Write, E: Write> Shell<O, E> {
+impl<W: Write> Shell<W> {
     pub fn message_format(&self) -> MessageFormat {
         self.message_format
     }
@@ -174,10 +166,6 @@ impl<O: Write, E: Write> Shell<O, E> {
         self.color
     }
 
-    pub fn verbosity(&self) -> Verbosity {
-        self.verbosity
-    }
-
     fn style(&self, color: AnsiColor) -> Style {
         if self.use_color {
             Style::new().bold().fg_color(Some(Color::Ansi(color)))
@@ -187,27 +175,54 @@ impl<O: Write, E: Write> Shell<O, E> {
     }
 }
 
+/// Bundles the `Shell` with cross-cutting CLI flags
+pub struct Ctx<W: Write = Box<dyn Write + Send>> {
+    shell: Shell<W>,
+    non_interactive: bool,
+}
+
+impl<W: Write> Ctx<W> {
+    /// `non_interactive` is the raw `--non-interactive` flag; JSON output mode
+    /// always forces non-interactive regardless of the flag, since a piped
+    /// consumer can't answer prompts.
+    pub fn new(shell: Shell<W>, non_interactive: bool) -> Self {
+        let non_interactive = non_interactive || shell.message_format().is_json();
+        Self {
+            shell,
+            non_interactive,
+        }
+    }
+
+    pub fn shell(&mut self) -> &mut Shell<W> {
+        &mut self.shell
+    }
+
+    pub fn is_non_interactive(&self) -> bool {
+        self.non_interactive
+    }
+}
+
 #[macro_export]
 macro_rules! shell_line {
     ($shell:expr $(,)?) => {
-        $shell.blank_line()
+        $shell.shell().blank_line()
     };
     ($shell:expr, $($arg:tt)*) => {
-        $shell.line(format_args!($($arg)*))
+        $shell.shell().line(format_args!($($arg)*))
     };
 }
 
 #[macro_export]
 macro_rules! shell_print {
     ($shell:expr, $($arg:tt)*) => {
-        $shell.print(format_args!($($arg)*))
+        $shell.shell().print(format_args!($($arg)*))
     };
 }
 
 #[macro_export]
 macro_rules! shell_err_line {
     ($shell:expr, $($arg:tt)*) => {
-        $shell.err_line(format_args!($($arg)*))
+        $shell.shell().err_line(format_args!($($arg)*))
     };
 }
 
@@ -317,6 +332,30 @@ mod tests {
 
         let output = String::from_utf8(shell.into_stdout()).unwrap();
         assert_eq!(output, "value: ok\n");
+    }
+
+    #[test]
+    fn ctx_reflects_explicit_non_interactive_flag() {
+        let shell = Shell::from_write(Vec::new(), MessageFormat::Human);
+        let ctx = Ctx::new(shell, true);
+
+        assert!(ctx.is_non_interactive());
+    }
+
+    #[test]
+    fn ctx_forces_non_interactive_in_json_mode_regardless_of_flag() {
+        let shell = Shell::from_write(Vec::new(), MessageFormat::Json);
+        let ctx = Ctx::new(shell, false);
+
+        assert!(ctx.is_non_interactive());
+    }
+
+    #[test]
+    fn ctx_is_interactive_when_flag_unset_and_format_is_human() {
+        let shell = Shell::from_write(Vec::new(), MessageFormat::Human);
+        let ctx = Ctx::new(shell, false);
+
+        assert!(!ctx.is_non_interactive());
     }
 
     #[test]

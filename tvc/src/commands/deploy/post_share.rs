@@ -1,7 +1,7 @@
 //! Deploy post-share command.
 
 use crate::commands::keys::re_encrypt_share::ReEncryptedShareOutput;
-use crate::output::{Message, Shell};
+use crate::output::{Ctx, Message};
 use crate::util::read_json_file;
 use anyhow::Context;
 use clap::Args as ClapArgs;
@@ -25,7 +25,7 @@ pub struct Args {
 }
 
 /// Run the deploy post-share command.
-pub async fn run<O: Write, E: Write>(args: Args, shell: &mut Shell<O, E>) -> anyhow::Result<()> {
+pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> anyhow::Result<()> {
     let re_encrypted_share: ReEncryptedShareOutput =
         read_json_file(&args.re_encrypted_share, "re-encrypted share output").await?;
     let intent =
@@ -43,7 +43,7 @@ pub async fn run<O: Write, E: Write>(args: Args, shell: &mut Shell<O, E>) -> any
         .await
         .context("failed to post quorum key share")?;
 
-    shell.emit(&QuorumKeySharePosted {
+    ctx.shell().emit(&QuorumKeySharePosted {
         provisioning_share_id: result.result.provisioning_share_id,
     })?;
 

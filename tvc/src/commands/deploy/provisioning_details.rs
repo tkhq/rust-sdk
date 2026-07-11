@@ -1,6 +1,6 @@
 //! Deploy provisioning-details command.
 
-use crate::output::Shell;
+use crate::output::Ctx;
 use crate::provisioning::{
     ProvisionBundle, extract_ephemeral_public_key_bytes, verify_provisioning_details,
 };
@@ -59,7 +59,7 @@ struct AttestationSummary {
 const SUMMARY_PCR_MAX_INDEX: usize = 17;
 
 /// Run the deploy provisioning-details command.
-pub async fn run<O: Write, E: Write>(args: Args, shell: &mut Shell<O, E>) -> anyhow::Result<()> {
+pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> anyhow::Result<()> {
     let auth = crate::client::build_client().await?;
 
     let request = GetTvcDeploymentProvisioningDetailsRequest {
@@ -109,8 +109,8 @@ pub async fn run<O: Write, E: Write>(args: Args, shell: &mut Shell<O, E>) -> any
             fetched_at_unix_ms,
             &summary.ephemeral_key,
         );
-        write_provision_bundle(path, &bundle, shell).await?;
-        shell_line!(shell)?;
+        write_provision_bundle(ctx, path, &bundle).await?;
+        shell_line!(ctx)?;
     }
 
     let verification_status = if args.dangerous_skip_verification {
@@ -118,20 +118,20 @@ pub async fn run<O: Write, E: Write>(args: Args, shell: &mut Shell<O, E>) -> any
     } else {
         "verified (attestation + approvals)"
     };
-    print_summary(&args.deploy_id, verification_status, &summary, shell)?;
+    print_summary(ctx, &args.deploy_id, verification_status, &summary)?;
 
     Ok(())
 }
 
-async fn write_provision_bundle<O: Write, E: Write>(
+async fn write_provision_bundle<W: Write>(
+    ctx: &mut Ctx<W>,
     path: &Path,
     bundle: &ProvisionBundle,
-    shell: &mut Shell<O, E>,
 ) -> anyhow::Result<()> {
     let contents =
         serde_json::to_vec_pretty(bundle).context("failed to serialize provision bundle")?;
     write_file(path, &contents).await?;
-    shell_line!(shell, "Provision bundle written to: {}", path.display())?;
+    shell_line!(ctx, "Provision bundle written to: {}", path.display())?;
     Ok(())
 }
 
@@ -188,24 +188,24 @@ fn approval_summaries(approvals: &[Approval]) -> Vec<ApprovalSummary> {
         .collect()
 }
 
-fn print_summary<O: Write, E: Write>(
+fn print_summary<W: Write>(
+    ctx: &mut Ctx<W>,
     deploy_id: &str,
     verification_status: &str,
     summary: &AttestationSummary,
-    shell: &mut Shell<O, E>,
 ) -> anyhow::Result<()> {
-    shell_line!(shell, "Deployment: {deploy_id}")?;
-    shell_line!(shell, "Verification: {verification_status}")?;
+    shell_line!(ctx, "Deployment: {deploy_id}")?;
+    shell_line!(ctx, "Verification: {verification_status}")?;
     shell_line!(
-        shell,
+        ctx,
         "Ephemeral Key: {}",
         hex::encode(&summary.ephemeral_key)
     )?;
-    shell_line!(shell, "Module ID: {}", summary.module_id)?;
-    shell_line!(shell, "Digest: {:?}", summary.digest)?;
-    shell_line!(shell, "Timestamp (ms): {}", summary.timestamp_ms)?;
+    shell_line!(ctx, "Module ID: {}", summary.module_id)?;
+    shell_line!(ctx, "Digest: {:?}", summary.digest)?;
+    shell_line!(ctx, "Timestamp (ms): {}", summary.timestamp_ms)?;
     shell_line!(
-        shell,
+        ctx,
         "User Data: {}",
         summary
             .user_data
@@ -214,7 +214,7 @@ fn print_summary<O: Write, E: Write>(
             .unwrap_or_else(|| "(none)".to_string())
     )?;
     shell_line!(
-        shell,
+        ctx,
         "Nonce: {}",
         summary
             .nonce
@@ -222,52 +222,48 @@ fn print_summary<O: Write, E: Write>(
             .map(hex::encode)
             .unwrap_or_else(|| "(none)".to_string())
     )?;
-    shell_line!(shell, "PCRs:")?;
+    shell_line!(ctx, "PCRs:")?;
     for (index, pcr) in &summary.pcrs {
         let label = match *index {
             16 => " (setup manifest/key commitment)",
             17 => " (live manifest/key commitment)",
             _ => "",
         };
-        shell_line!(shell, "  PCR{index}{label}: {}", hex::encode(pcr))?;
+        shell_line!(ctx, "  PCR{index}{label}: {}", hex::encode(pcr))?;
     }
+    shell_line!(ctx, "Certificate Length: {} bytes", summary.certificate_len)?;
     shell_line!(
-        shell,
-        "Certificate Length: {} bytes",
-        summary.certificate_len
-    )?;
-    shell_line!(
-        shell,
+        ctx,
         "CA Bundle Certificates: {}",
         summary.ca_bundle_cert_count
     )?;
     shell_line!(
-        shell,
+        ctx,
         "Manifest Set Approvals: {}/{}",
         summary.manifest_set_approvals.len(),
         summary.manifest_set_threshold
     )?;
-    print_approval_summary_entries(&summary.manifest_set_approvals, shell)?;
+    print_approval_summary_entries(ctx, &summary.manifest_set_approvals)?;
     if summary.share_set_approvals.is_empty() {
-        shell_line!(shell, "Share Set Approvals: (none)")?;
+        shell_line!(ctx, "Share Set Approvals: (none)")?;
     } else {
         shell_line!(
-            shell,
+            ctx,
             "Share Set Approvals: {}",
             summary.share_set_approvals.len()
         )?;
-        print_approval_summary_entries(&summary.share_set_approvals, shell)?;
+        print_approval_summary_entries(ctx, &summary.share_set_approvals)?;
     }
     Ok(())
 }
 
-fn print_approval_summary_entries<O: Write, E: Write>(
+fn print_approval_summary_entries<W: Write>(
+    ctx: &mut Ctx<W>,
     approvals: &[ApprovalSummary],
-    shell: &mut Shell<O, E>,
 ) -> anyhow::Result<()> {
     for approval in approvals {
         shell_line!(
-            shell,
+            ctx,
             "  {}: {}",
             approval.alias,
             hex::encode(&approval.public_key)

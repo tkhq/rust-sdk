@@ -1,7 +1,7 @@
 //! App set-live-deploy command.
 
 use crate::client::build_client;
-use crate::output::Shell;
+use crate::output::Ctx;
 use crate::shell_line;
 use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
@@ -19,7 +19,7 @@ pub struct Args {
 }
 
 /// Run the app set-live-deploy command.
-pub async fn run<O: Write, E: Write>(args: Args, shell: &mut Shell<O, E>) -> Result<()> {
+pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
     let auth = build_client().await?;
 
     let intent = UpdateTvcAppLiveDeploymentIntent {
@@ -37,12 +37,12 @@ pub async fn run<O: Write, E: Write>(args: Args, shell: &mut Shell<O, E>) -> Res
         .await
         .context("failed to set TVC app live deployment")?;
 
-    shell_line!(shell)?;
-    shell_line!(shell, "Set-live-deploy accepted.")?;
-    shell_line!(shell)?;
-    shell_line!(shell, "Deployment ID: {}", args.deploy_id)?;
-    shell_line!(shell, "Activity ID: {}", result.activity_id)?;
-    shell_line!(shell, "Activity Status: {:?}", result.status)?;
+    shell_line!(ctx)?;
+    shell_line!(ctx, "Set-live-deploy accepted.")?;
+    shell_line!(ctx)?;
+    shell_line!(ctx, "Deployment ID: {}", args.deploy_id)?;
+    shell_line!(ctx, "Activity ID: {}", result.activity_id)?;
+    shell_line!(ctx, "Activity Status: {:?}", result.status)?;
 
     Ok(())
 }

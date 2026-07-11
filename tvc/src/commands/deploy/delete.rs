@@ -1,7 +1,7 @@
 //! Deploy delete command - marks a deployment for deletion.
 
 use crate::client::build_client;
-use crate::output::Shell;
+use crate::output::Ctx;
 use crate::shell_line;
 use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
@@ -19,7 +19,7 @@ pub struct Args {
 }
 
 /// Run the deploy delete command.
-pub async fn run<O: Write, E: Write>(args: Args, shell: &mut Shell<O, E>) -> Result<()> {
+pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
     let auth = build_client().await?;
 
     let intent = DeleteTvcDeploymentIntent {
@@ -37,15 +37,15 @@ pub async fn run<O: Write, E: Write>(args: Args, shell: &mut Shell<O, E>) -> Res
         .await
         .context("failed to delete TVC deployment")?;
 
-    shell_line!(shell)?;
+    shell_line!(ctx)?;
     shell_line!(
-        shell,
+        ctx,
         "Deployment delete accepted; deployment is marked for deletion."
     )?;
-    shell_line!(shell)?;
-    shell_line!(shell, "Deployment ID: {}", result.result.deployment_id)?;
-    shell_line!(shell, "Activity ID: {}", result.activity_id)?;
-    shell_line!(shell, "Activity Status: {:?}", result.status)?;
+    shell_line!(ctx)?;
+    shell_line!(ctx, "Deployment ID: {}", result.result.deployment_id)?;
+    shell_line!(ctx, "Activity ID: {}", result.activity_id)?;
+    shell_line!(ctx, "Activity Status: {:?}", result.status)?;
 
     Ok(())
 }

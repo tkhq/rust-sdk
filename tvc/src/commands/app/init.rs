@@ -2,7 +2,7 @@
 
 use crate::config::app::AppConfig;
 use crate::config::turnkey::{Config, StoredQosOperatorKey};
-use crate::output::Shell;
+use crate::output::Ctx;
 use crate::prompts::{bail_interactive_conflicts_with_non_interactive, ensure_stdin_is_tty};
 use crate::shell_line;
 use anyhow::{Context, Result, bail};
@@ -31,22 +31,18 @@ pub struct Args {
 }
 
 /// Run the app init command.
-pub async fn run<O: Write, E: Write>(
-    args: Args,
-    is_non_interactive: bool,
-    shell: &mut Shell<O, E>,
-) -> Result<()> {
+pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
     if args.interactive {
-        if is_non_interactive {
+        if ctx.is_non_interactive() {
             bail_interactive_conflicts_with_non_interactive()?;
         } else {
             ensure_stdin_is_tty()?;
         }
     }
-    execute(args, shell).await
+    execute(ctx, args).await
 }
 
-async fn execute<O: Write, E: Write>(args: Args, shell: &mut Shell<O, E>) -> Result<()> {
+async fn execute<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
     // Check if file already exists
     if args.output.exists() {
         bail!("File already exists: {}", args.output.display());
@@ -68,23 +64,23 @@ async fn execute<O: Write, E: Write>(args: Args, shell: &mut Shell<O, E>) -> Res
         .with_context(|| format!("failed to write file: {}", args.output.display()))?;
 
     if args.interactive {
-        shell_line!(shell, "Created app config: {}", args.output.display())?;
-        shell_line!(shell)?;
+        shell_line!(ctx, "Created app config: {}", args.output.display())?;
+        shell_line!(ctx)?;
         shell_line!(
-            shell,
+            ctx,
             "Run: tvc app create --config-file {}",
             args.output.display()
         )?;
     } else {
         shell_line!(
-            shell,
+            ctx,
             "Created app config template: {}",
             args.output.display()
         )?;
-        shell_line!(shell)?;
-        shell_line!(shell, "Edit the file to fill in your values, then run:")?;
+        shell_line!(ctx)?;
+        shell_line!(ctx, "Edit the file to fill in your values, then run:")?;
         shell_line!(
-            shell,
+            ctx,
             "  tvc app create --config-file {}",
             args.output.display()
         )?;

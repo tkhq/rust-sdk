@@ -11,7 +11,7 @@ use turnkey_client::generated::{
 use crate::{
     client::{fetch_tvc_app, fetch_tvc_deployment},
     commands::display::format_egress_enabled,
-    output::Shell,
+    output::Ctx,
     shell_line,
 };
 
@@ -25,7 +25,7 @@ pub struct Args {
 }
 
 /// Run the deploy get-status command.
-pub async fn run<O: Write, E: Write>(args: Args, shell: &mut Shell<O, E>) -> anyhow::Result<()> {
+pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> anyhow::Result<()> {
     let Args {
         deploy_id: deployment_id,
     } = args;
@@ -57,11 +57,11 @@ pub async fn run<O: Write, E: Write>(args: Args, shell: &mut Shell<O, E>) -> any
     );
     let app = fetch_tvc_app(&auth, &deployment.app_id).await?;
 
-    shell_line!(shell, "Deployment: {}", deployment.id)?;
-    shell_line!(shell, "App ID: {}", app_status.app_id)?;
-    shell_line!(shell, "{}", format_egress_enabled(app.enable_egress))?;
+    shell_line!(ctx, "Deployment: {}", deployment.id)?;
+    shell_line!(ctx, "App ID: {}", app_status.app_id)?;
+    shell_line!(ctx, "{}", format_egress_enabled(app.enable_egress))?;
     shell_line!(
-        shell,
+        ctx,
         "Is Targeted Deployment: {}",
         if app_status.targeted_deployment_id == deployment_id {
             "yes"
@@ -71,25 +71,22 @@ pub async fn run<O: Write, E: Write>(args: Args, shell: &mut Shell<O, E>) -> any
     )?;
     if let Some(deployment_status) = find_deployment_status(&app_status, &deployment_id) {
         shell_line!(
-            shell,
+            ctx,
             "{}",
             crate::commands::app_status::format_replica_status(deployment_status)
         )?;
 
         if let Some(updated) = &deployment_status.last_updated_time {
             shell_line!(
-                shell,
+                ctx,
                 "Last Updated: {}.{:0>9}s",
                 updated.seconds,
                 updated.nanos
             )?;
         }
     } else {
-        shell_line!(shell, "Live Status: unavailable")?;
-        shell_line!(
-            shell,
-            "Reason: deployment not present in current app status"
-        )?;
+        shell_line!(ctx, "Live Status: unavailable")?;
+        shell_line!(ctx, "Reason: deployment not present in current app status")?;
     }
 
     Ok(())
