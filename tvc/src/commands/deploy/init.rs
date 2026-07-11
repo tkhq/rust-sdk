@@ -4,6 +4,7 @@ use super::PORT_GUIDANCE;
 use crate::{
     client::{build_client, fetch_tvc_deployment},
     config::{deploy::DeployConfig, turnkey},
+    outcome::Outcome,
     output::{Message, StdCtx},
     prompts::{bail_interactive_conflicts_with_non_interactive, ensure_stdin_is_tty},
 };
@@ -45,7 +46,7 @@ pub struct Args {
 }
 
 /// Run the deploy init command.
-pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<()> {
+pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     if args.interactive {
         if ctx.is_non_interactive() {
             bail_interactive_conflicts_with_non_interactive()?;
@@ -56,7 +57,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<()> {
     execute(ctx, args).await
 }
 
-async fn execute(ctx: &mut StdCtx, args: Args) -> Result<()> {
+async fn execute(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     let Args {
         output,
         from_deployment,
@@ -117,16 +118,14 @@ async fn execute(ctx: &mut StdCtx, args: Args) -> Result<()> {
     std::fs::write(&output, json)
         .with_context(|| format!("failed to write file: {}", output.display()))?;
 
-    ctx.shell().emit(&DeploymentConfigCreated {
+    Ok(Outcome::DeployInit(DeploymentConfigCreated {
         command: "deploy init",
         path: output.display().to_string(),
         template: !is_interactive,
         interactive: is_interactive,
         from_deployment: is_from_deployment,
         needs_pull_secret,
-    })?;
-
-    Ok(())
+    }))
 }
 
 const FROM_DEPLOYMENT_GUIDANCE: &str = r#"
@@ -141,8 +140,9 @@ const PULL_SECRET_GUIDANCE: &str = r#"  - The source deployment used a private i
     remove pivotContainerEncryptedPullSecret if the new image is public).
 "#;
 
-#[derive(Serialize)]
-struct DeploymentConfigCreated {
+#[derive(Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeploymentConfigCreated {
     command: &'static str,
     path: String,
     template: bool,
@@ -177,12 +177,19 @@ impl Message for DeploymentConfigCreated {
 
         if self.interactive {
             message.push_str(&format!(
-                "\nRun: tvc deploy create --config-file {}\n\n{PORT_GUIDANCE}",
+                r#"
+Run: tvc deploy create --config-file {}
+
+{PORT_GUIDANCE}"#,
                 self.path
             ));
         } else {
             message.push_str(&format!(
-                "\nEdit the file to fill in your values, then run:\n  tvc deploy create --config-file {}\n\n{PORT_GUIDANCE}",
+                r#"
+Edit the file to fill in your values, then run:
+  tvc deploy create --config-file {}
+
+{PORT_GUIDANCE}"#,
                 self.path
             ));
         }

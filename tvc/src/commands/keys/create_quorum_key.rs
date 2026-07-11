@@ -2,6 +2,7 @@
 
 use crate::{
     client::build_client,
+    outcome::Outcome,
     output::{Message, StdCtx},
 };
 use anyhow::{Context, Result, anyhow, ensure};
@@ -29,9 +30,9 @@ pub struct Args {
     pub operator_encrypt_keys: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct QuorumKeyCreated {
+pub struct QuorumKeyCreated {
     quorum_key_id: String,
     quorum_public_key: String,
     share_ids: Vec<String>,
@@ -53,7 +54,7 @@ impl Message for QuorumKeyCreated {
 }
 
 /// Run the hosted quorum-key creation command.
-pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<()> {
+pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     let operator_encrypt_keys = parse_operator_encrypt_keys(&args.operator_encrypt_keys)?;
     validate_operator_count(operator_encrypt_keys.len())?;
     validate_threshold(args.threshold, operator_encrypt_keys.len())?;
@@ -73,7 +74,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<()> {
         .map_err(|error| anyhow!("failed to create hosted TVC quorum key: {error}"))?;
     let output = validate_result(result.result, expected_share_count)?;
 
-    ctx.shell().emit(&output)
+    Ok(Outcome::KeysCreateQuorumKey(output))
 }
 
 fn parse_operator_encrypt_keys(input: &str) -> Result<Vec<String>> {

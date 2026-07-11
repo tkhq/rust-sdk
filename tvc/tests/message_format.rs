@@ -20,7 +20,7 @@ fn deploy_init_defaults_to_human_output() {
         .stdout(predicate::str::contains(
             "Created deployment config template:",
         ))
-        .stdout(predicate::str::contains("\"reason\"").not());
+        .stdout(predicate::str::contains(r#""reason""#).not());
 }
 
 #[test]
@@ -50,6 +50,65 @@ fn deploy_init_json_output_emits_structured_message() {
     assert_eq!(message["path"], output.display().to_string());
     assert_eq!(message["template"], true);
     assert_eq!(message["interactive"], false);
+    // camelCase payload keys are part of the contract (a blank template keeps
+    // the pull-secret placeholder, so needsPullSecret is true).
+    assert_eq!(message["fromDeployment"], false);
+    assert_eq!(message["needsPullSecret"], true);
+}
+
+#[test]
+fn app_init_json_output_emits_structured_message() {
+    let temp = TempDir::new().unwrap();
+    let output = temp.path().join("app.json");
+
+    let assert = cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .current_dir(temp.path())
+        .arg("--message-format=json")
+        .arg("app")
+        .arg("init")
+        .arg("--output")
+        .arg(&output)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Created app config template:").not());
+
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+    let lines: Vec<_> = stdout.lines().collect();
+    assert_eq!(lines.len(), 1, "expected one JSON message, got {stdout:?}");
+
+    let message: Value = serde_json::from_str(lines[0]).unwrap();
+    assert_eq!(message["reason"], "app-config-created");
+    assert_eq!(message["command"], "app init");
+    assert_eq!(message["path"], output.display().to_string());
+    assert_eq!(message["template"], true);
+    assert_eq!(message["interactive"], false);
+}
+
+#[test]
+fn keys_init_local_quorum_key_json_output_emits_structured_message() {
+    let temp = TempDir::new().unwrap();
+    let output = temp.path().join("quorum_key.json");
+
+    let assert = cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .current_dir(temp.path())
+        .arg("--message-format=json")
+        .arg("keys")
+        .arg("init-local-quorum-key")
+        .arg("--output")
+        .arg(&output)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Created quorum key config template:").not());
+
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+    let lines: Vec<_> = stdout.lines().collect();
+    assert_eq!(lines.len(), 1, "expected one JSON message, got {stdout:?}");
+
+    let message: Value = serde_json::from_str(lines[0]).unwrap();
+    assert_eq!(message["reason"], "quorum-key-config-created");
+    assert_eq!(message["path"], output.display().to_string());
 }
 
 #[test]

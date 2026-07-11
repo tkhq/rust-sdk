@@ -1,6 +1,7 @@
 //! Deploy post-share command.
 
 use crate::commands::keys::re_encrypt_local_share::ReEncryptedShareOutput;
+use crate::outcome::Outcome;
 use crate::output::{Message, StdCtx};
 use crate::util::read_json_file;
 use anyhow::Context;
@@ -24,7 +25,7 @@ pub struct Args {
 }
 
 /// Run the deploy post-share command.
-pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<()> {
+pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
     let re_encrypted_share: ReEncryptedShareOutput =
         read_json_file(&args.re_encrypted_share, "re-encrypted share output").await?;
     let intent =
@@ -42,16 +43,14 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<()> {
         .await
         .context("failed to post quorum key share")?;
 
-    ctx.shell().emit(&QuorumKeySharePosted {
+    Ok(Outcome::DeployPostShare(QuorumKeySharePosted {
         provisioning_share_id: result.result.provisioning_share_id,
-    })?;
-
-    Ok(())
+    }))
 }
 
-#[derive(Serialize)]
+#[derive(Default, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct QuorumKeySharePosted {
+pub struct QuorumKeySharePosted {
     provisioning_share_id: String,
 }
 

@@ -2,10 +2,11 @@
 
 use crate::config::quorum_key::QuorumKeyConfig;
 use crate::config::turnkey::{Config, StoredQosOperatorKey};
-use crate::output::StdCtx;
-use crate::shell_println;
+use crate::outcome::Outcome;
+use crate::output::{Message, StdCtx};
 use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
+use serde::Serialize;
 use std::path::PathBuf;
 
 /// Generate a template quorum key configuration file.
@@ -24,7 +25,7 @@ pub struct Args {
 }
 
 /// Run the quorum key init command.
-pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<()> {
+pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     if args.output.exists() {
         anyhow::bail!("File already exists: {}", args.output.display());
     }
@@ -37,25 +38,36 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<()> {
     std::fs::write(&args.output, json)
         .with_context(|| format!("failed to write file: {}", args.output.display()))?;
 
-    shell_println!(
-        ctx,
-        "Created quorum key config template: {}",
-        args.output.display()
-    )?;
-    shell_println!(ctx)?;
-    // Constraints inherited from qos_crypto::shamir::shares_generate.
-    shell_println!(ctx, "Constraints (see qos_crypto/src/shamir.rs):")?;
-    shell_println!(ctx, "  shares    : 1..=255")?;
-    shell_println!(ctx, "  threshold : >= 2 and <= shares")?;
-    shell_println!(ctx)?;
-    shell_println!(ctx, "Edit the file to fill in your values, then run:")?;
-    shell_println!(
-        ctx,
-        "  tvc keys generate-local-quorum-key --config-file {}",
-        args.output.display()
-    )?;
+    Ok(Outcome::KeysInitQuorumKey(QuorumKeyConfigCreated {
+        path: args.output.display().to_string(),
+    }))
+}
 
-    Ok(())
+#[derive(Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuorumKeyConfigCreated {
+    path: String,
+}
+
+impl Message for QuorumKeyConfigCreated {
+    fn reason(&self) -> &'static str {
+        "quorum-key-config-created"
+    }
+
+    fn human_message(&self) -> String {
+        // Constraints inherited from qos_crypto::shamir::shares_generate.
+        format!(
+            r#"Created quorum key config template: {}
+
+Constraints (see qos_crypto/src/shamir.rs):
+  shares    : 1..=255
+  threshold : >= 2 and <= shares
+
+Edit the file to fill in your values, then run:
+  tvc keys generate-local-quorum-key --config-file {}"#,
+            self.path, self.path
+        )
+    }
 }
 
 /// Load the operator public key from the active org's config.

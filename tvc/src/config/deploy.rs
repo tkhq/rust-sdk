@@ -327,7 +327,7 @@ mod tests {
     /// Build a `TvcManifest` from the fixture, optionally flipping debug mode on.
     fn manifest(debug_mode: bool) -> TvcManifest {
         let json = if debug_mode {
-            MANIFEST_JSON.replace("\"debugMode\": false", "\"debugMode\": true")
+            MANIFEST_JSON.replace(r#""debugMode": false"#, r#""debugMode": true"#)
         } else {
             MANIFEST_JSON.to_string()
         };

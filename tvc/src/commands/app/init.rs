@@ -2,11 +2,12 @@
 
 use crate::config::app::AppConfig;
 use crate::config::turnkey::{Config, StoredQosOperatorKey};
-use crate::output::StdCtx;
+use crate::outcome::Outcome;
+use crate::output::{Message, StdCtx};
 use crate::prompts::{bail_interactive_conflicts_with_non_interactive, ensure_stdin_is_tty};
-use crate::shell_println;
 use anyhow::{Context, Result, bail};
 use clap::Args as ClapArgs;
+use serde::Serialize;
 use std::path::PathBuf;
 
 /// Generate a template app configuration file.
@@ -30,7 +31,7 @@ pub struct Args {
 }
 
 /// Run the app init command.
-pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<()> {
+pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     if args.interactive {
         if ctx.is_non_interactive() {
             bail_interactive_conflicts_with_non_interactive()?;
@@ -38,10 +39,10 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<()> {
             ensure_stdin_is_tty()?;
         }
     }
-    execute(ctx, args).await
+    execute(args).await
 }
 
-async fn execute(ctx: &mut StdCtx, args: Args) -> Result<()> {
+async fn execute(args: Args) -> Result<Outcome> {
     // Check if file already exists
     if args.output.exists() {
         bail!("File already exists: {}", args.output.display());
@@ -62,30 +63,45 @@ async fn execute(ctx: &mut StdCtx, args: Args) -> Result<()> {
     std::fs::write(&args.output, json)
         .with_context(|| format!("failed to write file: {}", args.output.display()))?;
 
-    if args.interactive {
-        shell_println!(ctx, "Created app config: {}", args.output.display())?;
-        shell_println!(ctx)?;
-        shell_println!(
-            ctx,
-            "Run: tvc app create --config-file {}",
-            args.output.display()
-        )?;
-    } else {
-        shell_println!(
-            ctx,
-            "Created app config template: {}",
-            args.output.display()
-        )?;
-        shell_println!(ctx)?;
-        shell_println!(ctx, "Edit the file to fill in your values, then run:")?;
-        shell_println!(
-            ctx,
-            "  tvc app create --config-file {}",
-            args.output.display()
-        )?;
+    Ok(Outcome::AppInit(AppConfigCreated {
+        command: "app init",
+        path: args.output.display().to_string(),
+        template: !args.interactive,
+        interactive: args.interactive,
+    }))
+}
+
+#[derive(Default, Serialize)]
+pub struct AppConfigCreated {
+    command: &'static str,
+    path: String,
+    template: bool,
+    interactive: bool,
+}
+
+impl Message for AppConfigCreated {
+    fn reason(&self) -> &'static str {
+        "app-config-created"
     }
 
-    Ok(())
+    fn human_message(&self) -> String {
+        if self.interactive {
+            format!(
+                r#"Created app config: {}
+
+Run: tvc app create --config-file {}"#,
+                self.path, self.path
+            )
+        } else {
+            format!(
+                r#"Created app config template: {}
+
+Edit the file to fill in your values, then run:
+  tvc app create --config-file {}"#,
+                self.path, self.path
+            )
+        }
+    }
 }
 
 /// Load the operator public key from the active org's config

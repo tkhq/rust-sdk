@@ -2,6 +2,8 @@
 
 use anyhow::{Context, anyhow};
 use clap::Args as ClapArgs;
+use serde::Serialize;
+use std::fmt::Write as _;
 use turnkey_client::generated::{
     GetAppStatusRequest,
     external::data::v1::{AppStatus, DeploymentStatus},
@@ -9,9 +11,10 @@ use turnkey_client::generated::{
 
 use crate::{
     client::{fetch_tvc_app, fetch_tvc_deployment},
+    commands::app_status::{ReplicaCounts, TimestampPayload, format_replica_counts},
     commands::display::format_egress_enabled,
-    output::StdCtx,
-    shell_println,
+    outcome::Outcome,
+    output::{Message, StdCtx},
 };
 
 /// Get the live status of a deployment from the app status API.
@@ -24,7 +27,7 @@ pub struct Args {
 }
 
 /// Run the deploy get-status command.
-pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<()> {
+pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
     let Args {
         deploy_id: deployment_id,
     } = args;
@@ -56,39 +59,76 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<()> {
     );
     let app = fetch_tvc_app(&auth, &deployment.app_id).await?;
 
-    shell_println!(ctx, "Deployment: {}", deployment.id)?;
-    shell_println!(ctx, "App ID: {}", app_status.app_id)?;
-    shell_println!(ctx, "{}", format_egress_enabled(app.enable_egress))?;
-    shell_println!(
-        ctx,
-        "Is Targeted Deployment: {}",
-        if app_status.targeted_deployment_id == deployment_id {
-            "yes"
-        } else {
-            "no"
-        }
-    )?;
-    if let Some(deployment_status) = find_deployment_status(&app_status, &deployment_id) {
-        shell_println!(
-            ctx,
-            "{}",
-            crate::commands::app_status::format_replica_status(deployment_status)
-        )?;
+    let deployment_status = find_deployment_status(&app_status, &deployment_id);
 
-        if let Some(updated) = &deployment_status.last_updated_time {
-            shell_println!(
-                ctx,
-                "Last Updated: {}.{:0>9}s",
-                updated.seconds,
-                updated.nanos
-            )?;
-        }
-    } else {
-        shell_println!(ctx, "Live Status: unavailable")?;
-        shell_println!(ctx, "Reason: deployment not present in current app status")?;
+    Ok(Outcome::DeployGetStatus(DeploymentRuntimeStatus {
+        deployment_id: deployment.id,
+        app_id: app_status.app_id.clone(),
+        egress_enabled: app.enable_egress,
+        is_targeted: app_status.targeted_deployment_id == deployment_id,
+        replicas: deployment_status.map(|status| ReplicaCounts {
+            ready: status.ready_replicas,
+            desired: status.desired_replicas,
+        }),
+        last_updated: deployment_status
+            .and_then(|status| status.last_updated_time.clone().map(Into::into)),
+    }))
+}
+
+#[derive(Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeploymentRuntimeStatus {
+    deployment_id: String,
+    app_id: String,
+    egress_enabled: bool,
+    is_targeted: bool,
+    /// `None` when the deployment is not present in the current app status.
+    replicas: Option<ReplicaCounts>,
+    last_updated: Option<TimestampPayload>,
+}
+
+impl Message for DeploymentRuntimeStatus {
+    fn reason(&self) -> &'static str {
+        "deployment-runtime-status"
     }
 
-    Ok(())
+    fn human_message(&self) -> String {
+        let mut message = format!(
+            r#"Deployment: {}
+App ID: {}
+{}
+Is Targeted Deployment: {}"#,
+            self.deployment_id,
+            self.app_id,
+            format_egress_enabled(self.egress_enabled),
+            if self.is_targeted { "yes" } else { "no" }
+        );
+
+        match &self.replicas {
+            Some(replicas) => {
+                let _ = write!(
+                    message,
+                    "\n{}",
+                    format_replica_counts(replicas.ready, replicas.desired)
+                );
+
+                if let Some(updated) = &self.last_updated {
+                    let _ = write!(
+                        message,
+                        "\nLast Updated: {}.{:09}s",
+                        updated.seconds, updated.nanos
+                    );
+                }
+            }
+            None => message.push_str(
+                r#"
+Live Status: unavailable
+Reason: deployment not present in current app status"#,
+            ),
+        }
+
+        message
+    }
 }
 
 fn find_deployment_status<'a>(

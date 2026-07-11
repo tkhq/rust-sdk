@@ -2,13 +2,18 @@
 
 use anyhow::{Context, anyhow};
 use clap::Args as ClapArgs;
+use serde::Serialize;
+use std::fmt::Write as _;
 use turnkey_client::generated::GetAppStatusRequest;
+use turnkey_client::generated::external::data::v1::{AppStatus, DeploymentStatus};
 
 use crate::client::fetch_tvc_app;
-use crate::commands::app_status::{format_replica_status, sanitize_app_status};
+use crate::commands::app_status::{
+    ReplicaCounts, TimestampPayload, format_replica_counts, sanitize_app_status,
+};
 use crate::commands::display::format_egress_enabled;
-use crate::output::StdCtx;
-use crate::shell_println;
+use crate::outcome::Outcome;
+use crate::output::{Message, StdCtx};
 
 /// Get the live status of an app from the cluster.
 #[derive(Debug, ClapArgs)]
@@ -20,7 +25,7 @@ pub struct Args {
 }
 
 /// Run the app status command.
-pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<()> {
+pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
     let auth = crate::client::build_client().await?;
 
     let request = GetAppStatusRequest {
@@ -41,33 +46,96 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<()> {
     );
     let app = fetch_tvc_app(&auth, &args.app_id).await?;
 
-    shell_println!(ctx, "App ID: {}", app_status.app_id)?;
-    shell_println!(
-        ctx,
-        "Targeted Deployment: {}",
-        app_status.targeted_deployment_id
-    )?;
-    shell_println!(ctx, "{}", format_egress_enabled(app.enable_egress))?;
+    // Exhaustive destructure so a new `AppStatus` field forces a decision here
+    // rather than being silently dropped.
+    let AppStatus {
+        app_id,
+        deployments,
+        targeted_deployment_id,
+    } = app_status;
 
-    if app_status.deployments.is_empty() {
-        shell_println!(ctx)?;
-        shell_println!(ctx, "No deployments found.")?;
-    } else {
-        for deployment in &app_status.deployments {
-            shell_println!(ctx)?;
-            shell_println!(ctx, "Deployment: {}", deployment.deployment_id)?;
-            shell_println!(ctx, "  {}", format_replica_status(deployment))?;
+    Ok(Outcome::AppStatus(AppStatusReport {
+        app_id,
+        targeted_deployment_id,
+        egress_enabled: app.enable_egress,
+        deployments: deployments
+            .into_iter()
+            .map(|deployment| {
+                let DeploymentStatus {
+                    deployment_id,
+                    ready_replicas,
+                    desired_replicas,
+                    last_updated_time,
+                } = deployment;
+                DeploymentReplicaStatus {
+                    deployment_id,
+                    replicas: ReplicaCounts {
+                        ready: ready_replicas,
+                        desired: desired_replicas,
+                    },
+                    last_updated: last_updated_time.map(Into::into),
+                }
+            })
+            .collect(),
+    }))
+}
 
-            if let Some(updated) = &deployment.last_updated_time {
-                shell_println!(
-                    ctx,
-                    "  Last Updated: {}.{:0>9}s",
-                    updated.seconds,
-                    updated.nanos
-                )?;
-            }
-        }
+#[derive(Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppStatusReport {
+    app_id: String,
+    targeted_deployment_id: String,
+    egress_enabled: bool,
+    deployments: Vec<DeploymentReplicaStatus>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DeploymentReplicaStatus {
+    deployment_id: String,
+    replicas: ReplicaCounts,
+    last_updated: Option<TimestampPayload>,
+}
+
+impl Message for AppStatusReport {
+    fn reason(&self) -> &'static str {
+        "app-status"
     }
 
-    Ok(())
+    fn human_message(&self) -> String {
+        let mut message = format!(
+            r#"App ID: {}
+Targeted Deployment: {}
+{}"#,
+            self.app_id,
+            self.targeted_deployment_id,
+            format_egress_enabled(self.egress_enabled)
+        );
+
+        if self.deployments.is_empty() {
+            message.push_str("\n\nNo deployments found.");
+        } else {
+            for deployment in &self.deployments {
+                let _ = write!(
+                    message,
+                    r#"
+
+Deployment: {}
+  {}"#,
+                    deployment.deployment_id,
+                    format_replica_counts(deployment.replicas.ready, deployment.replicas.desired)
+                );
+
+                if let Some(updated) = &deployment.last_updated {
+                    let _ = write!(
+                        message,
+                        "\n  Last Updated: {}.{:0>9}s",
+                        updated.seconds, updated.nanos
+                    );
+                }
+            }
+        }
+
+        message
+    }
 }

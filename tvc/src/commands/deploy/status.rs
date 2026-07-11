@@ -2,13 +2,16 @@
 
 use anyhow::Context;
 use clap::Args as ClapArgs;
+use serde::Serialize;
+use std::fmt::Write as _;
 use turnkey_client::generated::GetTvcDeploymentRequest;
 use turnkey_client::generated::external::data::v1::TvcDeployment;
 
 use crate::client::fetch_tvc_app;
+use crate::commands::app_status::TimestampPayload;
 use crate::commands::display::{format_egress_enabled, yes_no};
-use crate::output::StdCtx;
-use crate::shell_println;
+use crate::outcome::Outcome;
+use crate::output::{Message, StdCtx};
 
 /// Get the status of a deployment.
 #[derive(Debug, ClapArgs)]
@@ -20,7 +23,7 @@ pub struct Args {
 }
 
 /// Run the deploy status command.
-pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<()> {
+pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
     let auth = crate::client::build_client().await?;
 
     let request = GetTvcDeploymentRequest {
@@ -38,81 +41,141 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<()> {
         .tvc_deployment
         .ok_or_else(|| anyhow::anyhow!("deployment not found: {}", args.deploy_id))?;
 
-    let manifest = deployment
-        .manifest
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("manifest not found in deployment"))?;
-    let app = fetch_tvc_app(&auth, &deployment.app_id).await?;
+    // Exhaustive destructure (rather than `..`) so a new `TvcDeployment` field
+    // forces a compile error here and forces a deliberate decision about usage
+    let TvcDeployment {
+        id,
+        app_id,
+        manifest,
+        qos_version,
+        pivot_container,
+        created_at,
+        updated_at,
+        delete,
+        debug_mode,
+        organization_id: _,
+        manifest_set: _,
+        share_set: _,
+        manifest_approvals: _,
+    } = deployment;
 
-    shell_println!(ctx, "Deployment: {}", deployment.id)?;
-    shell_println!(ctx, "App ID: {}", deployment.app_id)?;
-    shell_println!(ctx, "{}", format_egress_enabled(app.enable_egress))?;
-    shell_println!(ctx, "Manifest ID: {}", manifest.id)?;
-    shell_println!(ctx, "QOS Version: {}", deployment.qos_version)?;
-    shell_println!(ctx, "{}", format_marked_for_deletion(&deployment))?;
+    let manifest = manifest.ok_or_else(|| anyhow::anyhow!("manifest not found in deployment"))?;
+    let app = fetch_tvc_app(&auth, &app_id).await?;
 
-    if let Some(pivot) = &deployment.pivot_container {
-        shell_println!(ctx)?;
-        shell_println!(ctx, "Pivot Container:")?;
-        shell_println!(ctx, "  URL: {}", pivot.container_url)?;
-        shell_println!(ctx, "  Path: {}", pivot.path)?;
-        if !pivot.args.is_empty() {
-            shell_println!(ctx, "  Args: {:?}", pivot.args)?;
-        }
-    }
-
-    if let Some(created) = &deployment.created_at {
-        shell_println!(ctx)?;
-        shell_println!(ctx, "Created: {}.{:0>9}s", created.seconds, created.nanos)?;
-    }
-
-    if let Some(updated) = &deployment.updated_at {
-        shell_println!(ctx, "Updated: {}.{:0>9}s", updated.seconds, updated.nanos)?;
-    }
-
-    Ok(())
+    Ok(Outcome::DeployStatus(DeploymentStatusReport {
+        deployment_id: id,
+        app_id,
+        egress_enabled: app.enable_egress,
+        manifest_id: manifest.id,
+        qos_version,
+        marked_for_deletion: delete,
+        debug_mode,
+        pivot_container: pivot_container.map(|pivot| PivotContainerSummary {
+            url: pivot.container_url,
+            path: pivot.path,
+            args: pivot.args,
+        }),
+        created_at: created_at.map(Into::into),
+        updated_at: updated_at.map(Into::into),
+    }))
 }
 
-fn format_marked_for_deletion(deployment: &TvcDeployment) -> String {
-    format!("Marked for deletion: {}", yes_no(deployment.delete))
+#[derive(Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeploymentStatusReport {
+    deployment_id: String,
+    app_id: String,
+    egress_enabled: bool,
+    manifest_id: String,
+    qos_version: String,
+    marked_for_deletion: bool,
+    debug_mode: bool,
+    pivot_container: Option<PivotContainerSummary>,
+    created_at: Option<TimestampPayload>,
+    updated_at: Option<TimestampPayload>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PivotContainerSummary {
+    url: String,
+    path: String,
+    args: Vec<String>,
+}
+
+impl Message for DeploymentStatusReport {
+    fn reason(&self) -> &'static str {
+        "deployment-status"
+    }
+
+    fn human_message(&self) -> String {
+        let mut message = format!(
+            r#"Deployment: {}
+App ID: {}
+{}
+Manifest ID: {}
+QOS Version: {}
+{}
+Debug Mode: {}"#,
+            self.deployment_id,
+            self.app_id,
+            format_egress_enabled(self.egress_enabled),
+            self.manifest_id,
+            self.qos_version,
+            format_marked_for_deletion(self.marked_for_deletion),
+            yes_no(self.debug_mode)
+        );
+
+        if let Some(pivot) = &self.pivot_container {
+            let _ = write!(
+                message,
+                r#"
+
+Pivot Container:
+  URL: {}
+  Path: {}"#,
+                pivot.url, pivot.path
+            );
+            if !pivot.args.is_empty() {
+                let _ = write!(message, "\n  Args: {:?}", pivot.args);
+            }
+        }
+
+        if let Some(created) = &self.created_at {
+            let _ = write!(
+                message,
+                "\n\nCreated: {}.{:09}s",
+                created.seconds, created.nanos
+            );
+        }
+
+        if let Some(updated) = &self.updated_at {
+            let _ = write!(
+                message,
+                "\nUpdated: {}.{:09}s",
+                updated.seconds, updated.nanos
+            );
+        }
+
+        message
+    }
+}
+
+fn format_marked_for_deletion(delete: bool) -> String {
+    format!("Marked for deletion: {}", yes_no(delete))
 }
 
 #[cfg(test)]
 mod tests {
     use super::format_marked_for_deletion;
-    use turnkey_client::generated::external::data::v1::TvcDeployment;
-
-    fn deployment(delete: bool) -> TvcDeployment {
-        TvcDeployment {
-            id: "deploy-123".to_string(),
-            organization_id: "org-123".to_string(),
-            app_id: "app-123".to_string(),
-            manifest_set: None,
-            share_set: None,
-            manifest: None,
-            manifest_approvals: vec![],
-            qos_version: "qos-v1".to_string(),
-            pivot_container: None,
-            debug_mode: false,
-            created_at: None,
-            updated_at: None,
-            delete,
-        }
-    }
 
     #[test]
     fn marked_for_deletion_formats_yes_when_delete_is_true() {
-        assert_eq!(
-            format_marked_for_deletion(&deployment(true)),
-            "Marked for deletion: yes"
-        );
+        assert_eq!(format_marked_for_deletion(true), "Marked for deletion: yes");
     }
 
     #[test]
     fn marked_for_deletion_formats_no_when_delete_is_false() {
-        assert_eq!(
-            format_marked_for_deletion(&deployment(false)),
-            "Marked for deletion: no"
-        );
+        assert_eq!(format_marked_for_deletion(false), "Marked for deletion: no");
     }
 }

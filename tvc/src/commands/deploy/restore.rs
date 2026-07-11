@@ -2,11 +2,12 @@
 
 use anyhow::Context;
 use clap::Args as ClapArgs;
+use serde::Serialize;
 use std::time::{SystemTime, UNIX_EPOCH};
-use turnkey_client::generated::RestoreTvcDeploymentIntent;
+use turnkey_client::generated::{ActivityStatus, RestoreTvcDeploymentIntent};
 
-use crate::output::StdCtx;
-use crate::shell_println;
+use crate::outcome::Outcome;
+use crate::output::{Message, StdCtx};
 
 /// Restore a deleted deployment.
 #[derive(Debug, ClapArgs)]
@@ -18,7 +19,7 @@ pub struct Args {
 }
 
 /// Run the deploy restore command.
-pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<()> {
+pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
     let auth = crate::client::build_client().await?;
 
     let intent = RestoreTvcDeploymentIntent {
@@ -36,15 +37,48 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<()> {
         .await
         .context("failed to restore TVC deployment")?;
 
-    shell_println!(ctx)?;
-    shell_println!(
-        ctx,
-        "Deployment restore accepted; deployment is no longer marked for deletion."
-    )?;
-    shell_println!(ctx)?;
-    shell_println!(ctx, "Deployment ID: {}", result.result.deployment_id)?;
-    shell_println!(ctx, "Activity ID: {}", result.activity_id)?;
-    shell_println!(ctx, "Activity Status: {:?}", result.status)?;
+    Ok(Outcome::DeployRestore(DeploymentRestored {
+        deployment_id: result.result.deployment_id,
+        activity_id: result.activity_id,
+        activity_status: result.status,
+    }))
+}
 
-    Ok(())
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeploymentRestored {
+    deployment_id: String,
+    activity_id: String,
+    /// Stable proto status name, e.g. `ACTIVITY_STATUS_COMPLETED`.
+    activity_status: ActivityStatus,
+}
+
+/// Manual because the generated `ActivityStatus` does not implement
+/// `Default`; the zero value is the enum's `Unspecified` variant.
+impl Default for DeploymentRestored {
+    fn default() -> Self {
+        Self {
+            deployment_id: String::default(),
+            activity_id: String::default(),
+            activity_status: ActivityStatus::Unspecified,
+        }
+    }
+}
+
+impl Message for DeploymentRestored {
+    fn reason(&self) -> &'static str {
+        "deployment-restored"
+    }
+
+    fn human_message(&self) -> String {
+        format!(
+            r#"
+Deployment restore accepted; deployment is no longer marked for deletion.
+
+Deployment ID: {}
+Activity ID: {}
+Activity Status: {}"#,
+            self.deployment_id, self.activity_id, self.activity_status.as_str_name()
+        )
+    }
 }

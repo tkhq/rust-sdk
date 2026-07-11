@@ -4,12 +4,15 @@ use super::format_port_summary;
 use crate::client::{build_client, fetch_tvc_app};
 use crate::config::deploy::{DeployConfig, DeployConfigValidationErrors};
 use crate::config::turnkey::Config;
-use crate::output::StdCtx;
+use crate::outcome::Outcome;
+use crate::output::{Message, StdCtx};
 use crate::prompts;
 use crate::pull_secret::encrypt_pivot_pull_secret;
 use crate::shell_println;
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Args as ClapArgs;
+use serde::Serialize;
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::try_join;
@@ -146,7 +149,7 @@ struct ResolvedDeployInputs {
     pivot_pull_secret: Option<String>,
 }
 
-pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<()> {
+pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     let inputs = if ctx.is_non_interactive() {
         build_inputs_non_interactive(args).await?
     } else {
@@ -370,7 +373,10 @@ fn pin_image_url(image_url: &str, resolved_digest: &str) -> String {
     }
 }
 
-async fn run_with_resolved_inputs(ctx: &mut StdCtx, inputs: ResolvedDeployInputs) -> Result<()> {
+async fn run_with_resolved_inputs(
+    ctx: &mut StdCtx,
+    inputs: ResolvedDeployInputs,
+) -> Result<Outcome> {
     let deploy_config = inputs.config;
 
     shell_println!(
@@ -417,7 +423,7 @@ async fn run_with_resolved_inputs(ctx: &mut StdCtx, inputs: ResolvedDeployInputs
 
     let intent = build_create_intent(
         &deploy_config,
-        pinned_image_url,
+        pinned_image_url.clone(),
         pivot_container_encrypted_pull_secret,
     );
 
@@ -432,28 +438,59 @@ async fn run_with_resolved_inputs(ctx: &mut StdCtx, inputs: ResolvedDeployInputs
         .await
         .context("failed to create TVC deployment")?;
 
-    shell_println!(ctx)?;
-    shell_println!(ctx, "Deployment created successfully!")?;
-    shell_println!(ctx)?;
-    shell_println!(ctx, "Deployment ID: {}", result.result.deployment_id)?;
-    shell_println!(ctx, "App ID: {}", deploy_config.app_id)?;
-    if let Some(path) = &inputs.config_path {
-        shell_println!(ctx, "Config: {}", path.display())?;
-    }
-    shell_println!(ctx)?;
-    shell_println!(ctx, "Next steps:")?;
-    shell_println!(
-        ctx,
-        "  - Run `tvc deploy status --deploy-id {}` to check deployment status",
-        result.result.deployment_id
-    )?;
-    shell_println!(
-        ctx,
-        "  - Run `tvc deploy approve --deploy-id {} --operator-id <operator-id>` to approve the manifest",
-        result.result.deployment_id
-    )?;
+    Ok(Outcome::DeployCreate(DeploymentCreated {
+        deployment_id: result.result.deployment_id,
+        app_id: deploy_config.app_id,
+        pinned_image_url,
+        config_path: inputs
+            .config_path
+            .as_ref()
+            .map(|path| path.display().to_string()),
+    }))
+}
 
-    Ok(())
+#[derive(Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeploymentCreated {
+    deployment_id: String,
+    app_id: String,
+    pinned_image_url: String,
+    /// Present when the deployment was created from a config file.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    config_path: Option<String>,
+}
+
+impl Message for DeploymentCreated {
+    fn reason(&self) -> &'static str {
+        "deployment-created"
+    }
+
+    fn human_message(&self) -> String {
+        let mut message = format!(
+            r#"
+Deployment created successfully!
+
+Deployment ID: {}
+App ID: {}"#,
+            self.deployment_id, self.app_id
+        );
+
+        if let Some(path) = &self.config_path {
+            let _ = write!(message, "\nConfig: {path}");
+        }
+
+        let _ = write!(
+            message,
+            r#"
+
+Next steps:
+  - Run `tvc deploy status --deploy-id {}` to check deployment status
+  - Run `tvc deploy approve --deploy-id {} --operator-id <operator-id>` to approve the manifest"#,
+            self.deployment_id, self.deployment_id
+        );
+
+        message
+    }
 }
 
 #[cfg(test)]

@@ -127,6 +127,51 @@ fn generate_local_quorum_key_rejects_invalid_config() {
 }
 
 #[test]
+fn generate_local_quorum_key_json_output_emits_structured_message() {
+    let temp = TempDir::new().unwrap();
+    let config_path = temp.path().join("quorum_key.json");
+    let metadata_path = temp.path().join("quorum_key_metadata.json");
+
+    let operator_public_keys = (0..2)
+        .map(|_| hex::encode(P256Pair::generate().unwrap().public_key().to_bytes()))
+        .collect::<Vec<_>>();
+
+    fs::write(
+        &config_path,
+        serde_json::to_vec_pretty(&json!({
+            "shares": 2,
+            "threshold": 2,
+            "operatorPublicKeys": operator_public_keys,
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    let assert = cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .arg("--message-format=json")
+        .arg("keys")
+        .arg("generate-local-quorum-key")
+        .arg("--config-file")
+        .arg(&config_path)
+        .arg("--quorum-key-metadata-out")
+        .arg(&metadata_path)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Quorum Public Key:").not());
+
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+    let lines: Vec<_> = stdout.lines().collect();
+    assert_eq!(lines.len(), 1, "expected one JSON message, got {stdout:?}");
+
+    let message: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+    assert_eq!(message["reason"], "quorum-key-generated");
+    assert_eq!(message["threshold"], 2);
+    assert_eq!(message["metadataPath"], metadata_path.display().to_string());
+    assert!(message["quorumKeyPublic"].is_string());
+}
+
+#[test]
 fn keys_help_lists_local_quorum_key_commands_only() {
     cargo_bin_cmd!("tvc")
         .arg("keys")

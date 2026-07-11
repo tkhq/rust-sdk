@@ -1,12 +1,13 @@
 //! App delete command - marks an app and all deployments for deletion.
 
 use crate::client::build_client;
-use crate::output::StdCtx;
-use crate::shell_println;
+use crate::outcome::Outcome;
+use crate::output::{Message, StdCtx};
 use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
+use serde::Serialize;
 use std::time::{SystemTime, UNIX_EPOCH};
-use turnkey_client::generated::DeleteTvcAppAndDeploymentsIntent;
+use turnkey_client::generated::{ActivityStatus, DeleteTvcAppAndDeploymentsIntent};
 
 /// Delete a TVC application and all of its deployments.
 #[derive(Debug, ClapArgs)]
@@ -18,7 +19,7 @@ pub struct Args {
 }
 
 /// Run the app delete command.
-pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<()> {
+pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     let auth = build_client().await?;
 
     let intent = DeleteTvcAppAndDeploymentsIntent {
@@ -36,11 +37,48 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<()> {
         .await
         .context("failed to delete TVC app and deployments")?;
 
-    shell_println!(ctx, "App delete accepted.")?;
-    shell_println!(ctx, "App and deployments marked for deletion.")?;
-    shell_println!(ctx, "App ID: {}", result.result.app_id)?;
-    shell_println!(ctx, "Activity ID: {}", result.activity_id)?;
-    shell_println!(ctx, "Activity Status: {:?}", result.status)?;
+    Ok(Outcome::AppDelete(AppDeleted {
+        app_id: result.result.app_id,
+        activity_id: result.activity_id,
+        activity_status: result.status,
+    }))
+}
 
-    Ok(())
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppDeleted {
+    app_id: String,
+    activity_id: String,
+    /// Stable proto status name, e.g. `ACTIVITY_STATUS_COMPLETED`.
+    activity_status: ActivityStatus,
+}
+
+/// Manual because the generated `ActivityStatus` does not implement
+/// `Default`; the zero value is the enum's `Unspecified` variant.
+impl Default for AppDeleted {
+    fn default() -> Self {
+        Self {
+            app_id: String::default(),
+            activity_id: String::default(),
+            activity_status: ActivityStatus::Unspecified,
+        }
+    }
+}
+
+impl Message for AppDeleted {
+    fn reason(&self) -> &'static str {
+        "app-deleted"
+    }
+
+    fn human_message(&self) -> String {
+        format!(
+            r#"App delete accepted.
+App and deployments marked for deletion.
+
+App ID: {}
+Activity ID: {}
+Activity Status: {}"#,
+            self.app_id, self.activity_id, self.activity_status.as_str_name()
+        )
+    }
 }
