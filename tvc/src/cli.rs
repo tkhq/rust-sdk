@@ -34,7 +34,14 @@ Authentication:
 
 Interactive behavior:
     By default, commands may prompt when stdin is a TTY. Use --non-interactive
-    or set TVC_NON_INTERACTIVE=true to disable prompts and fail fast instead.";
+    or set TVC_NON_INTERACTIVE=true to disable prompts and fail fast instead.
+
+Output format:
+    --message-format human (default) prints human-readable text. Use
+    --message-format json to emit machine-readable output instead: one JSON
+    object per line (newline-delimited JSON), each with a \"reason\" field
+    identifying the message, including errors. JSON mode implies
+    --non-interactive, so commands never prompt and fail fast on missing input.";
 
 /// CLI command parsing and dispatch.
 #[derive(Debug, Parser)]
