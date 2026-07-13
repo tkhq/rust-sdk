@@ -1,7 +1,7 @@
 //! Deploy create command - creates a deployment from a config file or CLI flags.
 
 use super::format_port_summary;
-use crate::client::build_client;
+use crate::client::{build_client, fetch_tvc_app};
 use crate::config::deploy::{DeployConfig, DeployConfigValidationErrors};
 use crate::config::turnkey::Config;
 use crate::prompts;
@@ -372,6 +372,9 @@ async fn run_with_resolved_inputs(inputs: ResolvedDeployInputs) -> Result<()> {
 
     let auth = build_client().await?;
 
+    // validate that the app exists
+    fetch_tvc_app(&auth, &deploy_config.app_id).await?;
+
     let pivot_container_encrypted_pull_secret = match inputs.pivot_pull_secret.as_ref() {
         Some(pull_secret) => Some(encrypt_pivot_pull_secret(pull_secret, &auth.api_base_url)?),
         None => deploy_config.pivot_container_encrypted_pull_secret.clone(),
@@ -443,6 +446,10 @@ mod tests {
     use std::io::Write;
     use tempfile::NamedTempFile;
 
+    // App IDs are validated as UUIDs, so test fixtures must use well-formed ones.
+    const FLAG_APP_ID: &str = "11111111-1111-1111-1111-111111111111";
+    const FILE_APP_ID: &str = "22222222-2222-2222-2222-222222222222";
+
     #[test]
     fn pin_image_url_appends_digest_to_tagged_reference() {
         let pinned = pin_image_url("ghcr.io/team/app:latest", "sha256:abc123");
@@ -457,7 +464,7 @@ mod tests {
 
     fn all_required_flags() -> Args {
         let overrides = Overrides {
-            app_id: Some("flag-app-id".into()),
+            app_id: Some(FLAG_APP_ID.into()),
             qos_version: Some("flag-qos".into()),
             pivot_image_url: Some("flag-image".into()),
             expected_pivot_digest: Some("flag-digest".into()),
@@ -473,7 +480,7 @@ mod tests {
 
     fn file_config() -> DeployConfig {
         let mut c = DeployConfig::template(None);
-        c.app_id = "file-app-id".into();
+        c.app_id = FILE_APP_ID.into();
         c.qos_version = "file-qos".into();
         c.pivot_container_image_url = "file-image".into();
         c.pivot_path = "file-path".into();
@@ -520,7 +527,7 @@ mod tests {
     fn flag_overrides_file_value() {
         let file = write_config(&file_config());
         let overrides = Overrides {
-            app_id: Some("flag-app-id".into()),
+            app_id: Some(FLAG_APP_ID.into()),
             ..Default::default()
         };
         let args = Args {
@@ -529,7 +536,7 @@ mod tests {
             ..Default::default()
         };
         let resolved = run_resolve(&args).unwrap();
-        assert_eq!(resolved.app_id, "flag-app-id");
+        assert_eq!(resolved.app_id, FLAG_APP_ID);
         // Untouched fields keep their file values.
         assert_eq!(resolved.qos_version, "file-qos");
         assert_eq!(resolved.health_check_port, 4000);
@@ -543,7 +550,7 @@ mod tests {
             ..Default::default()
         };
         let resolved = run_resolve(&args).unwrap();
-        assert_eq!(resolved.app_id, "file-app-id");
+        assert_eq!(resolved.app_id, FILE_APP_ID);
         assert_eq!(resolved.qos_version, "file-qos");
         assert_eq!(resolved.health_check_port, 4000);
     }
@@ -552,7 +559,7 @@ mod tests {
     fn no_file_uses_flag_only_with_template_defaults() {
         let resolved = run_resolve(&all_required_flags()).unwrap();
         // Required fields come from flags.
-        assert_eq!(resolved.app_id, "flag-app-id");
+        assert_eq!(resolved.app_id, FLAG_APP_ID);
         assert_eq!(resolved.qos_version, "flag-qos");
         assert_eq!(resolved.pivot_container_image_url, "flag-image");
         assert_eq!(resolved.pivot_path, "flag-path");
@@ -759,7 +766,7 @@ mod tests {
         };
 
         let resolved = run_resolve(&args).unwrap();
-        assert_eq!(resolved.app_id, "flag-app-id");
+        assert_eq!(resolved.app_id, FLAG_APP_ID);
         assert_eq!(resolved.qos_version, "flag-qos");
         assert_eq!(resolved.pivot_container_image_url, "flag-image");
         assert_eq!(resolved.pivot_path, "flag-path");

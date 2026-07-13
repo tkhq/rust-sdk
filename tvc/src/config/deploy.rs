@@ -10,6 +10,7 @@ use turnkey_client::generated::{
     external::data::v1::{TvcContainerSpec, TvcDeployment},
     immutable::common::v1::TvcHealthCheckType,
 };
+use uuid::Uuid;
 
 /// Sentinel written by `tvc deploy init` to remind the user to either remove
 /// the field (public image) or replace it with an encrypted pull secret
@@ -207,6 +208,10 @@ impl DeployConfig {
                 field: "app_id",
                 placeholder: self.app_id.clone(),
             });
+        } else if Uuid::try_parse(&self.app_id).is_err() {
+            errors.push(DeployConfigValidationError::InvalidAppId {
+                value: self.app_id.clone(),
+            });
         }
         if self.qos_version.starts_with("<FILL_IN") {
             errors.push(DeployConfigValidationError::Placeholder {
@@ -249,6 +254,8 @@ pub enum DeployConfigValidationError {
         field: &'static str,
         placeholder: String,
     },
+    #[error("app_id is not a valid UUID: {value}")]
+    InvalidAppId { value: String },
     #[error(
         "pivotContainerEncryptedPullSecret contains placeholder value {placeholder}; pass \
          --pivot-pull-secret <PATH> or remove pivotContainerEncryptedPullSecret for public images"
@@ -474,12 +481,62 @@ mod tests {
     #[test]
     fn fully_filled_config_has_no_placeholders() {
         let mut config = DeployConfig::template(None);
-        config.app_id = "app_123".into();
+        config.app_id = "651b573c-861b-4f10-a478-cbcfe0c226af".into();
         config.qos_version = "0.6.1".into();
         config.pivot_container_image_url = "ghcr.io/x/y:v1".into();
         config.pivot_path = "/bin/pivot".into();
         config.expected_pivot_digest = "sha256:abc".into();
         config.pivot_container_encrypted_pull_secret = None;
         assert!(!config.has_placeholders());
+    }
+
+    /// Build a config with every required field filled by a valid (non-placeholder)
+    /// value, so `validate()` returns `Ok` unless a test perturbs one field.
+    fn valid_config() -> DeployConfig {
+        let mut config = DeployConfig::template(None);
+        config.app_id = "651b573c-861b-4f10-a478-cbcfe0c226af".into();
+        config.qos_version = "0.6.1".into();
+        config.pivot_container_image_url = "ghcr.io/x/y:v1".into();
+        config.pivot_path = "/bin/pivot".into();
+        config.expected_pivot_digest = "sha256:abc".into();
+        config.pivot_container_encrypted_pull_secret = None;
+        config
+    }
+
+    #[test]
+    fn validate_rejects_non_uuid_app_id() {
+        let mut config = valid_config();
+        config.app_id = "not-a-uuid".into();
+        let errors = config.validate().unwrap_err();
+        assert!(errors.to_string().contains("not a valid UUID"), "{errors}");
+        // A malformed app_id is a hard error, so interactive mode bails instead
+        // of prompting the user to "fill in" an already-present value.
+        assert!(errors.has_non_placeholder_error());
+    }
+
+    #[test]
+    fn validate_accepts_well_formed_uuid() {
+        // Turnkey resource IDs come in both UUID v4 and v7 forms; accept either.
+        for app_id in [
+            "651b573c-861b-4f10-a478-cbcfe0c226af", // v4
+            "019660f7-801d-75d8-a40e-e4f69944b711", // v7
+        ] {
+            let mut config = valid_config();
+            config.app_id = app_id.into();
+            assert!(config.validate().is_ok(), "should accept {app_id}");
+        }
+    }
+
+    /// The placeholder branch takes precedence over the UUID check, so an
+    /// unfilled `<FILL_IN_APP_ID>` is reported as a placeholder (which interactive
+    /// mode prompts to fill), not as an "invalid UUID" hard error.
+    #[test]
+    fn validate_reports_placeholder_app_id_as_placeholder() {
+        let config = DeployConfig::template(None);
+        let errors = config.validate().unwrap_err();
+        let msg = errors.to_string();
+        assert!(msg.contains("placeholder"), "{msg}");
+        assert!(!msg.contains("not a valid UUID"), "{msg}");
+        assert!(!errors.has_non_placeholder_error());
     }
 }
