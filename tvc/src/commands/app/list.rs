@@ -8,7 +8,7 @@ use turnkey_client::generated::external::data::v1::TvcApp;
 
 use crate::commands::display::format_egress_enabled;
 use crate::output::Ctx;
-use crate::shell_line;
+use crate::shell_println;
 
 const SEPARATOR_WIDTH: usize = 40;
 
@@ -38,7 +38,7 @@ pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> anyhow::Result<()> {
     filter_by_name(&mut apps, args.name.as_deref());
 
     if apps.is_empty() {
-        shell_line!(ctx, "No apps found.")?;
+        shell_println!(ctx, "No apps found.")?;
         return Ok(());
     }
 
@@ -71,7 +71,7 @@ fn render_app<W: Write>(ctx: &mut Ctx<W>, app: &TvcApp) -> anyhow::Result<()> {
 
     lines.push("─".repeat(SEPARATOR_WIDTH));
 
-    shell_line!(ctx, "{}", lines.join("\n"))?;
+    shell_println!(ctx, "{}", lines.join("\n"))?;
     Ok(())
 }
 

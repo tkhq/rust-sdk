@@ -9,7 +9,7 @@ use crate::client::fetch_tvc_app;
 use crate::commands::app_status::{format_replica_status, sanitize_app_status};
 use crate::commands::display::format_egress_enabled;
 use crate::output::Ctx;
-use crate::shell_line;
+use crate::shell_println;
 
 /// Get the live status of an app from the cluster.
 #[derive(Debug, ClapArgs)]
@@ -42,25 +42,25 @@ pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> anyhow::Result<()> {
     );
     let app = fetch_tvc_app(&auth, &args.app_id).await?;
 
-    shell_line!(ctx, "App ID: {}", app_status.app_id)?;
-    shell_line!(
+    shell_println!(ctx, "App ID: {}", app_status.app_id)?;
+    shell_println!(
         ctx,
         "Targeted Deployment: {}",
         app_status.targeted_deployment_id
     )?;
-    shell_line!(ctx, "{}", format_egress_enabled(app.enable_egress))?;
+    shell_println!(ctx, "{}", format_egress_enabled(app.enable_egress))?;
 
     if app_status.deployments.is_empty() {
-        shell_line!(ctx)?;
-        shell_line!(ctx, "No deployments found.")?;
+        shell_println!(ctx)?;
+        shell_println!(ctx, "No deployments found.")?;
     } else {
         for deployment in &app_status.deployments {
-            shell_line!(ctx)?;
-            shell_line!(ctx, "Deployment: {}", deployment.deployment_id)?;
-            shell_line!(ctx, "  {}", format_replica_status(deployment))?;
+            shell_println!(ctx)?;
+            shell_println!(ctx, "Deployment: {}", deployment.deployment_id)?;
+            shell_println!(ctx, "  {}", format_replica_status(deployment))?;
 
             if let Some(updated) = &deployment.last_updated_time {
-                shell_line!(
+                shell_println!(
                     ctx,
                     "  Last Updated: {}.{:0>9}s",
                     updated.seconds,

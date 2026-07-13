@@ -12,7 +12,7 @@ use crate::{
     client::{fetch_tvc_app, fetch_tvc_deployment},
     commands::display::format_egress_enabled,
     output::Ctx,
-    shell_line,
+    shell_println,
 };
 
 /// Get the live status of a deployment from the app status API.
@@ -57,10 +57,10 @@ pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> anyhow::Result<()> {
     );
     let app = fetch_tvc_app(&auth, &deployment.app_id).await?;
 
-    shell_line!(ctx, "Deployment: {}", deployment.id)?;
-    shell_line!(ctx, "App ID: {}", app_status.app_id)?;
-    shell_line!(ctx, "{}", format_egress_enabled(app.enable_egress))?;
-    shell_line!(
+    shell_println!(ctx, "Deployment: {}", deployment.id)?;
+    shell_println!(ctx, "App ID: {}", app_status.app_id)?;
+    shell_println!(ctx, "{}", format_egress_enabled(app.enable_egress))?;
+    shell_println!(
         ctx,
         "Is Targeted Deployment: {}",
         if app_status.targeted_deployment_id == deployment_id {
@@ -70,14 +70,14 @@ pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> anyhow::Result<()> {
         }
     )?;
     if let Some(deployment_status) = find_deployment_status(&app_status, &deployment_id) {
-        shell_line!(
+        shell_println!(
             ctx,
             "{}",
             crate::commands::app_status::format_replica_status(deployment_status)
         )?;
 
         if let Some(updated) = &deployment_status.last_updated_time {
-            shell_line!(
+            shell_println!(
                 ctx,
                 "Last Updated: {}.{:0>9}s",
                 updated.seconds,
@@ -85,8 +85,8 @@ pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> anyhow::Result<()> {
             )?;
         }
     } else {
-        shell_line!(ctx, "Live Status: unavailable")?;
-        shell_line!(ctx, "Reason: deployment not present in current app status")?;
+        shell_println!(ctx, "Live Status: unavailable")?;
+        shell_println!(ctx, "Reason: deployment not present in current app status")?;
     }
 
     Ok(())

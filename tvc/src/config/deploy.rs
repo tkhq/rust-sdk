@@ -2,7 +2,7 @@
 
 use crate::output::Ctx;
 use crate::prompts;
-use crate::shell_line;
+use crate::shell_println;
 use anyhow::{Context, Result, anyhow};
 use qos_core::protocol::services::boot::VersionedManifest;
 use serde::{Deserialize, Serialize};
@@ -162,7 +162,7 @@ impl DeployConfig {
             let is_public = prompts::confirm("Is the container image in a public registry?", true)?;
             self.pivot_container_encrypted_pull_secret = None;
             if !is_public {
-                shell_line!(
+                shell_println!(
                     ctx,
                     "Note: pass `--pivot-pull-secret <PATH>` when running \
                      `tvc deploy create` to encrypt and attach the pull secret."

@@ -4,7 +4,7 @@ use crate::config::app::AppConfig;
 use crate::config::turnkey::{Config, StoredQosOperatorKey};
 use crate::output::Ctx;
 use crate::prompts::{bail_interactive_conflicts_with_non_interactive, ensure_stdin_is_tty};
-use crate::shell_line;
+use crate::shell_println;
 use anyhow::{Context, Result, bail};
 use clap::Args as ClapArgs;
 use std::io::Write;
@@ -64,22 +64,22 @@ async fn execute<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
         .with_context(|| format!("failed to write file: {}", args.output.display()))?;
 
     if args.interactive {
-        shell_line!(ctx, "Created app config: {}", args.output.display())?;
-        shell_line!(ctx)?;
-        shell_line!(
+        shell_println!(ctx, "Created app config: {}", args.output.display())?;
+        shell_println!(ctx)?;
+        shell_println!(
             ctx,
             "Run: tvc app create --config-file {}",
             args.output.display()
         )?;
     } else {
-        shell_line!(
+        shell_println!(
             ctx,
             "Created app config template: {}",
             args.output.display()
         )?;
-        shell_line!(ctx)?;
-        shell_line!(ctx, "Edit the file to fill in your values, then run:")?;
-        shell_line!(
+        shell_println!(ctx)?;
+        shell_println!(ctx, "Edit the file to fill in your values, then run:")?;
+        shell_println!(
             ctx,
             "  tvc app create --config-file {}",
             args.output.display()

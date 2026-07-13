@@ -5,7 +5,7 @@ use crate::output::Ctx;
 use crate::quorum_key_metadata::{
     EncryptedShareMetadata, QuorumKeyMetadata, decode_p256_public_key_hex,
 };
-use crate::shell_line;
+use crate::shell_println;
 use crate::util::read_json_file;
 use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
@@ -66,14 +66,14 @@ pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
         )
     })?;
 
-    shell_line!(
+    shell_println!(
         ctx,
         "Quorum key metadata written to: {}",
         args.quorum_key_metadata_out.display()
     )?;
 
-    shell_line!(ctx, "Quorum Public Key: {quorum_key_public}")?;
-    shell_line!(ctx, "Threshold: {}", config.threshold)?;
+    shell_println!(ctx, "Quorum Public Key: {quorum_key_public}")?;
+    shell_println!(ctx, "Threshold: {}", config.threshold)?;
 
     Ok(())
 }

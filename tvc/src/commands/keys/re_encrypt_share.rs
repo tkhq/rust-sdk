@@ -5,7 +5,7 @@ use crate::output::{Ctx, Message};
 use crate::pair::{HexSeed, Pair};
 use crate::provisioning::ProvisionBundle;
 use crate::quorum_key_metadata::QuorumKeyMetadata;
-use crate::shell_err_line;
+use crate::shell_eprintln;
 use crate::util::{read_json_file, write_file};
 use anyhow::{Context, anyhow};
 use clap::Args as ClapArgs;
@@ -83,7 +83,7 @@ pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> anyhow::Result<()> {
         OperatorSeedSource::from_args(args.operator_seed, args.operator_seed_path)?;
 
     if args.dangerous_skip_verification {
-        shell_err_line!(
+        shell_eprintln!(
             ctx,
             "WARNING: Skipping attestation, PCR, and manifest approval verification! This is dangerous and should not be used for sensitive applications."
         )?;
@@ -198,7 +198,7 @@ async fn write_output<W: Write>(
         let contents = serde_json::to_string_pretty(output)
             .context("failed to serialize re-encrypted share")?;
         write_file(path, &contents).await?;
-        shell_err_line!(ctx, "Re-encrypted share written to: {}", path.display())?;
+        shell_eprintln!(ctx, "Re-encrypted share written to: {}", path.display())?;
     } else {
         // Emit the share output as the machine-relevant payload. In human mode
         // this prints pretty JSON exactly as before; in JSON mode it is wrapped

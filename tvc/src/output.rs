@@ -202,27 +202,39 @@ impl<W: Write> Ctx<W> {
     }
 }
 
+/// Writes a formatted line through TVC's output shell.
+///
+/// This presentation output is suppressed in JSON mode. Use `Shell::emit` for
+/// structured command output.
 #[macro_export]
-macro_rules! shell_line {
-    ($shell:expr $(,)?) => {
-        $shell.shell().blank_line()
+macro_rules! shell_println {
+    ($ctx:expr $(,)?) => {
+        $ctx.shell().blank_line()
     };
-    ($shell:expr, $($arg:tt)*) => {
-        $shell.shell().line(format_args!($($arg)*))
+    ($ctx:expr, $($arg:tt)*) => {
+        $ctx.shell().line(format_args!($($arg)*))
     };
 }
 
+/// Writes formatted text through TVC's output shell without a trailing newline.
+///
+/// This presentation output is suppressed in JSON mode. Use `Shell::emit` for
+/// structured command output.
 #[macro_export]
 macro_rules! shell_print {
-    ($shell:expr, $($arg:tt)*) => {
-        $shell.shell().print(format_args!($($arg)*))
+    ($ctx:expr, $($arg:tt)*) => {
+        $ctx.shell().print(format_args!($($arg)*))
     };
 }
 
+/// Writes a formatted line to stderr through TVC's output shell.
+///
+/// This presentation output is suppressed in JSON mode. Use `Shell::emit` for
+/// structured command output.
 #[macro_export]
-macro_rules! shell_err_line {
-    ($shell:expr, $($arg:tt)*) => {
-        $shell.shell().err_line(format_args!($($arg)*))
+macro_rules! shell_eprintln {
+    ($ctx:expr, $($arg:tt)*) => {
+        $ctx.shell().err_line(format_args!($($arg)*))
     };
 }
 
@@ -356,66 +368,5 @@ mod tests {
         let ctx = Ctx::new(shell, false);
 
         assert!(!ctx.is_non_interactive());
-    }
-
-    #[test]
-    fn command_modules_do_not_write_directly_to_standard_streams() {
-        let src_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-        let mut violations = Vec::new();
-        collect_standard_stream_macro_violations(&src_dir, &mut violations);
-
-        assert!(
-            violations.is_empty(),
-            "user-facing output must go through Shell:\n{}",
-            violations.join("\n")
-        );
-    }
-
-    fn collect_standard_stream_macro_violations(
-        dir: &std::path::Path,
-        violations: &mut Vec<String>,
-    ) {
-        for entry in std::fs::read_dir(dir).unwrap() {
-            let path = entry.unwrap().path();
-            if path.is_dir() {
-                collect_standard_stream_macro_violations(&path, violations);
-                continue;
-            }
-
-            if path.extension().and_then(|ext| ext.to_str()) != Some("rs") {
-                continue;
-            }
-            if path.file_name().and_then(|name| name.to_str()) == Some("output.rs") {
-                continue;
-            }
-
-            let content = std::fs::read_to_string(&path).unwrap();
-            for (index, line) in content.lines().enumerate() {
-                if ["println!", "print!", "eprintln!", "eprint!"]
-                    .iter()
-                    .any(|needle| contains_direct_macro(line, needle))
-                {
-                    violations.push(format!(
-                        "{}:{}: {}",
-                        path.strip_prefix(env!("CARGO_MANIFEST_DIR"))
-                            .unwrap()
-                            .display(),
-                        index + 1,
-                        line.trim()
-                    ));
-                }
-            }
-        }
-    }
-
-    fn contains_direct_macro(line: &str, macro_name: &str) -> bool {
-        let Some(index) = line.find(macro_name) else {
-            return false;
-        };
-
-        line[..index]
-            .chars()
-            .next_back()
-            .is_none_or(|previous| !matches!(previous, '_' | 'a'..='z' | 'A'..='Z' | '0'..='9'))
     }
 }

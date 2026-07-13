@@ -3,7 +3,7 @@
 use crate::config::quorum_key::QuorumKeyConfig;
 use crate::config::turnkey::{Config, StoredQosOperatorKey};
 use crate::output::Ctx;
-use crate::shell_line;
+use crate::shell_println;
 use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
 use std::io::Write;
@@ -38,19 +38,19 @@ pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
     std::fs::write(&args.output, json)
         .with_context(|| format!("failed to write file: {}", args.output.display()))?;
 
-    shell_line!(
+    shell_println!(
         ctx,
         "Created quorum key config template: {}",
         args.output.display()
     )?;
-    shell_line!(ctx)?;
+    shell_println!(ctx)?;
     // Constraints inherited from qos_crypto::shamir::shares_generate.
-    shell_line!(ctx, "Constraints (see qos_crypto/src/shamir.rs):")?;
-    shell_line!(ctx, "  shares    : 1..=255")?;
-    shell_line!(ctx, "  threshold : >= 2 and <= shares")?;
-    shell_line!(ctx)?;
-    shell_line!(ctx, "Edit the file to fill in your values, then run:")?;
-    shell_line!(
+    shell_println!(ctx, "Constraints (see qos_crypto/src/shamir.rs):")?;
+    shell_println!(ctx, "  shares    : 1..=255")?;
+    shell_println!(ctx, "  threshold : >= 2 and <= shares")?;
+    shell_println!(ctx)?;
+    shell_println!(ctx, "Edit the file to fill in your values, then run:")?;
+    shell_println!(
         ctx,
         "  tvc keys generate-quorum-key --config-file {}",
         args.output.display()

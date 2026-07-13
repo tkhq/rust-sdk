@@ -130,6 +130,18 @@ async fn execute<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
     Ok(())
 }
 
+const FROM_DEPLOYMENT_GUIDANCE: &str = r#"
+Seeded from an existing deployment. Before deploying:
+  - expectedPivotDigest and debug mode were copied from the source deployment.
+    The digest is tied to the container image, so if you change
+    pivotContainerImageUrl you MUST recompute the digest to match.
+"#;
+
+const PULL_SECRET_GUIDANCE: &str = r#"  - The source deployment used a private image. Its pull secret cannot be
+    recovered; pass `--pivot-pull-secret <PATH>` to `tvc deploy create` (or
+    remove pivotContainerEncryptedPullSecret if the new image is public).
+"#;
+
 #[derive(Serialize)]
 struct DeploymentConfigCreated {
     command: &'static str,
@@ -157,19 +169,10 @@ impl Message for DeploymentConfigCreated {
         // changes), and a pull secret (if the source used one) cannot be
         // recovered and must be re-supplied.
         if self.from_deployment {
-            message.push_str(
-                "\nSeeded from an existing deployment. Before deploying:\n  \
-                 - expectedPivotDigest and debug mode were copied from the source deployment.\n    \
-                 The digest is tied to the container image, so if you change\n    \
-                 pivotContainerImageUrl you MUST recompute the digest to match.\n",
-            );
+            message.push_str(FROM_DEPLOYMENT_GUIDANCE);
 
             if self.needs_pull_secret {
-                message.push_str(
-                    "  - The source deployment used a private image. Its pull secret cannot be\n    \
-                     recovered; pass `--pivot-pull-secret <PATH>` to `tvc deploy create` (or\n    \
-                     remove pivotContainerEncryptedPullSecret if the new image is public).\n",
-                );
+                message.push_str(PULL_SECRET_GUIDANCE);
             }
         }
 

@@ -7,7 +7,7 @@ use crate::config::turnkey::Config;
 use crate::output::Ctx;
 use crate::prompts;
 use crate::pull_secret::encrypt_pivot_pull_secret;
-use crate::shell_line;
+use crate::shell_println;
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Args as ClapArgs;
 use std::io::Write;
@@ -328,7 +328,7 @@ fn offer_to_save_config<W: Write>(
         let json = serde_json::to_string_pretty(config).context("failed to serialize config")?;
         std::fs::write(path, json)
             .with_context(|| format!("failed to write config file: {}", path.display()))?;
-        shell_line!(ctx, "Wrote {}", path.display())?;
+        shell_println!(ctx, "Wrote {}", path.display())?;
     }
     Ok(())
 }
@@ -380,13 +380,13 @@ async fn run_with_resolved_inputs<W: Write>(
 ) -> Result<()> {
     let deploy_config = inputs.config;
 
-    shell_line!(
+    shell_println!(
         ctx,
         "Creating deployment for app '{}'...",
         deploy_config.app_id
     )?;
-    shell_line!(ctx, "{}", format_port_summary(&deploy_config))?;
-    shell_line!(ctx)?;
+    shell_println!(ctx, "{}", format_port_summary(&deploy_config))?;
+    shell_println!(ctx)?;
 
     let auth = build_client().await?;
 
@@ -416,7 +416,7 @@ async fn run_with_resolved_inputs<W: Write>(
     );
 
     if pinned_image_url != deploy_config.pivot_container_image_url {
-        shell_line!(
+        shell_println!(
             ctx,
             "Using pinned image reference for deployment request: {pinned_image_url}"
         )?;
@@ -439,22 +439,22 @@ async fn run_with_resolved_inputs<W: Write>(
         .await
         .context("failed to create TVC deployment")?;
 
-    shell_line!(ctx)?;
-    shell_line!(ctx, "Deployment created successfully!")?;
-    shell_line!(ctx)?;
-    shell_line!(ctx, "Deployment ID: {}", result.result.deployment_id)?;
-    shell_line!(ctx, "App ID: {}", deploy_config.app_id)?;
+    shell_println!(ctx)?;
+    shell_println!(ctx, "Deployment created successfully!")?;
+    shell_println!(ctx)?;
+    shell_println!(ctx, "Deployment ID: {}", result.result.deployment_id)?;
+    shell_println!(ctx, "App ID: {}", deploy_config.app_id)?;
     if let Some(path) = &inputs.config_path {
-        shell_line!(ctx, "Config: {}", path.display())?;
+        shell_println!(ctx, "Config: {}", path.display())?;
     }
-    shell_line!(ctx)?;
-    shell_line!(ctx, "Next steps:")?;
-    shell_line!(
+    shell_println!(ctx)?;
+    shell_println!(ctx, "Next steps:")?;
+    shell_println!(
         ctx,
         "  - Run `tvc deploy status --deploy-id {}` to check deployment status",
         result.result.deployment_id
     )?;
-    shell_line!(
+    shell_println!(
         ctx,
         "  - Run `tvc deploy approve --deploy-id {} --operator-id <operator-id>` to approve the manifest",
         result.result.deployment_id

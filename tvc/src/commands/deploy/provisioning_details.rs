@@ -4,7 +4,7 @@ use crate::output::Ctx;
 use crate::provisioning::{
     ProvisionBundle, extract_ephemeral_public_key_bytes, verify_provisioning_details,
 };
-use crate::shell_line;
+use crate::shell_println;
 use crate::util::write_file;
 use anyhow::{Context, bail};
 use clap::Args as ClapArgs;
@@ -110,7 +110,7 @@ pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> anyhow::Result<()> {
             &summary.ephemeral_key,
         );
         write_provision_bundle(ctx, path, &bundle).await?;
-        shell_line!(ctx)?;
+        shell_println!(ctx)?;
     }
 
     let verification_status = if args.dangerous_skip_verification {
@@ -131,7 +131,7 @@ async fn write_provision_bundle<W: Write>(
     let contents =
         serde_json::to_vec_pretty(bundle).context("failed to serialize provision bundle")?;
     write_file(path, &contents).await?;
-    shell_line!(ctx, "Provision bundle written to: {}", path.display())?;
+    shell_println!(ctx, "Provision bundle written to: {}", path.display())?;
     Ok(())
 }
 
@@ -194,17 +194,17 @@ fn print_summary<W: Write>(
     verification_status: &str,
     summary: &AttestationSummary,
 ) -> anyhow::Result<()> {
-    shell_line!(ctx, "Deployment: {deploy_id}")?;
-    shell_line!(ctx, "Verification: {verification_status}")?;
-    shell_line!(
+    shell_println!(ctx, "Deployment: {deploy_id}")?;
+    shell_println!(ctx, "Verification: {verification_status}")?;
+    shell_println!(
         ctx,
         "Ephemeral Key: {}",
         hex::encode(&summary.ephemeral_key)
     )?;
-    shell_line!(ctx, "Module ID: {}", summary.module_id)?;
-    shell_line!(ctx, "Digest: {:?}", summary.digest)?;
-    shell_line!(ctx, "Timestamp (ms): {}", summary.timestamp_ms)?;
-    shell_line!(
+    shell_println!(ctx, "Module ID: {}", summary.module_id)?;
+    shell_println!(ctx, "Digest: {:?}", summary.digest)?;
+    shell_println!(ctx, "Timestamp (ms): {}", summary.timestamp_ms)?;
+    shell_println!(
         ctx,
         "User Data: {}",
         summary
@@ -213,7 +213,7 @@ fn print_summary<W: Write>(
             .map(hex::encode)
             .unwrap_or_else(|| "(none)".to_string())
     )?;
-    shell_line!(
+    shell_println!(
         ctx,
         "Nonce: {}",
         summary
@@ -222,22 +222,22 @@ fn print_summary<W: Write>(
             .map(hex::encode)
             .unwrap_or_else(|| "(none)".to_string())
     )?;
-    shell_line!(ctx, "PCRs:")?;
+    shell_println!(ctx, "PCRs:")?;
     for (index, pcr) in &summary.pcrs {
         let label = match *index {
             16 => " (setup manifest/key commitment)",
             17 => " (live manifest/key commitment)",
             _ => "",
         };
-        shell_line!(ctx, "  PCR{index}{label}: {}", hex::encode(pcr))?;
+        shell_println!(ctx, "  PCR{index}{label}: {}", hex::encode(pcr))?;
     }
-    shell_line!(ctx, "Certificate Length: {} bytes", summary.certificate_len)?;
-    shell_line!(
+    shell_println!(ctx, "Certificate Length: {} bytes", summary.certificate_len)?;
+    shell_println!(
         ctx,
         "CA Bundle Certificates: {}",
         summary.ca_bundle_cert_count
     )?;
-    shell_line!(
+    shell_println!(
         ctx,
         "Manifest Set Approvals: {}/{}",
         summary.manifest_set_approvals.len(),
@@ -245,9 +245,9 @@ fn print_summary<W: Write>(
     )?;
     print_approval_summary_entries(ctx, &summary.manifest_set_approvals)?;
     if summary.share_set_approvals.is_empty() {
-        shell_line!(ctx, "Share Set Approvals: (none)")?;
+        shell_println!(ctx, "Share Set Approvals: (none)")?;
     } else {
-        shell_line!(
+        shell_println!(
             ctx,
             "Share Set Approvals: {}",
             summary.share_set_approvals.len()
@@ -262,7 +262,7 @@ fn print_approval_summary_entries<W: Write>(
     approvals: &[ApprovalSummary],
 ) -> anyhow::Result<()> {
     for approval in approvals {
-        shell_line!(
+        shell_println!(
             ctx,
             "  {}: {}",
             approval.alias,

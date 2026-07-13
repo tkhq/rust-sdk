@@ -7,7 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::RestoreTvcDeploymentIntent;
 
 use crate::output::Ctx;
-use crate::shell_line;
+use crate::shell_println;
 
 /// Restore a deleted deployment.
 #[derive(Debug, ClapArgs)]
@@ -37,15 +37,15 @@ pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> anyhow::Result<()> {
         .await
         .context("failed to restore TVC deployment")?;
 
-    shell_line!(ctx)?;
-    shell_line!(
+    shell_println!(ctx)?;
+    shell_println!(
         ctx,
         "Deployment restore accepted; deployment is no longer marked for deletion."
     )?;
-    shell_line!(ctx)?;
-    shell_line!(ctx, "Deployment ID: {}", result.result.deployment_id)?;
-    shell_line!(ctx, "Activity ID: {}", result.activity_id)?;
-    shell_line!(ctx, "Activity Status: {:?}", result.status)?;
+    shell_println!(ctx)?;
+    shell_println!(ctx, "Deployment ID: {}", result.result.deployment_id)?;
+    shell_println!(ctx, "Activity ID: {}", result.activity_id)?;
+    shell_println!(ctx, "Activity Status: {:?}", result.status)?;
 
     Ok(())
 }

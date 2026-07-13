@@ -7,7 +7,7 @@ use crate::{
         turnkey::{self, StoredQosOperatorKey},
     },
     output::Ctx,
-    prompts, shell_line,
+    prompts, shell_println,
 };
 use anyhow::{Context, Result, anyhow};
 use clap::Args as ClapArgs;
@@ -118,7 +118,7 @@ fn offer_to_save_app_config<W: Write>(
         let json = serde_json::to_string_pretty(config).context("failed to serialize config")?;
         std::fs::write(path, json)
             .with_context(|| format!("failed to write config file: {}", path.display()))?;
-        shell_line!(ctx, "Wrote {}", path.display())?;
+        shell_println!(ctx, "Wrote {}", path.display())?;
     }
     Ok(())
 }
@@ -137,7 +137,7 @@ async fn run_with_config<W: Write>(
     args: Args,
     app_config: AppConfig,
 ) -> Result<()> {
-    shell_line!(ctx, "Creating app '{}'...", app_config.name)?;
+    shell_println!(ctx, "Creating app '{}'...", app_config.name)?;
 
     let auth = build_client().await?;
 
@@ -162,22 +162,22 @@ async fn run_with_config<W: Write>(
     config.set_last_operator_ids(&operator_ids)?;
     config.save().await?;
 
-    shell_line!(ctx)?;
-    shell_line!(ctx, "App created successfully!")?;
-    shell_line!(ctx)?;
-    shell_line!(ctx, "App ID: {app_id}")?;
-    shell_line!(ctx, "Name: {}", app_config.name)?;
-    shell_line!(ctx, "Manifest Set ID: {}", result.result.manifest_set_id)?;
+    shell_println!(ctx)?;
+    shell_println!(ctx, "App created successfully!")?;
+    shell_println!(ctx)?;
+    shell_println!(ctx, "App ID: {app_id}")?;
+    shell_println!(ctx, "Name: {}", app_config.name)?;
+    shell_println!(ctx, "Manifest Set ID: {}", result.result.manifest_set_id)?;
     if !operator_ids.is_empty() {
-        shell_line!(
+        shell_println!(
             ctx,
             "Manifest Set Operator IDs: {}",
             operator_ids.join(", ")
         )?;
     }
-    shell_line!(ctx, "Config: {}", args.config_file.display())?;
-    shell_line!(ctx)?;
-    shell_line!(
+    shell_println!(ctx, "Config: {}", args.config_file.display())?;
+    shell_println!(ctx)?;
+    shell_println!(
         ctx,
         "Use one of the Manifest Set Operator IDs above with `tvc deploy approve --operator-id`"
     )?;

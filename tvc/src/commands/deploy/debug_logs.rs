@@ -1,7 +1,7 @@
 //! Deploy debug-logs command.
 
 use crate::output::Ctx;
-use crate::{shell_err_line, shell_line};
+use crate::{shell_eprintln, shell_println};
 use anyhow::Context;
 use chrono::{DateTime, SecondsFormat, Utc};
 use clap::Args as ClapArgs;
@@ -195,7 +195,7 @@ async fn query_debug_logs<W: Write>(
         return Ok(());
     };
 
-    shell_err_line!(ctx, "Connected; polling for debug logs...")?;
+    shell_eprintln!(ctx, "Connected; polling for debug logs...")?;
 
     let poll_interval = Duration::from_secs(poll_request.poll_interval_seconds as u64);
     loop {
@@ -337,7 +337,7 @@ impl DebugLogPrinter {
             let replica = entry.replica_label.as_str();
 
             if self.should_print_line(replica, line) {
-                shell_line!(
+                shell_println!(
                     ctx,
                     "{}",
                     format_log_line(replica, line, self.include_platform_timestamp)
