@@ -91,7 +91,7 @@ impl Cli {
                 let emit_result = if shell.message_format().is_json() {
                     shell.emit(&ErrorMessage::from_error(&error))
                 } else {
-                    shell.error(&error)
+                    shell.human().error(&error)
                 };
                 if let Err(emit_error) = emit_result {
                     let mut stderr = std::io::stderr();

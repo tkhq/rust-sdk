@@ -101,7 +101,7 @@ impl<W: Write> Shell<W> {
 
     pub fn emit<M: Message>(&mut self, message: &M) -> Result<()> {
         match self.message_format {
-            MessageFormat::Human => self.line(message.human_message()),
+            MessageFormat::Human => self.human().line(message.human_message()),
             MessageFormat::Json => {
                 writeln!(self.stdout, "{}", message.to_json_string())?;
                 Ok(())
@@ -109,57 +109,14 @@ impl<W: Write> Shell<W> {
         }
     }
 
-    pub fn line(&mut self, message: impl Display) -> Result<()> {
-        if matches!(self.message_format, MessageFormat::Human) {
-            writeln!(self.stdout, "{message}")?;
-        }
-        Ok(())
-    }
-
-    pub fn blank_line(&mut self) -> Result<()> {
-        if matches!(self.message_format, MessageFormat::Human) {
-            writeln!(self.stdout)?;
-        }
-        Ok(())
-    }
-
-    pub fn status(&mut self, label: &str, message: impl Display) -> Result<()> {
-        if matches!(self.message_format, MessageFormat::Human) {
-            let style = self.style(AnsiColor::Green);
-            writeln!(self.stderr, "{style}{label}{style:#}: {message}")?;
-        }
-        Ok(())
-    }
-
-    pub fn warn(&mut self, message: impl Display) -> Result<()> {
-        if matches!(self.message_format, MessageFormat::Human) {
-            let style = self.style(AnsiColor::Yellow);
-            writeln!(self.stderr, "{style}warning{style:#}: {message}")?;
-        }
-        Ok(())
-    }
-
-    pub fn err_line(&mut self, message: impl Display) -> Result<()> {
-        if matches!(self.message_format, MessageFormat::Human) {
-            writeln!(self.stderr, "{message}")?;
-        }
-        Ok(())
-    }
-
-    pub fn error(&mut self, message: impl Display) -> Result<()> {
-        if matches!(self.message_format, MessageFormat::Human) {
-            let style = self.style(AnsiColor::Red);
-            writeln!(self.stderr, "{style}error{style:#}: {message}")?;
-        }
-        Ok(())
-    }
-
-    pub fn print(&mut self, message: impl Display) -> Result<()> {
-        if matches!(self.message_format, MessageFormat::Human) {
-            write!(self.stdout, "{message}")?;
-            self.stdout.flush()?;
-        }
-        Ok(())
+    /// Human-only presentation writers.
+    ///
+    /// Every method on the returned [`Human`] handle writes only when the
+    /// message format is [`MessageFormat::Human`] and is a silent no-op
+    /// otherwise, so it must never carry machine-readable output — use
+    /// [`Shell::emit`] for that.
+    pub fn human(&mut self) -> Human<'_, W> {
+        Human(self)
     }
 
     pub fn color(&self) -> ColorChoice {
@@ -172,6 +129,69 @@ impl<W: Write> Shell<W> {
         } else {
             Style::new()
         }
+    }
+}
+
+/// Human-only presentation writers over a borrowed [`Shell`].
+///
+/// Every method here writes only in [`MessageFormat::Human`] and
+/// is a silent no-op otherwise, so it is meant for
+/// human-facing output (progress, prompts, spacing) — never for
+/// machine-readable JSON output, which must go through [`Shell::emit`].
+pub struct Human<'a, W: Write>(&'a mut Shell<W>);
+
+impl<W: Write> Human<'_, W> {
+    pub fn line(&mut self, message: impl Display) -> Result<()> {
+        if matches!(self.0.message_format, MessageFormat::Human) {
+            writeln!(self.0.stdout, "{message}")?;
+        }
+        Ok(())
+    }
+
+    pub fn blank_line(&mut self) -> Result<()> {
+        if matches!(self.0.message_format, MessageFormat::Human) {
+            writeln!(self.0.stdout)?;
+        }
+        Ok(())
+    }
+
+    pub fn status(&mut self, label: &str, message: impl Display) -> Result<()> {
+        if matches!(self.0.message_format, MessageFormat::Human) {
+            let style = self.0.style(AnsiColor::Green);
+            writeln!(self.0.stderr, "{style}{label}{style:#}: {message}")?;
+        }
+        Ok(())
+    }
+
+    pub fn warn(&mut self, message: impl Display) -> Result<()> {
+        if matches!(self.0.message_format, MessageFormat::Human) {
+            let style = self.0.style(AnsiColor::Yellow);
+            writeln!(self.0.stderr, "{style}warning{style:#}: {message}")?;
+        }
+        Ok(())
+    }
+
+    pub fn err_line(&mut self, message: impl Display) -> Result<()> {
+        if matches!(self.0.message_format, MessageFormat::Human) {
+            writeln!(self.0.stderr, "{message}")?;
+        }
+        Ok(())
+    }
+
+    pub fn error(&mut self, message: impl Display) -> Result<()> {
+        if matches!(self.0.message_format, MessageFormat::Human) {
+            let style = self.0.style(AnsiColor::Red);
+            writeln!(self.0.stderr, "{style}error{style:#}: {message}")?;
+        }
+        Ok(())
+    }
+
+    pub fn print(&mut self, message: impl Display) -> Result<()> {
+        if matches!(self.0.message_format, MessageFormat::Human) {
+            write!(self.0.stdout, "{message}")?;
+            self.0.stdout.flush()?;
+        }
+        Ok(())
     }
 }
 
@@ -209,10 +229,10 @@ impl<W: Write> Ctx<W> {
 #[macro_export]
 macro_rules! shell_println {
     ($ctx:expr $(,)?) => {
-        $ctx.shell().blank_line()
+        $ctx.shell().human().blank_line()
     };
     ($ctx:expr, $($arg:tt)*) => {
-        $ctx.shell().line(format_args!($($arg)*))
+        $ctx.shell().human().line(format_args!($($arg)*))
     };
 }
 
@@ -223,7 +243,7 @@ macro_rules! shell_println {
 #[macro_export]
 macro_rules! shell_print {
     ($ctx:expr, $($arg:tt)*) => {
-        $ctx.shell().print(format_args!($($arg)*))
+        $ctx.shell().human().print(format_args!($($arg)*))
     };
 }
 
@@ -234,7 +254,7 @@ macro_rules! shell_print {
 #[macro_export]
 macro_rules! shell_eprintln {
     ($ctx:expr, $($arg:tt)*) => {
-        $ctx.shell().err_line(format_args!($($arg)*))
+        $ctx.shell().human().err_line(format_args!($($arg)*))
     };
 }
 
