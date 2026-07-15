@@ -64,6 +64,11 @@ impl Cli {
         let non_interactive = args.non_interactive;
 
         match args.command {
+            Commands::Activity { command } => match command {
+                ActivityCommands::List(args) => commands::activity::list::run(args).await,
+                ActivityCommands::Approve(args) => commands::activity::approve::run(args).await,
+                ActivityCommands::Reject(args) => commands::activity::reject::run(args).await,
+            },
             Commands::Deploy { command } => match command {
                 DeployCommands::Approve(args) => {
                     commands::deploy::approve::run(args, non_interactive).await
@@ -119,6 +124,11 @@ impl Cli {
 enum Commands {
     /// Authenticate with Turnkey.
     Login(commands::login::Args),
+    /// Inspect and vote on activities pending consensus.
+    Activity {
+        #[command(subcommand)]
+        command: ActivityCommands,
+    },
     /// Manage saved login profiles.
     Profile {
         #[command(subcommand)]
@@ -148,9 +158,30 @@ impl Commands {
             Commands::Profile { command } => match command {
                 ProfileCommands::Delete(_) => "profile delete",
             },
+            Commands::Activity { command } => command.name(),
             Commands::Deploy { command } => command.name(),
             Commands::App { command } => command.name(),
             Commands::Keys { command } => command.name(),
+        }
+    }
+}
+
+#[derive(Debug, Subcommand)]
+enum ActivityCommands {
+    /// List activities, pending consensus by default.
+    List(commands::activity::list::Args),
+    /// Approve (vote on) an activity by fingerprint.
+    Approve(commands::activity::approve::Args),
+    /// Reject (vote against) an activity by fingerprint.
+    Reject(commands::activity::reject::Args),
+}
+
+impl ActivityCommands {
+    fn name(&self) -> &'static str {
+        match self {
+            ActivityCommands::List(_) => "activity list",
+            ActivityCommands::Approve(_) => "activity approve",
+            ActivityCommands::Reject(_) => "activity reject",
         }
     }
 }
