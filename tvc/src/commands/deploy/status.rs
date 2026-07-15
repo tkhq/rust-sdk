@@ -61,11 +61,11 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
 
     if let Some(created) = &deployment.created_at {
         println!();
-        println!("Created: {}.{:09}s", created.seconds, created.nanos);
+        println!("Created: {}.{:0>9}s", created.seconds, created.nanos);
     }
 
     if let Some(updated) = &deployment.updated_at {
-        println!("Updated: {}.{:09}s", updated.seconds, updated.nanos);
+        println!("Updated: {}.{:0>9}s", updated.seconds, updated.nanos);
     }
 
     Ok(())
