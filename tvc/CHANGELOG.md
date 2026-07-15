@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.11.0](https://github.com/tkhq/rust-sdk/compare/tvc-v0.10.0...tvc-v0.11.0) - 2026-07-15
+
+### Added
+
+- *(tvc)* [**breaking**] --operator-seed takes the seed value; add --operator-seed-path
+- *(tvc)* validate app-id at deploy create
+- *(tvc)* seed deploy init config from an existing deployment
+
+### Other
+
+- Merge pull request #184 from tkhq/am/feat/remove-delete-org-profiles
+- Update to qos 0.12.1 and default to it for deploys
+- Add ticket to TODO
+
 ## [0.10.0](https://github.com/tkhq/rust-sdk/compare/tvc-v0.9.0...tvc-v0.10.0) - 2026-07-07
 
 ### Other
