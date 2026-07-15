@@ -1,10 +1,9 @@
 //! Deploy delete command - marks a deployment for deletion.
 
 use crate::client::build_client;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::Args as ClapArgs;
-use std::time::{SystemTime, UNIX_EPOCH};
-use turnkey_client::generated::DeleteTvcDeploymentIntent;
+use turnkey_client::generated::{ActivityType, DeleteTvcDeploymentIntent, intent};
 
 /// Delete a TVC deployment by marking it for deletion.
 #[derive(Debug, ClapArgs)]
@@ -23,16 +22,23 @@ pub async fn run(args: Args) -> Result<()> {
         deployment_id: args.deploy_id.clone(),
     };
 
-    let timestamp_ms = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .context("system time before unix epoch")?
-        .as_millis();
-
-    let result = auth
-        .client
-        .delete_tvc_deployment(auth.org_id, timestamp_ms, intent)
-        .await
-        .context("failed to delete TVC deployment")?;
+    let intent_inner = intent::Inner::DeleteTvcDeploymentIntent(intent.clone());
+    let result = match crate::commands::consensus::submit_with_consensus(
+        &auth,
+        ActivityType::DeleteTvcDeployment,
+        "failed to check for pending deployment delete activities",
+        "failed to delete TVC deployment",
+        |pending_intent| pending_intent == &intent_inner,
+        |timestamp_ms| {
+            auth.client
+                .delete_tvc_deployment(auth.org_id.clone(), timestamp_ms, intent)
+        },
+    )
+    .await?
+    {
+        crate::commands::consensus::ConsensusSubmission::Submitted(result) => result,
+        crate::commands::consensus::ConsensusSubmission::ExistingActivityHandled => return Ok(()),
+    };
 
     println!();
     println!("Deployment delete accepted; deployment is marked for deletion.");

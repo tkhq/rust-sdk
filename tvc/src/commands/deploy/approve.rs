@@ -15,12 +15,11 @@ use std::collections::HashSet;
 use std::fmt::Write;
 use std::path::Path;
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::debug;
 use turnkey_client::generated::external::data::v1::TvcDeployment;
 use turnkey_client::generated::{
-    ActivityStatus, ActivityType, CreateTvcManifestApprovalsIntent, GetActivitiesRequest,
-    GetTvcDeploymentRequest, TvcManifestApproval, intent,
+    ActivityType, CreateTvcManifestApprovalsIntent, GetTvcDeploymentRequest, TvcManifestApproval,
+    intent,
 };
 
 const QUORUM_REACHED_MESSAGE: &str =
@@ -305,45 +304,22 @@ async fn post_approval_to_api(
         approvals: vec![tvc_approval],
     };
 
-    // Re-running this command after a consensus-needed response must vote on
-    // the existing pending activity instead of creating a duplicate one.
-    let pending = auth
-        .client
-        .get_activities(GetActivitiesRequest {
-            organization_id: auth.org_id.clone(),
-            filter_by_status: vec![ActivityStatus::ConsensusNeeded],
-            pagination_options: None,
-            filter_by_type: vec![ActivityType::CreateTvcManifestApprovals],
-        })
-        .await
-        .context("failed to check for pending manifest approval activities")?;
-
     let intent_inner = intent::Inner::CreateTvcManifestApprovalsIntent(intent.clone());
-    if let Some(existing) = crate::commands::consensus::find_matching_pending_activity(
-        &pending.activities,
-        &intent_inner,
-    ) {
-        return crate::commands::consensus::vote_on_existing_activity(&auth, existing).await;
-    }
-
-    let timestamp_ms = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .context("system time before unix epoch")?
-        .as_millis();
-
-    let result = match auth
-        .client
-        .create_tvc_manifest_approvals(auth.org_id.clone(), timestamp_ms, intent)
-        .await
+    let result = match crate::commands::consensus::submit_with_consensus(
+        &auth,
+        ActivityType::CreateTvcManifestApprovals,
+        "failed to check for pending manifest approval activities",
+        "failed to post manifest approval",
+        |pending_intent| pending_intent == &intent_inner,
+        |timestamp_ms| {
+            auth.client
+                .create_tvc_manifest_approvals(auth.org_id.clone(), timestamp_ms, intent)
+        },
+    )
+    .await?
     {
-        Ok(result) => result,
-        Err(error) => {
-            if let Some(activity) = crate::commands::consensus::pending_consensus_from_error(&error)
-            {
-                return crate::commands::consensus::pending_consensus_result(&activity);
-            }
-            return Err(error).context("failed to post manifest approval");
-        }
+        crate::commands::consensus::ConsensusSubmission::Submitted(result) => result,
+        crate::commands::consensus::ConsensusSubmission::ExistingActivityHandled => return Ok(()),
     };
 
     println!();

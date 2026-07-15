@@ -9,11 +9,9 @@ use crate::pull_secret::encrypt_pivot_pull_secret;
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Args as ClapArgs;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::try_join;
 use turnkey_client::generated::{
-    ActivityStatus, ActivityType, CreateTvcDeploymentIntent, GetActivitiesRequest,
-    ValidateTvcImageRequest, intent,
+    ActivityType, CreateTvcDeploymentIntent, ValidateTvcImageRequest, intent,
 };
 
 pub(crate) const LONG_ABOUT: &str = r#"
@@ -410,45 +408,22 @@ async fn run_with_resolved_inputs(inputs: ResolvedDeployInputs) -> Result<()> {
         pivot_container_encrypted_pull_secret,
     );
 
-    // Re-running this command after a consensus-needed response must vote on
-    // the existing pending activity instead of creating a duplicate one.
-    let pending = auth
-        .client
-        .get_activities(GetActivitiesRequest {
-            organization_id: auth.org_id.clone(),
-            filter_by_status: vec![ActivityStatus::ConsensusNeeded],
-            pagination_options: None,
-            filter_by_type: vec![ActivityType::CreateTvcDeployment],
-        })
-        .await
-        .context("failed to check for pending deployment activities")?;
-
     let intent_inner = intent::Inner::CreateTvcDeploymentIntent(intent.clone());
-    if let Some(existing) = crate::commands::consensus::find_matching_pending_activity(
-        &pending.activities,
-        &intent_inner,
-    ) {
-        return crate::commands::consensus::vote_on_existing_activity(&auth, existing).await;
-    }
-
-    let timestamp_ms = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .context("system time before unix epoch")?
-        .as_millis();
-
-    let result = match auth
-        .client
-        .create_tvc_deployment(auth.org_id, timestamp_ms, intent)
-        .await
+    let result = match crate::commands::consensus::submit_with_consensus(
+        &auth,
+        ActivityType::CreateTvcDeployment,
+        "failed to check for pending deployment activities",
+        "failed to create TVC deployment",
+        |pending_intent| pending_intent == &intent_inner,
+        |timestamp_ms| {
+            auth.client
+                .create_tvc_deployment(auth.org_id.clone(), timestamp_ms, intent)
+        },
+    )
+    .await?
     {
-        Ok(result) => result,
-        Err(error) => {
-            if let Some(activity) = crate::commands::consensus::pending_consensus_from_error(&error)
-            {
-                return crate::commands::consensus::pending_consensus_result(&activity);
-            }
-            return Err(error).context("failed to create TVC deployment");
-        }
+        crate::commands::consensus::ConsensusSubmission::Submitted(result) => result,
+        crate::commands::consensus::ConsensusSubmission::ExistingActivityHandled => return Ok(()),
     };
 
     println!();

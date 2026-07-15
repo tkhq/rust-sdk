@@ -2,11 +2,13 @@
 
 use crate::client::AuthenticatedClient;
 use anyhow::{Context, Result};
-use turnkey_client::TurnkeyClientError;
+use std::future::Future;
 use turnkey_client::generated::intent::Inner;
 use turnkey_client::generated::{
-    Activity, ApproveActivityIntent, GetOrganizationConfigsRequest, GetWhoamiRequest,
+    Activity, ActivityStatus, ActivityType, ApproveActivityIntent, GetActivitiesRequest,
+    GetOrganizationConfigsRequest, GetWhoamiRequest,
 };
+use turnkey_client::{ActivityResult, TurnkeyClientError};
 
 const VOTE_SELECTION_APPROVED: &str = "VOTE_SELECTION_APPROVED";
 
@@ -49,19 +51,70 @@ pub(crate) fn pending_consensus_result(activity: &PendingConsensusActivity<'_>) 
     Err(crate::exit::ExitError::consensus_needed().into())
 }
 
-/// Find a pending activity whose intent contents exactly match `intent`.
+/// Find a pending activity whose intent satisfies `matches_intent`.
 ///
 /// The submission timestamp lives in the request envelope (`timestampMs`),
-/// not in the intent, so intent equality identifies an operator re-running
+/// not in the intent, so intent matching identifies an operator re-running
 /// the same request even though the server fingerprints each raw request
 /// body differently.
-pub(crate) fn find_matching_pending_activity<'a>(
-    activities: &'a [Activity],
-    intent: &Inner,
-) -> Option<&'a Activity> {
-    activities
-        .iter()
-        .find(|activity| activity.intent.as_ref().and_then(|i| i.inner.as_ref()) == Some(intent))
+pub(crate) fn find_matching_pending_activity_by(
+    activities: &[Activity],
+    matches_intent: impl Fn(&Inner) -> bool,
+) -> Option<&Activity> {
+    activities.iter().find(|activity| {
+        activity
+            .intent
+            .as_ref()
+            .and_then(|intent| intent.inner.as_ref())
+            .is_some_and(&matches_intent)
+    })
+}
+
+pub(crate) enum ConsensusSubmission<T> {
+    Submitted(ActivityResult<T>),
+    ExistingActivityHandled,
+}
+
+pub(crate) async fn submit_with_consensus<T, MatchesIntent, Submit, SubmitFuture>(
+    auth: &AuthenticatedClient,
+    activity_type: ActivityType,
+    list_context: &'static str,
+    submit_context: &'static str,
+    matches_intent: MatchesIntent,
+    submit: Submit,
+) -> Result<ConsensusSubmission<T>>
+where
+    MatchesIntent: Fn(&Inner) -> bool,
+    Submit: FnOnce(u128) -> SubmitFuture,
+    SubmitFuture: Future<Output = std::result::Result<ActivityResult<T>, TurnkeyClientError>>,
+{
+    let pending = auth
+        .client
+        .get_activities(GetActivitiesRequest {
+            organization_id: auth.org_id.clone(),
+            filter_by_status: vec![ActivityStatus::ConsensusNeeded],
+            pagination_options: None,
+            filter_by_type: vec![activity_type],
+        })
+        .await
+        .context(list_context)?;
+
+    if let Some(existing) = find_matching_pending_activity_by(&pending.activities, matches_intent) {
+        vote_on_existing_activity(auth, existing).await?;
+        return Ok(ConsensusSubmission::ExistingActivityHandled);
+    }
+
+    let result = submit(auth.client.current_timestamp()).await;
+    match result {
+        Ok(result) => Ok(ConsensusSubmission::Submitted(result)),
+        Err(error) => {
+            if let Some(activity) = pending_consensus_from_error(&error) {
+                pending_consensus_result(&activity)?;
+                unreachable!("pending_consensus_result always returns an error");
+            }
+            Err(error).context(submit_context)
+        }
+    }
 }
 
 /// Number of approval votes already recorded on an activity.
@@ -229,8 +282,9 @@ mod tests {
             pending_activity("match", Some(approvals_intent("manifest-a", "sig-a"))),
         ];
 
-        let found =
-            find_matching_pending_activity(&activities, &approvals_intent("manifest-a", "sig-a"));
+        let found = find_matching_pending_activity_by(&activities, |inner| {
+            inner == &approvals_intent("manifest-a", "sig-a")
+        });
 
         assert_eq!(found.map(|a| a.id.as_str()), Some("match"));
     }
@@ -242,8 +296,9 @@ mod tests {
             Some(approvals_intent("manifest-a", "another-operator-sig")),
         )];
 
-        let found =
-            find_matching_pending_activity(&activities, &approvals_intent("manifest-a", "sig-a"));
+        let found = find_matching_pending_activity_by(&activities, |inner| {
+            inner == &approvals_intent("manifest-a", "sig-a")
+        });
 
         assert!(found.is_none());
     }
@@ -252,8 +307,37 @@ mod tests {
     fn matcher_ignores_activities_without_intent() {
         let activities = vec![pending_activity("no-intent", None)];
 
-        let found =
-            find_matching_pending_activity(&activities, &approvals_intent("manifest-a", "sig-a"));
+        let found = find_matching_pending_activity_by(&activities, |inner| {
+            inner == &approvals_intent("manifest-a", "sig-a")
+        });
+
+        assert!(found.is_none());
+    }
+
+    #[test]
+    fn generic_matcher_finds_activity_with_matching_predicate() {
+        let activities = vec![
+            pending_activity("other", Some(approvals_intent("manifest-b", "sig-b"))),
+            pending_activity("match", Some(approvals_intent("manifest-a", "sig-a"))),
+        ];
+
+        let found = find_matching_pending_activity_by(&activities, |inner| {
+            inner == &approvals_intent("manifest-a", "sig-a")
+        });
+
+        assert_eq!(found.map(|a| a.id.as_str()), Some("match"));
+    }
+
+    #[test]
+    fn generic_matcher_ignores_activities_without_matching_predicate() {
+        let activities = vec![pending_activity(
+            "other",
+            Some(approvals_intent("manifest-a", "sig-a")),
+        )];
+
+        let found = find_matching_pending_activity_by(&activities, |inner| {
+            inner == &approvals_intent("manifest-a", "sig-b")
+        });
 
         assert!(found.is_none());
     }
