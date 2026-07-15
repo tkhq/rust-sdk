@@ -124,6 +124,12 @@ pub enum TurnkeyClientError {
     #[error("This activity ({0}) requires extra approvals")]
     ActivityRequiresApproval(String),
 
+    #[error("This activity ({activity_id}) is pending consensus")]
+    ActivityPendingConsensus {
+        activity_id: String,
+        fingerprint: String,
+    },
+
     #[error("Maximum number of attempts reached (after {0} retries)")]
     ExceededRetries(usize),
 
@@ -330,7 +336,13 @@ impl<S: Stamp> TurnkeyClient<S> {
                 ActivityStatus::Failed => {
                     return Err(TurnkeyClientError::ActivityFailed(activity.failure));
                 }
-                ActivityStatus::ConsensusNeeded | ActivityStatus::AuthenticatorsNeeded => {
+                ActivityStatus::ConsensusNeeded => {
+                    return Err(TurnkeyClientError::ActivityPendingConsensus {
+                        activity_id: activity.id,
+                        fingerprint: activity.fingerprint,
+                    });
+                }
+                ActivityStatus::AuthenticatorsNeeded => {
                     return Err(TurnkeyClientError::ActivityRequiresApproval(activity.id));
                 }
                 ActivityStatus::Unspecified
@@ -670,8 +682,12 @@ mod test {
             .await;
 
         match result.unwrap_err() {
-            TurnkeyClientError::ActivityRequiresApproval(activity_id) => {
+            TurnkeyClientError::ActivityPendingConsensus {
+                activity_id,
+                fingerprint,
+            } => {
                 assert_eq!(activity_id, "some-activity-id");
+                assert_eq!(fingerprint, "fingerprint");
             }
             other => panic!("unexpected error: {other:?}"),
         }
