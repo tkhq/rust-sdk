@@ -1,0 +1,31 @@
+[package]
+name = "tvc-axum"
+version = "0.11.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "Axum middleware for Turnkey Verifiable Cloud apps: signed responses with attestation and manifest headers"
+repository = "https://github.com/tkhq/rust-sdk"
+homepage = "https://turnkey.com"
+readme = "README.md"
+documentation = "https://docs.rs/tvc-axum"
+keywords = ["turnkey", "tvc", "enclaves", "axum", "attestation"]
+categories = ["cryptography", "web-programming"]
+
+[dependencies]
+axum = { workspace = true }
+base64 = { workspace = true }
+http-body-util = { workspace = true }
+qos_core = { workspace = true }
+qos_json = { workspace = true }
+qos_nsm = { workspace = true }
+qos_p256 = { workspace = true }
+serde = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+tower = { workspace = true }
+
+[dev-dependencies]
+qos_nsm = { workspace = true, features = ["mock"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tower = { workspace = true, features = ["util"] }
+tvc-utils = { workspace = true }
