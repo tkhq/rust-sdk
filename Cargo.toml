@@ -12,7 +12,9 @@ members = [
   "examples",
   # Contains utilities to work with Turnkey proofs (boot proofs, app proofs)
   "proofs",
-  "tvc"
+  "tvc",
+  # Test utilities for Turnkey Verifiable Cloud, e.g. fake manifest generation
+  "tvc-utils"
 ]
 resolver = "2"
 

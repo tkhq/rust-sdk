@@ -4222,6 +4222,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tvc-utils"
+version = "0.11.0"
+dependencies = [
+ "qos_core",
+ "qos_json",
+ "qos_p256",
+ "serde_json",
+]
+
+[[package]]
 name = "typenum"
 version = "1.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
