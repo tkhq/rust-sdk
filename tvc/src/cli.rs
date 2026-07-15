@@ -105,6 +105,11 @@ impl Cli {
                     commands::keys::re_encrypt_share::run(args).await
                 }
             },
+            Commands::Policy { command } => match command {
+                PolicyCommands::Init(args) => {
+                    commands::policy::init::run(args, non_interactive).await
+                }
+            },
             Commands::Login(args) => commands::login::run(args, non_interactive).await,
             Commands::Profile { command } => match command {
                 ProfileCommands::Delete(delete_args) => {
@@ -139,6 +144,11 @@ enum Commands {
         #[command(subcommand)]
         command: KeysCommands,
     },
+    /// Manage TVC org policies.
+    Policy {
+        #[command(subcommand)]
+        command: PolicyCommands,
+    },
 }
 
 impl Commands {
@@ -151,6 +161,7 @@ impl Commands {
             Commands::Deploy { command } => command.name(),
             Commands::App { command } => command.name(),
             Commands::Keys { command } => command.name(),
+            Commands::Policy { command } => command.name(),
         }
     }
 }
@@ -234,6 +245,12 @@ enum KeysCommands {
     ReEncryptShare(commands::keys::re_encrypt_share::Args),
 }
 
+#[derive(Debug, Subcommand)]
+enum PolicyCommands {
+    /// Provision TVC org policies for designated users.
+    Init(commands::policy::init::Args),
+}
+
 impl AppCommands {
     fn name(&self) -> &'static str {
         match self {
@@ -253,6 +270,14 @@ impl KeysCommands {
             KeysCommands::GenerateQuorumKey(_) => "keys generate-quorum-key",
             KeysCommands::InitQuorumKey(_) => "keys init-quorum-key",
             KeysCommands::ReEncryptShare(_) => "keys re-encrypt-share",
+        }
+    }
+}
+
+impl PolicyCommands {
+    fn name(&self) -> &'static str {
+        match self {
+            PolicyCommands::Init(_) => "policy init",
         }
     }
 }

@@ -11,3 +11,4 @@ pub mod deploy;
 pub mod display;
 pub mod keys;
 pub mod login;
+pub mod policy;
