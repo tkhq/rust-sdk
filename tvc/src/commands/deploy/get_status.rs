@@ -72,7 +72,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         );
 
         if let Some(updated) = &deployment_status.last_updated_time {
-            println!("Last Updated: {}.{:09}s", updated.seconds, updated.nanos);
+            println!("Last Updated: {}.{:0>9}s", updated.seconds, updated.nanos);
         }
     } else {
         println!("Live Status: unavailable");
