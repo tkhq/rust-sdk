@@ -429,11 +429,11 @@ async fn run_with_resolved_inputs(inputs: ResolvedDeployInputs) -> Result<()> {
     println!();
     println!("Next steps:");
     println!(
-        "  - Run `WIP: tvc deploy status {}` to check deployment status",
+        "  - Run `tvc deploy status --deploy-id {}` to check deployment status",
         result.result.deployment_id
     );
     println!(
-        "  - Run `tvc deploy approve --deploy-id {}` to approve the manifest",
+        "  - Run `tvc deploy approve --deploy-id {} --operator-id <operator-id>` to approve the manifest",
         result.result.deployment_id
     );
 
