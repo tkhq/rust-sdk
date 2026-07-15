@@ -1,6 +1,6 @@
 //! Deploy provisioning-details command.
 
-use crate::output::Ctx;
+use crate::output::StdCtx;
 use crate::provisioning::{
     ProvisionBundle, extract_ephemeral_public_key_bytes, verify_provisioning_details,
 };
@@ -10,7 +10,6 @@ use anyhow::{Context, bail};
 use clap::Args as ClapArgs;
 use qos_core::protocol::services::boot::{Approval, VersionedManifestEnvelope};
 use qos_nsm::types::NsmDigest;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::{
@@ -59,7 +58,7 @@ struct AttestationSummary {
 const SUMMARY_PCR_MAX_INDEX: usize = 17;
 
 /// Run the deploy provisioning-details command.
-pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> anyhow::Result<()> {
+pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<()> {
     let auth = crate::client::build_client().await?;
 
     let request = GetTvcDeploymentProvisioningDetailsRequest {
@@ -123,8 +122,8 @@ pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn write_provision_bundle<W: Write>(
-    ctx: &mut Ctx<W>,
+async fn write_provision_bundle(
+    ctx: &mut StdCtx,
     path: &Path,
     bundle: &ProvisionBundle,
 ) -> anyhow::Result<()> {
@@ -188,8 +187,8 @@ fn approval_summaries(approvals: &[Approval]) -> Vec<ApprovalSummary> {
         .collect()
 }
 
-fn print_summary<W: Write>(
-    ctx: &mut Ctx<W>,
+fn print_summary(
+    ctx: &mut StdCtx,
     deploy_id: &str,
     verification_status: &str,
     summary: &AttestationSummary,
@@ -257,8 +256,8 @@ fn print_summary<W: Write>(
     Ok(())
 }
 
-fn print_approval_summary_entries<W: Write>(
-    ctx: &mut Ctx<W>,
+fn print_approval_summary_entries(
+    ctx: &mut StdCtx,
     approvals: &[ApprovalSummary],
 ) -> anyhow::Result<()> {
     for approval in approvals {

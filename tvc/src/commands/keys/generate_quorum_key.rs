@@ -1,7 +1,7 @@
 //! Generate quorum key command - generates and encrypts a quorum key from a given config.
 
 use crate::config::quorum_key::QuorumKeyConfig;
-use crate::output::Ctx;
+use crate::output::StdCtx;
 use crate::quorum_key_metadata::{
     EncryptedShareMetadata, QuorumKeyMetadata, decode_p256_public_key_hex,
 };
@@ -11,7 +11,6 @@ use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
 use qos_p256::{P256Pair, P256Public};
 use std::fs;
-use std::io::Write;
 use std::path::PathBuf;
 use zeroize::Zeroizing;
 
@@ -41,7 +40,7 @@ struct OperatorPublicKey {
 struct PlaintextShares(Vec<Zeroizing<Vec<u8>>>);
 
 /// Run the quorum key generation command.
-pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
+pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<()> {
     let config: QuorumKeyConfig =
         read_json_file(&args.config_file, "quorum key config file").await?;
     config.validate()?;

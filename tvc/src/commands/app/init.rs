@@ -2,12 +2,11 @@
 
 use crate::config::app::AppConfig;
 use crate::config::turnkey::{Config, StoredQosOperatorKey};
-use crate::output::Ctx;
+use crate::output::StdCtx;
 use crate::prompts::{bail_interactive_conflicts_with_non_interactive, ensure_stdin_is_tty};
 use crate::shell_println;
 use anyhow::{Context, Result, bail};
 use clap::Args as ClapArgs;
-use std::io::Write;
 use std::path::PathBuf;
 
 /// Generate a template app configuration file.
@@ -31,7 +30,7 @@ pub struct Args {
 }
 
 /// Run the app init command.
-pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
+pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<()> {
     if args.interactive {
         if ctx.is_non_interactive() {
             bail_interactive_conflicts_with_non_interactive()?;
@@ -42,7 +41,7 @@ pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
     execute(ctx, args).await
 }
 
-async fn execute<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
+async fn execute(ctx: &mut StdCtx, args: Args) -> Result<()> {
     // Check if file already exists
     if args.output.exists() {
         bail!("File already exists: {}", args.output.display());

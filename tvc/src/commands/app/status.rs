@@ -2,13 +2,12 @@
 
 use anyhow::{Context, anyhow};
 use clap::Args as ClapArgs;
-use std::io::Write;
 use turnkey_client::generated::GetAppStatusRequest;
 
 use crate::client::fetch_tvc_app;
 use crate::commands::app_status::{format_replica_status, sanitize_app_status};
 use crate::commands::display::format_egress_enabled;
-use crate::output::Ctx;
+use crate::output::StdCtx;
 use crate::shell_println;
 
 /// Get the live status of an app from the cluster.
@@ -21,7 +20,7 @@ pub struct Args {
 }
 
 /// Run the app status command.
-pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> anyhow::Result<()> {
+pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<()> {
     let auth = crate::client::build_client().await?;
 
     let request = GetAppStatusRequest {

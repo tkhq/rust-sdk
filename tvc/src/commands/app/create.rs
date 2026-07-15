@@ -6,12 +6,11 @@ use crate::{
         app::{AppConfig, AppConfigValidationErrors, OperatorSetParams},
         turnkey::{self, StoredQosOperatorKey},
     },
-    output::Ctx,
+    output::StdCtx,
     prompts, shell_println,
 };
 use anyhow::{Context, Result, anyhow};
 use clap::Args as ClapArgs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::{CreateTvcAppIntent, TvcOperatorParams, TvcOperatorSetParams};
@@ -40,7 +39,7 @@ struct Overrides {
     pub dangerous_enable_debug_mode_deployments: bool,
 }
 
-pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
+pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<()> {
     let config = if ctx.is_non_interactive() {
         build_app_config_non_interactive(&args).await?
     } else {
@@ -51,10 +50,7 @@ pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
     run_with_config(ctx, args, app_config).await
 }
 
-async fn build_app_config_interactive<W: Write>(
-    ctx: &mut Ctx<W>,
-    args: &Args,
-) -> Result<AppConfig> {
+async fn build_app_config_interactive(ctx: &mut StdCtx, args: &Args) -> Result<AppConfig> {
     let mut config = match read_app_config_file_bytes(&args.config_file).await {
         Ok(bytes) => parse_app_config(&bytes, &args.config_file)?,
         Err(_) => AppConfig::template(None),
@@ -108,11 +104,7 @@ fn invalid_app_config_error(path: &Path, errors: AppConfigValidationErrors) -> a
     anyhow!("invalid config file: {}: {}", path.display(), errors)
 }
 
-fn offer_to_save_app_config<W: Write>(
-    ctx: &mut Ctx<W>,
-    path: &Path,
-    config: &AppConfig,
-) -> Result<()> {
+fn offer_to_save_app_config(ctx: &mut StdCtx, path: &Path, config: &AppConfig) -> Result<()> {
     let save = prompts::confirm(&format!("Save filled config to {}?", path.display()), true)?;
     if save {
         let json = serde_json::to_string_pretty(config).context("failed to serialize config")?;
@@ -132,11 +124,7 @@ async fn load_saved_operator_public_key() -> Option<String> {
     Some(operator_key.public_key)
 }
 
-async fn run_with_config<W: Write>(
-    ctx: &mut Ctx<W>,
-    args: Args,
-    app_config: AppConfig,
-) -> Result<()> {
+async fn run_with_config(ctx: &mut StdCtx, args: Args, app_config: AppConfig) -> Result<()> {
     shell_println!(ctx, "Creating app '{}'...", app_config.name)?;
 
     let auth = build_client().await?;

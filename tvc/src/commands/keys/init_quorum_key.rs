@@ -2,11 +2,10 @@
 
 use crate::config::quorum_key::QuorumKeyConfig;
 use crate::config::turnkey::{Config, StoredQosOperatorKey};
-use crate::output::Ctx;
+use crate::output::StdCtx;
 use crate::shell_println;
 use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
-use std::io::Write;
 use std::path::PathBuf;
 
 /// Generate a template quorum key configuration file.
@@ -25,7 +24,7 @@ pub struct Args {
 }
 
 /// Run the quorum key init command.
-pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
+pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<()> {
     if args.output.exists() {
         anyhow::bail!("File already exists: {}", args.output.display());
     }

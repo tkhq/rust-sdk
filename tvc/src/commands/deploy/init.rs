@@ -4,14 +4,13 @@ use super::PORT_GUIDANCE;
 use crate::{
     client::{build_client, fetch_tvc_deployment},
     config::{deploy::DeployConfig, turnkey},
-    output::{Ctx, Message},
+    output::{Message, StdCtx},
     prompts::{bail_interactive_conflicts_with_non_interactive, ensure_stdin_is_tty},
 };
 use anyhow::{Context, Result, bail};
 use chrono::Local;
 use clap::Args as ClapArgs;
 use serde::Serialize;
-use std::io::Write;
 use std::path::PathBuf;
 
 pub(crate) const LONG_ABOUT: &str = r#"
@@ -46,7 +45,7 @@ pub struct Args {
 }
 
 /// Run the deploy init command.
-pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
+pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<()> {
     if args.interactive {
         if ctx.is_non_interactive() {
             bail_interactive_conflicts_with_non_interactive()?;
@@ -57,7 +56,7 @@ pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
     execute(ctx, args).await
 }
 
-async fn execute<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
+async fn execute(ctx: &mut StdCtx, args: Args) -> Result<()> {
     let Args {
         output,
         from_deployment,

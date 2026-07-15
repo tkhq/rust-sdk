@@ -4,13 +4,12 @@ use super::format_port_summary;
 use crate::client::{build_client, fetch_tvc_app};
 use crate::config::deploy::{DeployConfig, DeployConfigValidationErrors};
 use crate::config::turnkey::Config;
-use crate::output::Ctx;
+use crate::output::StdCtx;
 use crate::prompts;
 use crate::pull_secret::encrypt_pivot_pull_secret;
 use crate::shell_println;
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Args as ClapArgs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::try_join;
@@ -147,7 +146,7 @@ struct ResolvedDeployInputs {
     pivot_pull_secret: Option<String>,
 }
 
-pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
+pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<()> {
     let inputs = if ctx.is_non_interactive() {
         build_inputs_non_interactive(args).await?
     } else {
@@ -157,10 +156,7 @@ pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
     run_with_resolved_inputs(ctx, inputs).await
 }
 
-async fn build_inputs_interactive<W: Write>(
-    ctx: &mut Ctx<W>,
-    args: Args,
-) -> Result<ResolvedDeployInputs> {
+async fn build_inputs_interactive(ctx: &mut StdCtx, args: Args) -> Result<ResolvedDeployInputs> {
     let Args {
         config_file: config_path,
         pivot_pull_secret,
@@ -313,8 +309,8 @@ fn invalid_deploy_config_error(errors: DeployConfigValidationErrors) -> anyhow::
 /// Ask the user whether to write the updated config back to disk.
 /// `file_loaded` distinguishes "saving over an existing file" from
 /// "creating a new file at this path" in the prompt wording.
-fn offer_to_save_config<W: Write>(
-    ctx: &mut Ctx<W>,
+fn offer_to_save_config(
+    ctx: &mut StdCtx,
     path: &Path,
     config: &DeployConfig,
     file_loaded: bool,
@@ -374,10 +370,7 @@ fn pin_image_url(image_url: &str, resolved_digest: &str) -> String {
     }
 }
 
-async fn run_with_resolved_inputs<W: Write>(
-    ctx: &mut Ctx<W>,
-    inputs: ResolvedDeployInputs,
-) -> Result<()> {
+async fn run_with_resolved_inputs(ctx: &mut StdCtx, inputs: ResolvedDeployInputs) -> Result<()> {
     let deploy_config = inputs.config;
 
     shell_println!(

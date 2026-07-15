@@ -2,7 +2,7 @@
 
 use crate::config::turnkey::Config;
 use crate::operator_key::{OperatorSeedSource, load_operator_pair};
-use crate::output::{Ctx, Message};
+use crate::output::{Message, StdCtx};
 use crate::pair::HexSeed;
 use crate::prompts;
 use crate::prompts::{bail_required_in_non_interactive, stdin_can_prompt};
@@ -17,7 +17,6 @@ use qos_core::protocol::services::boot::{
 use serde::Serialize;
 use std::collections::HashSet;
 use std::fmt::Write;
-use std::io::Write as IoWrite;
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -120,7 +119,7 @@ struct ResolvedApproveInputs {
     post_target: Option<PostTarget>,
 }
 
-pub async fn run<W: IoWrite>(ctx: &mut Ctx<W>, mut args: Args) -> anyhow::Result<()> {
+pub async fn run(ctx: &mut StdCtx, mut args: Args) -> anyhow::Result<()> {
     let operator_seed_source =
         OperatorSeedSource::from_args(args.operator_seed.take(), args.operator_seed_path.take())?;
 
@@ -133,8 +132,8 @@ pub async fn run<W: IoWrite>(ctx: &mut Ctx<W>, mut args: Args) -> anyhow::Result
     run_with_resolved_inputs(ctx, inputs).await
 }
 
-async fn build_inputs_interactive<W: IoWrite>(
-    ctx: &mut Ctx<W>,
+async fn build_inputs_interactive(
+    ctx: &mut StdCtx,
     args: Args,
     operator_seed_source: Option<OperatorSeedSource>,
 ) -> anyhow::Result<ResolvedApproveInputs> {
@@ -194,8 +193,8 @@ async fn build_inputs_interactive<W: IoWrite>(
     })
 }
 
-async fn build_inputs_non_interactive<W: IoWrite>(
-    ctx: &mut Ctx<W>,
+async fn build_inputs_non_interactive(
+    ctx: &mut StdCtx,
     args: Args,
     operator_seed_source: Option<OperatorSeedSource>,
 ) -> anyhow::Result<ResolvedApproveInputs> {
@@ -242,8 +241,8 @@ async fn build_inputs_non_interactive<W: IoWrite>(
     })
 }
 
-async fn run_with_resolved_inputs<W: IoWrite>(
-    ctx: &mut Ctx<W>,
+async fn run_with_resolved_inputs(
+    ctx: &mut StdCtx,
     inputs: ResolvedApproveInputs,
 ) -> anyhow::Result<()> {
     if inputs.dry_run {
@@ -271,8 +270,8 @@ async fn run_with_resolved_inputs<W: IoWrite>(
     Ok(())
 }
 
-async fn load_manifest<W: IoWrite>(
-    ctx: &mut Ctx<W>,
+async fn load_manifest(
+    ctx: &mut StdCtx,
     args: &Args,
 ) -> anyhow::Result<(VersionedManifest, Option<String>)> {
     match (&args.manifest, &args.deploy_id) {
@@ -285,8 +284,8 @@ async fn load_manifest<W: IoWrite>(
     }
 }
 
-async fn sign_and_output<W: IoWrite>(
-    ctx: &mut Ctx<W>,
+async fn sign_and_output(
+    ctx: &mut StdCtx,
     operator_seed_source: Option<OperatorSeedSource>,
     approval_out: Option<&Path>,
     manifest: &VersionedManifest,
@@ -346,8 +345,8 @@ async fn load_saved_operator_ids() -> anyhow::Result<Vec<String>> {
     Ok(config.get_last_operator_ids().unwrap_or_default())
 }
 
-async fn post_approval_to_api<W: IoWrite>(
-    ctx: &mut Ctx<W>,
+async fn post_approval_to_api(
+    ctx: &mut StdCtx,
     plan: PostApprovalPlan<'_>,
     approval: &Approval,
 ) -> anyhow::Result<()> {
@@ -469,10 +468,7 @@ async fn generate_approval(
 }
 
 /// Walk the user through each section of the manifest for approval.
-fn interactive_approve<W: IoWrite>(
-    ctx: &mut Ctx<W>,
-    manifest: &VersionedManifest,
-) -> anyhow::Result<()> {
+fn interactive_approve(ctx: &mut StdCtx, manifest: &VersionedManifest) -> anyhow::Result<()> {
     shell_println!(ctx, "\n========================================")?;
     shell_println!(ctx, "         MANIFEST APPROVAL")?;
     shell_println!(ctx, "========================================\n")?;
@@ -501,7 +497,7 @@ fn render_namespace(namespace: &Namespace) -> String {
     s
 }
 
-fn review_namespace<W: IoWrite>(ctx: &mut Ctx<W>, namespace: &Namespace) -> anyhow::Result<()> {
+fn review_namespace(ctx: &mut StdCtx, namespace: &Namespace) -> anyhow::Result<()> {
     shell_print!(ctx, "{}", render_namespace(namespace))?;
     prompts::confirm_or_bail("Approve namespace?", "approval")
 }
@@ -519,7 +515,7 @@ fn render_enclave(enclave: &NitroConfig) -> String {
     s
 }
 
-fn review_enclave<W: IoWrite>(ctx: &mut Ctx<W>, enclave: &NitroConfig) -> anyhow::Result<()> {
+fn review_enclave(ctx: &mut StdCtx, enclave: &NitroConfig) -> anyhow::Result<()> {
     shell_print!(ctx, "{}", render_enclave(enclave))?;
     prompts::confirm_or_bail("Approve enclave configuration?", "approval")
 }
@@ -542,7 +538,7 @@ fn render_pivot(manifest: &VersionedManifest) -> String {
     s
 }
 
-fn review_pivot<W: IoWrite>(ctx: &mut Ctx<W>, manifest: &VersionedManifest) -> anyhow::Result<()> {
+fn review_pivot(ctx: &mut StdCtx, manifest: &VersionedManifest) -> anyhow::Result<()> {
     shell_print!(ctx, "{}", render_pivot(manifest))?;
     prompts::confirm_or_bail("Approve pivot binary?", "approval")
 }
@@ -566,7 +562,7 @@ fn render_manifest_set(set: &ManifestSet) -> String {
     s
 }
 
-fn review_manifest_set<W: IoWrite>(ctx: &mut Ctx<W>, set: &ManifestSet) -> anyhow::Result<()> {
+fn review_manifest_set(ctx: &mut StdCtx, set: &ManifestSet) -> anyhow::Result<()> {
     shell_print!(ctx, "{}", render_manifest_set(set))?;
     prompts::confirm_or_bail("Approve manifest set?", "approval")
 }
@@ -582,7 +578,7 @@ fn render_share_set(set: &ShareSet) -> String {
     s
 }
 
-fn review_share_set<W: IoWrite>(ctx: &mut Ctx<W>, set: &ShareSet) -> anyhow::Result<()> {
+fn review_share_set(ctx: &mut StdCtx, set: &ShareSet) -> anyhow::Result<()> {
     shell_print!(ctx, "{}", render_share_set(set))?;
     prompts::confirm_or_bail("Approve share set?", "approval")
 }
@@ -596,8 +592,8 @@ async fn read_manifest_from_path(path: &Path) -> anyhow::Result<VersionedManifes
 
 /// Fetch manifest from Turnkey using GetTvcDeployment API.
 /// Returns the manifest and its Turnkey manifest_id.
-async fn fetch_manifest_from_deploy<W: IoWrite>(
-    ctx: &mut Ctx<W>,
+async fn fetch_manifest_from_deploy(
+    ctx: &mut StdCtx,
     deploy_id: &str,
 ) -> anyhow::Result<(VersionedManifest, String)> {
     shell_println!(ctx, "Fetching deployment {deploy_id}...")?;

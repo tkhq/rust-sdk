@@ -1,11 +1,10 @@
 //! Deploy delete command - marks a deployment for deletion.
 
 use crate::client::build_client;
-use crate::output::Ctx;
+use crate::output::StdCtx;
 use crate::shell_println;
 use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
-use std::io::Write;
 use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::DeleteTvcDeploymentIntent;
 
@@ -19,7 +18,7 @@ pub struct Args {
 }
 
 /// Run the deploy delete command.
-pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
+pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<()> {
     let auth = build_client().await?;
 
     let intent = DeleteTvcDeploymentIntent {

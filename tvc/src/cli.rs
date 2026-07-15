@@ -1,7 +1,7 @@
 //! CLI parsing and dispatch.
 
 use crate::commands;
-use crate::output::{ColorChoice, Ctx, ErrorMessage, MessageFormat, Shell};
+use crate::output::{ColorChoice, Ctx, ErrorMessage, MessageFormat, Shell, StdCtx};
 use clap::{ArgAction, Parser, Subcommand, builder::BoolishValueParser};
 use std::io::Write;
 use std::process::ExitCode;
@@ -104,7 +104,7 @@ impl Cli {
 }
 
 impl Commands {
-    async fn run<W: Write>(self, ctx: &mut Ctx<W>) -> anyhow::Result<()> {
+    async fn run(self, ctx: &mut StdCtx) -> anyhow::Result<()> {
         match self {
             Commands::Deploy { command } => match command {
                 DeployCommands::Approve(args) => commands::deploy::approve::run(ctx, args).await,
