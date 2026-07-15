@@ -1,7 +1,7 @@
 //! Re-encrypt share command.
 
-use crate::operator_key::load_operator_pair;
-use crate::pair::Pair;
+use crate::operator_key::{OperatorSeedSource, load_operator_pair};
+use crate::pair::{HexSeed, Pair};
 use crate::provisioning::ProvisionBundle;
 use crate::quorum_key_metadata::QuorumKeyMetadata;
 use crate::util::{read_json_file, write_file};
@@ -26,10 +26,24 @@ pub struct Args {
     #[arg(long, value_name = "PATH", env = "TVC_PROVISION_BUNDLE")]
     pub provision_bundle: PathBuf,
 
-    /// Path to the file containing the master seed for the operator key.
-    /// If not provided, uses the operator key from the logged-in org config.
-    #[arg(long, value_name = "PATH", env = "TVC_OPERATOR_SEED")]
-    pub operator_seed: Option<PathBuf>,
+    /// Hex-encoded 32-byte master seed for the operator key.
+    /// If no seed flag is provided, uses the operator key from the logged-in org config.
+    #[arg(
+        long,
+        value_name = "HEX_SEED",
+        env = "TVC_OPERATOR_SEED",
+        help_heading = "Operator seed (pick one)"
+    )]
+    pub operator_seed: Option<HexSeed>,
+
+    /// Path to a file containing the hex-encoded master seed for the operator key.
+    #[arg(
+        long,
+        value_name = "PATH",
+        env = "TVC_OPERATOR_SEED_PATH",
+        help_heading = "Operator seed (pick one)"
+    )]
+    pub operator_seed_path: Option<PathBuf>,
 
     /// Never use for sensitive applications! Skip attestation, PCR, and manifest approval verification.
     #[arg(long, env = "TVC_DANGEROUS_SKIP_VERIFICATION")]
@@ -51,6 +65,9 @@ pub(crate) struct ReEncryptedShareOutput {
 
 /// Run the re-encrypt-share command.
 pub async fn run(args: Args) -> anyhow::Result<()> {
+    let operator_seed_source =
+        OperatorSeedSource::from_args(args.operator_seed, args.operator_seed_path)?;
+
     if args.dangerous_skip_verification {
         eprintln!(
             "WARNING: Skipping attestation, PCR, and manifest approval verification! This is dangerous and should not be used for sensitive applications."
@@ -61,7 +78,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         read_json_file(&args.quorum_key_metadata, "quorum key metadata file").await?;
     let provision_bundle: ProvisionBundle =
         read_json_file(&args.provision_bundle, "provision bundle").await?;
-    let operator_pair = load_operator_pair(args.operator_seed.as_deref()).await?;
+    let operator_pair = load_operator_pair(operator_seed_source).await?;
 
     let output = build_re_encrypted_share_output(
         &quorum_key_metadata,

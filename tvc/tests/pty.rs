@@ -31,7 +31,7 @@ fn approve_walks_all_sections_with_yeses() {
     let mut session = spawn(
         "deploy approve \
          --manifest fixtures/manifest.json \
-         --operator-seed fixtures/seed.hex \
+         --operator-seed-path fixtures/seed.hex \
          --skip-post",
     );
 
@@ -73,7 +73,7 @@ fn approve_bails_when_user_rejects_pivot() {
     let mut session = spawn(
         "deploy approve \
          --manifest fixtures/manifest.json \
-         --operator-seed fixtures/seed.hex \
+         --operator-seed-path fixtures/seed.hex \
          --skip-post",
     );
 

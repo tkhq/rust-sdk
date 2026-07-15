@@ -1,7 +1,8 @@
 //! Approve deploy command - cryptographically approve a QOS manifest.
 
 use crate::config::turnkey::Config;
-use crate::operator_key::load_operator_pair;
+use crate::operator_key::{OperatorSeedSource, load_operator_pair};
+use crate::pair::HexSeed;
 use crate::prompts;
 use crate::prompts::{bail_required_in_non_interactive, stdin_can_prompt};
 use crate::util::{read_file_to_string, write_file};
@@ -59,10 +60,24 @@ pub struct Args {
     #[arg(long, env = "TVC_OPERATOR_ID")]
     pub operator_id: Option<String>,
 
-    /// Path to the file containing the master seed for the operator key.
-    /// If not provided, uses the operator key from the logged-in org config.
-    #[arg(long, value_name = "PATH", env = "TVC_OPERATOR_SEED")]
-    pub operator_seed: Option<PathBuf>,
+    /// Hex-encoded 32-byte master seed for the operator key.
+    /// If no seed flag is provided, uses the operator key from the logged-in org config.
+    #[arg(
+        long,
+        value_name = "HEX_SEED",
+        env = "TVC_OPERATOR_SEED",
+        help_heading = "Operator seed (pick one)"
+    )]
+    pub operator_seed: Option<HexSeed>,
+
+    /// Path to a file containing the hex-encoded master seed for the operator key.
+    #[arg(
+        long,
+        value_name = "PATH",
+        env = "TVC_OPERATOR_SEED_PATH",
+        help_heading = "Operator seed (pick one)"
+    )]
+    pub operator_seed_path: Option<PathBuf>,
 
     /// Walk through manifest approval prompts but do not generate an approval.
     #[arg(long, env = "TVC_DRY_RUN")]
@@ -95,23 +110,29 @@ struct PostTarget {
 
 struct ResolvedApproveInputs {
     manifest: VersionedManifest,
-    operator_seed: Option<PathBuf>,
+    operator_seed_source: Option<OperatorSeedSource>,
     approval_out: Option<PathBuf>,
     dry_run: bool,
     post_target: Option<PostTarget>,
 }
 
-pub async fn run(args: Args, is_non_interactive: bool) -> anyhow::Result<()> {
+pub async fn run(mut args: Args, is_non_interactive: bool) -> anyhow::Result<()> {
+    let operator_seed_source =
+        OperatorSeedSource::from_args(args.operator_seed.take(), args.operator_seed_path.take())?;
+
     let inputs = if is_non_interactive {
-        build_inputs_non_interactive(args).await?
+        build_inputs_non_interactive(args, operator_seed_source).await?
     } else {
-        build_inputs_interactive(args).await?
+        build_inputs_interactive(args, operator_seed_source).await?
     };
 
     run_with_resolved_inputs(inputs).await
 }
 
-async fn build_inputs_interactive(args: Args) -> anyhow::Result<ResolvedApproveInputs> {
+async fn build_inputs_interactive(
+    args: Args,
+    operator_seed_source: Option<OperatorSeedSource>,
+) -> anyhow::Result<ResolvedApproveInputs> {
     let do_prompt_user = !args.dangerous_skip_interactive;
 
     // Guard: bail fast before fetching the manifest if review prompts are
@@ -161,14 +182,17 @@ async fn build_inputs_interactive(args: Args) -> anyhow::Result<ResolvedApproveI
 
     Ok(ResolvedApproveInputs {
         manifest,
-        operator_seed: args.operator_seed,
+        operator_seed_source,
         approval_out: args.approval_out,
         dry_run: args.dry_run,
         post_target,
     })
 }
 
-async fn build_inputs_non_interactive(args: Args) -> anyhow::Result<ResolvedApproveInputs> {
+async fn build_inputs_non_interactive(
+    args: Args,
+    operator_seed_source: Option<OperatorSeedSource>,
+) -> anyhow::Result<ResolvedApproveInputs> {
     if !args.dangerous_skip_interactive {
         bail_required_in_non_interactive("--dangerous-skip-interactive")?;
     }
@@ -205,7 +229,7 @@ async fn build_inputs_non_interactive(args: Args) -> anyhow::Result<ResolvedAppr
 
     Ok(ResolvedApproveInputs {
         manifest,
-        operator_seed: args.operator_seed,
+        operator_seed_source,
         approval_out: args.approval_out,
         dry_run: args.dry_run,
         post_target,
@@ -219,7 +243,7 @@ async fn run_with_resolved_inputs(inputs: ResolvedApproveInputs) -> anyhow::Resu
     }
 
     let approval = sign_and_output(
-        inputs.operator_seed.as_deref(),
+        inputs.operator_seed_source,
         inputs.approval_out.as_deref(),
         &inputs.manifest,
     )
@@ -249,11 +273,12 @@ async fn load_manifest(args: &Args) -> anyhow::Result<(VersionedManifest, Option
 }
 
 async fn sign_and_output(
-    operator_seed: Option<&Path>,
+    operator_seed_source: Option<OperatorSeedSource>,
     approval_out: Option<&Path>,
     manifest: &VersionedManifest,
 ) -> anyhow::Result<Approval> {
-    let pair: Box<dyn crate::pair::Pair> = Box::new(load_operator_pair(operator_seed).await?);
+    let pair: Box<dyn crate::pair::Pair> =
+        Box::new(load_operator_pair(operator_seed_source).await?);
 
     let approval = generate_approval(pair, manifest).await?;
     let json = serde_json::to_string_pretty(&approval)?;
