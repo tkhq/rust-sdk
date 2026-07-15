@@ -412,11 +412,20 @@ async fn run_with_resolved_inputs(inputs: ResolvedDeployInputs) -> Result<()> {
         .context("system time before unix epoch")?
         .as_millis();
 
-    let result = auth
+    let result = match auth
         .client
         .create_tvc_deployment(auth.org_id, timestamp_ms, intent)
         .await
-        .context("failed to create TVC deployment")?;
+    {
+        Ok(result) => result,
+        Err(error) => {
+            if let Some(activity) = crate::commands::consensus::pending_consensus_from_error(&error)
+            {
+                return crate::commands::consensus::pending_consensus_result(&activity);
+            }
+            return Err(error).context("failed to create TVC deployment");
+        }
+    };
 
     println!();
     println!("Deployment created successfully!");

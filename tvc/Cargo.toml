@@ -45,3 +45,4 @@ predicates = { workspace = true }
 qos_nsm = { workspace = true, features = ["mock"] }
 rexpect = { workspace = true }
 tempfile = { workspace = true }
+wiremock = { workspace = true }

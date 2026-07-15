@@ -3,6 +3,7 @@ pub mod cli;
 pub mod client;
 pub mod commands;
 pub mod config;
+pub mod exit;
 pub mod logging;
 pub(crate) mod operator_key;
 pub mod pair;

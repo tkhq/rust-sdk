@@ -309,11 +309,20 @@ async fn post_approval_to_api(
         .context("system time before unix epoch")?
         .as_millis();
 
-    let result = auth
+    let result = match auth
         .client
         .create_tvc_manifest_approvals(auth.org_id.clone(), timestamp_ms, intent)
         .await
-        .context("failed to post manifest approval")?;
+    {
+        Ok(result) => result,
+        Err(error) => {
+            if let Some(activity) = crate::commands::consensus::pending_consensus_from_error(&error)
+            {
+                return crate::commands::consensus::pending_consensus_result(&activity);
+            }
+            return Err(error).context("failed to post manifest approval");
+        }
+    };
 
     println!();
     println!("Approval posted successfully!");

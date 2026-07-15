@@ -7,6 +7,7 @@
 pub mod app;
 pub mod app_status;
 pub mod confirmation;
+pub(crate) mod consensus;
 pub mod deploy;
 pub mod display;
 pub mod keys;
