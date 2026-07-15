@@ -96,7 +96,8 @@ fn re_encrypt_share_help_lists_expected_flags() {
         .success()
         .stdout(predicate::str::contains("--quorum-key-metadata <PATH>"))
         .stdout(predicate::str::contains("--provision-bundle <PATH>"))
-        .stdout(predicate::str::contains("--operator-seed <PATH>"))
+        .stdout(predicate::str::contains("--operator-seed <HEX_SEED>"))
+        .stdout(predicate::str::contains("--operator-seed-path <PATH>"))
         .stdout(predicate::str::contains("--dangerous-skip-verification"))
         .stdout(predicate::str::contains("--re-encrypted-out <PATH>"));
 }
@@ -175,7 +176,7 @@ fn re_encrypt_share_round_trips_metadata_share() {
         .arg(&metadata_path)
         .arg("--provision-bundle")
         .arg(&provision_bundle_path)
-        .arg("--operator-seed")
+        .arg("--operator-seed-path")
         .arg(&operator_seed_path)
         .arg("--dangerous-skip-verification")
         .arg("--re-encrypted-out")
