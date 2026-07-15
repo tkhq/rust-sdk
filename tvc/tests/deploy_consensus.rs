@@ -49,6 +49,16 @@ async fn mount_tvc_app_lookup(server: &MockServer) {
         .await;
 }
 
+async fn mount_no_pending_activities(server: &MockServer) {
+    Mock::given(method("POST"))
+        .and(path("/public/v1/query/list_activities"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({ "activities": [] })),
+        )
+        .mount(server)
+        .await;
+}
+
 fn consensus_needed_activity(activity_type: &str) -> ResponseTemplate {
     ResponseTemplate::new(200).set_body_json(serde_json::json!({
         "activity": {
@@ -65,6 +75,7 @@ fn consensus_needed_activity(activity_type: &str) -> ResponseTemplate {
 async fn deploy_create_reports_consensus_needed_without_generic_failure() {
     let server = MockServer::start().await;
     mount_tvc_app_lookup(&server).await;
+    mount_no_pending_activities(&server).await;
 
     Mock::given(method("POST"))
         .and(path("/public/v1/query/validate_tvc_image"))
@@ -110,6 +121,7 @@ async fn deploy_create_reports_consensus_needed_without_generic_failure() {
 #[tokio::test]
 async fn deploy_approve_reports_consensus_needed_without_generic_failure() {
     let server = MockServer::start().await;
+    mount_no_pending_activities(&server).await;
     let approval_out = NamedTempFile::new().unwrap();
 
     Mock::given(method("POST"))

@@ -11,7 +11,10 @@ use clap::Args as ClapArgs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::try_join;
-use turnkey_client::generated::{CreateTvcDeploymentIntent, ValidateTvcImageRequest};
+use turnkey_client::generated::{
+    ActivityStatus, ActivityType, CreateTvcDeploymentIntent, GetActivitiesRequest,
+    ValidateTvcImageRequest, intent,
+};
 
 pub(crate) const LONG_ABOUT: &str = r#"
 Create a new TVC deployment.
@@ -406,6 +409,27 @@ async fn run_with_resolved_inputs(inputs: ResolvedDeployInputs) -> Result<()> {
         pinned_image_url,
         pivot_container_encrypted_pull_secret,
     );
+
+    // Re-running this command after a consensus-needed response must vote on
+    // the existing pending activity instead of creating a duplicate one.
+    let pending = auth
+        .client
+        .get_activities(GetActivitiesRequest {
+            organization_id: auth.org_id.clone(),
+            filter_by_status: vec![ActivityStatus::ConsensusNeeded],
+            pagination_options: None,
+            filter_by_type: vec![ActivityType::CreateTvcDeployment],
+        })
+        .await
+        .context("failed to check for pending deployment activities")?;
+
+    let intent_inner = intent::Inner::CreateTvcDeploymentIntent(intent.clone());
+    if let Some(existing) = crate::commands::consensus::find_matching_pending_activity(
+        &pending.activities,
+        &intent_inner,
+    ) {
+        return crate::commands::consensus::vote_on_existing_activity(&auth, existing).await;
+    }
 
     let timestamp_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
