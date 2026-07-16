@@ -120,3 +120,20 @@ turnkey_client = { path = "client", version = "0.11.0" }
 turnkey_enclave_encrypt = { path = "enclave_encrypt", version = "0.11.0" }
 turnkey_proofs = { path = "proofs", version = "0.11.0" }
 tvc-utils = { path = "tvc-utils", version = "0.11.0" }
+
+# TODO: remove this patch section once qos PR #765
+# (https://github.com/tkhq/qos/pull/765) merges and a new qos_core version is
+# published to crates.io, then bump the qos_* version pins above.
+#
+# The fake manifest builder and trust chain verifier used by tvc-axum live in
+# qos_core on that branch but are not yet in a published release. All qos_*
+# crates are patched to the same git revision because qos_core depends on the
+# other qos crates via in-repo path dependencies; patching only qos_core would
+# produce duplicate crate sources (crates.io + git) and type mismatches.
+[patch.crates-io]
+qos_core = { git = "https://github.com/tkhq/qos", branch = "zeke/manifest-fake-and-verify-helpers" }
+qos_crypto = { git = "https://github.com/tkhq/qos", branch = "zeke/manifest-fake-and-verify-helpers" }
+qos_hex = { git = "https://github.com/tkhq/qos", branch = "zeke/manifest-fake-and-verify-helpers" }
+qos_json = { git = "https://github.com/tkhq/qos", branch = "zeke/manifest-fake-and-verify-helpers" }
+qos_nsm = { git = "https://github.com/tkhq/qos", branch = "zeke/manifest-fake-and-verify-helpers" }
+qos_p256 = { git = "https://github.com/tkhq/qos", branch = "zeke/manifest-fake-and-verify-helpers" }

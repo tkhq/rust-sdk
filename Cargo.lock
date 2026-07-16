@@ -2787,8 +2787,7 @@ dependencies = [
 [[package]]
 name = "qos_core"
 version = "0.12.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa990f83214ee02842afadcfedebbe3ae646ef46c0ca96cd65250139b2a48048"
+source = "git+https://github.com/tkhq/qos?branch=zeke%2Fmanifest-fake-and-verify-helpers#bf5ece05cc98a5e2065eb376b8b3816a9ee00a8f"
 dependencies = [
  "aws-nitro-enclaves-nsm-api",
  "borsh",
@@ -2811,8 +2810,7 @@ dependencies = [
 [[package]]
 name = "qos_crypto"
 version = "0.12.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d8fbad4f8f2987352af1b908542d3c31ec751c3e0f60a194090bc8b0bd86a457"
+source = "git+https://github.com/tkhq/qos?branch=zeke%2Fmanifest-fake-and-verify-helpers#bf5ece05cc98a5e2065eb376b8b3816a9ee00a8f"
 dependencies = [
  "rand 0.9.2",
  "sha2",
@@ -2824,8 +2822,7 @@ dependencies = [
 [[package]]
 name = "qos_hex"
 version = "0.12.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f27f8efaf9f4ef36e5f6ee3622f231cd8f6c401a0275c8645b850d0058d6b88"
+source = "git+https://github.com/tkhq/qos?branch=zeke%2Fmanifest-fake-and-verify-helpers#bf5ece05cc98a5e2065eb376b8b3816a9ee00a8f"
 dependencies = [
  "serde",
 ]
@@ -2833,8 +2830,7 @@ dependencies = [
 [[package]]
 name = "qos_json"
 version = "0.12.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "063747127bb17931076a56360373d141667e0882756ff806137265423218088b"
+source = "git+https://github.com/tkhq/qos?branch=zeke%2Fmanifest-fake-and-verify-helpers#bf5ece05cc98a5e2065eb376b8b3816a9ee00a8f"
 dependencies = [
  "qos_hex",
  "serde",
@@ -2845,8 +2841,7 @@ dependencies = [
 [[package]]
 name = "qos_nsm"
 version = "0.12.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fdad6d79bb77f27521d3f8c66f3d10d88308f1c719f7514664a5fa1fb3c8a6ca"
+source = "git+https://github.com/tkhq/qos?branch=zeke%2Fmanifest-fake-and-verify-helpers#bf5ece05cc98a5e2065eb376b8b3816a9ee00a8f"
 dependencies = [
  "aws-nitro-enclaves-cose",
  "aws-nitro-enclaves-nsm-api",
@@ -2864,8 +2859,7 @@ dependencies = [
 [[package]]
 name = "qos_p256"
 version = "0.12.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0178515d461d211089da862860ccab75bbd7e24298fc691cedac5ba446165fb"
+source = "git+https://github.com/tkhq/qos?branch=zeke%2Fmanifest-fake-and-verify-helpers#bf5ece05cc98a5e2065eb376b8b3816a9ee00a8f"
 dependencies = [
  "aes-gcm",
  "borsh",
