@@ -6,23 +6,21 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::response::Response;
-use base64::{Engine as _, engine::general_purpose::STANDARD};
 use qos_core::protocol::services::boot::{
-    Approval, ManifestCommitmentKind, ManifestEnvelopeV2, ManifestSet, ManifestV2, ManifestVersion,
-    Namespace, NitroConfig, PivotConfigV2, PivotEnv, QuorumMember, RestartPolicy, ShareSet,
-    VerificationExpectations, VersionedManifestEnvelope, verify_attestation_and_manifest,
+    Approval, ManifestEnvelopeV2, ManifestSet, ManifestV2, ManifestVersion, Namespace, NitroConfig,
+    PivotConfigV2, PivotEnv, QuorumMember, RestartPolicy, ShareSet, VersionedManifestEnvelope,
 };
 use qos_nsm::NsmProvider;
 use qos_nsm::mock::{MOCK_ROOT_CERT_DER, MOCK_SECONDS_SINCE_EPOCH, MockNsm};
 use qos_nsm::nitro::{self, AttestError};
 use qos_nsm::types::{NsmRequest, NsmResponse};
 use qos_p256::{P256Pair, P256Public};
-use sha2::{Digest, Sha256};
 use tower::{ServiceBuilder, ServiceExt, service_fn};
-use tvc_axum::{ATTESTATION_DOC_HEADER, MANIFEST_ENVELOPE_HEADER, ResponseSigningLayer};
-
-const SIGNATURE_COMPONENTS: &str = "(\"@method\" \"@path\" \"@status\" \"content-digest\")";
-const SIGNATURE_ALG: &str = "ecdsa-p256-sha256";
+use tvc_axum::{
+    ATTESTATION_DOC_HEADER, MANIFEST_ENVELOPE_HEADER, ManifestCommitmentKind, ResponseSigningLayer,
+    SignedResponseParts, VerificationExpectations, VerifyError, VerifyResponseError,
+    verify_quorum_signature, verify_response_trust_chain,
+};
 
 /// NSM wrapper that counts attestation requests. Only for tests.
 struct CountingNsm {
@@ -67,17 +65,14 @@ fn test_member(alias: &str) -> (QuorumMember, P256Pair) {
 
 /// Minimal manifest envelope with one manifest-set member approving at
 /// threshold 1, mirroring the qos_core verify tests.
-fn approved_envelope() -> VersionedManifestEnvelope {
+fn approved_envelope_with_quorum(quorum_key: Vec<u8>) -> VersionedManifestEnvelope {
     let (member, pair) = test_member("member");
     let manifest = ManifestV2 {
         version: ManifestVersion::V2,
         namespace: Namespace {
             name: "test-namespace".to_string(),
             nonce: 1,
-            quorum_key: P256Pair::generate()
-                .expect("key should generate")
-                .public_key()
-                .to_bytes(),
+            quorum_key,
         },
         pivot: PivotConfigV2 {
             hash: [7; 32],
@@ -120,6 +115,15 @@ fn approved_envelope() -> VersionedManifestEnvelope {
     VersionedManifestEnvelope::V2(envelope)
 }
 
+fn approved_envelope() -> VersionedManifestEnvelope {
+    approved_envelope_with_quorum(
+        P256Pair::generate()
+            .expect("key should generate")
+            .public_key()
+            .to_bytes(),
+    )
+}
+
 /// NSM whose PCR bank matches the manifest measurements and carries the
 /// setup manifest commitment (PCR16) over the manifest hash and ephemeral
 /// public key, so the emitted attestation documents pass full verification.
@@ -141,21 +145,6 @@ fn seeded_nsm(envelope: &VersionedManifestEnvelope, ephemeral_key: &P256Pair) ->
             ManifestCommitmentKind::Setup.pcr_index(),
             commitment_pcr.to_vec(),
         )
-}
-
-fn signed_layer(
-    ephemeral_key: &Arc<P256Pair>,
-    quorum_key: Option<&Arc<P256Pair>>,
-    envelope: &VersionedManifestEnvelope,
-) -> ResponseSigningLayer {
-    let mut builder = ResponseSigningLayer::builder()
-        .ephemeral_key(Arc::clone(ephemeral_key))
-        .nsm(Arc::new(MockNsm::new()))
-        .manifest_envelope(envelope.clone());
-    if let Some(quorum_key) = quorum_key {
-        builder = builder.quorum_key(Arc::clone(quorum_key));
-    }
-    builder.build().expect("layer should build")
 }
 
 async fn oneshot_response(layer: &ResponseSigningLayer, method: &str, uri: &str) -> Response {
@@ -196,247 +185,205 @@ fn header_str<'a>(response: &'a Response, name: &str) -> &'a str {
         .unwrap_or_else(|_| panic!("{name} header should be ascii"))
 }
 
-fn label_value<'a>(header: &'a str, label: &str) -> &'a str {
-    header
-        .split(", ")
-        .find_map(|value| value.strip_prefix(&format!("{label}=")))
-        .unwrap_or_else(|| panic!("{label} value should exist"))
-}
-
-fn created_from_signature_input(input: &str, label: &str) -> u64 {
-    let value = label_value(input, label);
-    let created = value
-        .strip_prefix(&format!(r#"{SIGNATURE_COMPONENTS};created="#))
-        .and_then(|value| value.split_once(';').map(|(created, _)| created))
-        .expect("created parameter should exist");
-    created.parse().expect("created should be a unix timestamp")
-}
-
-fn signature_bytes(signature_header: &str, label: &str) -> Vec<u8> {
-    let signature = label_value(signature_header, label)
-        .strip_prefix(':')
-        .and_then(|value| value.strip_suffix(':'))
-        .expect("signature should be an RFC byte sequence");
-    STANDARD
-        .decode(signature)
-        .expect("signature should be base64")
-}
-
-fn signature_input(label: &str, created: u64) -> String {
-    format!(r#"{SIGNATURE_COMPONENTS};created={created};keyid="{label}";alg="{SIGNATURE_ALG}""#)
-}
-
-fn signature_base(
-    method: &str,
-    path: &str,
+/// A signed response and everything a client needs to verify it.
+struct SignedFixture {
+    envelope: VersionedManifestEnvelope,
+    ephemeral_public: Vec<u8>,
+    quorum_public: P256Public,
+    method: &'static str,
+    path: &'static str,
     status: StatusCode,
-    digest: &str,
-    label: &str,
-    created: u64,
-) -> Vec<u8> {
-    format!(
-        "\"@method\": {method}\n\"@path\": {path}\n\"@status\": {}\n\"content-digest\": {digest}\n\"@signature-params\": {}",
-        status.as_u16(),
-        signature_input(label, created)
-    )
-    .into_bytes()
+    body: Vec<u8>,
+    signature_input: String,
+    signature: String,
+    attestation_doc: String,
+    manifest_envelope: String,
 }
 
-fn content_digest(body: &[u8]) -> String {
-    format!("sha-256=:{}:", STANDARD.encode(Sha256::digest(body)))
-}
+impl SignedFixture {
+    fn parts(&self) -> SignedResponseParts<'_> {
+        SignedResponseParts {
+            method: self.method,
+            path: self.path,
+            status: self.status,
+            body: &self.body,
+            signature_input: &self.signature_input,
+            signature: &self.signature,
+        }
+    }
 
-#[tokio::test]
-async fn full_trust_chain_verifies_from_attestation_doc() {
-    let ephemeral_key = Arc::new(P256Pair::generate().expect("key should generate"));
-    let envelope = approved_envelope();
-    let layer = signed_layer(&ephemeral_key, None, &envelope);
-
-    let response = oneshot_response(&layer, "GET", "/chain?ignored=true").await;
-
-    // 1. The manifest envelope header carries the exact canonical bytes the
-    // enclave booted with.
-    let manifest_bytes = STANDARD
-        .decode(header_str(&response, MANIFEST_ENVELOPE_HEADER))
-        .expect("manifest header should be base64");
-    assert_eq!(
-        manifest_bytes,
-        envelope
-            .to_storage_vec()
-            .expect("envelope should serialize")
-    );
-    let decoded_envelope = VersionedManifestEnvelope::try_from_slice_compat(&manifest_bytes)
-        .expect("manifest header should decode");
-
-    // 2. The attestation document verifies up to the NSM root and binds the
-    // manifest hash as user_data.
-    let attestation_bytes = STANDARD
-        .decode(header_str(&response, ATTESTATION_DOC_HEADER))
-        .expect("attestation header should be base64");
-    let attestation_doc = nitro::attestation_doc_from_der(
-        &attestation_bytes,
-        MOCK_ROOT_CERT_DER,
-        MOCK_SECONDS_SINCE_EPOCH,
-    )
-    .expect("attestation doc should verify against the NSM root");
-    assert_eq!(
-        attestation_doc.user_data.as_deref().map(Vec::as_slice),
-        Some(decoded_envelope.manifest_hash().as_slice()),
-        "attestation user_data should be the manifest hash"
-    );
-
-    // 3. The ephemeral public key extracted from the attestation document
-    // (never from a header) verifies the response signature.
-    let attested_key_bytes = attestation_doc
-        .public_key
-        .expect("attestation doc should bind the ephemeral public key")
-        .into_vec();
-    assert_eq!(attested_key_bytes, ephemeral_key.public_key().to_bytes());
-    let attested_key =
-        P256Public::from_bytes(&attested_key_bytes).expect("attested key should decode");
-
-    let digest = header_str(&response, "content-digest").to_owned();
-    let signature_input_header = header_str(&response, "signature-input").to_owned();
-    let signature_header = header_str(&response, "signature").to_owned();
-    let created = created_from_signature_input(&signature_input_header, "ephemeral");
-    assert_eq!(
-        signature_input_header,
-        format!("ephemeral={}", signature_input("ephemeral", created))
-    );
-
-    let body = body_bytes(response).await;
-    assert_eq!(body, b"signed body");
-    assert_eq!(digest, content_digest(&body));
-
-    attested_key
-        .verify(
-            &signature_base(
-                "GET",
-                "/chain",
-                StatusCode::OK,
-                &digest,
-                "ephemeral",
-                created,
-            ),
-            &signature_bytes(&signature_header, "ephemeral"),
+    fn verify_chain(
+        &self,
+        parts: &SignedResponseParts<'_>,
+        expectations: &VerificationExpectations,
+    ) -> Result<P256Public, VerifyResponseError> {
+        verify_response_trust_chain(
+            parts,
+            &self.attestation_doc,
+            &self.manifest_envelope,
+            MOCK_ROOT_CERT_DER,
+            MOCK_SECONDS_SINCE_EPOCH,
+            ManifestCommitmentKind::Setup,
+            expectations,
         )
-        .expect("ephemeral signature should verify with the attested key");
+    }
 }
 
-#[tokio::test]
-async fn qos_core_verifier_accepts_the_emitted_trust_chain() {
+/// Drive one request through a quorum-signing layer whose manifest carries
+/// the quorum public key and whose NSM passes full verification.
+async fn signed_fixture(method: &'static str, path: &'static str) -> SignedFixture {
     let ephemeral_key = Arc::new(P256Pair::generate().expect("key should generate"));
-    let envelope = approved_envelope();
-    let manifest = envelope.clone().manifest();
-    let nsm = seeded_nsm(&envelope, &ephemeral_key);
+    let quorum_key = Arc::new(P256Pair::generate().expect("key should generate"));
+    let envelope = approved_envelope_with_quorum(quorum_key.public_key().to_bytes());
     let layer = ResponseSigningLayer::builder()
         .ephemeral_key(Arc::clone(&ephemeral_key))
-        .nsm(Arc::new(nsm))
+        .quorum_key(Arc::clone(&quorum_key))
+        .nsm(Arc::new(seeded_nsm(&envelope, &ephemeral_key)))
         .manifest_envelope(envelope.clone())
         .build()
         .expect("layer should build");
 
-    let response = oneshot_response(&layer, "GET", "/verified").await;
+    let response = oneshot_response(&layer, method, path).await;
+    let status = response.status();
+    let signature_input = header_str(&response, "signature-input").to_owned();
+    let signature = header_str(&response, "signature").to_owned();
+    let attestation_doc = header_str(&response, ATTESTATION_DOC_HEADER).to_owned();
+    let manifest_envelope = header_str(&response, MANIFEST_ENVELOPE_HEADER).to_owned();
+    let body = body_bytes(response).await;
 
-    let attested_key = verify_attestation_and_manifest(
-        &STANDARD
-            .decode(header_str(&response, ATTESTATION_DOC_HEADER))
-            .expect("attestation header should be base64"),
-        &STANDARD
-            .decode(header_str(&response, MANIFEST_ENVELOPE_HEADER))
-            .expect("manifest header should be base64"),
-        MOCK_ROOT_CERT_DER,
-        MOCK_SECONDS_SINCE_EPOCH,
-        ManifestCommitmentKind::Setup,
-        &VerificationExpectations::new()
-            .namespace_name("test-namespace")
-            .nonce(1)
-            .quorum_key(manifest.namespace().quorum_key.clone())
-            .qos_commit("test-qos-commit")
-            .pcrs(
-                manifest.enclave().pcr0.clone(),
-                manifest.enclave().pcr1.clone(),
-                manifest.enclave().pcr2.clone(),
-                manifest.enclave().pcr3.clone(),
-            )
-            .pivot_hash(*manifest.pivot_hash())
-            .manifest_hash(envelope.manifest_hash()),
-    )
-    .unwrap_or_else(|e| panic!("emitted trust chain should verify: {e}"));
-
-    // The returned ephemeral key verifies the response signature.
-    let digest = header_str(&response, "content-digest").to_owned();
-    let signature_input_header = header_str(&response, "signature-input").to_owned();
-    let signature_header = header_str(&response, "signature").to_owned();
-    let created = created_from_signature_input(&signature_input_header, "ephemeral");
-    attested_key
-        .verify(
-            &signature_base(
-                "GET",
-                "/verified",
-                StatusCode::OK,
-                &digest,
-                "ephemeral",
-                created,
-            ),
-            &signature_bytes(&signature_header, "ephemeral"),
-        )
-        .expect("ephemeral signature should verify with the attested key");
+    SignedFixture {
+        envelope,
+        ephemeral_public: ephemeral_key.public_key().to_bytes(),
+        quorum_public: P256Public::from_bytes(&quorum_key.public_key().to_bytes())
+            .expect("quorum public key should decode"),
+        method,
+        path,
+        status,
+        body,
+        signature_input,
+        signature,
+        attestation_doc,
+        manifest_envelope,
+    }
 }
 
 #[tokio::test]
-async fn quorum_signature_included_and_verifies_when_configured() {
-    let ephemeral_key = Arc::new(P256Pair::generate().expect("ephemeral key should generate"));
-    let quorum_key = Arc::new(P256Pair::generate().expect("quorum key should generate"));
-    let envelope = approved_envelope();
-    let layer = signed_layer(&ephemeral_key, Some(&quorum_key), &envelope);
+async fn quorum_and_full_chain_verification_succeed() {
+    let fixture = signed_fixture("GET", "/verified").await;
+    let manifest = fixture.envelope.clone().manifest();
 
-    let response = oneshot_response(&layer, "GET", "/quorum").await;
-
-    let digest = header_str(&response, "content-digest").to_owned();
-    let signature_input_header = header_str(&response, "signature-input").to_owned();
-    let signature_header = header_str(&response, "signature").to_owned();
-    let created = created_from_signature_input(&signature_input_header, "ephemeral");
-    assert_eq!(
-        created_from_signature_input(&signature_input_header, "quorum"),
-        created
-    );
-    assert_eq!(
-        signature_input_header,
-        format!(
-            "ephemeral={}, quorum={}",
-            signature_input("ephemeral", created),
-            signature_input("quorum", created)
+    // Full chain: attestation document, manifest expectations, approvals and
+    // commitment PCR verify, and the attested ephemeral key verifies the
+    // ephemeral response signature.
+    let attested_key = fixture
+        .verify_chain(
+            &fixture.parts(),
+            &VerificationExpectations::new()
+                .namespace_name(&manifest.namespace().name)
+                .quorum_key(manifest.namespace().quorum_key.clone())
+                .manifest_hash(fixture.envelope.manifest_hash()),
         )
-    );
+        .expect("trust chain should verify");
+    assert_eq!(attested_key.to_bytes(), fixture.ephemeral_public);
 
-    let quorum_public = P256Public::from_bytes(&quorum_key.public_key().to_bytes())
-        .expect("quorum public key should decode");
-    quorum_public
-        .verify(
-            &signature_base("GET", "/quorum", StatusCode::OK, &digest, "quorum", created),
-            &signature_bytes(&signature_header, "quorum"),
-        )
-        .expect("quorum signature should verify");
+    // The quorum key taken from the verified manifest verifies the quorum
+    // response signature.
+    let quorum_key = P256Public::from_bytes(&manifest.namespace().quorum_key)
+        .expect("manifest quorum key should decode");
+    verify_quorum_signature(&fixture.parts(), &quorum_key).expect("quorum signature should verify");
 }
 
 #[tokio::test]
-async fn no_quorum_entries_without_quorum_key() {
+async fn tampered_responses_and_wrong_keys_fail() {
+    let fixture = signed_fixture("POST", "/tamper").await;
+    let expectations = VerificationExpectations::new();
+
+    let wrong_key = P256Pair::generate().expect("key should generate");
+    let wrong_public =
+        P256Public::from_bytes(&wrong_key.public_key().to_bytes()).expect("key should decode");
+    assert!(matches!(
+        verify_quorum_signature(&fixture.parts(), &wrong_public),
+        Err(VerifyResponseError::InvalidSignature("quorum"))
+    ));
+
+    let tampered_body = SignedResponseParts {
+        body: b"tampered body",
+        ..fixture.parts()
+    };
+    assert!(matches!(
+        verify_quorum_signature(&tampered_body, &fixture.quorum_public),
+        Err(VerifyResponseError::InvalidSignature("quorum"))
+    ));
+    assert!(matches!(
+        fixture.verify_chain(&tampered_body, &expectations),
+        Err(VerifyResponseError::InvalidSignature("ephemeral"))
+    ));
+
+    let tampered_status = SignedResponseParts {
+        status: StatusCode::NOT_FOUND,
+        ..fixture.parts()
+    };
+    assert!(matches!(
+        fixture.verify_chain(&tampered_status, &expectations),
+        Err(VerifyResponseError::InvalidSignature("ephemeral"))
+    ));
+}
+
+#[tokio::test]
+async fn expectation_mismatch_propagates_the_qos_error() {
+    let fixture = signed_fixture("GET", "/expectations").await;
+
+    assert!(matches!(
+        fixture.verify_chain(
+            &fixture.parts(),
+            &VerificationExpectations::new().namespace_name("other-namespace"),
+        ),
+        Err(VerifyResponseError::TrustChain(
+            VerifyError::NamespaceNameMismatch { .. }
+        ))
+    ));
+}
+
+#[tokio::test]
+async fn no_quorum_signature_without_quorum_key() {
     let ephemeral_key = Arc::new(P256Pair::generate().expect("key should generate"));
-    let envelope = approved_envelope();
-    let layer = signed_layer(&ephemeral_key, None, &envelope);
+    let layer = ResponseSigningLayer::builder()
+        .ephemeral_key(Arc::clone(&ephemeral_key))
+        .nsm(Arc::new(MockNsm::new()))
+        .manifest_envelope(approved_envelope())
+        .build()
+        .expect("layer should build");
 
     let response = oneshot_response(&layer, "GET", "/no-quorum").await;
+    let signature_input = header_str(&response, "signature-input").to_owned();
+    let signature = header_str(&response, "signature").to_owned();
+    let body = body_bytes(response).await;
 
-    assert!(!header_str(&response, "signature-input").contains("quorum="));
-    assert!(!header_str(&response, "signature").contains("quorum="));
+    let parts = SignedResponseParts {
+        method: "GET",
+        path: "/no-quorum",
+        status: StatusCode::OK,
+        body: &body,
+        signature_input: &signature_input,
+        signature: &signature,
+    };
+    let any_key =
+        P256Public::from_bytes(&ephemeral_key.public_key().to_bytes()).expect("key should decode");
+    assert!(matches!(
+        verify_quorum_signature(&parts, &any_key),
+        Err(VerifyResponseError::MissingSignatureInput("quorum"))
+    ));
 }
 
 #[tokio::test]
 async fn no_public_key_header_is_emitted() {
     let ephemeral_key = Arc::new(P256Pair::generate().expect("key should generate"));
-    let envelope = approved_envelope();
-    let layer = signed_layer(&ephemeral_key, None, &envelope);
+    let layer = ResponseSigningLayer::builder()
+        .ephemeral_key(ephemeral_key)
+        .nsm(Arc::new(MockNsm::new()))
+        .manifest_envelope(approved_envelope())
+        .build()
+        .expect("layer should build");
 
     let response = oneshot_response(&layer, "GET", "/no-pk-header").await;
 
@@ -448,85 +395,6 @@ async fn no_public_key_header_is_emitted() {
     assert!(!response.headers().contains_key("x-tvc-ephemeral-signature"));
     assert!(!response.headers().contains_key("x-tvc-quorum-signature"));
     assert!(!response.headers().contains_key("x-tvc-signature-timestamp"));
-}
-
-#[tokio::test]
-async fn tampered_signature_bases_fail_verification() {
-    let ephemeral_key = Arc::new(P256Pair::generate().expect("key should generate"));
-    let public_key = P256Public::from_bytes(&ephemeral_key.public_key().to_bytes())
-        .expect("public key should decode");
-    let envelope = approved_envelope();
-    let layer = signed_layer(&ephemeral_key, None, &envelope);
-
-    let response = oneshot_response(&layer, "POST", "/tamper").await;
-
-    let digest = header_str(&response, "content-digest").to_owned();
-    let signature_input_header = header_str(&response, "signature-input").to_owned();
-    let signature_header = header_str(&response, "signature").to_owned();
-    let created = created_from_signature_input(&signature_input_header, "ephemeral");
-    let body = body_bytes(response).await;
-    let signature = signature_bytes(&signature_header, "ephemeral");
-
-    public_key
-        .verify(
-            &signature_base(
-                "POST",
-                "/tamper",
-                StatusCode::OK,
-                &digest,
-                "ephemeral",
-                created,
-            ),
-            &signature,
-        )
-        .expect("signature should verify over expected signing payload");
-    for tampered_base in [
-        signature_base(
-            "GET",
-            "/tamper",
-            StatusCode::OK,
-            &digest,
-            "ephemeral",
-            created,
-        ),
-        signature_base(
-            "POST",
-            "/other",
-            StatusCode::OK,
-            &digest,
-            "ephemeral",
-            created,
-        ),
-        signature_base(
-            "POST",
-            "/tamper",
-            StatusCode::NOT_FOUND,
-            &digest,
-            "ephemeral",
-            created,
-        ),
-        signature_base(
-            "POST",
-            "/tamper",
-            StatusCode::OK,
-            &content_digest(b"tampered body"),
-            "ephemeral",
-            created,
-        ),
-        signature_base(
-            "POST",
-            "/tamper",
-            StatusCode::OK,
-            &content_digest(&body),
-            "ephemeral",
-            created + 1,
-        ),
-    ] {
-        assert!(
-            public_key.verify(&tampered_base, &signature).is_err(),
-            "tampered signature base should fail verification"
-        );
-    }
 }
 
 #[tokio::test]
