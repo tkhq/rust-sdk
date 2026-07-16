@@ -74,26 +74,6 @@ impl Shell<Box<dyn Write + Send>> {
     }
 }
 
-impl Shell<Vec<u8>> {
-    pub fn from_write(stdout: Vec<u8>, message_format: MessageFormat) -> Self {
-        Self {
-            stdout,
-            stderr: Vec::new(),
-            color: ColorChoice::Never,
-            use_color: false,
-            message_format,
-        }
-    }
-
-    pub fn into_stdout(self) -> Vec<u8> {
-        self.stdout
-    }
-
-    pub fn into_stderr(self) -> Vec<u8> {
-        self.stderr
-    }
-}
-
 impl<W: Write> Shell<W> {
     pub fn message_format(&self) -> MessageFormat {
         self.message_format
@@ -330,6 +310,26 @@ impl Message for ErrorMessage {
 mod tests {
     use super::*;
     use serde::Serialize;
+
+    impl Shell<Vec<u8>> {
+        pub fn from_write(stdout: Vec<u8>, message_format: MessageFormat) -> Self {
+            Self {
+                stdout,
+                stderr: Vec::new(),
+                color: ColorChoice::Never,
+                use_color: false,
+                message_format,
+            }
+        }
+
+        pub fn into_stdout(self) -> Vec<u8> {
+            self.stdout
+        }
+
+        pub fn into_stderr(self) -> Vec<u8> {
+            self.stderr
+        }
+    }
 
     #[derive(Serialize)]
     struct TestMessage {
