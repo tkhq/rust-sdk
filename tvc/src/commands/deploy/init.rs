@@ -4,11 +4,14 @@ use super::PORT_GUIDANCE;
 use crate::{
     client::{build_client, fetch_tvc_deployment},
     config::{deploy::DeployConfig, turnkey},
+    output::{Ctx, Message},
     prompts::{bail_interactive_conflicts_with_non_interactive, ensure_stdin_is_tty},
 };
 use anyhow::{Context, Result, bail};
 use chrono::Local;
 use clap::Args as ClapArgs;
+use serde::Serialize;
+use std::io::Write;
 use std::path::PathBuf;
 
 pub(crate) const LONG_ABOUT: &str = r#"
@@ -43,18 +46,18 @@ pub struct Args {
 }
 
 /// Run the deploy init command.
-pub async fn run(args: Args, is_non_interactive: bool) -> Result<()> {
+pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
     if args.interactive {
-        if is_non_interactive {
+        if ctx.is_non_interactive() {
             bail_interactive_conflicts_with_non_interactive()?;
         } else {
             ensure_stdin_is_tty()?;
         }
     }
-    execute(args).await
+    execute(ctx, args).await
 }
 
-async fn execute(args: Args) -> Result<()> {
+async fn execute<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
     let Args {
         output,
         from_deployment,
@@ -104,7 +107,7 @@ async fn execute(args: Args) -> Result<()> {
             .await
             .ok()
             .and_then(|config| config.get_last_app_id());
-        config.fill_interactively(saved_app_id.as_deref())?;
+        config.fill_interactively(ctx, saved_app_id.as_deref())?;
     }
 
     let needs_pull_secret = config.pull_secret_is_placeholder();
@@ -115,44 +118,76 @@ async fn execute(args: Args) -> Result<()> {
     std::fs::write(&output, json)
         .with_context(|| format!("failed to write file: {}", output.display()))?;
 
-    if is_interactive {
-        println!("Created deployment config: {}", output.display());
-    } else {
-        println!("Created deployment config template: {}", output.display());
-    }
-    println!();
-
-    // Print the reminders specific to seeding a config from an existing deployment:
-    // the digest and debug mode were copied from the source manifest (the digest is
-    // image-coupled, so it must be recomputed if the image changes), and a pull secret
-    // (if the source used one) cannot be recovered and must be re-supplied.
-    if is_from_deployment {
-        println!("Seeded from an existing deployment. Before deploying:");
-        println!(
-            "  - expectedPivotDigest and debug mode were copied from the source deployment.\n    \
-             The digest is tied to the container image, so if you change\n    \
-             pivotContainerImageUrl you MUST recompute the digest to match."
-        );
-
-        if needs_pull_secret {
-            println!(
-                "  - The source deployment used a private image. Its pull secret cannot be\n    \
-                 recovered; pass `--pivot-pull-secret <PATH>` to `tvc deploy create` (or\n    \
-                 remove pivotContainerEncryptedPullSecret if the new image is public)."
-            );
-        }
-
-        println!();
-    }
-
-    if is_interactive {
-        println!("Run: tvc deploy create --config-file {}", output.display());
-    } else {
-        println!("Edit the file to fill in your values, then run:");
-        println!("  tvc deploy create --config-file {}", output.display());
-    }
-    println!();
-    println!("{PORT_GUIDANCE}");
+    ctx.shell().emit(&DeploymentConfigCreated {
+        command: "deploy init",
+        path: output.display().to_string(),
+        template: !is_interactive,
+        interactive: is_interactive,
+        from_deployment: is_from_deployment,
+        needs_pull_secret,
+    })?;
 
     Ok(())
+}
+
+const FROM_DEPLOYMENT_GUIDANCE: &str = r#"
+Seeded from an existing deployment. Before deploying:
+  - expectedPivotDigest and debug mode were copied from the source deployment.
+    The digest is tied to the container image, so if you change
+    pivotContainerImageUrl you MUST recompute the digest to match.
+"#;
+
+const PULL_SECRET_GUIDANCE: &str = r#"  - The source deployment used a private image. Its pull secret cannot be
+    recovered; pass `--pivot-pull-secret <PATH>` to `tvc deploy create` (or
+    remove pivotContainerEncryptedPullSecret if the new image is public).
+"#;
+
+#[derive(Serialize)]
+struct DeploymentConfigCreated {
+    command: &'static str,
+    path: String,
+    template: bool,
+    interactive: bool,
+    from_deployment: bool,
+    needs_pull_secret: bool,
+}
+
+impl Message for DeploymentConfigCreated {
+    fn reason(&self) -> &'static str {
+        "deployment-config-created"
+    }
+
+    fn human_message(&self) -> String {
+        let mut message = if self.interactive {
+            format!("Created deployment config: {}\n", self.path)
+        } else {
+            format!("Created deployment config template: {}\n", self.path)
+        };
+
+        // The digest and debug mode were copied from the source manifest (the
+        // digest is image-coupled, so it must be recomputed if the image
+        // changes), and a pull secret (if the source used one) cannot be
+        // recovered and must be re-supplied.
+        if self.from_deployment {
+            message.push_str(FROM_DEPLOYMENT_GUIDANCE);
+
+            if self.needs_pull_secret {
+                message.push_str(PULL_SECRET_GUIDANCE);
+            }
+        }
+
+        if self.interactive {
+            message.push_str(&format!(
+                "\nRun: tvc deploy create --config-file {}\n\n{PORT_GUIDANCE}",
+                self.path
+            ));
+        } else {
+            message.push_str(&format!(
+                "\nEdit the file to fill in your values, then run:\n  tvc deploy create --config-file {}\n\n{PORT_GUIDANCE}",
+                self.path
+            ));
+        }
+
+        message
+    }
 }

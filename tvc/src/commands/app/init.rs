@@ -2,9 +2,12 @@
 
 use crate::config::app::AppConfig;
 use crate::config::turnkey::{Config, StoredQosOperatorKey};
+use crate::output::Ctx;
 use crate::prompts::{bail_interactive_conflicts_with_non_interactive, ensure_stdin_is_tty};
+use crate::shell_println;
 use anyhow::{Context, Result, bail};
 use clap::Args as ClapArgs;
+use std::io::Write;
 use std::path::PathBuf;
 
 /// Generate a template app configuration file.
@@ -28,18 +31,18 @@ pub struct Args {
 }
 
 /// Run the app init command.
-pub async fn run(args: Args, is_non_interactive: bool) -> Result<()> {
+pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
     if args.interactive {
-        if is_non_interactive {
+        if ctx.is_non_interactive() {
             bail_interactive_conflicts_with_non_interactive()?;
         } else {
             ensure_stdin_is_tty()?;
         }
     }
-    execute(args).await
+    execute(ctx, args).await
 }
 
-async fn execute(args: Args) -> Result<()> {
+async fn execute<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
     // Check if file already exists
     if args.output.exists() {
         bail!("File already exists: {}", args.output.display());
@@ -61,17 +64,26 @@ async fn execute(args: Args) -> Result<()> {
         .with_context(|| format!("failed to write file: {}", args.output.display()))?;
 
     if args.interactive {
-        println!("Created app config: {}", args.output.display());
-        println!();
-        println!(
+        shell_println!(ctx, "Created app config: {}", args.output.display())?;
+        shell_println!(ctx)?;
+        shell_println!(
+            ctx,
             "Run: tvc app create --config-file {}",
             args.output.display()
-        );
+        )?;
     } else {
-        println!("Created app config template: {}", args.output.display());
-        println!();
-        println!("Edit the file to fill in your values, then run:");
-        println!("  tvc app create --config-file {}", args.output.display());
+        shell_println!(
+            ctx,
+            "Created app config template: {}",
+            args.output.display()
+        )?;
+        shell_println!(ctx)?;
+        shell_println!(ctx, "Edit the file to fill in your values, then run:")?;
+        shell_println!(
+            ctx,
+            "  tvc app create --config-file {}",
+            args.output.display()
+        )?;
     }
 
     Ok(())

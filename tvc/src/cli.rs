@@ -1,7 +1,10 @@
 //! CLI parsing and dispatch.
 
 use crate::commands;
+use crate::output::{ColorChoice, Ctx, ErrorMessage, MessageFormat, Shell};
 use clap::{ArgAction, Parser, Subcommand, builder::BoolishValueParser};
+use std::io::Write;
+use std::process::ExitCode;
 use tracing::debug;
 
 const LONG_ABOUT: &str = "\
@@ -31,7 +34,14 @@ Authentication:
 
 Interactive behavior:
     By default, commands may prompt when stdin is a TTY. Use --non-interactive
-    or set TVC_NON_INTERACTIVE=true to disable prompts and fail fast instead.";
+    or set TVC_NON_INTERACTIVE=true to disable prompts and fail fast instead.
+
+Output format:
+    --message-format human (default) prints human-readable text. Use
+    --message-format json to emit machine-readable output instead: one JSON
+    object per line (newline-delimited JSON), each with a \"reason\" field
+    identifying the message, including errors. JSON mode implies
+    --non-interactive, so commands never prompt and fail fast on missing input.";
 
 /// CLI command parsing and dispatch.
 #[derive(Debug, Parser)]
@@ -47,68 +57,100 @@ pub struct Cli {
     )]
     non_interactive: bool,
 
+    /// Format user-facing output.
+    #[arg(long, global = true, value_enum, default_value_t = MessageFormat::Human)]
+    message_format: MessageFormat,
+
+    /// Control ANSI color in user-facing output.
+    #[arg(long, global = true, value_enum, default_value_t = ColorChoice::Auto)]
+    color: ColorChoice,
+
     #[command(subcommand)]
     command: Commands,
 }
 
 impl Cli {
     /// Run the CLI.
-    pub async fn run() -> anyhow::Result<()> {
+    pub async fn run() -> ExitCode {
         let args = Cli::parse();
         debug!(
             command = args.command.name(),
             non_interactive = args.non_interactive,
+            message_format = ?args.message_format,
+            color = ?args.color,
             "dispatching"
         );
 
-        let non_interactive = args.non_interactive;
+        let shell = Shell::standard(args.message_format, args.color);
+        let mut ctx = Ctx::new(shell, args.non_interactive);
+        let result = args.command.run(&mut ctx).await;
+        match result {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                let shell = ctx.shell();
+                let emit_result = if shell.message_format().is_json() {
+                    shell.emit(&ErrorMessage::from_error(&error))
+                } else {
+                    shell.human().error(&error)
+                };
+                if let Err(emit_error) = emit_result {
+                    let mut stderr = std::io::stderr();
+                    let _ = writeln!(stderr, "error: failed to write CLI error: {emit_error}");
+                }
+                ExitCode::FAILURE
+            }
+        }
+    }
+}
 
-        match args.command {
+impl Commands {
+    async fn run<W: Write>(self, ctx: &mut Ctx<W>) -> anyhow::Result<()> {
+        match self {
             Commands::Deploy { command } => match command {
-                DeployCommands::Approve(args) => {
-                    commands::deploy::approve::run(args, non_interactive).await
+                DeployCommands::Approve(args) => commands::deploy::approve::run(ctx, args).await,
+                DeployCommands::GetStatus(args) => {
+                    commands::deploy::get_status::run(ctx, args).await
                 }
-                DeployCommands::GetStatus(args) => commands::deploy::get_status::run(args).await,
                 DeployCommands::ProvisioningDetails(args) => {
-                    commands::deploy::provisioning_details::run(args).await
+                    commands::deploy::provisioning_details::run(ctx, args).await
                 }
-                DeployCommands::PostShare(args) => commands::deploy::post_share::run(args).await,
-                DeployCommands::Status(args) => commands::deploy::status::run(args).await,
-                DeployCommands::Create(args) => {
-                    commands::deploy::create::run(args, non_interactive).await
+                DeployCommands::PostShare(args) => {
+                    commands::deploy::post_share::run(ctx, args).await
                 }
-                DeployCommands::Init(args) => {
-                    commands::deploy::init::run(args, non_interactive).await
+                DeployCommands::Status(args) => commands::deploy::status::run(ctx, args).await,
+                DeployCommands::Create(args) => commands::deploy::create::run(ctx, args).await,
+                DeployCommands::Init(args) => commands::deploy::init::run(ctx, args).await,
+                DeployCommands::DebugLogs(args) => {
+                    commands::deploy::debug_logs::run(ctx, args).await
                 }
-                DeployCommands::DebugLogs(args) => commands::deploy::debug_logs::run(args).await,
-                DeployCommands::Delete(args) => commands::deploy::delete::run(args).await,
-                DeployCommands::Restore(args) => commands::deploy::restore::run(args).await,
+                DeployCommands::Delete(args) => commands::deploy::delete::run(ctx, args).await,
+                DeployCommands::Restore(args) => commands::deploy::restore::run(ctx, args).await,
             },
             Commands::App { command } => match command {
-                AppCommands::Status(args) => commands::app::status::run(args).await,
-                AppCommands::List(args) => commands::app::list::run(args).await,
-                AppCommands::Create(args) => {
-                    commands::app::create::run(args, non_interactive).await
+                AppCommands::Status(args) => commands::app::status::run(ctx, args).await,
+                AppCommands::List(args) => commands::app::list::run(ctx, args).await,
+                AppCommands::Create(args) => commands::app::create::run(ctx, args).await,
+                AppCommands::Init(args) => commands::app::init::run(ctx, args).await,
+                AppCommands::SetLiveDeploy(args) => {
+                    commands::app::set_live_deploy::run(ctx, args).await
                 }
-                AppCommands::Init(args) => commands::app::init::run(args, non_interactive).await,
-                AppCommands::SetLiveDeploy(args) => commands::app::set_live_deploy::run(args).await,
-                AppCommands::Delete(args) => commands::app::delete::run(args).await,
+                AppCommands::Delete(args) => commands::app::delete::run(ctx, args).await,
             },
             Commands::Keys { command } => match command {
                 KeysCommands::GenerateQuorumKey(args) => {
-                    commands::keys::generate_quorum_key::run(args).await
+                    commands::keys::generate_quorum_key::run(ctx, args).await
                 }
                 KeysCommands::InitQuorumKey(args) => {
-                    commands::keys::init_quorum_key::run(args).await
+                    commands::keys::init_quorum_key::run(ctx, args).await
                 }
                 KeysCommands::ReEncryptShare(args) => {
-                    commands::keys::re_encrypt_share::run(args).await
+                    commands::keys::re_encrypt_share::run(ctx, args).await
                 }
             },
-            Commands::Login(args) => commands::login::run(args, non_interactive).await,
+            Commands::Login(args) => commands::login::run(ctx, args).await,
             Commands::Profile { command } => match command {
                 ProfileCommands::Delete(delete_args) => {
-                    commands::login::run_delete(delete_args, non_interactive).await
+                    commands::login::run_delete(ctx, delete_args).await
                 }
             },
         }

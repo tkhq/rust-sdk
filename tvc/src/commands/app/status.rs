@@ -2,10 +2,14 @@
 
 use anyhow::{Context, anyhow};
 use clap::Args as ClapArgs;
+use std::io::Write;
 use turnkey_client::generated::GetAppStatusRequest;
 
 use crate::client::fetch_tvc_app;
+use crate::commands::app_status::{format_replica_status, sanitize_app_status};
 use crate::commands::display::format_egress_enabled;
+use crate::output::Ctx;
+use crate::shell_println;
 
 /// Get the live status of an app from the cluster.
 #[derive(Debug, ClapArgs)]
@@ -17,7 +21,7 @@ pub struct Args {
 }
 
 /// Run the app status command.
-pub async fn run(args: Args) -> anyhow::Result<()> {
+pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> anyhow::Result<()> {
     let auth = crate::client::build_client().await?;
 
     let request = GetAppStatusRequest {
@@ -31,31 +35,37 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         .await
         .context("failed to fetch app status")?;
 
-    let app_status = crate::commands::app_status::sanitize_app_status(
+    let app_status = sanitize_app_status(
         response
             .app_status
             .ok_or_else(|| anyhow!("no status returned for app: {}", args.app_id))?,
     );
     let app = fetch_tvc_app(&auth, &args.app_id).await?;
 
-    println!("App ID: {}", app_status.app_id);
-    println!("Targeted Deployment: {}", app_status.targeted_deployment_id);
-    println!("{}", format_egress_enabled(app.enable_egress));
+    shell_println!(ctx, "App ID: {}", app_status.app_id)?;
+    shell_println!(
+        ctx,
+        "Targeted Deployment: {}",
+        app_status.targeted_deployment_id
+    )?;
+    shell_println!(ctx, "{}", format_egress_enabled(app.enable_egress))?;
 
     if app_status.deployments.is_empty() {
-        println!();
-        println!("No deployments found.");
+        shell_println!(ctx)?;
+        shell_println!(ctx, "No deployments found.")?;
     } else {
         for deployment in &app_status.deployments {
-            println!();
-            println!("Deployment: {}", deployment.deployment_id);
-            println!(
-                "  {}",
-                crate::commands::app_status::format_replica_status(deployment)
-            );
+            shell_println!(ctx)?;
+            shell_println!(ctx, "Deployment: {}", deployment.deployment_id)?;
+            shell_println!(ctx, "  {}", format_replica_status(deployment))?;
 
             if let Some(updated) = &deployment.last_updated_time {
-                println!("  Last Updated: {}.{:0>9}s", updated.seconds, updated.nanos);
+                shell_println!(
+                    ctx,
+                    "  Last Updated: {}.{:0>9}s",
+                    updated.seconds,
+                    updated.nanos
+                )?;
             }
         }
     }

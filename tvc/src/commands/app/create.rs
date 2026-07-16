@@ -6,10 +6,12 @@ use crate::{
         app::{AppConfig, AppConfigValidationErrors, OperatorSetParams},
         turnkey::{self, StoredQosOperatorKey},
     },
-    prompts,
+    output::Ctx,
+    prompts, shell_println,
 };
 use anyhow::{Context, Result, anyhow};
 use clap::Args as ClapArgs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::{CreateTvcAppIntent, TvcOperatorParams, TvcOperatorSetParams};
@@ -38,18 +40,21 @@ struct Overrides {
     pub dangerous_enable_debug_mode_deployments: bool,
 }
 
-pub async fn run(args: Args, is_non_interactive: bool) -> Result<()> {
-    let config = if is_non_interactive {
+pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
+    let config = if ctx.is_non_interactive() {
         build_app_config_non_interactive(&args).await?
     } else {
-        build_app_config_interactive(&args).await?
+        build_app_config_interactive(ctx, &args).await?
     };
 
     let app_config = apply_overrides(config, &args.overrides);
-    run_with_config(args, app_config).await
+    run_with_config(ctx, args, app_config).await
 }
 
-async fn build_app_config_interactive(args: &Args) -> Result<AppConfig> {
+async fn build_app_config_interactive<W: Write>(
+    ctx: &mut Ctx<W>,
+    args: &Args,
+) -> Result<AppConfig> {
     let mut config = match read_app_config_file_bytes(&args.config_file).await {
         Ok(bytes) => parse_app_config(&bytes, &args.config_file)?,
         Err(_) => AppConfig::template(None),
@@ -71,7 +76,7 @@ async fn build_app_config_interactive(args: &Args) -> Result<AppConfig> {
     }
 
     if changed {
-        offer_to_save_app_config(&args.config_file, &config)?;
+        offer_to_save_app_config(ctx, &args.config_file, &config)?;
     }
 
     Ok(config)
@@ -103,13 +108,17 @@ fn invalid_app_config_error(path: &Path, errors: AppConfigValidationErrors) -> a
     anyhow!("invalid config file: {}: {}", path.display(), errors)
 }
 
-fn offer_to_save_app_config(path: &Path, config: &AppConfig) -> Result<()> {
+fn offer_to_save_app_config<W: Write>(
+    ctx: &mut Ctx<W>,
+    path: &Path,
+    config: &AppConfig,
+) -> Result<()> {
     let save = prompts::confirm(&format!("Save filled config to {}?", path.display()), true)?;
     if save {
         let json = serde_json::to_string_pretty(config).context("failed to serialize config")?;
         std::fs::write(path, json)
             .with_context(|| format!("failed to write config file: {}", path.display()))?;
-        println!("Wrote {}", path.display());
+        shell_println!(ctx, "Wrote {}", path.display())?;
     }
     Ok(())
 }
@@ -123,8 +132,12 @@ async fn load_saved_operator_public_key() -> Option<String> {
     Some(operator_key.public_key)
 }
 
-async fn run_with_config(args: Args, app_config: AppConfig) -> Result<()> {
-    println!("Creating app '{}'...", app_config.name);
+async fn run_with_config<W: Write>(
+    ctx: &mut Ctx<W>,
+    args: Args,
+    app_config: AppConfig,
+) -> Result<()> {
+    shell_println!(ctx, "Creating app '{}'...", app_config.name)?;
 
     let auth = build_client().await?;
 
@@ -149,20 +162,25 @@ async fn run_with_config(args: Args, app_config: AppConfig) -> Result<()> {
     config.set_last_operator_ids(&operator_ids)?;
     config.save().await?;
 
-    println!();
-    println!("App created successfully!");
-    println!();
-    println!("App ID: {app_id}");
-    println!("Name: {}", app_config.name);
-    println!("Manifest Set ID: {}", result.result.manifest_set_id);
+    shell_println!(ctx)?;
+    shell_println!(ctx, "App created successfully!")?;
+    shell_println!(ctx)?;
+    shell_println!(ctx, "App ID: {app_id}")?;
+    shell_println!(ctx, "Name: {}", app_config.name)?;
+    shell_println!(ctx, "Manifest Set ID: {}", result.result.manifest_set_id)?;
     if !operator_ids.is_empty() {
-        println!("Manifest Set Operator IDs: {}", operator_ids.join(", "));
+        shell_println!(
+            ctx,
+            "Manifest Set Operator IDs: {}",
+            operator_ids.join(", ")
+        )?;
     }
-    println!("Config: {}", args.config_file.display());
-    println!();
-    println!(
+    shell_println!(ctx, "Config: {}", args.config_file.display())?;
+    shell_println!(ctx)?;
+    shell_println!(
+        ctx,
         "Use one of the Manifest Set Operator IDs above with `tvc deploy approve --operator-id`"
-    );
+    )?;
 
     Ok(())
 }
