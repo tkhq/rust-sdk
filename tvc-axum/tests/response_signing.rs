@@ -16,7 +16,10 @@ use qos_p256::{P256Pair, P256Public};
 use sha2::{Digest, Sha256};
 use tower::{ServiceBuilder, ServiceExt, service_fn};
 use tvc_axum::{ATTESTATION_DOC_HEADER, MANIFEST_ENVELOPE_HEADER, ResponseSigningLayer};
-use tvc_utils::fake_manifest_envelope;
+use tvc_utils::{
+    FakeManifestBuilder, VerificationExpectations, fake_keyed_member, fake_manifest_envelope,
+    verify_attestation_and_manifest,
+};
 
 const SIGNATURE_COMPONENTS: &str = "(\"@method\" \"@path\" \"@status\" \"content-digest\")";
 const SIGNATURE_ALG: &str = "ecdsa-p256-sha256";
@@ -223,6 +226,72 @@ async fn full_trust_chain_verifies_from_attestation_doc() {
             &signature_base(
                 "GET",
                 "/chain",
+                StatusCode::OK,
+                &digest,
+                "ephemeral",
+                created,
+            ),
+            &signature_bytes(&signature_header, "ephemeral"),
+        )
+        .expect("ephemeral signature should verify with the attested key");
+}
+
+#[tokio::test]
+async fn tvc_utils_verifier_accepts_the_emitted_trust_chain() {
+    let ephemeral_key = Arc::new(P256Pair::generate().expect("key should generate"));
+    let (member, pair) = fake_keyed_member("member");
+    let envelope = FakeManifestBuilder::new().build_envelope_approved_by(&[(member, pair)]);
+    let manifest = envelope.clone().manifest();
+    // NSM whose PCR bank matches the manifest measurements.
+    let nsm = MockNsm::new()
+        .with_pcr(0, manifest.enclave().pcr0.clone())
+        .with_pcr(1, manifest.enclave().pcr1.clone())
+        .with_pcr(2, manifest.enclave().pcr2.clone())
+        .with_pcr(3, manifest.enclave().pcr3.clone());
+    let layer = ResponseSigningLayer::builder()
+        .ephemeral_key(Arc::clone(&ephemeral_key))
+        .nsm(Arc::new(nsm))
+        .manifest_envelope(envelope.clone())
+        .build()
+        .expect("layer should build");
+
+    let response = oneshot_response(&layer, "GET", "/verified").await;
+
+    let attested_key = verify_attestation_and_manifest(
+        &STANDARD
+            .decode(header_str(&response, ATTESTATION_DOC_HEADER))
+            .expect("attestation header should be base64"),
+        &STANDARD
+            .decode(header_str(&response, MANIFEST_ENVELOPE_HEADER))
+            .expect("manifest header should be base64"),
+        MOCK_ROOT_CERT_DER,
+        MOCK_SECONDS_SINCE_EPOCH,
+        &VerificationExpectations::new()
+            .namespace_name("fake-namespace")
+            .nonce(1)
+            .quorum_key(manifest.namespace().quorum_key.clone())
+            .qos_commit("fake-qos-commit")
+            .pcrs(
+                manifest.enclave().pcr0.clone(),
+                manifest.enclave().pcr1.clone(),
+                manifest.enclave().pcr2.clone(),
+                manifest.enclave().pcr3.clone(),
+            )
+            .pivot_hash(*manifest.pivot_hash())
+            .manifest_hash(envelope.manifest_hash()),
+    )
+    .unwrap_or_else(|e| panic!("emitted trust chain should verify: {e}"));
+
+    // The returned ephemeral key verifies the response signature.
+    let digest = header_str(&response, "content-digest").to_owned();
+    let signature_input_header = header_str(&response, "signature-input").to_owned();
+    let signature_header = header_str(&response, "signature").to_owned();
+    let created = created_from_signature_input(&signature_input_header, "ephemeral");
+    attested_key
+        .verify(
+            &signature_base(
+                "GET",
+                "/verified",
                 StatusCode::OK,
                 &digest,
                 "ephemeral",
