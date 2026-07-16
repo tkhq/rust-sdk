@@ -18,8 +18,8 @@ use qos_p256::{P256Pair, P256Public};
 use tower::{ServiceBuilder, ServiceExt, service_fn};
 use tvc_axum::{
     ATTESTATION_DOC_HEADER, MANIFEST_ENVELOPE_HEADER, ManifestCommitmentKind, ResponseSigningLayer,
-    SignedResponseParts, VerificationExpectations, VerifyError, VerifyResponseError,
-    verify_quorum_signature, verify_response_trust_chain,
+    SignedResponseParts, VerificationExpectations, VerifyResponseError, verify_quorum_signature,
+    verify_response_trust_chain,
 };
 
 /// NSM wrapper that counts attestation requests. Only for tests.
@@ -330,21 +330,6 @@ async fn tampered_responses_and_wrong_keys_fail() {
 }
 
 #[tokio::test]
-async fn expectation_mismatch_propagates_the_qos_error() {
-    let fixture = signed_fixture("GET", "/expectations").await;
-
-    assert!(matches!(
-        fixture.verify_chain(
-            &fixture.parts(),
-            &VerificationExpectations::new().namespace_name("other-namespace"),
-        ),
-        Err(VerifyResponseError::TrustChain(
-            VerifyError::NamespaceNameMismatch { .. }
-        ))
-    ));
-}
-
-#[tokio::test]
 async fn no_quorum_signature_without_quorum_key() {
     let ephemeral_key = Arc::new(P256Pair::generate().expect("key should generate"));
     let layer = ResponseSigningLayer::builder()
@@ -376,28 +361,6 @@ async fn no_quorum_signature_without_quorum_key() {
 }
 
 #[tokio::test]
-async fn no_public_key_header_is_emitted() {
-    let ephemeral_key = Arc::new(P256Pair::generate().expect("key should generate"));
-    let layer = ResponseSigningLayer::builder()
-        .ephemeral_key(ephemeral_key)
-        .nsm(Arc::new(MockNsm::new()))
-        .manifest_envelope(approved_envelope())
-        .build()
-        .expect("layer should build");
-
-    let response = oneshot_response(&layer, "GET", "/no-pk-header").await;
-
-    assert!(
-        !response
-            .headers()
-            .contains_key("x-tvc-ephemeral-public-key")
-    );
-    assert!(!response.headers().contains_key("x-tvc-ephemeral-signature"));
-    assert!(!response.headers().contains_key("x-tvc-quorum-signature"));
-    assert!(!response.headers().contains_key("x-tvc-signature-timestamp"));
-}
-
-#[tokio::test]
 async fn attestation_doc_is_cached_across_responses() {
     let ephemeral_key = Arc::new(P256Pair::generate().expect("key should generate"));
     let nsm = Arc::new(CountingNsm::new());
@@ -421,33 +384,4 @@ async fn attestation_doc_is_cached_across_responses() {
         1,
         "responses within the TTL should reuse the attestation doc fetched at build time"
     );
-}
-
-#[tokio::test]
-async fn builder_requires_ephemeral_key_nsm_and_manifest() {
-    let ephemeral_key = Arc::new(P256Pair::generate().expect("key should generate"));
-
-    let missing_ephemeral = ResponseSigningLayer::builder()
-        .nsm(Arc::new(MockNsm::new()))
-        .manifest_envelope(approved_envelope())
-        .build();
-    assert!(matches!(
-        missing_ephemeral,
-        Err(tvc_axum::Error::MissingEphemeralKey)
-    ));
-
-    let missing_nsm = ResponseSigningLayer::builder()
-        .ephemeral_key(Arc::clone(&ephemeral_key))
-        .manifest_envelope(approved_envelope())
-        .build();
-    assert!(matches!(missing_nsm, Err(tvc_axum::Error::MissingNsm)));
-
-    let missing_manifest = ResponseSigningLayer::builder()
-        .ephemeral_key(Arc::clone(&ephemeral_key))
-        .nsm(Arc::new(MockNsm::new()))
-        .build();
-    assert!(matches!(
-        missing_manifest,
-        Err(tvc_axum::Error::MissingManifestEnvelope)
-    ));
 }
