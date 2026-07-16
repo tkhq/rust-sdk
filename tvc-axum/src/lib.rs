@@ -119,24 +119,6 @@ pub(crate) fn signature_base(
     .into_bytes()
 }
 
-fn signature_header_entries(
-    label: &str,
-    key: &P256Pair,
-    method: &str,
-    path: &str,
-    status: StatusCode,
-    digest: &str,
-    created: u64,
-) -> Option<(String, String)> {
-    let params = signature_input(label, created);
-    let base = signature_base(method, path, status, digest, &params);
-    let signature = key.sign(&base).ok()?;
-    Some((
-        format!("{label}={params}"),
-        format!("{label}=:{}:", STANDARD.encode(signature)),
-    ))
-}
-
 fn internal_error_response(message: &'static str) -> Response<Body> {
     let mut response = Response::new(Body::from(format!(r#"{{"error":"{message}"}}"#)));
     *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
@@ -246,31 +228,24 @@ impl Shared {
             .to_bytes();
         let created = unix_timestamp().ok_or("failed to read system time")?;
         let digest = content_digest(&body);
+        let sign = |label: &str, key: &P256Pair| {
+            let params = signature_input(label, created);
+            let base = signature_base(method, path, parts.status, &digest, &params);
+            let signature = key.sign(&base).ok()?;
+            Some((
+                format!("{label}={params}"),
+                format!("{label}=:{}:", STANDARD.encode(signature)),
+            ))
+        };
 
-        let ephemeral = signature_header_entries(
-            "ephemeral",
-            &self.ephemeral_key,
-            method,
-            path,
-            parts.status,
-            &digest,
-            created,
-        )
-        .ok_or("failed to sign response with ephemeral key")?;
+        let ephemeral = sign("ephemeral", &self.ephemeral_key)
+            .ok_or("failed to sign response with ephemeral key")?;
         let mut signature_inputs = vec![ephemeral.0];
         let mut signatures = vec![ephemeral.1];
 
         if let Some(quorum_key) = &self.quorum_key {
-            let quorum = signature_header_entries(
-                "quorum",
-                quorum_key,
-                method,
-                path,
-                parts.status,
-                &digest,
-                created,
-            )
-            .ok_or("failed to sign response with quorum key")?;
+            let quorum =
+                sign("quorum", quorum_key).ok_or("failed to sign response with quorum key")?;
             signature_inputs.push(quorum.0);
             signatures.push(quorum.1);
         }
