@@ -8,8 +8,9 @@ use axum::http::{Request, StatusCode};
 use axum::response::Response;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use qos_core::protocol::services::boot::{
-    FakeManifestBuilder, VerificationExpectations, VersionedManifestEnvelope, fake_keyed_member,
-    fake_manifest_envelope, verify_attestation_and_manifest,
+    Approval, ManifestCommitmentKind, ManifestEnvelopeV2, ManifestSet, ManifestV2, ManifestVersion,
+    Namespace, NitroConfig, PivotConfigV2, PivotEnv, QuorumMember, RestartPolicy, ShareSet,
+    VerificationExpectations, VersionedManifestEnvelope, verify_attestation_and_manifest,
 };
 use qos_nsm::NsmProvider;
 use qos_nsm::mock::{MOCK_ROOT_CERT_DER, MOCK_SECONDS_SINCE_EPOCH, MockNsm};
@@ -53,6 +54,93 @@ impl NsmProvider for CountingNsm {
     fn attestation_root_ca_der(&self) -> Vec<u8> {
         self.inner.attestation_root_ca_der()
     }
+}
+
+fn test_member(alias: &str) -> (QuorumMember, P256Pair) {
+    let pair = P256Pair::generate().expect("key should generate");
+    let member = QuorumMember {
+        alias: alias.to_string(),
+        pub_key: pair.public_key().to_bytes(),
+    };
+    (member, pair)
+}
+
+/// Minimal manifest envelope with one manifest-set member approving at
+/// threshold 1, mirroring the qos_core verify tests.
+fn approved_envelope() -> VersionedManifestEnvelope {
+    let (member, pair) = test_member("member");
+    let manifest = ManifestV2 {
+        version: ManifestVersion::V2,
+        namespace: Namespace {
+            name: "test-namespace".to_string(),
+            nonce: 1,
+            quorum_key: P256Pair::generate()
+                .expect("key should generate")
+                .public_key()
+                .to_bytes(),
+        },
+        pivot: PivotConfigV2 {
+            hash: [7; 32],
+            restart: RestartPolicy::Never,
+            bridge_config: vec![],
+            debug_mode: false,
+            args: vec![],
+            env: PivotEnv::new(),
+        },
+        manifest_set: ManifestSet {
+            threshold: 1,
+            members: vec![member.clone()],
+        },
+        share_set: ShareSet {
+            threshold: 1,
+            members: vec![member.clone()],
+        },
+        enclave: NitroConfig {
+            pcr0: vec![0; 48],
+            pcr1: vec![1; 48],
+            pcr2: vec![2; 48],
+            pcr3: vec![3; 48],
+            aws_root_certificate: vec![],
+            qos_commit: "test-qos-commit".to_string(),
+        },
+        dns: None,
+    };
+    let mut envelope = ManifestEnvelopeV2 {
+        manifest,
+        manifest_set_approvals: vec![],
+        share_set_approvals: vec![],
+    };
+    let manifest_hash = VersionedManifestEnvelope::V2(envelope.clone()).manifest_hash();
+    envelope.manifest_set_approvals = vec![Approval {
+        signature: pair
+            .sign(&manifest_hash)
+            .expect("approval signing should not fail"),
+        member,
+    }];
+    VersionedManifestEnvelope::V2(envelope)
+}
+
+/// NSM whose PCR bank matches the manifest measurements and carries the
+/// setup manifest commitment (PCR16) over the manifest hash and ephemeral
+/// public key, so the emitted attestation documents pass full verification.
+fn seeded_nsm(envelope: &VersionedManifestEnvelope, ephemeral_key: &P256Pair) -> MockNsm {
+    let manifest = envelope.clone().manifest();
+    let enclave = manifest.enclave();
+    let commitment_pcr = nitro::expected_manifest_commitment_pcr(
+        ManifestCommitmentKind::Setup,
+        &envelope.manifest_hash(),
+        &ephemeral_key.public_key().to_bytes(),
+    )
+    .expect("commitment PCR should compute");
+    MockNsm::new()
+        .with_pcr(0, enclave.pcr0.clone())
+        .with_pcr(1, enclave.pcr1.clone())
+        .with_pcr(2, enclave.pcr2.clone())
+        .with_pcr(3, enclave.pcr3.clone())
+        .with_pcr(
+            ManifestCommitmentKind::Setup.pcr_index(),
+            commitment_pcr.to_vec(),
+        )
 }
 
 fn signed_layer(
@@ -161,7 +249,7 @@ fn content_digest(body: &[u8]) -> String {
 #[tokio::test]
 async fn full_trust_chain_verifies_from_attestation_doc() {
     let ephemeral_key = Arc::new(P256Pair::generate().expect("key should generate"));
-    let envelope = fake_manifest_envelope();
+    let envelope = approved_envelope();
     let layer = signed_layer(&ephemeral_key, None, &envelope);
 
     let response = oneshot_response(&layer, "GET", "/chain?ignored=true").await;
@@ -238,15 +326,9 @@ async fn full_trust_chain_verifies_from_attestation_doc() {
 #[tokio::test]
 async fn qos_core_verifier_accepts_the_emitted_trust_chain() {
     let ephemeral_key = Arc::new(P256Pair::generate().expect("key should generate"));
-    let (member, pair) = fake_keyed_member("member");
-    let envelope = FakeManifestBuilder::new().build_envelope_approved_by(&[(member, pair)]);
+    let envelope = approved_envelope();
     let manifest = envelope.clone().manifest();
-    // NSM whose PCR bank matches the manifest measurements.
-    let nsm = MockNsm::new()
-        .with_pcr(0, manifest.enclave().pcr0.clone())
-        .with_pcr(1, manifest.enclave().pcr1.clone())
-        .with_pcr(2, manifest.enclave().pcr2.clone())
-        .with_pcr(3, manifest.enclave().pcr3.clone());
+    let nsm = seeded_nsm(&envelope, &ephemeral_key);
     let layer = ResponseSigningLayer::builder()
         .ephemeral_key(Arc::clone(&ephemeral_key))
         .nsm(Arc::new(nsm))
@@ -265,11 +347,12 @@ async fn qos_core_verifier_accepts_the_emitted_trust_chain() {
             .expect("manifest header should be base64"),
         MOCK_ROOT_CERT_DER,
         MOCK_SECONDS_SINCE_EPOCH,
+        ManifestCommitmentKind::Setup,
         &VerificationExpectations::new()
-            .namespace_name("fake-namespace")
+            .namespace_name("test-namespace")
             .nonce(1)
             .quorum_key(manifest.namespace().quorum_key.clone())
-            .qos_commit("fake-qos-commit")
+            .qos_commit("test-qos-commit")
             .pcrs(
                 manifest.enclave().pcr0.clone(),
                 manifest.enclave().pcr1.clone(),
@@ -305,7 +388,7 @@ async fn qos_core_verifier_accepts_the_emitted_trust_chain() {
 async fn quorum_signature_included_and_verifies_when_configured() {
     let ephemeral_key = Arc::new(P256Pair::generate().expect("ephemeral key should generate"));
     let quorum_key = Arc::new(P256Pair::generate().expect("quorum key should generate"));
-    let envelope = fake_manifest_envelope();
+    let envelope = approved_envelope();
     let layer = signed_layer(&ephemeral_key, Some(&quorum_key), &envelope);
 
     let response = oneshot_response(&layer, "GET", "/quorum").await;
@@ -340,7 +423,7 @@ async fn quorum_signature_included_and_verifies_when_configured() {
 #[tokio::test]
 async fn no_quorum_entries_without_quorum_key() {
     let ephemeral_key = Arc::new(P256Pair::generate().expect("key should generate"));
-    let envelope = fake_manifest_envelope();
+    let envelope = approved_envelope();
     let layer = signed_layer(&ephemeral_key, None, &envelope);
 
     let response = oneshot_response(&layer, "GET", "/no-quorum").await;
@@ -352,7 +435,7 @@ async fn no_quorum_entries_without_quorum_key() {
 #[tokio::test]
 async fn no_public_key_header_is_emitted() {
     let ephemeral_key = Arc::new(P256Pair::generate().expect("key should generate"));
-    let envelope = fake_manifest_envelope();
+    let envelope = approved_envelope();
     let layer = signed_layer(&ephemeral_key, None, &envelope);
 
     let response = oneshot_response(&layer, "GET", "/no-pk-header").await;
@@ -372,7 +455,7 @@ async fn tampered_signature_bases_fail_verification() {
     let ephemeral_key = Arc::new(P256Pair::generate().expect("key should generate"));
     let public_key = P256Public::from_bytes(&ephemeral_key.public_key().to_bytes())
         .expect("public key should decode");
-    let envelope = fake_manifest_envelope();
+    let envelope = approved_envelope();
     let layer = signed_layer(&ephemeral_key, None, &envelope);
 
     let response = oneshot_response(&layer, "POST", "/tamper").await;
@@ -453,7 +536,7 @@ async fn attestation_doc_is_cached_across_responses() {
     let layer = ResponseSigningLayer::builder()
         .ephemeral_key(Arc::clone(&ephemeral_key))
         .nsm(Arc::clone(&nsm) as Arc<dyn NsmProvider + Send + Sync>)
-        .manifest_envelope(fake_manifest_envelope())
+        .manifest_envelope(approved_envelope())
         .build()
         .expect("layer should build");
     assert_eq!(nsm.attestation_requests.load(Ordering::SeqCst), 1);
@@ -478,7 +561,7 @@ async fn builder_requires_ephemeral_key_nsm_and_manifest() {
 
     let missing_ephemeral = ResponseSigningLayer::builder()
         .nsm(Arc::new(MockNsm::new()))
-        .manifest_envelope(fake_manifest_envelope())
+        .manifest_envelope(approved_envelope())
         .build();
     assert!(matches!(
         missing_ephemeral,
@@ -487,7 +570,7 @@ async fn builder_requires_ephemeral_key_nsm_and_manifest() {
 
     let missing_nsm = ResponseSigningLayer::builder()
         .ephemeral_key(Arc::clone(&ephemeral_key))
-        .manifest_envelope(fake_manifest_envelope())
+        .manifest_envelope(approved_envelope())
         .build();
     assert!(matches!(missing_nsm, Err(tvc_axum::Error::MissingNsm)));
 

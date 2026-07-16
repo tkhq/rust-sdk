@@ -2787,7 +2787,7 @@ dependencies = [
 [[package]]
 name = "qos_core"
 version = "0.12.2"
-source = "git+https://github.com/tkhq/qos?branch=zeke%2Fmanifest-fake-and-verify-helpers#bf5ece05cc98a5e2065eb376b8b3816a9ee00a8f"
+source = "git+https://github.com/tkhq/qos?branch=zeke%2Fmanifest-fake-and-verify-helpers#4ca563315f9c8681dc3af67e85ec54f86be25246"
 dependencies = [
  "aws-nitro-enclaves-nsm-api",
  "borsh",
@@ -2810,7 +2810,7 @@ dependencies = [
 [[package]]
 name = "qos_crypto"
 version = "0.12.2"
-source = "git+https://github.com/tkhq/qos?branch=zeke%2Fmanifest-fake-and-verify-helpers#bf5ece05cc98a5e2065eb376b8b3816a9ee00a8f"
+source = "git+https://github.com/tkhq/qos?branch=zeke%2Fmanifest-fake-and-verify-helpers#4ca563315f9c8681dc3af67e85ec54f86be25246"
 dependencies = [
  "rand 0.9.2",
  "sha2",
@@ -2822,7 +2822,7 @@ dependencies = [
 [[package]]
 name = "qos_hex"
 version = "0.12.2"
-source = "git+https://github.com/tkhq/qos?branch=zeke%2Fmanifest-fake-and-verify-helpers#bf5ece05cc98a5e2065eb376b8b3816a9ee00a8f"
+source = "git+https://github.com/tkhq/qos?branch=zeke%2Fmanifest-fake-and-verify-helpers#4ca563315f9c8681dc3af67e85ec54f86be25246"
 dependencies = [
  "serde",
 ]
@@ -2830,7 +2830,7 @@ dependencies = [
 [[package]]
 name = "qos_json"
 version = "0.12.2"
-source = "git+https://github.com/tkhq/qos?branch=zeke%2Fmanifest-fake-and-verify-helpers#bf5ece05cc98a5e2065eb376b8b3816a9ee00a8f"
+source = "git+https://github.com/tkhq/qos?branch=zeke%2Fmanifest-fake-and-verify-helpers#4ca563315f9c8681dc3af67e85ec54f86be25246"
 dependencies = [
  "qos_hex",
  "serde",
@@ -2841,7 +2841,7 @@ dependencies = [
 [[package]]
 name = "qos_nsm"
 version = "0.12.2"
-source = "git+https://github.com/tkhq/qos?branch=zeke%2Fmanifest-fake-and-verify-helpers#bf5ece05cc98a5e2065eb376b8b3816a9ee00a8f"
+source = "git+https://github.com/tkhq/qos?branch=zeke%2Fmanifest-fake-and-verify-helpers#4ca563315f9c8681dc3af67e85ec54f86be25246"
 dependencies = [
  "aws-nitro-enclaves-cose",
  "aws-nitro-enclaves-nsm-api",
@@ -2859,7 +2859,7 @@ dependencies = [
 [[package]]
 name = "qos_p256"
 version = "0.12.2"
-source = "git+https://github.com/tkhq/qos?branch=zeke%2Fmanifest-fake-and-verify-helpers#bf5ece05cc98a5e2065eb376b8b3816a9ee00a8f"
+source = "git+https://github.com/tkhq/qos?branch=zeke%2Fmanifest-fake-and-verify-helpers#4ca563315f9c8681dc3af67e85ec54f86be25246"
 dependencies = [
  "aes-gcm",
  "borsh",
@@ -4580,7 +4580,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
