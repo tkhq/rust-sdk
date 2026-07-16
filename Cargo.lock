@@ -4294,9 +4294,12 @@ name = "tvc-utils"
 version = "0.11.0"
 dependencies = [
  "qos_core",
+ "qos_hex",
  "qos_json",
+ "qos_nsm",
  "qos_p256",
  "serde_json",
+ "thiserror 2.0.12",
 ]
 
 [[package]]

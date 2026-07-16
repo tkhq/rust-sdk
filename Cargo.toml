@@ -15,7 +15,7 @@ members = [
   "tvc",
   # Axum middleware for Turnkey Verifiable Cloud apps (signed responses)
   "tvc-axum",
-  # Test utilities for Turnkey Verifiable Cloud, e.g. fake manifest generation
+  # Utilities for Turnkey Verifiable Cloud, e.g. trust chain verification and fake manifest generation
   "tvc-utils"
 ]
 resolver = "2"
@@ -24,6 +24,7 @@ resolver = "2"
 # QuorumOS
 qos_core = { version = "0.12.2", default-features = false }
 qos_crypto = { version = "0.12.2", default-features = false }
+qos_hex = { version = "0.12.2", default-features = false }
 qos_json = { version = "0.12.2", default-features = false }
 qos_nsm = { version = "0.12.2", default-features = false }
 qos_p256 = { version = "0.12.2", default-features = false }
