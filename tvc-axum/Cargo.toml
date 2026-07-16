@@ -25,7 +25,7 @@ thiserror = { workspace = true }
 tower = { workspace = true }
 
 [dev-dependencies]
+qos_core = { workspace = true, features = ["mock"] }
 qos_nsm = { workspace = true, features = ["mock"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tower = { workspace = true, features = ["util"] }
-tvc-utils = { workspace = true }

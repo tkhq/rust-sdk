@@ -7,7 +7,10 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::response::Response;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
-use qos_core::protocol::services::boot::VersionedManifestEnvelope;
+use qos_core::protocol::services::boot::{
+    FakeManifestBuilder, VerificationExpectations, VersionedManifestEnvelope, fake_keyed_member,
+    fake_manifest_envelope, verify_attestation_and_manifest,
+};
 use qos_nsm::NsmProvider;
 use qos_nsm::mock::{MOCK_ROOT_CERT_DER, MOCK_SECONDS_SINCE_EPOCH, MockNsm};
 use qos_nsm::nitro::{self, AttestError};
@@ -16,10 +19,6 @@ use qos_p256::{P256Pair, P256Public};
 use sha2::{Digest, Sha256};
 use tower::{ServiceBuilder, ServiceExt, service_fn};
 use tvc_axum::{ATTESTATION_DOC_HEADER, MANIFEST_ENVELOPE_HEADER, ResponseSigningLayer};
-use tvc_utils::{
-    FakeManifestBuilder, VerificationExpectations, fake_keyed_member, fake_manifest_envelope,
-    verify_attestation_and_manifest,
-};
 
 const SIGNATURE_COMPONENTS: &str = "(\"@method\" \"@path\" \"@status\" \"content-digest\")";
 const SIGNATURE_ALG: &str = "ecdsa-p256-sha256";
@@ -237,7 +236,7 @@ async fn full_trust_chain_verifies_from_attestation_doc() {
 }
 
 #[tokio::test]
-async fn tvc_utils_verifier_accepts_the_emitted_trust_chain() {
+async fn qos_core_verifier_accepts_the_emitted_trust_chain() {
     let ephemeral_key = Arc::new(P256Pair::generate().expect("key should generate"));
     let (member, pair) = fake_keyed_member("member");
     let envelope = FakeManifestBuilder::new().build_envelope_approved_by(&[(member, pair)]);
