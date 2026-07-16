@@ -119,9 +119,22 @@ pub(crate) fn signature_base(
     .into_bytes()
 }
 
-fn signature_value(key: &P256Pair, signature_base: &[u8]) -> Option<String> {
-    let signature = key.sign(signature_base).ok()?;
-    Some(format!(":{}:", STANDARD.encode(signature)))
+fn signature_header_entries(
+    label: &str,
+    key: &P256Pair,
+    method: &str,
+    path: &str,
+    status: StatusCode,
+    digest: &str,
+    created: u64,
+) -> Option<(String, String)> {
+    let params = signature_input(label, created);
+    let base = signature_base(method, path, status, digest, &params);
+    let signature = key.sign(&base).ok()?;
+    Some((
+        format!("{label}={params}"),
+        format!("{label}=:{}:", STANDARD.encode(signature)),
+    ))
 }
 
 fn internal_error_response(message: &'static str) -> Response<Body> {
@@ -213,6 +226,80 @@ impl Shared {
             cache.fetched_at = Instant::now();
         }
         Ok(cache.header.clone())
+    }
+
+    async fn sign_response<ResBody>(
+        &self,
+        method: &str,
+        path: &str,
+        response: Response<ResBody>,
+    ) -> Result<Response<Body>, &'static str>
+    where
+        ResBody: HttpBody<Data = Bytes>,
+        ResBody::Error: std::fmt::Display,
+    {
+        let (mut parts, body) = response.into_parts();
+        let body = body
+            .collect()
+            .await
+            .map_err(|_| "failed to read response body")?
+            .to_bytes();
+        let created = unix_timestamp().ok_or("failed to read system time")?;
+        let digest = content_digest(&body);
+
+        let ephemeral = signature_header_entries(
+            "ephemeral",
+            &self.ephemeral_key,
+            method,
+            path,
+            parts.status,
+            &digest,
+            created,
+        )
+        .ok_or("failed to sign response with ephemeral key")?;
+        let mut signature_inputs = vec![ephemeral.0];
+        let mut signatures = vec![ephemeral.1];
+
+        if let Some(quorum_key) = &self.quorum_key {
+            let quorum = signature_header_entries(
+                "quorum",
+                quorum_key,
+                method,
+                path,
+                parts.status,
+                &digest,
+                created,
+            )
+            .ok_or("failed to sign response with quorum key")?;
+            signature_inputs.push(quorum.0);
+            signatures.push(quorum.1);
+        }
+
+        parts.headers.insert(
+            "content-digest",
+            HeaderValue::from_str(&digest).map_err(|_| "failed to encode content digest")?,
+        );
+        parts.headers.insert(
+            "signature-input",
+            HeaderValue::from_str(&signature_inputs.join(", "))
+                .map_err(|_| "failed to encode signature input")?,
+        );
+        parts.headers.insert(
+            "signature",
+            HeaderValue::from_str(&signatures.join(", "))
+                .map_err(|_| "failed to encode signature")?,
+        );
+        parts.headers.insert(
+            ATTESTATION_DOC_HEADER,
+            self.attestation_header()
+                .map_err(|_| "failed to fetch attestation document")?,
+        );
+        parts.headers.insert(
+            MANIFEST_ENVELOPE_HEADER,
+            self.manifest_envelope_header.clone(),
+        );
+
+        Ok(Response::from_parts(parts, Body::from(body)))
     }
 }
 
@@ -368,86 +455,10 @@ where
 
         Box::pin(async move {
             let response = future.await?;
-            let (mut parts, body) = response.into_parts();
-            let body_bytes = match body.collect().await {
-                Ok(collected) => collected.to_bytes(),
-                Err(_) => return Ok(internal_error_response("failed to read response body")),
-            };
-
-            let created = match unix_timestamp() {
-                Some(created) => created,
-                None => return Ok(internal_error_response("failed to read system time")),
-            };
-            let digest = content_digest(&body_bytes);
-            let mut signature_inputs = Vec::new();
-            let mut signatures = Vec::new();
-
-            {
-                let params = signature_input("ephemeral", created);
-                let base = signature_base(&method, &path, parts.status, &digest, &params);
-                let signature = match signature_value(&shared.ephemeral_key, &base) {
-                    Some(signature) => signature,
-                    None => {
-                        return Ok(internal_error_response(
-                            "failed to sign response with ephemeral key",
-                        ));
-                    }
-                };
-                signature_inputs.push(format!("ephemeral={params}"));
-                signatures.push(format!("ephemeral={signature}"));
-            }
-
-            if let Some(quorum_key) = &shared.quorum_key {
-                let params = signature_input("quorum", created);
-                let base = signature_base(&method, &path, parts.status, &digest, &params);
-                let signature = match signature_value(quorum_key, &base) {
-                    Some(signature) => signature,
-                    None => {
-                        return Ok(internal_error_response(
-                            "failed to sign response with quorum key",
-                        ));
-                    }
-                };
-                signature_inputs.push(format!("quorum={params}"));
-                signatures.push(format!("quorum={signature}"));
-            }
-
-            let digest = match HeaderValue::from_str(&digest) {
-                Ok(digest) => digest,
-                Err(_) => return Ok(internal_error_response("failed to encode content digest")),
-            };
-            parts.headers.insert("content-digest", digest);
-
-            let signature_input = match HeaderValue::from_str(&signature_inputs.join(", ")) {
-                Ok(signature_input) => signature_input,
-                Err(_) => {
-                    return Ok(internal_error_response("failed to encode signature input"));
-                }
-            };
-            let signature = match HeaderValue::from_str(&signatures.join(", ")) {
-                Ok(signature) => signature,
-                Err(_) => return Ok(internal_error_response("failed to encode signature")),
-            };
-            parts.headers.insert("signature-input", signature_input);
-            parts.headers.insert("signature", signature);
-
-            let attestation_header = match shared.attestation_header() {
-                Ok(attestation_header) => attestation_header,
-                Err(_) => {
-                    return Ok(internal_error_response(
-                        "failed to fetch attestation document",
-                    ));
-                }
-            };
-            parts
-                .headers
-                .insert(ATTESTATION_DOC_HEADER, attestation_header);
-            parts.headers.insert(
-                MANIFEST_ENVELOPE_HEADER,
-                shared.manifest_envelope_header.clone(),
-            );
-
-            Ok(Response::from_parts(parts, Body::from(body_bytes)))
+            Ok(shared
+                .sign_response(&method, &path, response)
+                .await
+                .unwrap_or_else(internal_error_response))
         })
     }
 }
