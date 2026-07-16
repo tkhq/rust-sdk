@@ -8,7 +8,7 @@
 //! measurements and no approvals.
 
 use qos_core::protocol::services::boot::{
-    ManifestEnvelopeV2, ManifestSet, ManifestV2, ManifestVersion, Namespace, NitroConfig,
+    Approval, ManifestEnvelopeV2, ManifestSet, ManifestV2, ManifestVersion, Namespace, NitroConfig,
     PivotConfigV2, PivotEnv, QuorumMember, RestartPolicy, ShareSet, VersionedManifestEnvelope,
 };
 use qos_p256::P256Pair;
@@ -32,6 +32,23 @@ pub fn fake_member(alias: &str) -> QuorumMember {
             .public_key()
             .to_bytes(),
     }
+}
+
+/// Generate a [`QuorumMember`] with the given alias along with its P-256 key
+/// pair, for signing manifest-set approvals. Only for tests.
+///
+/// # Panics
+///
+/// Panics if key generation fails, which indicates a broken RNG. Only for
+/// tests.
+#[must_use]
+pub fn fake_keyed_member(alias: &str) -> (QuorumMember, P256Pair) {
+    let pair = P256Pair::generate().expect("test key generation should not fail");
+    let member = QuorumMember {
+        alias: alias.to_string(),
+        pub_key: pair.public_key().to_bytes(),
+    };
+    (member, pair)
 }
 
 /// Build a fake manifest (v2) with default values. Only for tests.
@@ -220,5 +237,84 @@ impl FakeManifestBuilder {
             manifest_set_approvals: vec![],
             share_set_approvals: vec![],
         })
+    }
+
+    /// Build a fake [`VersionedManifestEnvelope`] (v2) with manifest-set
+    /// approvals signed by the given members over the manifest hash. If no
+    /// manifest set was configured, it is derived from the approvers with a
+    /// threshold requiring all of them.
+    ///
+    /// # Panics
+    ///
+    /// Panics if signing fails, which indicates a broken key pair. Only for
+    /// tests.
+    #[must_use]
+    pub fn build_envelope_approved_by(
+        mut self,
+        approvers: &[(QuorumMember, P256Pair)],
+    ) -> VersionedManifestEnvelope {
+        if self.manifest_set.is_none() {
+            self.manifest_set = Some(ManifestSet {
+                threshold: u32::try_from(approvers.len())
+                    .expect("approver count should fit in u32"),
+                members: approvers.iter().map(|(member, _)| member.clone()).collect(),
+            });
+        }
+
+        let mut envelope = ManifestEnvelopeV2 {
+            manifest: self.build(),
+            manifest_set_approvals: vec![],
+            share_set_approvals: vec![],
+        };
+        let manifest_hash = VersionedManifestEnvelope::V2(envelope.clone()).manifest_hash();
+        envelope.manifest_set_approvals = approvers
+            .iter()
+            .map(|(member, pair)| Approval {
+                signature: pair
+                    .sign(&manifest_hash)
+                    .expect("test approval signing should not fail"),
+                member: member.clone(),
+            })
+            .collect();
+        VersionedManifestEnvelope::V2(envelope)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn approved_envelope_passes_check_approvals() {
+        let (member_a, pair_a) = fake_keyed_member("member-a");
+        let (member_b, pair_b) = fake_keyed_member("member-b");
+        let envelope = FakeManifestBuilder::new()
+            .build_envelope_approved_by(&[(member_a.clone(), pair_a), (member_b.clone(), pair_b)]);
+
+        envelope
+            .check_approvals()
+            .expect("threshold approvals from generated members should verify");
+        assert_eq!(envelope.manifest_set().threshold, 2);
+        assert_eq!(
+            envelope.manifest_set().members,
+            vec![member_a.clone(), member_b.clone()]
+        );
+        assert_eq!(envelope.manifest_set_approvals().len(), 2);
+        assert_eq!(envelope.manifest_set_approvals()[0].member, member_a);
+        assert_eq!(envelope.manifest_set_approvals()[1].member, member_b);
+    }
+
+    #[test]
+    fn approved_envelope_respects_explicit_manifest_set() {
+        let (member, pair) = fake_keyed_member("member");
+        let envelope = FakeManifestBuilder::new()
+            .manifest_set(1, vec![member.clone(), fake_member("other")])
+            .build_envelope_approved_by(&[(member, pair)]);
+
+        envelope
+            .check_approvals()
+            .expect("a threshold-meeting subset of approvals should verify");
+        assert_eq!(envelope.manifest_set().members.len(), 2);
+        assert_eq!(envelope.manifest_set_approvals().len(), 1);
     }
 }
