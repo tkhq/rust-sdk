@@ -18,10 +18,20 @@
 //!    ephemeral public key is intentionally never sent as its own header:
 //!    verifiers must take it from the attestation document.
 //!
+//! [`verify_response_trust_chain`] and [`verify_quorum_signature`] implement
+//! the client side of this scheme.
+//!
 //! [`QosJson`] is a response adapter that serializes bodies with `qos_json`
 //! canonical JSON so signed bytes are reproducible.
 
 #![deny(missing_docs)]
+
+mod verify;
+
+pub use verify::{
+    ManifestCommitmentKind, SignedResponseParts, VerificationExpectations, VerifyError,
+    VerifyResponseError, verify_quorum_signature, verify_response_trust_chain,
+};
 
 use std::future::Future;
 use std::pin::Pin;
@@ -87,7 +97,7 @@ fn unix_timestamp() -> Option<u64> {
         .ok()
 }
 
-fn content_digest(body: &[u8]) -> String {
+pub(crate) fn content_digest(body: &[u8]) -> String {
     format!("sha-256=:{}:", STANDARD.encode(Sha256::digest(body)))
 }
 
@@ -95,18 +105,16 @@ fn signature_input(label: &str, created: u64) -> String {
     format!(r#"{SIGNATURE_COMPONENTS};created={created};keyid="{label}";alg="{SIGNATURE_ALG}""#)
 }
 
-fn signature_base(
+pub(crate) fn signature_base(
     method: &str,
     path: &str,
     status: StatusCode,
     digest: &str,
-    label: &str,
-    created: u64,
+    params: &str,
 ) -> Vec<u8> {
     format!(
-        "\"@method\": {method}\n\"@path\": {path}\n\"@status\": {}\n\"content-digest\": {digest}\n\"@signature-params\": {}",
+        "\"@method\": {method}\n\"@path\": {path}\n\"@status\": {}\n\"content-digest\": {digest}\n\"@signature-params\": {params}",
         status.as_u16(),
-        signature_input(label, created)
     )
     .into_bytes()
 }
@@ -375,8 +383,8 @@ where
             let mut signatures = Vec::new();
 
             {
-                let base =
-                    signature_base(&method, &path, parts.status, &digest, "ephemeral", created);
+                let params = signature_input("ephemeral", created);
+                let base = signature_base(&method, &path, parts.status, &digest, &params);
                 let signature = match signature_value(&shared.ephemeral_key, &base) {
                     Some(signature) => signature,
                     None => {
@@ -385,15 +393,13 @@ where
                         ));
                     }
                 };
-                signature_inputs.push(format!(
-                    "ephemeral={}",
-                    signature_input("ephemeral", created)
-                ));
+                signature_inputs.push(format!("ephemeral={params}"));
                 signatures.push(format!("ephemeral={signature}"));
             }
 
             if let Some(quorum_key) = &shared.quorum_key {
-                let base = signature_base(&method, &path, parts.status, &digest, "quorum", created);
+                let params = signature_input("quorum", created);
+                let base = signature_base(&method, &path, parts.status, &digest, &params);
                 let signature = match signature_value(quorum_key, &base) {
                     Some(signature) => signature,
                     None => {
@@ -402,7 +408,7 @@ where
                         ));
                     }
                 };
-                signature_inputs.push(format!("quorum={}", signature_input("quorum", created)));
+                signature_inputs.push(format!("quorum={params}"));
                 signatures.push(format!("quorum={signature}"));
             }
 
