@@ -1,6 +1,6 @@
 //! Deploy debug-logs command.
 
-use crate::output::Ctx;
+use crate::output::{Ctx, StdCtx};
 use crate::{shell_eprintln, shell_println};
 use anyhow::Context;
 use chrono::{DateTime, SecondsFormat, Utc};
@@ -119,7 +119,7 @@ pub struct Args {
 }
 
 /// Run the `deploy debug-logs` command.
-pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> anyhow::Result<()> {
+pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<()> {
     let auth = crate::client::build_client().await?;
 
     let request = DebugLogQueryRequest {
@@ -171,8 +171,8 @@ impl DebugLogQueryRequest {
     }
 }
 
-async fn query_debug_logs<W: Write>(
-    ctx: &mut Ctx<W>,
+async fn query_debug_logs(
+    ctx: &mut StdCtx,
     client: &turnkey_client::TurnkeyClient<TurnkeyP256ApiKey>,
     request: DebugLogQueryRequest,
 ) -> anyhow::Result<()> {
@@ -325,9 +325,9 @@ impl DebugLogPrinter {
         }
     }
 
-    fn print_response<W: Write>(
+    fn print_response<W: Write, W2: Write>(
         &mut self,
-        ctx: &mut Ctx<W>,
+        ctx: &mut Ctx<W, W2>,
         response: &GetTvcDeploymentDebugLogsResponse,
     ) -> anyhow::Result<()> {
         for entry in &response.entries {
@@ -541,9 +541,7 @@ mod tests {
             ],
         };
         let mut printer = DebugLogPrinter::new(false, 1000, false);
-        let shell =
-            crate::output::Shell::from_write(Vec::new(), crate::output::MessageFormat::Human);
-        let mut ctx = Ctx::new(shell, false);
+        let mut ctx = Ctx::new(crate::output::EmptyShell::default(), false);
 
         printer.print_response(&mut ctx, &response).unwrap();
 

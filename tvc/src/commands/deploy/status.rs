@@ -2,13 +2,12 @@
 
 use anyhow::Context;
 use clap::Args as ClapArgs;
-use std::io::Write;
 use turnkey_client::generated::GetTvcDeploymentRequest;
 use turnkey_client::generated::external::data::v1::TvcDeployment;
 
 use crate::client::fetch_tvc_app;
 use crate::commands::display::{format_egress_enabled, yes_no};
-use crate::output::Ctx;
+use crate::output::StdCtx;
 use crate::shell_println;
 
 /// Get the status of a deployment.
@@ -21,7 +20,7 @@ pub struct Args {
 }
 
 /// Run the deploy status command.
-pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> anyhow::Result<()> {
+pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<()> {
     let auth = crate::client::build_client().await?;
 
     let request = GetTvcDeploymentRequest {

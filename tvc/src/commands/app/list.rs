@@ -2,12 +2,11 @@
 
 use anyhow::Context;
 use clap::Args as ClapArgs;
-use std::io::Write;
 use turnkey_client::generated::GetTvcAppsRequest;
 use turnkey_client::generated::external::data::v1::TvcApp;
 
 use crate::commands::display::format_egress_enabled;
-use crate::output::Ctx;
+use crate::output::StdCtx;
 use crate::shell_println;
 
 const SEPARATOR_WIDTH: usize = 40;
@@ -22,7 +21,7 @@ pub struct Args {
 }
 
 /// Run the app list command.
-pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> anyhow::Result<()> {
+pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<()> {
     let auth = crate::client::build_client().await?;
 
     let response = auth
@@ -55,7 +54,7 @@ fn filter_by_name(apps: &mut Vec<TvcApp>, name: Option<&str>) {
     }
 }
 
-fn render_app<W: Write>(ctx: &mut Ctx<W>, app: &TvcApp) -> anyhow::Result<()> {
+fn render_app(ctx: &mut StdCtx, app: &TvcApp) -> anyhow::Result<()> {
     let live = app.live_deployment_id.as_deref().unwrap_or("(none)");
     let mut lines = vec![
         format!("Name: {}", app.name),

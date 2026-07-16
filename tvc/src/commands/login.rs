@@ -4,13 +4,13 @@ use crate::config::turnkey::{
     API_BASE_URL_PROD, Config, KeyCurve, OrgConfig, StoredApiKey, StoredQosOperatorKey,
     dashboard_base_url, default_api_key_path, default_operator_key_path, default_org_dir,
 };
-use crate::output::Ctx;
+use crate::output::StdCtx;
 use crate::prompts::{self, error_required_in_non_interactive};
 use crate::{shell_eprintln, shell_print, shell_println};
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Args as ClapArgs;
 use qos_p256::P256Pair;
-use std::io::{BufRead, Write};
+use std::io::BufRead;
 use tracing::debug;
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use turnkey_client::generated::GetWhoamiRequest;
@@ -58,7 +58,7 @@ struct LoginPlan {
     api_key_policy: ApiKeyPolicy,
 }
 
-pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
+pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<()> {
     debug!(
         non_interactive = ctx.is_non_interactive(),
         org_arg_present = args.org.is_some(),
@@ -79,7 +79,7 @@ pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> Result<()> {
 
 /// Permanently delete a saved login profile: its config entry and its API and
 /// operator key files on disk.
-pub async fn run_delete<W: Write>(ctx: &mut Ctx<W>, args: DeleteArgs) -> Result<()> {
+pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs) -> Result<()> {
     let is_non_interactive = ctx.is_non_interactive();
     debug!(
         non_interactive = is_non_interactive,
@@ -272,8 +272,8 @@ impl std::fmt::Display for ProfileChoice<'_> {
     }
 }
 
-fn build_login_plan_interactive<W: Write>(
-    ctx: &mut Ctx<W>,
+fn build_login_plan_interactive(
+    ctx: &mut StdCtx,
     args: Args,
     config: &Config,
 ) -> Result<LoginPlan> {
@@ -300,11 +300,7 @@ fn build_login_plan_non_interactive(args: Args) -> Result<LoginPlan> {
     })
 }
 
-async fn execute_login<W: Write>(
-    ctx: &mut Ctx<W>,
-    mut config: Config,
-    plan: LoginPlan,
-) -> Result<()> {
+async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) -> Result<()> {
     let (alias, org_config) = match plan.org {
         OrgPlan::Existing(query) => {
             let alias = match find_org(&config, &query) {
@@ -362,8 +358,8 @@ async fn execute_login<W: Write>(
     print_success(ctx, &alias, &org_config, &api_key, &operator_key, &whoami)
 }
 
-fn prompt_for_org_plan<W: Write>(
-    ctx: &mut Ctx<W>,
+fn prompt_for_org_plan(
+    ctx: &mut StdCtx,
     config: &Config,
     api_base_url_override: Option<&str>,
 ) -> Result<OrgPlan> {
@@ -402,8 +398,8 @@ fn prompt_for_org_plan<W: Write>(
     }
 }
 
-fn prompt_for_new_org_inputs<W: Write>(
-    ctx: &mut Ctx<W>,
+fn prompt_for_new_org_inputs(
+    ctx: &mut StdCtx,
     api_base_url_override: Option<&str>,
 ) -> Result<OrgPlan> {
     let dashboard_url = dashboard_base_url(api_base_url_override.unwrap_or(API_BASE_URL_PROD));
@@ -483,10 +479,7 @@ fn update_api_base_url_from_override(
     }
 }
 
-async fn generate_api_key<W: Write>(
-    ctx: &mut Ctx<W>,
-    org_config: &OrgConfig,
-) -> Result<StoredApiKey> {
+async fn generate_api_key(ctx: &mut StdCtx, org_config: &OrgConfig) -> Result<StoredApiKey> {
     debug!("generating new API key");
     shell_println!(ctx)?;
     shell_println!(ctx, "Generating API key...")?;
@@ -527,7 +520,7 @@ async fn generate_api_key<W: Write>(
     Ok(api_key)
 }
 
-fn wait_for_dashboard_registration<W: Write>(ctx: &mut Ctx<W>) -> Result<()> {
+fn wait_for_dashboard_registration(ctx: &mut StdCtx) -> Result<()> {
     shell_print!(ctx, "Press Enter when done...")?;
 
     let mut input = String::new();
@@ -535,8 +528,8 @@ fn wait_for_dashboard_registration<W: Write>(ctx: &mut Ctx<W>) -> Result<()> {
     Ok(())
 }
 
-async fn find_or_generate_operator_key<W: Write>(
-    ctx: &mut Ctx<W>,
+async fn find_or_generate_operator_key(
+    ctx: &mut StdCtx,
     org_config: &OrgConfig,
 ) -> Result<StoredQosOperatorKey> {
     debug!(operator_key_path = %org_config.operator_key_path.display(), "resolving operator key");
@@ -622,8 +615,8 @@ async fn verify_credentials(
     })
 }
 
-fn print_success<W: Write>(
-    ctx: &mut Ctx<W>,
+fn print_success(
+    ctx: &mut StdCtx,
     alias: &str,
     org_config: &OrgConfig,
     api_key: &StoredApiKey,

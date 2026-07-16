@@ -1,7 +1,7 @@
 //! Re-encrypt share command.
 
 use crate::operator_key::{OperatorSeedSource, load_operator_pair};
-use crate::output::{Ctx, Message};
+use crate::output::{Message, StdCtx};
 use crate::pair::{HexSeed, Pair};
 use crate::provisioning::ProvisionBundle;
 use crate::quorum_key_metadata::QuorumKeyMetadata;
@@ -11,7 +11,6 @@ use anyhow::{Context, anyhow};
 use clap::Args as ClapArgs;
 use qos_core::protocol::services::boot::{Approval, QuorumMember, VersionedManifestEnvelope};
 use serde::{Deserialize, Serialize};
-use std::io::Write;
 use std::path::{Path, PathBuf};
 
 /// Re-encrypt a share with an ephemeral key.
@@ -78,7 +77,7 @@ impl Message for ReEncryptedShareOutput {
 }
 
 /// Run the re-encrypt-share command.
-pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> anyhow::Result<()> {
+pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<()> {
     let operator_seed_source =
         OperatorSeedSource::from_args(args.operator_seed, args.operator_seed_path)?;
 
@@ -189,8 +188,8 @@ fn find_share_set_member(
         })
 }
 
-async fn write_output<W: Write>(
-    ctx: &mut Ctx<W>,
+async fn write_output(
+    ctx: &mut StdCtx,
     path: Option<&Path>,
     output: &ReEncryptedShareOutput,
 ) -> anyhow::Result<()> {

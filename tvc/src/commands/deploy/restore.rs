@@ -2,11 +2,10 @@
 
 use anyhow::Context;
 use clap::Args as ClapArgs;
-use std::io::Write;
 use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::RestoreTvcDeploymentIntent;
 
-use crate::output::Ctx;
+use crate::output::StdCtx;
 use crate::shell_println;
 
 /// Restore a deleted deployment.
@@ -19,7 +18,7 @@ pub struct Args {
 }
 
 /// Run the deploy restore command.
-pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> anyhow::Result<()> {
+pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<()> {
     let auth = crate::client::build_client().await?;
 
     let intent = RestoreTvcDeploymentIntent {

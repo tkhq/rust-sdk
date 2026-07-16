@@ -6,7 +6,7 @@ use clap::ValueEnum;
 use serde::Serialize;
 use std::error::Error;
 use std::fmt::{self, Display};
-use std::io::{self, IsTerminal, Write};
+use std::io::{self, IsTerminal, Stderr, Stdout, Write};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
 pub enum MessageFormat {
@@ -48,15 +48,15 @@ pub trait Message: Serialize {
     }
 }
 
-pub struct Shell<W: Write = Box<dyn Write + Send>> {
-    stdout: W,
-    stderr: W,
+pub struct Shell<Out = Stdout, Err = Stderr> {
+    stdout: Out,
+    stderr: Err,
     color: ColorChoice,
     use_color: bool,
     message_format: MessageFormat,
 }
 
-impl Shell<Box<dyn Write + Send>> {
+impl Shell {
     pub fn standard(message_format: MessageFormat, color: ColorChoice) -> Self {
         let use_color = match color {
             ColorChoice::Auto => io::stderr().is_terminal(),
@@ -65,8 +65,8 @@ impl Shell<Box<dyn Write + Send>> {
         };
 
         Self {
-            stdout: Box::new(io::stdout()),
-            stderr: Box::new(io::stderr()),
+            stdout: io::stdout(),
+            stderr: io::stderr(),
             color,
             use_color,
             message_format,
@@ -74,11 +74,25 @@ impl Shell<Box<dyn Write + Send>> {
     }
 }
 
-impl<W: Write> Shell<W> {
+impl<W, W2> Shell<W, W2> {
     pub fn message_format(&self) -> MessageFormat {
         self.message_format
     }
 
+    pub fn color(&self) -> ColorChoice {
+        self.color
+    }
+
+    fn style(&self, color: AnsiColor) -> Style {
+        if self.use_color {
+            Style::new().bold().fg_color(Some(Color::Ansi(color)))
+        } else {
+            Style::new()
+        }
+    }
+}
+
+impl<W: Write, W2: Write> Shell<W, W2> {
     pub fn emit<M: Message>(&mut self, message: &M) -> Result<()> {
         match self.message_format {
             MessageFormat::Human => self.human().line(message.human_message()),
@@ -95,20 +109,8 @@ impl<W: Write> Shell<W> {
     /// message format is [`MessageFormat::Human`] and is a silent no-op
     /// otherwise, so it must never carry machine-readable output — use
     /// [`Shell::emit`] for that.
-    pub fn human(&mut self) -> Human<'_, W> {
+    pub fn human(&mut self) -> Human<'_, W, W2> {
         Human(self)
-    }
-
-    pub fn color(&self) -> ColorChoice {
-        self.color
-    }
-
-    fn style(&self, color: AnsiColor) -> Style {
-        if self.use_color {
-            Style::new().bold().fg_color(Some(Color::Ansi(color)))
-        } else {
-            Style::new()
-        }
     }
 }
 
@@ -118,9 +120,9 @@ impl<W: Write> Shell<W> {
 /// is a silent no-op otherwise, so it is meant for
 /// human-facing output (progress, prompts, spacing) — never for
 /// machine-readable JSON output, which must go through [`Shell::emit`].
-pub struct Human<'a, W: Write>(&'a mut Shell<W>);
+pub struct Human<'a, W: Write, W2: Write>(&'a mut Shell<W, W2>);
 
-impl<W: Write> Human<'_, W> {
+impl<W: Write, W2: Write> Human<'_, W, W2> {
     pub fn line(&mut self, message: impl Display) -> Result<()> {
         if matches!(self.0.message_format, MessageFormat::Human) {
             writeln!(self.0.stdout, "{message}")?;
@@ -176,16 +178,18 @@ impl<W: Write> Human<'_, W> {
 }
 
 /// Bundles the `Shell` with cross-cutting CLI flags
-pub struct Ctx<W: Write = Box<dyn Write + Send>> {
-    shell: Shell<W>,
+pub struct Ctx<W, W2> {
+    shell: Shell<W, W2>,
     non_interactive: bool,
 }
 
-impl<W: Write> Ctx<W> {
+pub type StdCtx = Ctx<Stdout, Stderr>;
+
+impl<W: Write, W2: Write> Ctx<W, W2> {
     /// `non_interactive` is the raw `--non-interactive` flag; JSON output mode
     /// always forces non-interactive regardless of the flag, since a piped
     /// consumer can't answer prompts.
-    pub fn new(shell: Shell<W>, non_interactive: bool) -> Self {
+    pub fn new(shell: Shell<W, W2>, non_interactive: bool) -> Self {
         let non_interactive = non_interactive || shell.message_format().is_json();
         Self {
             shell,
@@ -193,7 +197,7 @@ impl<W: Write> Ctx<W> {
         }
     }
 
-    pub fn shell(&mut self) -> &mut Shell<W> {
+    pub fn shell(&mut self) -> &mut Shell<W, W2> {
         &mut self.shell
     }
 
@@ -307,18 +311,41 @@ impl Message for ErrorMessage {
 }
 
 #[cfg(test)]
+pub use tests::*;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use serde::Serialize;
+    use std::io::Empty;
 
-    impl Shell<Vec<u8>> {
-        pub fn from_write(stdout: Vec<u8>, message_format: MessageFormat) -> Self {
+    pub type TestShell = Shell<Vec<u8>, Vec<u8>>;
+    pub type EmptyShell = Shell<Empty, Empty>;
+
+    impl<W: Default, W2: Default> Default for Shell<W, W2> {
+        fn default() -> Self {
             Self {
-                stdout,
-                stderr: Vec::new(),
+                stdout: Default::default(),
+                stderr: Default::default(),
                 color: ColorChoice::Never,
                 use_color: false,
-                message_format,
+                message_format: MessageFormat::Human,
+            }
+        }
+    }
+
+    impl TestShell {
+        pub fn with_json_formatter() -> Self {
+            Self {
+                message_format: MessageFormat::Json,
+                ..Default::default()
+            }
+        }
+
+        pub fn with_human_formatter() -> Self {
+            Self {
+                message_format: MessageFormat::Human,
+                ..Default::default()
             }
         }
 
@@ -348,44 +375,42 @@ mod tests {
 
     #[test]
     fn shell_emit_json_flattens_reason_into_message() {
-        let mut shell = Shell::from_write(Vec::new(), MessageFormat::Json);
+        let mut shell = TestShell::with_json_formatter();
 
         shell.emit(&TestMessage { value: "ok" }).unwrap();
 
-        let output = String::from_utf8(shell.into_stdout()).unwrap();
-        assert_eq!(output, "{\"reason\":\"test-message\",\"value\":\"ok\"}\n");
+        assert_eq!(
+            shell.into_stdout(),
+            concat!(r#"{"reason":"test-message","value":"ok"}"#, "\n").as_bytes()
+        );
     }
 
     #[test]
     fn shell_emit_human_uses_human_message() {
-        let mut shell = Shell::from_write(Vec::new(), MessageFormat::Human);
+        let mut shell = TestShell::with_human_formatter();
 
         shell.emit(&TestMessage { value: "ok" }).unwrap();
 
-        let output = String::from_utf8(shell.into_stdout()).unwrap();
-        assert_eq!(output, "value: ok\n");
+        assert_eq!(shell.into_stdout(), "value: ok\n".as_bytes());
     }
 
     #[test]
     fn ctx_reflects_explicit_non_interactive_flag() {
-        let shell = Shell::from_write(Vec::new(), MessageFormat::Human);
-        let ctx = Ctx::new(shell, true);
+        let ctx = Ctx::new(TestShell::with_human_formatter(), true);
 
         assert!(ctx.is_non_interactive());
     }
 
     #[test]
     fn ctx_forces_non_interactive_in_json_mode_regardless_of_flag() {
-        let shell = Shell::from_write(Vec::new(), MessageFormat::Json);
-        let ctx = Ctx::new(shell, false);
+        let ctx = Ctx::new(TestShell::with_json_formatter(), false);
 
         assert!(ctx.is_non_interactive());
     }
 
     #[test]
     fn ctx_is_interactive_when_flag_unset_and_format_is_human() {
-        let shell = Shell::from_write(Vec::new(), MessageFormat::Human);
-        let ctx = Ctx::new(shell, false);
+        let ctx = Ctx::new(TestShell::with_human_formatter(), false);
 
         assert!(!ctx.is_non_interactive());
     }

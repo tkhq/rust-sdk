@@ -2,7 +2,6 @@
 
 use anyhow::{Context, anyhow};
 use clap::Args as ClapArgs;
-use std::io::Write;
 use turnkey_client::generated::{
     GetAppStatusRequest,
     external::data::v1::{AppStatus, DeploymentStatus},
@@ -11,7 +10,7 @@ use turnkey_client::generated::{
 use crate::{
     client::{fetch_tvc_app, fetch_tvc_deployment},
     commands::display::format_egress_enabled,
-    output::Ctx,
+    output::StdCtx,
     shell_println,
 };
 
@@ -25,7 +24,7 @@ pub struct Args {
 }
 
 /// Run the deploy get-status command.
-pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> anyhow::Result<()> {
+pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<()> {
     let Args {
         deploy_id: deployment_id,
     } = args;

@@ -136,9 +136,9 @@ impl DeployConfig {
     /// Non-placeholder fields are preserved unchanged so partial edits work.
     ///
     /// `saved_app_id` is offered as the default for the App ID prompt when set.
-    pub fn fill_interactively<W: Write>(
+    pub fn fill_interactively<W: Write, W2: Write>(
         &mut self,
-        ctx: &mut Ctx<W>,
+        ctx: &mut Ctx<W, W2>,
         saved_app_id: Option<&str>,
     ) -> Result<()> {
         if self.app_id.starts_with("<FILL_IN") {
@@ -313,7 +313,7 @@ impl Display for DeployConfigValidationErrors {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::output::Shell;
+    use crate::output::EmptyShell;
     use turnkey_client::generated::external::data::v1::{
         TvcContainerSpec, TvcDeployment, TvcManifest,
     };
@@ -478,7 +478,7 @@ mod tests {
         config.expected_pivot_digest = "sha256:abc".into();
         config.pivot_container_encrypted_pull_secret = None;
 
-        let shell = Shell::from_write(Vec::new(), crate::output::MessageFormat::Human);
+        let shell = EmptyShell::default();
         let mut ctx = Ctx::new(shell, false);
         config.fill_interactively(&mut ctx, None).unwrap();
         assert_eq!(config.app_id, "app_xyz");

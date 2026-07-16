@@ -1,12 +1,11 @@
 //! Deploy post-share command.
 
 use crate::commands::keys::re_encrypt_share::ReEncryptedShareOutput;
-use crate::output::{Ctx, Message};
+use crate::output::{Message, StdCtx};
 use crate::util::read_json_file;
 use anyhow::Context;
 use clap::Args as ClapArgs;
 use serde::Serialize;
-use std::io::Write;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::{PostTvcQuorumKeyShareIntent, QuorumKeyShareApprovalBundle};
@@ -25,7 +24,7 @@ pub struct Args {
 }
 
 /// Run the deploy post-share command.
-pub async fn run<W: Write>(ctx: &mut Ctx<W>, args: Args) -> anyhow::Result<()> {
+pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<()> {
     let re_encrypted_share: ReEncryptedShareOutput =
         read_json_file(&args.re_encrypted_share, "re-encrypted share output").await?;
     let intent =
