@@ -94,7 +94,8 @@ async fn load_operator_public_key() -> Option<String> {
     let config = Config::load().await.ok()?;
 
     // Get active org config
-    let (_, org_config) = config.active_org_config()?;
-    let operator_key = StoredQosOperatorKey::load(org_config).await.ok()??;
+    let (alias, org_config) = config.active_org_config()?;
+    let local = org_config.select_local_record(alias).ok()?;
+    let operator_key = StoredQosOperatorKey::load(&local.key_path).await.ok()??;
     Some(operator_key.public_key)
 }

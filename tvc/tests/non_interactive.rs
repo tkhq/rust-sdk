@@ -13,7 +13,9 @@ use std::fs;
 use std::io::Write;
 use tempfile::{NamedTempFile, TempDir};
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
-use tvc::config::turnkey::{Config, KeyCurve, OrgConfig, StoredApiKey};
+use tvc::config::turnkey::{
+    Config, KeyCurve, OperatorKind, OperatorRecord, OrgConfig, StoredApiKey,
+};
 
 const NON_INTERACTIVE_ENV: &str = "TVC_NON_INTERACTIVE";
 const LOCAL_API_BASE_URL: &str = "http://127.0.0.1:1";
@@ -42,17 +44,20 @@ fn write_config(
             OrgConfig {
                 id: "org-test".to_string(),
                 api_key_path,
-                operator_key_path,
                 api_base_url: LOCAL_API_BASE_URL.to_string(),
+                default_operator_kind: OperatorKind::Local,
+                operators: vec![OperatorRecord::local(operator_key_path)],
+                extra: toml::Table::new(),
             },
         )]),
         last_created_app_id: HashMap::new(),
         last_operator_ids: HashMap::from([("test".to_string(), last_operator_ids)]),
+        extra: toml::Table::new(),
     };
 
     fs::write(
         turnkey_dir.join("tvc.config.toml"),
-        toml::to_string_pretty(&config).unwrap(),
+        format!("version = 1\n{}", toml::to_string_pretty(&config).unwrap()),
     )
     .unwrap();
 }

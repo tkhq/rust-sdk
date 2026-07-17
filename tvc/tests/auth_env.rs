@@ -4,7 +4,9 @@ use std::collections::HashMap;
 use std::fs;
 use tempfile::TempDir;
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
-use tvc::config::turnkey::{Config, KeyCurve, OrgConfig, StoredApiKey};
+use tvc::config::turnkey::{
+    Config, KeyCurve, OperatorKind, OperatorRecord, OrgConfig, StoredApiKey,
+};
 
 const ENV_ORG_ID: &str = "TVC_ORG_ID";
 const ENV_API_KEY_PUBLIC: &str = "TVC_API_KEY_PUBLIC";
@@ -96,16 +98,19 @@ fn auth_falls_back_to_disk_config_when_required_env_vars_are_unset() {
             OrgConfig {
                 id: "org-from-disk".to_string(),
                 api_key_path,
-                operator_key_path,
                 api_base_url: LOCAL_API_BASE_URL.to_string(),
+                default_operator_kind: OperatorKind::Local,
+                operators: vec![OperatorRecord::local(operator_key_path)],
+                extra: toml::Table::new(),
             },
         )]),
         last_created_app_id: HashMap::new(),
         last_operator_ids: HashMap::new(),
+        extra: toml::Table::new(),
     };
     fs::write(
         turnkey_dir.join("tvc.config.toml"),
-        toml::to_string_pretty(&config).unwrap(),
+        format!("version = 1\n{}", toml::to_string_pretty(&config).unwrap()),
     )
     .unwrap();
 

@@ -1,7 +1,7 @@
 //! Approve deploy command - cryptographically approve a QOS manifest.
 
 use crate::config::turnkey::Config;
-use crate::operator_key::{OperatorSeedSource, load_operator_pair};
+use crate::local_operator_key::{LocalOperatorSeedSource, resolve_local_operator};
 use crate::output::{Message, StdCtx};
 use crate::pair::HexSeed;
 use crate::prompts;
@@ -113,15 +113,17 @@ struct PostTarget {
 
 struct ResolvedApproveInputs {
     manifest: VersionedManifest,
-    operator_seed_source: Option<OperatorSeedSource>,
+    operator_seed_source: Option<LocalOperatorSeedSource>,
     approval_out: Option<PathBuf>,
     dry_run: bool,
     post_target: Option<PostTarget>,
 }
 
 pub async fn run(ctx: &mut StdCtx, mut args: Args) -> anyhow::Result<()> {
-    let operator_seed_source =
-        OperatorSeedSource::from_args(args.operator_seed.take(), args.operator_seed_path.take())?;
+    let operator_seed_source = LocalOperatorSeedSource::from_args(
+        args.operator_seed.take(),
+        args.operator_seed_path.take(),
+    )?;
 
     let inputs = if ctx.is_non_interactive() {
         build_inputs_non_interactive(ctx, args, operator_seed_source).await?
@@ -135,7 +137,7 @@ pub async fn run(ctx: &mut StdCtx, mut args: Args) -> anyhow::Result<()> {
 async fn build_inputs_interactive(
     ctx: &mut StdCtx,
     args: Args,
-    operator_seed_source: Option<OperatorSeedSource>,
+    operator_seed_source: Option<LocalOperatorSeedSource>,
 ) -> anyhow::Result<ResolvedApproveInputs> {
     let do_prompt_user = !args.dangerous_skip_interactive;
 
@@ -196,7 +198,7 @@ async fn build_inputs_interactive(
 async fn build_inputs_non_interactive(
     ctx: &mut StdCtx,
     args: Args,
-    operator_seed_source: Option<OperatorSeedSource>,
+    operator_seed_source: Option<LocalOperatorSeedSource>,
 ) -> anyhow::Result<ResolvedApproveInputs> {
     if !args.dangerous_skip_interactive {
         bail_required_in_non_interactive("--dangerous-skip-interactive")?;
@@ -286,12 +288,12 @@ async fn load_manifest(
 
 async fn sign_and_output(
     ctx: &mut StdCtx,
-    operator_seed_source: Option<OperatorSeedSource>,
+    operator_seed_source: Option<LocalOperatorSeedSource>,
     approval_out: Option<&Path>,
     manifest: &VersionedManifest,
 ) -> anyhow::Result<Approval> {
     let pair: Box<dyn crate::pair::Pair> =
-        Box::new(load_operator_pair(operator_seed_source).await?);
+        Box::new(resolve_local_operator(operator_seed_source).await?);
 
     let approval = generate_approval(pair, manifest).await?;
 

@@ -1,8 +1,8 @@
 //! Stored QOS operator key for manifest signing.
 
-use super::OrgConfig;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use tracing::debug;
 
 /// Operator key stored in operator.json
@@ -15,9 +15,8 @@ pub struct StoredQosOperatorKey {
 }
 
 impl StoredQosOperatorKey {
-    /// Load operator key from the path specified in org config
-    pub async fn load(org_config: &OrgConfig) -> Result<Option<Self>> {
-        let path = &org_config.operator_key_path;
+    /// Load an operator key from a registered `operator.json` path.
+    pub async fn load(path: &Path) -> Result<Option<Self>> {
         debug!(operator_key_path = %path.display(), "loading stored operator key");
         if !path.exists() {
             debug!(operator_key_path = %path.display(), "stored operator key not found");
@@ -40,9 +39,8 @@ impl StoredQosOperatorKey {
         Ok(Some(key))
     }
 
-    /// Save operator key to the path specified in org config
-    pub async fn save(&self, org_config: &OrgConfig) -> Result<()> {
-        let path = &org_config.operator_key_path;
+    /// Save an operator key to a registered `operator.json` path.
+    pub async fn save(&self, path: &Path) -> Result<()> {
         debug!(operator_key_path = %path.display(), "saving stored operator key");
 
         // Ensure parent directory exists

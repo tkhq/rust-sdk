@@ -1,8 +1,9 @@
 //! Login command for authenticating with Turnkey.
 
 use crate::config::turnkey::{
-    API_BASE_URL_PROD, Config, KeyCurve, OrgConfig, StoredApiKey, StoredQosOperatorKey,
-    dashboard_base_url, default_api_key_path, default_operator_key_path, default_org_dir,
+    API_BASE_URL_PROD, Config, KeyCurve, OperatorRecordKind, OrgConfig, StoredApiKey,
+    StoredQosOperatorKey, dashboard_base_url, default_api_key_path, default_operator_key_path,
+    default_org_dir,
 };
 use crate::output::StdCtx;
 use crate::prompts::{self, error_required_in_non_interactive};
@@ -10,6 +11,7 @@ use crate::{shell_eprintln, shell_print, shell_println};
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Args as ClapArgs;
 use qos_p256::P256Pair;
+use std::collections::BTreeSet;
 use std::io::BufRead;
 use tracing::debug;
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
@@ -158,8 +160,20 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs) -> Result<()> {
     // default profile is removed by deleting that whole directory. Custom
     // (hand-edited) key paths are left untouched with a warning, since the user
     // placed them deliberately and they may live outside our config tree.
-    let uses_default_layout = removed.api_key_path == default_api_key_path(&alias)?
-        && removed.operator_key_path == default_operator_key_path(&alias)?;
+    let default_api_key = default_api_key_path(&alias)?;
+    let default_operator_key = default_operator_key_path(&alias)?;
+    let local_key_paths: Vec<_> = removed
+        .operators
+        .iter()
+        .filter_map(|operator| match &operator.kind {
+            OperatorRecordKind::Local(local) => Some(&local.key_path),
+            _ => None,
+        })
+        .collect();
+    let uses_default_layout = removed.api_key_path == default_api_key
+        && local_key_paths
+            .iter()
+            .all(|path| *path == &default_operator_key);
 
     let removed_dir = if uses_default_layout {
         let dir = default_org_dir(&alias)?;
@@ -184,8 +198,13 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs) -> Result<()> {
             "WARNING: custom key paths are configured and were NOT deleted."
         )?;
         shell_eprintln!(ctx, "Remove them manually if no longer needed:")?;
-        shell_eprintln!(ctx, "  {}", removed.api_key_path.display())?;
-        shell_eprintln!(ctx, "  {}", removed.operator_key_path.display())?;
+        let custom_paths = local_key_paths
+            .into_iter()
+            .chain(Some(&removed.api_key_path))
+            .collect::<BTreeSet<_>>();
+        for path in custom_paths {
+            shell_eprintln!(ctx, "  {}", path.display())?;
+        }
         None
     };
 
@@ -353,7 +372,7 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
     shell_println!(ctx, "Verifying credentials...")?;
 
     let whoami = verify_credentials(&api_key, &org_config.id, &org_config.api_base_url).await?;
-    let operator_key = find_or_generate_operator_key(ctx, &org_config).await?;
+    let operator_key = find_or_generate_operator_key(ctx, &alias, &org_config).await?;
 
     print_success(ctx, &alias, &org_config, &api_key, &operator_key, &whoami)
 }
@@ -530,11 +549,13 @@ fn wait_for_dashboard_registration(ctx: &mut StdCtx) -> Result<()> {
 
 async fn find_or_generate_operator_key(
     ctx: &mut StdCtx,
+    org_alias: &str,
     org_config: &OrgConfig,
 ) -> Result<StoredQosOperatorKey> {
-    debug!(operator_key_path = %org_config.operator_key_path.display(), "resolving operator key");
+    let local = org_config.select_local_record(org_alias)?;
+    debug!(operator_key_path = %local.key_path.display(), "resolving operator key");
 
-    if let Some(operator_key) = StoredQosOperatorKey::load(org_config).await? {
+    if let Some(operator_key) = StoredQosOperatorKey::load(&local.key_path).await? {
         debug!("using existing operator key");
         shell_println!(ctx, "Using existing operator key.")?;
         return Ok(operator_key);
@@ -554,7 +575,7 @@ async fn find_or_generate_operator_key(
         private_key,
     };
 
-    operator_key.save(org_config).await?;
+    operator_key.save(&local.key_path).await?;
 
     shell_println!(ctx)?;
     shell_println!(ctx, "Operator Key Generated!")?;
@@ -623,6 +644,7 @@ fn print_success(
     operator_key: &StoredQosOperatorKey,
     whoami: &WhoamiResult,
 ) -> Result<()> {
+    let local = org_config.select_local_record(alias)?;
     shell_println!(ctx)?;
     shell_println!(ctx, "Successfully logged in!")?;
     shell_println!(ctx)?;
@@ -650,11 +672,7 @@ fn print_success(
         "  API key:        {}",
         org_config.api_key_path.display()
     )?;
-    shell_println!(
-        ctx,
-        "  Operator key:   {}",
-        org_config.operator_key_path.display()
-    )?;
+    shell_println!(ctx, "  Operator key:   {}", local.key_path.display())?;
 
     Ok(())
 }
@@ -664,7 +682,7 @@ mod tests {
     use super::*;
     use crate::config::turnkey::{
         API_BASE_URL_DEV, API_BASE_URL_PREPROD, DASHBOARD_URL_DEV, DASHBOARD_URL_PREPROD,
-        DASHBOARD_URL_PROD,
+        DASHBOARD_URL_PROD, OperatorKind, OperatorRecord,
     };
     use std::collections::HashMap;
     use std::path::PathBuf;
@@ -730,12 +748,15 @@ mod tests {
                 OrgConfig {
                     id: "org-test".to_string(),
                     api_key_path: PathBuf::from("api_key.json"),
-                    operator_key_path: PathBuf::from("operator.json"),
                     api_base_url: api_base_url.to_string(),
+                    default_operator_kind: OperatorKind::Local,
+                    operators: vec![OperatorRecord::local(PathBuf::from("operator.json"))],
+                    extra: toml::Table::new(),
                 },
             )]),
             last_created_app_id: HashMap::new(),
             last_operator_ids: HashMap::new(),
+            extra: toml::Table::new(),
         }
     }
 }
