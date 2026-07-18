@@ -28,6 +28,32 @@ Some commands support environment variables and command-line flags for
 programmatic use. Run command help, such as `tvc deploy create --help`, to see
 the supported inputs and precedence for that command.
 
+## Configuration
+
+### `--api-base-url`
+
+The `--api-base-url` flag (also settable as `TVC_API_BASE_URL`) overrides which
+Turnkey API endpoint `tvc` talks to. It defaults to `https://api.turnkey.com`.
+
+You typically only need this when pointing `tvc` at a non-production Turnkey
+environment — for example a staging cluster or a local API for development.
+The flag is available on `tvc login`; for newly configured orgs the value is
+stored alongside the org so subsequent commands hit the same environment, and
+for existing orgs it updates the stored value on that login.
+
+For programmatic use (CI, scripts), `TVC_API_BASE_URL` is also read directly by
+env-var auth alongside `TVC_ORG_ID` / `TVC_API_KEY_PUBLIC` / `TVC_API_KEY_PRIVATE`.
+
+```bash
+# One-off: log in against a staging environment
+tvc login --api-base-url https://api.staging.example.turnkey.com
+
+# CI: authenticate directly with env vars, including a non-prod base URL
+TVC_ORG_ID=... TVC_API_KEY_PUBLIC=... TVC_API_KEY_PRIVATE=... \
+  TVC_API_BASE_URL=https://api.staging.example.turnkey.com \
+  tvc app list
+```
+
 ## Usage
 
 ### Create an App
