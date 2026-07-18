@@ -23,7 +23,12 @@ pub struct Args {
     /// If not provided, will prompt interactively.
     #[arg(long, env = "TVC_ORG")]
     pub org: Option<String>,
-    /// Turnkey API base URL. Defaults to production for newly configured orgs.
+    /// Override the Turnkey API base URL (defaults to https://api.turnkey.com).
+    ///
+    /// Useful for pointing tvc at non-production Turnkey environments (e.g. a
+    /// staging or local API). For newly configured orgs the value is stored
+    /// alongside the org so subsequent commands hit the same environment; for
+    /// existing orgs it updates the stored value on this login.
     #[arg(long, env = "TVC_API_BASE_URL", value_name = "URL")]
     pub api_base_url: Option<String>,
 }
@@ -326,8 +331,11 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
 
     shell_println!(ctx, "Selected org: {} ({})", alias, org_config.id)?;
 
+    // Point active_org at the requested profile in memory. We deliberately do
+    // NOT persist the config yet: the whoami round-trip below is what proves
+    // the org ID is real and reachable with the current API key, and we don't
+    // want to leave a partially valid config on disk if that fails.
     config.set_active_org(&alias)?;
-    config.save().await?;
 
     let api_key = match StoredApiKey::load(&org_config).await? {
         Some(api_key) => {
@@ -352,10 +360,28 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
     shell_println!(ctx)?;
     shell_println!(ctx, "Verifying credentials...")?;
 
-    let whoami = verify_credentials(&api_key, &org_config.id, &org_config.api_base_url).await?;
+    // Validate the org ID BEFORE persisting the config so an invalid or
+    // unreachable org never leaves an entry pointing at nothing.
+    let whoami = verify_credentials(&api_key, &org_config.id, &org_config.api_base_url)
+        .await
+        .map_err(|err| org_verification_error(&org_config.id, err))?;
+
+    // Verification passed: safe to persist config now.
+    config.save().await?;
+
     let operator_key = find_or_generate_operator_key(ctx, &org_config).await?;
 
     print_success(ctx, &alias, &org_config, &api_key, &operator_key, &whoami)
+}
+
+/// Wrap a whoami failure with a user-facing message that names the org ID and
+/// points at the dashboard as the canonical source of truth for it.
+fn org_verification_error(org_id: &str, source: anyhow::Error) -> anyhow::Error {
+    source.context(format!(
+        "organization ID {org_id} could not be verified. \
+         Please check the ID and try again.\n\
+         You can copy the org ID from the Turnkey dashboard home page."
+    ))
 }
 
 fn prompt_for_org_plan(
