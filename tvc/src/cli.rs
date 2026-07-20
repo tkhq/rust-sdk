@@ -137,6 +137,9 @@ impl Commands {
                 AppCommands::Delete(args) => commands::app::delete::run(ctx, args).await,
             },
             Commands::Keys { command } => match command {
+                KeysCommands::CreateQuorumKey(args) => {
+                    commands::keys::create_quorum_key::run(ctx, args).await
+                }
                 KeysCommands::GenerateLocalQuorumKey(args) => {
                     commands::keys::generate_local_quorum_key::run(ctx, args).await
                 }
@@ -268,6 +271,8 @@ enum AppCommands {
 
 #[derive(Debug, Subcommand)]
 enum KeysCommands {
+    /// Create a hosted quorum key encrypted to hosted operator keys.
+    CreateQuorumKey(commands::keys::create_quorum_key::Args),
     /// Generate and shamir-split a local quorum key, encrypting each share to an operator key.
     GenerateLocalQuorumKey(commands::keys::generate_local_quorum_key::Args),
     /// Generate a template local quorum key configuration file.
@@ -292,6 +297,7 @@ impl AppCommands {
 impl KeysCommands {
     fn name(&self) -> &'static str {
         match self {
+            KeysCommands::CreateQuorumKey(_) => "keys create-quorum-key",
             KeysCommands::GenerateLocalQuorumKey(_) => "keys generate-local-quorum-key",
             KeysCommands::InitLocalQuorumKey(_) => "keys init-local-quorum-key",
             KeysCommands::ReEncryptLocalShare(_) => "keys re-encrypt-local-share",
