@@ -65,32 +65,33 @@ fn sample_manifest_envelope(
 }
 
 #[test]
-fn root_help_does_not_list_re_encrypt_share_command() {
+fn root_help_does_not_list_re_encrypt_local_share_command() {
     cargo_bin_cmd!("tvc")
         .arg("--help")
         .assert()
         .success()
-        .stdout(predicate::str::contains("re-encrypt-share").not());
+        .stdout(predicate::str::contains("re-encrypt-local-share").not());
 }
 
 #[test]
-fn keys_help_lists_re_encrypt_share_command() {
+fn keys_help_lists_re_encrypt_local_share_command_only() {
     cargo_bin_cmd!("tvc")
         .arg("keys")
         .arg("--help")
         .assert()
         .success()
-        .stdout(predicate::str::contains("re-encrypt-share"))
+        .stdout(predicate::str::contains("re-encrypt-local-share"))
+        .stdout(predicate::str::contains("re-encrypt-share").not())
         .stdout(predicate::str::contains(
-            "Re-encrypt a share for enclave provisioning",
+            "Re-encrypt a local share for enclave provisioning",
         ));
 }
 
 #[test]
-fn re_encrypt_share_help_lists_expected_flags() {
+fn re_encrypt_local_share_help_lists_expected_flags() {
     cargo_bin_cmd!("tvc")
         .arg("keys")
-        .arg("re-encrypt-share")
+        .arg("re-encrypt-local-share")
         .arg("--help")
         .assert()
         .success()
@@ -103,10 +104,10 @@ fn re_encrypt_share_help_lists_expected_flags() {
 }
 
 #[test]
-fn re_encrypt_share_requires_metadata_and_provision_bundle() {
+fn re_encrypt_local_share_requires_metadata_and_provision_bundle() {
     cargo_bin_cmd!("tvc")
         .arg("keys")
-        .arg("re-encrypt-share")
+        .arg("re-encrypt-local-share")
         .assert()
         .failure()
         .stderr(predicate::str::contains(
@@ -117,7 +118,7 @@ fn re_encrypt_share_requires_metadata_and_provision_bundle() {
 }
 
 #[test]
-fn re_encrypt_share_round_trips_metadata_share() {
+fn re_encrypt_local_share_round_trips_metadata_share() {
     let temp = TempDir::new().unwrap();
     let metadata_path = temp.path().join("quorum_key_metadata.json");
     let provision_bundle_path = temp.path().join("provision_bundle.json");
@@ -171,7 +172,7 @@ fn re_encrypt_share_round_trips_metadata_share() {
 
     cargo_bin_cmd!("tvc")
         .arg("keys")
-        .arg("re-encrypt-share")
+        .arg("re-encrypt-local-share")
         .arg("--quorum-key-metadata")
         .arg(&metadata_path)
         .arg("--provision-bundle")

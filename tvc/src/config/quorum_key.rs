@@ -1,4 +1,4 @@
-//! Quorum key configuration file format for `tvc keys generate-quorum-key`.
+//! Quorum key configuration file format for `tvc keys generate-local-quorum-key`.
 
 use crate::quorum_key_metadata::normalize_p256_public_key_hex;
 use anyhow::Context;
@@ -44,8 +44,9 @@ impl QuorumKeyConfig {
             .any(|k| k.starts_with("<FILL_IN"))
     }
 
-    /// Validate numeric constraints. Called by `generate_quorum_key`
-    /// before consuming the config.
+    /// Validate numeric constraints before consuming the config.
+    ///
+    /// Called by `generate_local_quorum_key`.
     pub fn validate(&self) -> anyhow::Result<()> {
         if self.has_placeholders() {
             anyhow::bail!("config contains placeholder operator public keys");

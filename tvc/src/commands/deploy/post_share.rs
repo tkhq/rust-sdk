@@ -1,6 +1,6 @@
 //! Deploy post-share command.
 
-use crate::commands::keys::re_encrypt_share::ReEncryptedShareOutput;
+use crate::commands::keys::re_encrypt_local_share::ReEncryptedShareOutput;
 use crate::output::{Message, StdCtx};
 use crate::util::read_json_file;
 use anyhow::Context;
@@ -14,7 +14,7 @@ use turnkey_client::generated::{PostTvcQuorumKeyShareIntent, QuorumKeyShareAppro
 #[derive(Debug, ClapArgs)]
 #[command(about, long_about = None)]
 pub struct Args {
-    /// Path to the re-encrypted share output from `tvc keys re-encrypt-share`.
+    /// Path to the re-encrypted share output from `tvc keys re-encrypt-local-share`.
     #[arg(long, value_name = "PATH", env = "TVC_RE_ENCRYPTED_SHARE")]
     pub re_encrypted_share: PathBuf,
 
@@ -83,7 +83,7 @@ fn build_post_tvc_quorum_key_share_intent(
 #[cfg(test)]
 mod tests {
     use super::build_post_tvc_quorum_key_share_intent;
-    use crate::commands::keys::re_encrypt_share::ReEncryptedShareOutput;
+    use crate::commands::keys::re_encrypt_local_share::ReEncryptedShareOutput;
     use qos_core::protocol::services::boot::{Approval, QuorumMember};
     use serde_json::json;
     use turnkey_client::generated::QuorumKeyShareApprovalBundle;

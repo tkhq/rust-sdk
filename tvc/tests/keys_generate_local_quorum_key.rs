@@ -23,7 +23,7 @@ struct EncryptedShare {
 }
 
 #[test]
-fn generate_quorum_key_writes_metadata() {
+fn generate_local_quorum_key_writes_metadata() {
     let temp = TempDir::new().unwrap();
     let config_path = temp.path().join("quorum_key.json");
     let metadata_path = temp.path().join("quorum_key_metadata.json");
@@ -53,7 +53,7 @@ fn generate_quorum_key_writes_metadata() {
 
     cargo_bin_cmd!("tvc")
         .arg("keys")
-        .arg("generate-quorum-key")
+        .arg("generate-local-quorum-key")
         .arg("--config-file")
         .arg(&config_path)
         .arg("--quorum-key-metadata-out")
@@ -99,7 +99,7 @@ fn generate_quorum_key_writes_metadata() {
 }
 
 #[test]
-fn generate_quorum_key_rejects_invalid_config() {
+fn generate_local_quorum_key_rejects_invalid_config() {
     let temp = TempDir::new().unwrap();
     let config_path = temp.path().join("quorum_key.json");
 
@@ -116,7 +116,7 @@ fn generate_quorum_key_rejects_invalid_config() {
 
     cargo_bin_cmd!("tvc")
         .arg("keys")
-        .arg("generate-quorum-key")
+        .arg("generate-local-quorum-key")
         .arg("--config-file")
         .arg(&config_path)
         .assert()
@@ -127,14 +127,34 @@ fn generate_quorum_key_rejects_invalid_config() {
 }
 
 #[test]
-fn keys_help_lists_generate_quorum_key() {
+fn keys_help_lists_local_quorum_key_commands_only() {
     cargo_bin_cmd!("tvc")
         .arg("keys")
         .arg("--help")
         .assert()
         .success()
-        .stdout(predicate::str::contains("generate-quorum-key"))
+        .stdout(predicate::str::contains("generate-local-quorum-key"))
+        .stdout(predicate::str::contains("init-local-quorum-key"))
+        .stdout(predicate::str::contains("generate-quorum-key").not())
+        .stdout(predicate::str::contains("init-quorum-key").not())
         .stdout(predicate::str::contains(
-            "Generate and shamir-split a quorum key, encrypting each share to an operator key",
+            "Generate and shamir-split a local quorum key, encrypting each share to an operator key",
         ));
+}
+
+#[test]
+fn old_local_quorum_key_command_names_are_rejected() {
+    cargo_bin_cmd!("tvc")
+        .arg("keys")
+        .arg("generate-quorum-key")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unrecognized subcommand"));
+
+    cargo_bin_cmd!("tvc")
+        .arg("keys")
+        .arg("init-quorum-key")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unrecognized subcommand"));
 }
