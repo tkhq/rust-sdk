@@ -1,6 +1,6 @@
 //! Re-encrypt local share command.
 
-use crate::operator_key::{OperatorSeedSource, load_operator_pair};
+use crate::local_operator_key::{LocalOperatorSeedSource, resolve_local_operator};
 use crate::output::{Message, StdCtx};
 use crate::pair::{HexSeed, Pair};
 use crate::provisioning::ProvisionBundle;
@@ -79,7 +79,7 @@ impl Message for ReEncryptedShareOutput {
 /// Run the re-encrypt-local-share command.
 pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<()> {
     let operator_seed_source =
-        OperatorSeedSource::from_args(args.operator_seed, args.operator_seed_path)?;
+        LocalOperatorSeedSource::from_args(args.operator_seed, args.operator_seed_path)?;
 
     if args.dangerous_skip_verification {
         shell_eprintln!(
@@ -92,7 +92,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<()> {
         read_json_file(&args.quorum_key_metadata, "quorum key metadata file").await?;
     let provision_bundle: ProvisionBundle =
         read_json_file(&args.provision_bundle, "provision bundle").await?;
-    let operator_pair = load_operator_pair(operator_seed_source).await?;
+    let operator_pair = resolve_local_operator(operator_seed_source).await?;
 
     let output = build_re_encrypted_share_output(
         &quorum_key_metadata,

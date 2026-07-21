@@ -1,6 +1,7 @@
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
 use std::fs;
+use tempfile::TempDir;
 
 fn fixture_seed_hex() -> String {
     fs::read_to_string("fixtures/seed.hex")
@@ -19,6 +20,23 @@ fn approve_requires_source() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("manifest source is required"));
+}
+
+#[test]
+fn approve_without_explicit_seed_requires_an_active_org() {
+    let temp = TempDir::new().unwrap();
+
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .arg("deploy")
+        .arg("approve")
+        .arg("--manifest")
+        .arg("fixtures/manifest.json")
+        .arg("--dangerous-skip-interactive")
+        .arg("--skip-post")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("No active organization"));
 }
 
 #[test]
