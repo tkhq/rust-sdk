@@ -6,13 +6,17 @@ use crate::{
         app::{AppConfig, AppConfigValidationErrors, OperatorSetParams},
         turnkey::{self, StoredQosOperatorKey},
     },
-    output::StdCtx,
+    output::{Ctx, StdCtx},
     prompts, shell_println,
 };
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result, anyhow, bail};
 use clap::Args as ClapArgs;
-use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    io,
+    path::{Path, PathBuf},
+};
+use tracing::debug;
 use turnkey_client::generated::{CreateTvcAppIntent, TvcOperatorParams, TvcOperatorSetParams};
 
 /// Create a new TVC application from a config file.
@@ -23,6 +27,14 @@ pub struct Args {
     /// Path to the app configuration file (JSON).
     #[arg(short = 'c', long, value_name = "PATH", env = "TVC_APP_CONFIG")]
     pub config_file: PathBuf,
+
+    /// Create a new operator instead of reusing the most recently created one.
+    ///
+    /// By default `app create` reuses the operator from your last `app create`
+    /// (the same local operator key) rather than minting a new operator ID each
+    /// time. Pass this to force creating a new operator.
+    #[arg(long, env = "TVC_NO_OPERATOR_REUSE")]
+    pub no_operator_reuse: bool,
 
     #[command(flatten)]
     overrides: Overrides,
@@ -46,8 +58,104 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<()> {
         build_app_config_interactive(ctx, &args).await?
     };
 
-    let app_config = apply_overrides(config, &args.overrides);
+    let mut app_config = apply_overrides(config, &args.overrides);
+
+    // Reuse the previously-created operator by default so repeated `app create`
+    // runs don't mint a fresh operator ID for the same local key. The decision
+    // itself is pure (`decide_operator_reuse`); this endpoint does the I/O
+    // (loading saved IDs) and adapts multi-candidate handling to the mode.
+    let saved_ids = load_saved_operator_ids().await;
+    match decide_operator_reuse(
+        args.no_operator_reuse,
+        app_config.manifest_set_params.as_ref(),
+        &saved_ids,
+    ) {
+        OperatorReuse::KeepConfig => {}
+        OperatorReuse::Reuse(id) => apply_operator_reuse(ctx, &mut app_config, id)?,
+        OperatorReuse::MultipleCandidates(ids) => {
+            if ctx.is_non_interactive() {
+                bail!(
+                    "multiple saved operator IDs for the active org; \
+                     set manifestSetParams.existingOperatorIds in your config to reuse one, \
+                     or pass --no-operator-reuse to create a new operator"
+                );
+            }
+            let id = prompts::select("Select operator to reuse", ids)?;
+            apply_operator_reuse(ctx, &mut app_config, id)?;
+        }
+    }
+
     run_with_config(ctx, args, app_config).await
+}
+
+/// What to do with the manifest set's operators at create time.
+#[derive(Debug, PartialEq, Eq)]
+enum OperatorReuse {
+    /// Leave the config as-is: create new operators, or honor an explicit config.
+    KeepConfig,
+    /// Reuse exactly this saved operator ID.
+    Reuse(String),
+    /// Several saved operator IDs are candidates; the caller picks one.
+    MultipleCandidates(Vec<String>),
+}
+
+/// Decide whether to reuse a previously-created operator for the manifest set.
+///
+/// Pure and mode-agnostic: it performs no I/O and knows nothing about
+/// interactivity. The caller resolves [`OperatorReuse::MultipleCandidates`] by
+/// prompting (interactive) or erroring (non-interactive).
+fn decide_operator_reuse(
+    no_reuse: bool,
+    manifest_set_params: Option<&OperatorSetParams>,
+    saved_ids: &[String],
+) -> OperatorReuse {
+    // Opt-out: the user explicitly wants a fresh operator.
+    if no_reuse {
+        return OperatorReuse::KeepConfig;
+    }
+    // Nothing to override: reusing a whole set by id, or no manifest params.
+    let Some(params) = manifest_set_params else {
+        return OperatorReuse::KeepConfig;
+    };
+    // Config already reuses operators explicitly; respect it (also the
+    // non-interactive escape hatch for picking a specific operator).
+    if !params.existing_operator_ids.is_empty() {
+        return OperatorReuse::KeepConfig;
+    }
+    match saved_ids {
+        [] => OperatorReuse::KeepConfig,
+        [id] => OperatorReuse::Reuse(id.clone()),
+        _ => OperatorReuse::MultipleCandidates(saved_ids.to_vec()),
+    }
+}
+
+/// Swap the manifest set from creating new operators to reusing `operator_id`.
+fn apply_operator_reuse<Out: io::Write, Err: io::Write>(
+    ctx: &mut Ctx<Out, Err>,
+    config: &mut AppConfig,
+    operator_id: String,
+) -> anyhow::Result<()> {
+    if let Some(params) = config.manifest_set_params.as_mut() {
+        params.new_operators.clear();
+        params.existing_operator_ids = vec![operator_id.clone()];
+    }
+
+    debug!(operator_id = %operator_id, "reusing existing operator");
+
+    shell_println!(
+        ctx,
+        "Reusing operator {operator_id} (pass --no-operator-reuse to create a new one)"
+    )
+}
+
+/// Best-effort load of the active org's most recently created operator IDs.
+/// Reuse is a convenience, so config-load failures fall back to no reuse; the
+/// real error surfaces later when `run_with_config` reloads the config.
+async fn load_saved_operator_ids() -> Vec<String> {
+    match turnkey::Config::load().await {
+        Ok(config) => config.get_last_operator_ids().unwrap_or_default(),
+        Err(_) => Vec::new(),
+    }
 }
 
 async fn build_app_config_interactive(ctx: &mut StdCtx, args: &Args) -> Result<AppConfig> {
@@ -218,7 +326,10 @@ fn to_tvc_operator_set_params(params: &OperatorSetParams) -> TvcOperatorSetParam
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::app::{KNOWN_QUORUM_KEY, OperatorParams};
+    use crate::{
+        config::app::{KNOWN_QUORUM_KEY, OperatorParams},
+        output::{Ctx, EmptyShell},
+    };
 
     fn valid_config() -> AppConfig {
         AppConfig {
@@ -382,5 +493,94 @@ mod tests {
 
         assert_eq!(intent.share_set_id.as_deref(), Some("share-set-id"));
         assert!(intent.share_set_params.is_none());
+    }
+
+    fn manifest_params_with_new_operator() -> OperatorSetParams {
+        OperatorSetParams {
+            name: "manifest-set".to_string(),
+            threshold: 1,
+            new_operators: vec![OperatorParams {
+                name: "operator-1".to_string(),
+                public_key: "operator-public-key".to_string(),
+            }],
+            existing_operator_ids: vec![],
+        }
+    }
+
+    /// The opt-out flag always wins: never reuse, even with a single saved id.
+    #[test]
+    fn decide_reuse_keeps_config_when_flag_set() {
+        let params = manifest_params_with_new_operator();
+        let saved = vec!["op-1".to_string()];
+        assert_eq!(
+            decide_operator_reuse(true, Some(&params), &saved),
+            OperatorReuse::KeepConfig
+        );
+    }
+
+    /// First run (nothing created yet) has nothing to reuse -> create new.
+    #[test]
+    fn decide_reuse_keeps_config_without_saved_ids() {
+        let params = manifest_params_with_new_operator();
+        assert_eq!(
+            decide_operator_reuse(false, Some(&params), &[]),
+            OperatorReuse::KeepConfig
+        );
+    }
+
+    /// A config that already pins existingOperatorIds is respected as-is.
+    #[test]
+    fn decide_reuse_keeps_config_when_config_pins_existing_ids() {
+        let mut params = manifest_params_with_new_operator();
+        params.existing_operator_ids = vec!["explicit-op".to_string()];
+        let saved = vec!["op-1".to_string(), "op-2".to_string()];
+        assert_eq!(
+            decide_operator_reuse(false, Some(&params), &saved),
+            OperatorReuse::KeepConfig
+        );
+    }
+
+    /// No manifest_set_params (e.g. reusing a whole set via manifestSetId) -> nothing to do.
+    #[test]
+    fn decide_reuse_keeps_config_without_manifest_params() {
+        let saved = vec!["op-1".to_string()];
+        assert_eq!(
+            decide_operator_reuse(false, None, &saved),
+            OperatorReuse::KeepConfig
+        );
+    }
+
+    /// The common case: exactly one saved operator -> reuse it.
+    #[test]
+    fn decide_reuse_reuses_single_saved_id() {
+        let params = manifest_params_with_new_operator();
+        let saved = vec!["op-1".to_string()];
+        assert_eq!(
+            decide_operator_reuse(false, Some(&params), &saved),
+            OperatorReuse::Reuse("op-1".to_string())
+        );
+    }
+
+    /// Multiple saved operators are surfaced for the endpoint to prompt/bail on.
+    #[test]
+    fn decide_reuse_returns_candidates_for_multiple_saved_ids() {
+        let params = manifest_params_with_new_operator();
+        let saved = vec!["op-1".to_string(), "op-2".to_string()];
+        assert_eq!(
+            decide_operator_reuse(false, Some(&params), &saved),
+            OperatorReuse::MultipleCandidates(saved.clone())
+        );
+    }
+
+    /// Applying reuse clears the would-be-created operators and pins the reused id.
+    #[test]
+    fn apply_operator_reuse_swaps_new_operators_for_existing_id() {
+        let mut ctx = Ctx::new(EmptyShell::default(), true);
+        let mut config = valid_config();
+        apply_operator_reuse(&mut ctx, &mut config, "op-1".to_string()).unwrap();
+
+        let params = config.manifest_set_params.unwrap();
+        assert!(params.new_operators.is_empty());
+        assert_eq!(params.existing_operator_ids, vec!["op-1".to_string()]);
     }
 }
