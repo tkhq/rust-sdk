@@ -5,14 +5,14 @@ use crate::client::{build_client, fetch_tvc_app};
 use crate::config::deploy::{DeployConfig, DeployConfigValidationErrors};
 use crate::config::turnkey::Config;
 use crate::outcome::Outcome;
-use crate::output::{Message, StdCtx};
+use crate::output::StdCtx;
 use crate::prompts;
 use crate::pull_secret::encrypt_pivot_pull_secret;
 use crate::shell_println;
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Args as ClapArgs;
 use serde::Serialize;
-use std::fmt::Write as _;
+use std::fmt::{self, Display, Formatter};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::try_join;
@@ -460,36 +460,31 @@ pub struct DeploymentCreated {
     config_path: Option<String>,
 }
 
-impl Message for DeploymentCreated {
-    fn reason(&self) -> &'static str {
-        "deployment-created"
-    }
-
-    fn human_message(&self) -> String {
-        let mut message = format!(
+impl Display for DeploymentCreated {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
             r#"
 Deployment created successfully!
 
 Deployment ID: {}
 App ID: {}"#,
             self.deployment_id, self.app_id
-        );
+        )?;
 
         if let Some(path) = &self.config_path {
-            let _ = write!(message, "\nConfig: {path}");
+            write!(f, "\nConfig: {path}")?;
         }
 
-        let _ = write!(
-            message,
+        write!(
+            f,
             r#"
 
 Next steps:
   - Run `tvc deploy status --deploy-id {}` to check deployment status
   - Run `tvc deploy approve --deploy-id {} --operator-id <operator-id>` to approve the manifest"#,
             self.deployment_id, self.deployment_id
-        );
-
-        message
+        )
     }
 }
 

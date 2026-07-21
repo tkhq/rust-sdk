@@ -6,7 +6,7 @@ use crate::shell_println;
 use anyhow::{Context, Result, anyhow};
 use qos_core::protocol::services::boot::VersionedManifest;
 use serde::{Deserialize, Serialize};
-use std::fmt::Display;
+use std::fmt::{self, Display, Formatter};
 use std::io::Write;
 use thiserror::Error;
 use turnkey_client::generated::{
@@ -298,7 +298,7 @@ impl DeployConfigValidationErrors {
 }
 
 impl Display for DeployConfigValidationErrors {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let s = self
             .0
             .iter()

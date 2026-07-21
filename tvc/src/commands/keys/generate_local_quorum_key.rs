@@ -2,7 +2,7 @@
 
 use crate::config::quorum_key::QuorumKeyConfig;
 use crate::outcome::Outcome;
-use crate::output::{Message, StdCtx};
+use crate::output::StdCtx;
 use crate::quorum_key_metadata::{
     EncryptedShareMetadata, QuorumKeyMetadata, decode_p256_public_key_hex,
 };
@@ -11,6 +11,7 @@ use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
 use qos_p256::{P256Pair, P256Public};
 use serde::Serialize;
+use std::fmt::{self, Display, Formatter};
 use std::fs;
 use std::path::PathBuf;
 use zeroize::Zeroizing;
@@ -81,13 +82,10 @@ pub struct QuorumKeyGenerated {
     metadata_path: String,
 }
 
-impl Message for QuorumKeyGenerated {
-    fn reason(&self) -> &'static str {
-        "quorum-key-generated"
-    }
-
-    fn human_message(&self) -> String {
-        format!(
+impl Display for QuorumKeyGenerated {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
             r#"Quorum key metadata written to: {}
 Quorum Public Key: {}
 Threshold: {}"#,

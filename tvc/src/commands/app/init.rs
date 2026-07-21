@@ -3,11 +3,12 @@
 use crate::config::app::AppConfig;
 use crate::config::turnkey::{Config, StoredQosOperatorKey};
 use crate::outcome::Outcome;
-use crate::output::{Message, StdCtx};
+use crate::output::StdCtx;
 use crate::prompts::{bail_interactive_conflicts_with_non_interactive, ensure_stdin_is_tty};
 use anyhow::{Context, Result, bail};
 use clap::Args as ClapArgs;
 use serde::Serialize;
+use std::fmt::{self, Display, Formatter};
 use std::path::PathBuf;
 
 /// Generate a template app configuration file.
@@ -79,21 +80,19 @@ pub struct AppConfigCreated {
     interactive: bool,
 }
 
-impl Message for AppConfigCreated {
-    fn reason(&self) -> &'static str {
-        "app-config-created"
-    }
-
-    fn human_message(&self) -> String {
+impl Display for AppConfigCreated {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         if self.interactive {
-            format!(
+            write!(
+                f,
                 r#"Created app config: {}
 
 Run: tvc app create --config-file {}"#,
                 self.path, self.path
             )
         } else {
-            format!(
+            write!(
+                f,
                 r#"Created app config template: {}
 
 Edit the file to fill in your values, then run:

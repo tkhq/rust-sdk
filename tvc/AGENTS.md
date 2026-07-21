@@ -19,6 +19,13 @@ Default guidance for coding-agent runs in this repository.
   `From<T>` over `From<&T>`. When a clone is genuinely needed, make it explicit
   at the call site — e.g. `value.clone().into()` or
   `items.iter().cloned().map(Into::into)`.
+- Prefer short (imported) names over fully-qualified paths. Add a `use` and
+  write `impl Display for Foo { fn fmt(&self, f: &mut Formatter<'_>) … }` rather
+  than `impl std::fmt::Display for Foo { … std::fmt::Formatter … }`. Only keep a
+  longer/module-qualified form when it disambiguates from another in-scope name —
+  e.g. `fmt::Result` stays qualified (via `use std::fmt::{self, Display, Formatter}`)
+  so it doesn't collide with `anyhow::Result`, and `std::fmt::Write` may need
+  `as _` where `std::io::Write` is also in scope.
 - When converting from an external/generated type (e.g. the API's `TvcApp`,
   `TvcDeployment`, `AppStatus`) into one of our own structs, destructure it
   exhaustively — `let Foo { a, b, c: _ } = value;` with no trailing `..` —

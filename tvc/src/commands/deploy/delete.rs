@@ -2,10 +2,11 @@
 
 use crate::client::build_client;
 use crate::outcome::Outcome;
-use crate::output::{Message, StdCtx};
+use crate::output::StdCtx;
 use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
 use serde::Serialize;
+use std::fmt::{self, Display, Formatter};
 use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::{ActivityStatus, DeleteTvcDeploymentIntent};
 
@@ -65,13 +66,10 @@ impl Default for DeploymentDeleted {
     }
 }
 
-impl Message for DeploymentDeleted {
-    fn reason(&self) -> &'static str {
-        "deployment-deleted"
-    }
-
-    fn human_message(&self) -> String {
-        format!(
+impl Display for DeploymentDeleted {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
             r#"
 Deployment delete accepted; deployment is marked for deletion.
 

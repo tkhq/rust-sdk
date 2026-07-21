@@ -1,7 +1,7 @@
 //! Deploy provisioning-details command.
 
 use crate::outcome::Outcome;
-use crate::output::{Message, StdCtx};
+use crate::output::StdCtx;
 use crate::provisioning::{
     ProvisionBundle, extract_ephemeral_public_key_bytes, verify_provisioning_details,
 };
@@ -12,6 +12,7 @@ use qos_core::protocol::services::boot::{Approval, VersionedManifestEnvelope};
 use qos_nsm::types::NsmDigest;
 use serde::Serialize;
 use std::fmt::Write;
+use std::fmt::{self, Display, Formatter};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::{
@@ -276,12 +277,8 @@ fn approval_entries(approvals: &[ApprovalSummary]) -> Vec<ApprovalEntry> {
         .collect()
 }
 
-impl Message for ProvisioningDetails {
-    fn reason(&self) -> &'static str {
-        "provisioning-details"
-    }
-
-    fn human_message(&self) -> String {
+impl Display for ProvisioningDetails {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut message = String::new();
 
         if let Some(path) = &self.bundle_path {
@@ -345,7 +342,7 @@ Manifest Set Approvals: {}/{}"#,
             write_approval_entries(&mut message, &self.share_set_approvals);
         }
 
-        message
+        f.write_str(&message)
     }
 }
 
@@ -428,7 +425,6 @@ mod tests {
     }
 
     use super::{ApprovalEntry, PcrEntry, ProvisioningDetails};
-    use crate::output::Message;
 
     fn full_details() -> ProvisioningDetails {
         ProvisioningDetails {
@@ -478,7 +474,7 @@ mod tests {
     #[test]
     fn human_message_full_golden() {
         assert_eq!(
-            full_details().human_message(),
+            full_details().to_string(),
             r#"Provision bundle written to: /tmp/bundle.json
 
 Deployment: dep_123
@@ -509,7 +505,7 @@ Share Set Approvals: 1
         // NOTE: the first five lines have empty values, so they end in a
         // significant trailing space — do not strip trailing whitespace here.
         assert_eq!(
-            details.human_message(),
+            details.to_string(),
             r#"Deployment: 
 Verification: 
 Ephemeral Key: 

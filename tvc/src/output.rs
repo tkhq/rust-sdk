@@ -5,7 +5,7 @@ use anyhow::Result;
 use clap::ValueEnum;
 use serde::Serialize;
 use std::error::Error;
-use std::fmt::{self, Display};
+use std::fmt::{self, Display, Formatter};
 use std::io::{self, IsTerminal, Stderr, Stdout, Write};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
@@ -282,7 +282,7 @@ impl MissingRequiredInput {
 }
 
 impl Display for MissingRequiredInput {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.write_str(&self.message)
     }
 }

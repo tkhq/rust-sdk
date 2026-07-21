@@ -3,10 +3,11 @@
 use crate::config::quorum_key::QuorumKeyConfig;
 use crate::config::turnkey::{Config, StoredQosOperatorKey};
 use crate::outcome::Outcome;
-use crate::output::{Message, StdCtx};
+use crate::output::StdCtx;
 use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
 use serde::Serialize;
+use std::fmt::{self, Display, Formatter};
 use std::path::PathBuf;
 
 /// Generate a template quorum key configuration file.
@@ -49,14 +50,11 @@ pub struct QuorumKeyConfigCreated {
     path: String,
 }
 
-impl Message for QuorumKeyConfigCreated {
-    fn reason(&self) -> &'static str {
-        "quorum-key-config-created"
-    }
-
-    fn human_message(&self) -> String {
+impl Display for QuorumKeyConfigCreated {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         // Constraints inherited from qos_crypto::shamir::shares_generate.
-        format!(
+        write!(
+            f,
             r#"Created quorum key config template: {}
 
 Constraints (see qos_crypto/src/shamir.rs):

@@ -2,10 +2,11 @@
 
 use crate::client::build_client;
 use crate::outcome::Outcome;
-use crate::output::{Message, StdCtx};
+use crate::output::StdCtx;
 use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
 use serde::Serialize;
+use std::fmt::{self, Display, Formatter};
 use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::{ActivityStatus, DeleteTvcAppAndDeploymentsIntent};
 
@@ -65,13 +66,10 @@ impl Default for AppDeleted {
     }
 }
 
-impl Message for AppDeleted {
-    fn reason(&self) -> &'static str {
-        "app-deleted"
-    }
-
-    fn human_message(&self) -> String {
-        format!(
+impl Display for AppDeleted {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
             r#"App delete accepted.
 App and deployments marked for deletion.
 

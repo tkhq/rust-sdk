@@ -3,7 +3,7 @@
 use anyhow::Context;
 use clap::Args as ClapArgs;
 use serde::Serialize;
-use std::fmt::Write as _;
+use std::fmt::{self, Display, Formatter};
 use turnkey_client::generated::GetTvcDeploymentRequest;
 use turnkey_client::generated::external::data::v1::TvcDeployment;
 
@@ -11,7 +11,7 @@ use crate::client::fetch_tvc_app;
 use crate::commands::app_status::TimestampPayload;
 use crate::commands::display::{format_egress_enabled, yes_no};
 use crate::outcome::Outcome;
-use crate::output::{Message, StdCtx};
+use crate::output::StdCtx;
 
 /// Get the status of a deployment.
 #[derive(Debug, ClapArgs)]
@@ -103,13 +103,10 @@ struct PivotContainerSummary {
     args: Vec<String>,
 }
 
-impl Message for DeploymentStatusReport {
-    fn reason(&self) -> &'static str {
-        "deployment-status"
-    }
-
-    fn human_message(&self) -> String {
-        let mut message = format!(
+impl Display for DeploymentStatusReport {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
             r#"Deployment: {}
 App ID: {}
 {}
@@ -124,40 +121,32 @@ Debug Mode: {}"#,
             self.qos_version,
             format_marked_for_deletion(self.marked_for_deletion),
             yes_no(self.debug_mode)
-        );
+        )?;
 
         if let Some(pivot) = &self.pivot_container {
-            let _ = write!(
-                message,
+            write!(
+                f,
                 r#"
 
 Pivot Container:
   URL: {}
   Path: {}"#,
                 pivot.url, pivot.path
-            );
+            )?;
             if !pivot.args.is_empty() {
-                let _ = write!(message, "\n  Args: {:?}", pivot.args);
+                write!(f, "\n  Args: {:?}", pivot.args)?;
             }
         }
 
         if let Some(created) = &self.created_at {
-            let _ = write!(
-                message,
-                "\n\nCreated: {}.{:09}s",
-                created.seconds, created.nanos
-            );
+            write!(f, "\n\nCreated: {}.{:09}s", created.seconds, created.nanos)?;
         }
 
         if let Some(updated) = &self.updated_at {
-            let _ = write!(
-                message,
-                "\nUpdated: {}.{:09}s",
-                updated.seconds, updated.nanos
-            );
+            write!(f, "\nUpdated: {}.{:09}s", updated.seconds, updated.nanos)?;
         }
 
-        message
+        Ok(())
     }
 }
 

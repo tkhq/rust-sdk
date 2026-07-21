@@ -7,13 +7,13 @@ use crate::{
         turnkey::{self, StoredQosOperatorKey},
     },
     outcome::Outcome,
-    output::{Ctx, Message, StdCtx},
+    output::{Ctx, StdCtx},
     prompts, shell_println,
 };
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Args as ClapArgs;
 use serde::Serialize;
-use std::fmt::Write as _;
+use std::fmt::{self, Display, Formatter};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
     io,
@@ -281,13 +281,10 @@ pub struct AppCreated {
     config_path: String,
 }
 
-impl Message for AppCreated {
-    fn reason(&self) -> &'static str {
-        "app-created"
-    }
-
-    fn human_message(&self) -> String {
-        let mut message = format!(
+impl Display for AppCreated {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
             r#"
 App created successfully!
 
@@ -295,26 +292,24 @@ App ID: {}
 Name: {}
 Manifest Set ID: {}"#,
             self.app_id, self.name, self.manifest_set_id
-        );
+        )?;
 
         if !self.manifest_set_operator_ids.is_empty() {
-            let _ = write!(
-                message,
+            write!(
+                f,
                 "\nManifest Set Operator IDs: {}",
                 self.manifest_set_operator_ids.join(", ")
-            );
+            )?;
         }
 
-        let _ = write!(
-            message,
+        write!(
+            f,
             r#"
 Config: {}
 
 Use one of the Manifest Set Operator IDs above with `tvc deploy approve --operator-id`"#,
             self.config_path
-        );
-
-        message
+        )
     }
 }
 

@@ -10,6 +10,7 @@
 //! `reason` strings are an external, stable contract: kebab-case, named
 //! deliberately, never renamed after release.
 
+use crate::commands::deploy::approve::ApproveOutcome;
 use crate::commands::{app, deploy, keys, login};
 use crate::output::Message;
 use serde::{Serialize, Serializer};
@@ -22,7 +23,7 @@ use serde::{Serialize, Serializer};
 pub enum Outcome {
     Login(login::LoggedIn),
     ProfileDelete(login::ProfileDeleted),
-    DeployApprove(deploy::approve::ApproveOutcome),
+    DeployApprove(ApproveOutcome),
     DeployGetStatus(deploy::get_status::DeploymentRuntimeStatus),
     DeployProvisioningDetails(deploy::provisioning_details::ProvisioningDetails),
     DeployPostShare(deploy::post_share::QuorumKeySharePosted),
@@ -81,23 +82,51 @@ impl Serialize for Outcome {
 }
 
 impl Message for Outcome {
+    /// The single source of truth for the reason vocabulary. Every terminal
+    /// reason string is a literal in  this one match, so uniqueness is auditable
+    /// at a glance (and, in a follow-up, enforceable by a proc-macro).
     fn reason(&self) -> &'static str {
-        with_message!(self, |msg| msg.reason())
+        match self {
+            Outcome::Login(_) => "logged-in",
+            Outcome::ProfileDelete(_) => "profile-deleted",
+            Outcome::DeployApprove(ApproveOutcome::Posted(_)) => "manifest-approval-posted",
+            Outcome::DeployApprove(ApproveOutcome::NotPosted(_)) => "manifest-approval-generated",
+            Outcome::DeployApprove(ApproveOutcome::DryRun(_)) => "manifest-approval-dry-run",
+            Outcome::DeployGetStatus(_) => "deployment-runtime-status",
+            Outcome::DeployProvisioningDetails(_) => "provisioning-details",
+            Outcome::DeployPostShare(_) => "quorum-key-share-posted",
+            Outcome::DeployStatus(_) => "deployment-status",
+            Outcome::DeployCreate(_) => "deployment-created",
+            Outcome::DeployInit(_) => "deployment-config-created",
+            Outcome::DeployDebugLogs(_) => "debug-logs-fetched",
+            Outcome::DeployDelete(_) => "deployment-deleted",
+            Outcome::DeployRestore(_) => "deployment-restored",
+            Outcome::AppStatus(_) => "app-status",
+            Outcome::AppList(_) => "apps-listed",
+            Outcome::AppCreate(_) => "app-created",
+            Outcome::AppInit(_) => "app-config-created",
+            Outcome::AppSetLiveDeploy(_) => "live-deployment-set",
+            Outcome::AppDelete(_) => "app-deleted",
+            Outcome::KeysCreateQuorumKey(_) => "quorum-key-created",
+            Outcome::KeysGenerateQuorumKey(_) => "quorum-key-generated",
+            Outcome::KeysInitQuorumKey(_) => "quorum-key-config-created",
+            Outcome::KeysReEncryptShare(_) => "re-encrypted-share-generated",
+        }
     }
 
     fn human_message(&self) -> String {
-        with_message!(self, |msg| msg.human_message())
-    }
-
-    fn to_json_string(&self) -> String {
-        with_message!(self, |msg| msg.to_json_string())
+        // Each inner payload renders itself via `Display`; the terminal outcome
+        // just delegates. An empty rendering means the outcome is machine-only.
+        with_message!(self, |msg| msg.to_string())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::commands::deploy::approve::ApproveOutcome;
+    use crate::commands::deploy::approve::{
+        ApprovalDryRun, ApprovalGenerated, ApprovalPosted, ApproveOutcome,
+    };
     use std::collections::HashSet;
 
     /// One zero-value instance per terminal shape, in `Outcome`'s declaration
@@ -108,15 +137,9 @@ mod tests {
         vec![
             Outcome::Login(login::LoggedIn::default()),
             Outcome::ProfileDelete(login::ProfileDeleted::default()),
-            Outcome::DeployApprove(ApproveOutcome::Posted(
-                deploy::approve::ApprovalPosted::default(),
-            )),
-            Outcome::DeployApprove(ApproveOutcome::NotPosted(
-                deploy::approve::ApprovalGenerated::default(),
-            )),
-            Outcome::DeployApprove(ApproveOutcome::DryRun(
-                deploy::approve::ApprovalDryRun::default(),
-            )),
+            Outcome::DeployApprove(ApproveOutcome::Posted(ApprovalPosted::default())),
+            Outcome::DeployApprove(ApproveOutcome::NotPosted(ApprovalGenerated::default())),
+            Outcome::DeployApprove(ApproveOutcome::DryRun(ApprovalDryRun::default())),
             Outcome::DeployGetStatus(deploy::get_status::DeploymentRuntimeStatus::default()),
             Outcome::DeployProvisioningDetails(
                 deploy::provisioning_details::ProvisioningDetails::default(),

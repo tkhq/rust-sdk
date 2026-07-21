@@ -3,7 +3,7 @@
 use anyhow::{Context, anyhow};
 use clap::Args as ClapArgs;
 use serde::Serialize;
-use std::fmt::Write as _;
+use std::fmt::{self, Display, Formatter};
 use turnkey_client::generated::GetAppStatusRequest;
 use turnkey_client::generated::external::data::v1::{AppStatus, DeploymentStatus};
 
@@ -13,7 +13,7 @@ use crate::commands::app_status::{
 };
 use crate::commands::display::format_egress_enabled;
 use crate::outcome::Outcome;
-use crate::output::{Message, StdCtx};
+use crate::output::StdCtx;
 
 /// Get the live status of an app from the cluster.
 #[derive(Debug, ClapArgs)]
@@ -97,45 +97,42 @@ struct DeploymentReplicaStatus {
     last_updated: Option<TimestampPayload>,
 }
 
-impl Message for AppStatusReport {
-    fn reason(&self) -> &'static str {
-        "app-status"
-    }
-
-    fn human_message(&self) -> String {
-        let mut message = format!(
+impl Display for AppStatusReport {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
             r#"App ID: {}
 Targeted Deployment: {}
 {}"#,
             self.app_id,
             self.targeted_deployment_id,
             format_egress_enabled(self.egress_enabled)
-        );
+        )?;
 
         if self.deployments.is_empty() {
-            message.push_str("\n\nNo deployments found.");
+            f.write_str("\n\nNo deployments found.")?;
         } else {
             for deployment in &self.deployments {
-                let _ = write!(
-                    message,
+                write!(
+                    f,
                     r#"
 
 Deployment: {}
   {}"#,
                     deployment.deployment_id,
                     format_replica_counts(deployment.replicas.ready, deployment.replicas.desired)
-                );
+                )?;
 
                 if let Some(updated) = &deployment.last_updated {
-                    let _ = write!(
-                        message,
+                    write!(
+                        f,
                         "\n  Last Updated: {}.{:0>9}s",
                         updated.seconds, updated.nanos
-                    );
+                    )?;
                 }
             }
         }
 
-        message
+        Ok(())
     }
 }

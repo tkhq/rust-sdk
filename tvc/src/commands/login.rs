@@ -6,7 +6,7 @@ use crate::config::turnkey::{
     default_org_dir,
 };
 use crate::outcome::Outcome;
-use crate::output::{Message, StdCtx};
+use crate::output::StdCtx;
 use crate::prompts::{self, error_required_in_non_interactive};
 use crate::{shell_eprintln, shell_print, shell_println};
 use anyhow::{Context, Result, anyhow, bail};
@@ -14,6 +14,7 @@ use clap::Args as ClapArgs;
 use qos_p256::P256Pair;
 use serde::Serialize;
 use std::collections::BTreeSet;
+use std::fmt::{self, Display, Formatter};
 use std::io::BufRead;
 use tracing::debug;
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
@@ -267,8 +268,8 @@ struct ProfileChoice<'a> {
     is_active: bool,
 }
 
-impl std::fmt::Display for ProfileChoice<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for ProfileChoice<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let suffix = if self.is_active { " (active)" } else { "" };
         write!(f, "{} ({}){suffix}", self.alias, self.org_id)
     }
@@ -449,8 +450,8 @@ enum OrgChoice {
     New,
 }
 
-impl std::fmt::Display for OrgChoice {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for OrgChoice {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             OrgChoice::Existing { display, .. } => write!(f, "{display}"),
             OrgChoice::New => write!(f, "[new] Add a new organization"),
@@ -666,12 +667,8 @@ pub struct ProfileDeleted {
     api_public_key: Option<String>,
 }
 
-impl Message for ProfileDeleted {
-    fn reason(&self) -> &'static str {
-        "profile-deleted"
-    }
-
-    fn human_message(&self) -> String {
+impl Display for ProfileDeleted {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut lines = vec![format!(
             "Deleted login profile '{}' ({}).",
             self.alias, self.organization_id
@@ -699,17 +696,14 @@ impl Message for ProfileDeleted {
             None => lines.push("  2. Delete the API key associated with this profile".to_string()),
         }
 
-        lines.join("\n")
+        f.write_str(&lines.join("\n"))
     }
 }
 
-impl Message for LoggedIn {
-    fn reason(&self) -> &'static str {
-        "logged-in"
-    }
-
-    fn human_message(&self) -> String {
-        format!(
+impl Display for LoggedIn {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
             r#"
 Successfully logged in!
 

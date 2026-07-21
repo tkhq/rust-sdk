@@ -5,13 +5,14 @@ use crate::{
     client::{build_client, fetch_tvc_deployment},
     config::{deploy::DeployConfig, turnkey},
     outcome::Outcome,
-    output::{Message, StdCtx},
+    output::StdCtx,
     prompts::{bail_interactive_conflicts_with_non_interactive, ensure_stdin_is_tty},
 };
 use anyhow::{Context, Result, bail};
 use chrono::Local;
 use clap::Args as ClapArgs;
 use serde::Serialize;
+use std::fmt::{self, Display, Formatter};
 use std::path::PathBuf;
 
 pub(crate) const LONG_ABOUT: &str = r#"
@@ -151,49 +152,45 @@ pub struct DeploymentConfigCreated {
     needs_pull_secret: bool,
 }
 
-impl Message for DeploymentConfigCreated {
-    fn reason(&self) -> &'static str {
-        "deployment-config-created"
-    }
-
-    fn human_message(&self) -> String {
-        let mut message = if self.interactive {
-            format!("Created deployment config: {}\n", self.path)
+impl Display for DeploymentConfigCreated {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        if self.interactive {
+            writeln!(f, "Created deployment config: {}", self.path)?;
         } else {
-            format!("Created deployment config template: {}\n", self.path)
-        };
+            writeln!(f, "Created deployment config template: {}", self.path)?;
+        }
 
         // The digest and debug mode were copied from the source manifest (the
         // digest is image-coupled, so it must be recomputed if the image
         // changes), and a pull secret (if the source used one) cannot be
         // recovered and must be re-supplied.
         if self.from_deployment {
-            message.push_str(FROM_DEPLOYMENT_GUIDANCE);
+            f.write_str(FROM_DEPLOYMENT_GUIDANCE)?;
 
             if self.needs_pull_secret {
-                message.push_str(PULL_SECRET_GUIDANCE);
+                f.write_str(PULL_SECRET_GUIDANCE)?;
             }
         }
 
         if self.interactive {
-            message.push_str(&format!(
+            write!(
+                f,
                 r#"
 Run: tvc deploy create --config-file {}
 
 {PORT_GUIDANCE}"#,
                 self.path
-            ));
+            )
         } else {
-            message.push_str(&format!(
+            write!(
+                f,
                 r#"
 Edit the file to fill in your values, then run:
   tvc deploy create --config-file {}
 
 {PORT_GUIDANCE}"#,
                 self.path
-            ));
+            )
         }
-
-        message
     }
 }

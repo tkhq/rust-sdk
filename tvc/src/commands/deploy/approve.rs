@@ -3,7 +3,7 @@
 use crate::config::turnkey::Config;
 use crate::local_operator_key::{LocalOperatorSeedSource, resolve_local_operator};
 use crate::outcome::Outcome;
-use crate::output::{Message, StdCtx};
+use crate::output::StdCtx;
 use crate::pair::HexSeed;
 use crate::prompts;
 use crate::prompts::{bail_required_in_non_interactive, stdin_can_prompt};
@@ -18,6 +18,7 @@ use qos_core::protocol::services::boot::{
 use serde::{Serialize, Serializer};
 use std::collections::HashSet;
 use std::fmt::Write;
+use std::fmt::{self, Display, Formatter};
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -135,28 +136,12 @@ impl Serialize for ApproveOutcome {
     }
 }
 
-impl Message for ApproveOutcome {
-    fn reason(&self) -> &'static str {
+impl Display for ApproveOutcome {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            ApproveOutcome::Posted(msg) => msg.reason(),
-            ApproveOutcome::NotPosted(msg) => msg.reason(),
-            ApproveOutcome::DryRun(msg) => msg.reason(),
-        }
-    }
-
-    fn human_message(&self) -> String {
-        match self {
-            ApproveOutcome::Posted(msg) => msg.human_message(),
-            ApproveOutcome::NotPosted(msg) => msg.human_message(),
-            ApproveOutcome::DryRun(msg) => msg.human_message(),
-        }
-    }
-
-    fn to_json_string(&self) -> String {
-        match self {
-            ApproveOutcome::Posted(msg) => msg.to_json_string(),
-            ApproveOutcome::NotPosted(msg) => msg.to_json_string(),
-            ApproveOutcome::DryRun(msg) => msg.to_json_string(),
+            ApproveOutcome::Posted(msg) => msg.fmt(f),
+            ApproveOutcome::NotPosted(msg) => msg.fmt(f),
+            ApproveOutcome::DryRun(msg) => msg.fmt(f),
         }
     }
 }
@@ -192,15 +177,14 @@ pub struct ApprovalPosted {
     quorum_reached: Option<bool>,
 }
 
-impl Message for ApprovalPosted {
-    fn reason(&self) -> &'static str {
-        "manifest-approval-posted"
-    }
-
-    fn human_message(&self) -> String {
-        let mut message = approval_payload_human_message(&self.approval, &self.written_to);
-        let _ = write!(
-            message,
+impl Display for ApprovalPosted {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str(&approval_payload_human_message(
+            &self.approval,
+            &self.written_to,
+        ))?;
+        write!(
+            f,
             r#"
 Approval posted successfully!
 
@@ -208,7 +192,7 @@ Approval IDs: {:?}
 Manifest ID: {}
 Operator ID: {}"#,
             self.approval_ids, self.manifest_id, self.operator_id
-        );
+        )?;
 
         if let Some(reached) = self.quorum_reached {
             let quorum_line = if reached {
@@ -216,10 +200,10 @@ Operator ID: {}"#,
             } else {
                 "Your approval has been posted. Deployment requires additional manifest approvals before it can be deployed on TVC."
             };
-            let _ = write!(message, "\n\n{quorum_line}");
+            write!(f, "\n\n{quorum_line}")?;
         }
 
-        message
+        Ok(())
     }
 }
 
@@ -234,26 +218,21 @@ pub struct ApprovalGenerated {
     written_to: Option<String>,
 }
 
-impl Message for ApprovalGenerated {
-    fn reason(&self) -> &'static str {
-        "manifest-approval-generated"
-    }
-
-    fn human_message(&self) -> String {
-        approval_payload_human_message(&self.approval, &self.written_to)
+impl Display for ApprovalGenerated {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str(&approval_payload_human_message(
+            &self.approval,
+            &self.written_to,
+        ))
     }
 }
 
 #[derive(Default, Serialize)]
 pub struct ApprovalDryRun {}
 
-impl Message for ApprovalDryRun {
-    fn reason(&self) -> &'static str {
-        "manifest-approval-dry-run"
-    }
-
-    fn human_message(&self) -> String {
-        "Dry run complete. No approval generated.".to_string()
+impl Display for ApprovalDryRun {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("Dry run complete. No approval generated.")
     }
 }
 
@@ -775,6 +754,7 @@ async fn fetch_manifest_from_deploy(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::output::Message;
     use turnkey_client::generated::external::data::v1::{
         TvcOperator, TvcOperatorApproval, TvcOperatorSet,
     };
@@ -947,8 +927,10 @@ mod tests {
 
     #[test]
     fn approval_posted_serializes_expected_json() {
-        let value: serde_json::Value =
-            serde_json::from_str(&posted_to_file().to_json_string()).unwrap();
+        let value: serde_json::Value = serde_json::from_str(
+            &Outcome::DeployApprove(ApproveOutcome::Posted(posted_to_file())).to_json_string(),
+        )
+        .unwrap();
 
         assert_eq!(
             value,
@@ -976,7 +958,10 @@ mod tests {
             written_to: None,
         };
 
-        let value: serde_json::Value = serde_json::from_str(&generated.to_json_string()).unwrap();
+        let value: serde_json::Value = serde_json::from_str(
+            &Outcome::DeployApprove(ApproveOutcome::NotPosted(generated)).to_json_string(),
+        )
+        .unwrap();
 
         assert_eq!(
             value,
@@ -995,8 +980,10 @@ mod tests {
 
     #[test]
     fn approval_dry_run_serializes_reason_only() {
-        let value: serde_json::Value =
-            serde_json::from_str(&ApprovalDryRun {}.to_json_string()).unwrap();
+        let value: serde_json::Value = serde_json::from_str(
+            &Outcome::DeployApprove(ApproveOutcome::DryRun(ApprovalDryRun {})).to_json_string(),
+        )
+        .unwrap();
 
         assert_eq!(
             value,
@@ -1015,19 +1002,19 @@ mod tests {
         posted.quorum_reached = Some(true);
         assert!(
             posted
-                .human_message()
+                .to_string()
                 .contains("Manifest approval quorum reached.")
         );
 
         posted.quorum_reached = Some(false);
         assert!(
             posted
-                .human_message()
+                .to_string()
                 .contains("requires additional manifest approvals")
         );
 
         posted.quorum_reached = None;
-        let human = posted.human_message();
+        let human = posted.to_string();
         assert!(!human.contains("quorum"));
         assert!(human.ends_with("Operator ID: operator-456"));
     }

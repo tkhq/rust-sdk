@@ -3,14 +3,13 @@
 use anyhow::Context;
 use clap::Args as ClapArgs;
 use serde::Serialize;
-use std::fmt;
-use std::fmt::Display;
+use std::fmt::{self, Display, Formatter};
 use turnkey_client::generated::GetTvcAppsRequest;
 use turnkey_client::generated::external::data::v1::TvcApp;
 
 use crate::commands::display::{format_egress_enabled, yes_no};
 use crate::outcome::Outcome;
-use crate::output::{Message, StdCtx};
+use crate::output::StdCtx;
 
 const SEPARATOR_WIDTH: usize = 40;
 
@@ -101,26 +100,24 @@ impl From<TvcApp> for AppSummary {
     }
 }
 
-impl Message for AppsListed {
-    fn reason(&self) -> &'static str {
-        "apps-listed"
-    }
-
-    fn human_message(&self) -> String {
+impl Display for AppsListed {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         if self.apps.is_empty() {
-            return "No apps found.".to_string();
+            return f.write_str("No apps found.");
         }
 
-        self.apps
+        let body = self
+            .apps
             .iter()
             .map(ToString::to_string)
             .collect::<Vec<_>>()
-            .join("\n")
+            .join("\n");
+        f.write_str(&body)
     }
 }
 
 impl Display for AppSummary {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let live = self.live_deployment_id.as_deref().unwrap_or("(none)");
         write!(
             f,

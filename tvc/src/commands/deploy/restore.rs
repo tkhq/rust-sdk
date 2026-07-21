@@ -3,11 +3,12 @@
 use anyhow::Context;
 use clap::Args as ClapArgs;
 use serde::Serialize;
+use std::fmt::{self, Display, Formatter};
 use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::{ActivityStatus, RestoreTvcDeploymentIntent};
 
 use crate::outcome::Outcome;
-use crate::output::{Message, StdCtx};
+use crate::output::StdCtx;
 
 /// Restore a deleted deployment.
 #[derive(Debug, ClapArgs)]
@@ -65,13 +66,10 @@ impl Default for DeploymentRestored {
     }
 }
 
-impl Message for DeploymentRestored {
-    fn reason(&self) -> &'static str {
-        "deployment-restored"
-    }
-
-    fn human_message(&self) -> String {
-        format!(
+impl Display for DeploymentRestored {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
             r#"
 Deployment restore accepted; deployment is no longer marked for deletion.
 

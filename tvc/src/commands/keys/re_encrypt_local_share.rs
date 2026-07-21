@@ -2,7 +2,7 @@
 
 use crate::local_operator_key::{LocalOperatorSeedSource, resolve_local_operator};
 use crate::outcome::Outcome;
-use crate::output::{Message, StdCtx};
+use crate::output::StdCtx;
 use crate::pair::{HexSeed, Pair};
 use crate::provisioning::ProvisionBundle;
 use crate::quorum_key_metadata::QuorumKeyMetadata;
@@ -12,6 +12,7 @@ use anyhow::{Context, anyhow};
 use clap::Args as ClapArgs;
 use qos_core::protocol::services::boot::{Approval, QuorumMember, VersionedManifestEnvelope};
 use serde::{Deserialize, Serialize};
+use std::fmt::{self, Display, Formatter};
 use std::path::{Path, PathBuf};
 
 /// Re-encrypt a share with an ephemeral key.
@@ -79,20 +80,19 @@ pub struct ReEncryptedShareGenerated {
     written_to: Option<String>,
 }
 
-impl Message for ReEncryptedShareGenerated {
-    fn reason(&self) -> &'static str {
-        "re-encrypted-share-generated"
-    }
-
-    fn human_message(&self) -> String {
+impl Display for ReEncryptedShareGenerated {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self.share {
             // Preserve the previous human behavior: pretty-printed share JSON.
-            Some(share) => serde_json::to_string_pretty(share)
-                .expect("serializing re-encrypted share should not fail"),
+            Some(share) => {
+                let json = serde_json::to_string_pretty(share)
+                    .expect("serializing re-encrypted share should not fail");
+                f.write_str(&json)
+            }
             // File branch: the "Re-encrypted share written to: ..." narration
             // prints inline on stderr; the outcome is machine-only, so human
             // mode prints nothing here.
-            None => String::new(),
+            None => Ok(()),
         }
     }
 }
@@ -239,6 +239,7 @@ mod tests {
         ReEncryptedShareGenerated, ReEncryptedShareOutput, build_re_encrypted_share_output,
         ensure_quorum_key_matches_manifest, find_share_set_member,
     };
+    use crate::outcome::Outcome;
     use crate::output::Message;
     use crate::pair::LocalPair;
     use crate::provisioning::ProvisionBundle;
@@ -563,7 +564,8 @@ mod tests {
     #[test]
     fn inline_branch_serializes_flattened_share_payload() {
         let value: serde_json::Value =
-            serde_json::from_str(&generated_inline().to_json_string()).unwrap();
+            serde_json::from_str(&Outcome::KeysReEncryptShare(generated_inline()).to_json_string())
+                .unwrap();
 
         assert_eq!(
             value,
@@ -585,8 +587,10 @@ mod tests {
 
     #[test]
     fn file_branch_serializes_written_to_path() {
-        let value: serde_json::Value =
-            serde_json::from_str(&generated_written_to().to_json_string()).unwrap();
+        let value: serde_json::Value = serde_json::from_str(
+            &Outcome::KeysReEncryptShare(generated_written_to()).to_json_string(),
+        )
+        .unwrap();
 
         assert_eq!(
             value,
@@ -599,6 +603,6 @@ mod tests {
 
     #[test]
     fn file_branch_is_machine_only_in_human_mode() {
-        assert!(generated_written_to().human_message().is_empty());
+        assert!(generated_written_to().to_string().is_empty());
     }
 }

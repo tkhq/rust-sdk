@@ -1,6 +1,7 @@
 use crate::util::read_file_to_string;
 use anyhow::anyhow;
 use qos_p256::P256Pair;
+use std::fmt::{self, Debug, Formatter};
 use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
@@ -43,8 +44,8 @@ impl FromStr for HexSeed {
 }
 
 // The seed must never reach debug output, so the derive is off the table.
-impl std::fmt::Debug for HexSeed {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Debug for HexSeed {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.write_str("HexSeed(..)")
     }
 }

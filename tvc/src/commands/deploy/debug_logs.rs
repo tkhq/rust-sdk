@@ -9,6 +9,7 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use clap::Args as ClapArgs;
 use serde::Serialize;
 use std::collections::{HashSet, VecDeque};
+use std::fmt::{self, Display, Formatter};
 use std::io::Write;
 use std::time::Duration;
 use turnkey_client::TurnkeyP256ApiKey;
@@ -257,13 +258,10 @@ pub struct DebugLogsFetched {
     line_count: usize,
 }
 
-impl Message for DebugLogsFetched {
-    fn reason(&self) -> &'static str {
-        "debug-logs-fetched"
-    }
-
-    fn human_message(&self) -> String {
-        String::new()
+impl Display for DebugLogsFetched {
+    fn fmt(&self, _f: &mut Formatter<'_>) -> fmt::Result {
+        // Machine-only terminal outcome; no human rendering.
+        Ok(())
     }
 }
 
@@ -673,6 +671,6 @@ mod tests {
 
     #[test]
     fn debug_logs_fetched_is_machine_only_in_human_mode() {
-        assert!(DebugLogsFetched::default().human_message().is_empty());
+        assert!(DebugLogsFetched::default().to_string().is_empty());
     }
 }

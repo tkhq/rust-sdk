@@ -3,7 +3,7 @@
 use anyhow::{Context, anyhow};
 use clap::Args as ClapArgs;
 use serde::Serialize;
-use std::fmt::Write as _;
+use std::fmt::{self, Display, Formatter};
 use turnkey_client::generated::{
     GetAppStatusRequest,
     external::data::v1::{AppStatus, DeploymentStatus},
@@ -14,7 +14,7 @@ use crate::{
     commands::app_status::{ReplicaCounts, TimestampPayload, format_replica_counts},
     commands::display::format_egress_enabled,
     outcome::Outcome,
-    output::{Message, StdCtx},
+    output::StdCtx,
 };
 
 /// Get the live status of a deployment from the app status API.
@@ -87,13 +87,10 @@ pub struct DeploymentRuntimeStatus {
     last_updated: Option<TimestampPayload>,
 }
 
-impl Message for DeploymentRuntimeStatus {
-    fn reason(&self) -> &'static str {
-        "deployment-runtime-status"
-    }
-
-    fn human_message(&self) -> String {
-        let mut message = format!(
+impl Display for DeploymentRuntimeStatus {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
             r#"Deployment: {}
 App ID: {}
 {}
@@ -102,32 +99,32 @@ Is Targeted Deployment: {}"#,
             self.app_id,
             format_egress_enabled(self.egress_enabled),
             if self.is_targeted { "yes" } else { "no" }
-        );
+        )?;
 
         match &self.replicas {
             Some(replicas) => {
-                let _ = write!(
-                    message,
+                write!(
+                    f,
                     "\n{}",
                     format_replica_counts(replicas.ready, replicas.desired)
-                );
+                )?;
 
                 if let Some(updated) = &self.last_updated {
-                    let _ = write!(
-                        message,
+                    write!(
+                        f,
                         "\nLast Updated: {}.{:09}s",
                         updated.seconds, updated.nanos
-                    );
+                    )?;
                 }
             }
-            None => message.push_str(
+            None => f.write_str(
                 r#"
 Live Status: unavailable
 Reason: deployment not present in current app status"#,
-            ),
+            )?,
         }
 
-        message
+        Ok(())
     }
 }
 

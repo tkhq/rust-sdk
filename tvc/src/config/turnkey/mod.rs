@@ -16,6 +16,7 @@ pub use qos_operator_key::StoredQosOperatorKey;
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt::{self, Display, Formatter};
 use std::path::Path;
 use std::path::PathBuf;
 use tracing::debug;
@@ -233,8 +234,8 @@ pub enum OperatorKind {
     Hosted,
 }
 
-impl std::fmt::Display for OperatorKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for OperatorKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Local => "local".fmt(f),
             Self::Hosted => "hosted".fmt(f),
