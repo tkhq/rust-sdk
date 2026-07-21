@@ -1,4 +1,4 @@
-//! Generate quorum key command - generates and encrypts a quorum key from a given config.
+//! Generate local quorum key command - generates and encrypts a quorum key from a given config.
 
 use crate::config::quorum_key::QuorumKeyConfig;
 use crate::output::StdCtx;

@@ -137,14 +137,17 @@ impl Commands {
                 AppCommands::Delete(args) => commands::app::delete::run(ctx, args).await,
             },
             Commands::Keys { command } => match command {
-                KeysCommands::GenerateQuorumKey(args) => {
-                    commands::keys::generate_quorum_key::run(ctx, args).await
+                KeysCommands::CreateQuorumKey(args) => {
+                    commands::keys::create_quorum_key::run(ctx, args).await
                 }
-                KeysCommands::InitQuorumKey(args) => {
-                    commands::keys::init_quorum_key::run(ctx, args).await
+                KeysCommands::GenerateLocalQuorumKey(args) => {
+                    commands::keys::generate_local_quorum_key::run(ctx, args).await
                 }
-                KeysCommands::ReEncryptShare(args) => {
-                    commands::keys::re_encrypt_share::run(ctx, args).await
+                KeysCommands::InitLocalQuorumKey(args) => {
+                    commands::keys::init_local_quorum_key::run(ctx, args).await
+                }
+                KeysCommands::ReEncryptLocalShare(args) => {
+                    commands::keys::re_encrypt_local_share::run(ctx, args).await
                 }
             },
             Commands::Login(args) => commands::login::run(ctx, args).await,
@@ -268,12 +271,14 @@ enum AppCommands {
 
 #[derive(Debug, Subcommand)]
 enum KeysCommands {
-    /// Generate and shamir-split a quorum key, encrypting each share to an operator key.
-    GenerateQuorumKey(commands::keys::generate_quorum_key::Args),
-    /// Generate a template quorum key configuration file.
-    InitQuorumKey(commands::keys::init_quorum_key::Args),
-    /// Re-encrypt a share for enclave provisioning.
-    ReEncryptShare(commands::keys::re_encrypt_share::Args),
+    /// Create a hosted quorum key encrypted to hosted operator keys.
+    CreateQuorumKey(commands::keys::create_quorum_key::Args),
+    /// Generate and shamir-split a local quorum key, encrypting each share to an operator key.
+    GenerateLocalQuorumKey(commands::keys::generate_local_quorum_key::Args),
+    /// Generate a template local quorum key configuration file.
+    InitLocalQuorumKey(commands::keys::init_local_quorum_key::Args),
+    /// Re-encrypt a local share for enclave provisioning.
+    ReEncryptLocalShare(commands::keys::re_encrypt_local_share::Args),
 }
 
 impl AppCommands {
@@ -292,9 +297,10 @@ impl AppCommands {
 impl KeysCommands {
     fn name(&self) -> &'static str {
         match self {
-            KeysCommands::GenerateQuorumKey(_) => "keys generate-quorum-key",
-            KeysCommands::InitQuorumKey(_) => "keys init-quorum-key",
-            KeysCommands::ReEncryptShare(_) => "keys re-encrypt-share",
+            KeysCommands::CreateQuorumKey(_) => "keys create-quorum-key",
+            KeysCommands::GenerateLocalQuorumKey(_) => "keys generate-local-quorum-key",
+            KeysCommands::InitLocalQuorumKey(_) => "keys init-local-quorum-key",
+            KeysCommands::ReEncryptLocalShare(_) => "keys re-encrypt-local-share",
         }
     }
 }

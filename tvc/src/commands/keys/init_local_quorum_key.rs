@@ -1,4 +1,4 @@
-//! Quorum key init command - generates a template quorum key config file.
+//! Local quorum key init command - generates a template quorum key config file.
 
 use crate::config::quorum_key::QuorumKeyConfig;
 use crate::config::turnkey::{Config, StoredQosOperatorKey};
@@ -51,7 +51,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<()> {
     shell_println!(ctx, "Edit the file to fill in your values, then run:")?;
     shell_println!(
         ctx,
-        "  tvc keys generate-quorum-key --config-file {}",
+        "  tvc keys generate-local-quorum-key --config-file {}",
         args.output.display()
     )?;
 
