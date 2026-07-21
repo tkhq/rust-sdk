@@ -78,7 +78,9 @@ App and deployments marked for deletion.
 App ID: {}
 Activity ID: {}
 Activity Status: {}"#,
-            self.app_id, self.activity_id, self.activity_status.as_str_name()
+            self.app_id,
+            self.activity_id,
+            self.activity_status.as_str_name()
         )
     }
 }

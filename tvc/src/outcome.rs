@@ -135,8 +135,12 @@ mod tests {
             Outcome::AppSetLiveDeploy(app::set_live_deploy::LiveDeploymentSet::default()),
             Outcome::AppDelete(app::delete::AppDeleted::default()),
             Outcome::KeysCreateQuorumKey(keys::create_quorum_key::QuorumKeyCreated::default()),
-            Outcome::KeysGenerateQuorumKey(keys::generate_local_quorum_key::QuorumKeyGenerated::default()),
-            Outcome::KeysInitQuorumKey(keys::init_local_quorum_key::QuorumKeyConfigCreated::default()),
+            Outcome::KeysGenerateQuorumKey(
+                keys::generate_local_quorum_key::QuorumKeyGenerated::default(),
+            ),
+            Outcome::KeysInitQuorumKey(
+                keys::init_local_quorum_key::QuorumKeyConfigCreated::default(),
+            ),
             Outcome::KeysReEncryptShare(
                 keys::re_encrypt_local_share::ReEncryptedShareGenerated::default(),
             ),

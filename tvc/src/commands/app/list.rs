@@ -73,7 +73,7 @@ struct AppSummary {
 impl From<TvcApp> for AppSummary {
     fn from(app: TvcApp) -> Self {
         // Destructure exhaustively (rather than `..`) so that adding a field to
-        // the generated `TvcApp` forces a compile error here 
+        // the generated `TvcApp` forces a compile error here
         let TvcApp {
             id,
             name,

@@ -78,7 +78,9 @@ Deployment restore accepted; deployment is no longer marked for deletion.
 Deployment ID: {}
 Activity ID: {}
 Activity Status: {}"#,
-            self.deployment_id, self.activity_id, self.activity_status.as_str_name()
+            self.deployment_id,
+            self.activity_id,
+            self.activity_status.as_str_name()
         )
     }
 }

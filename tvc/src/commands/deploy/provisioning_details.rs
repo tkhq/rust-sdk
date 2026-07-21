@@ -441,16 +441,31 @@ mod tests {
             user_data: Some("aa".to_string()),
             nonce: Some("bb".to_string()),
             pcrs: vec![
-                PcrEntry { index: 0, value: "00".to_string() },
-                PcrEntry { index: 16, value: "1616".to_string() },
-                PcrEntry { index: 17, value: "1717".to_string() },
+                PcrEntry {
+                    index: 0,
+                    value: "00".to_string(),
+                },
+                PcrEntry {
+                    index: 16,
+                    value: "1616".to_string(),
+                },
+                PcrEntry {
+                    index: 17,
+                    value: "1717".to_string(),
+                },
             ],
             certificate_length: 1234,
             ca_bundle_certificates: 3,
             manifest_set_threshold: 2,
             manifest_set_approvals: vec![
-                ApprovalEntry { alias: "alice".to_string(), public_key: "aaaa".to_string() },
-                ApprovalEntry { alias: "bob".to_string(), public_key: "bbbb".to_string() },
+                ApprovalEntry {
+                    alias: "alice".to_string(),
+                    public_key: "aaaa".to_string(),
+                },
+                ApprovalEntry {
+                    alias: "bob".to_string(),
+                    public_key: "bbbb".to_string(),
+                },
             ],
             share_set_approvals: vec![ApprovalEntry {
                 alias: "carol".to_string(),
