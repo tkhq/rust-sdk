@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # This environment releases crates on crates.io, requires approval
-    environment: release 
+    environment: release
     # only trigger this job if the push to main is from a merged PR with a "release" label
     if: >
       github.repository_owner == 'tkhq' &&

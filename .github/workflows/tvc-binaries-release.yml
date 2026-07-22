@@ -1,0 +1,196 @@
+name: TVC binaries release
+
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+  workflow_run:
+    workflows: [ "Release-plz" ]
+    types: [ completed ]
+    # Release-plz runs on the head branch of the merged release PR.
+    branches: [ "release-plz-*" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # PR and manual runs always build. Release runs build only after
+    # the triggering Release-plz workflow succeeds.
+    if: >
+      github.repository_owner == 'tkhq' &&
+      (
+        github.event_name == 'pull_request' ||
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event_name == 'workflow_run' &&
+          github.event.workflow_run.conclusion == 'success'
+        )
+      )
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            build_tool: cross
+            rustflags: -C target-feature=+crt-static
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            build_tool: cross
+            rustflags: -C target-feature=+crt-static
+          - target: aarch64-apple-darwin
+            os: macos-14
+            build_tool: cargo
+            rustflags: ""
+          - target: x86_64-apple-darwin
+            os: macos-14
+            build_tool: cargo
+            rustflags: ""
+    env:
+      RUSTFLAGS: ${{ matrix.rustflags }}
+      TARGET: ${{ matrix.target }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          # workflow_run's github.sha points at the default branch, so release
+          # builds must explicitly use the commit that release-plz ran against.
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          # drop creds since we don't need them later - https://release-plz.dev/docs/github/persist-credentials
+          persist-credentials: false
+
+      - name: Install Rust target
+        run: |
+          set -euo pipefail
+          rustup show active-toolchain || rustup toolchain install
+          rustup target add "${TARGET}"
+
+      - name: Install cross
+        if: matrix.build_tool == 'cross'
+        env:
+          CROSS_SHA256: a486cefa6cb486971b97be321ea9dfc2e90c1979550295314a368f53fab6d588
+          CROSS_VERSION: 0.2.5
+        run: |
+          set -euo pipefail
+          archive="${RUNNER_TEMP}/cross.tar.gz"
+          install_dir="${RUNNER_TEMP}/cross"
+          url="https://github.com/cross-rs/cross/releases/download/v${CROSS_VERSION}/cross-x86_64-unknown-linux-musl.tar.gz"
+
+          curl --fail --location --retry 5 --output "${archive}" "${url}"
+          echo "${CROSS_SHA256}  ${archive}" | sha256sum --check -
+          mkdir -p "${install_dir}"
+          tar -xzf "${archive}" -C "${install_dir}"
+          echo "${install_dir}" >> "${GITHUB_PATH}"
+
+      - name: Build tvc
+        env:
+          BUILD_TOOL: ${{ matrix.build_tool }}
+        run: |
+          set -euo pipefail
+          "${BUILD_TOOL}" build \
+            --release \
+            --bin tvc \
+            --locked \
+            --package tvc \
+            --target "${TARGET}"
+
+      - name: Package and checksum tvc
+        env:
+          # stop macOS tar from packaging with metadata - https://superuser.com/questions/259703/get-mac-tar-to-stop-putting-filenames-in-tar-archives
+          COPYFILE_DISABLE: "1"
+        # shasum256 is unavailable on macOS, use shasum instead
+        run: |
+          set -euo pipefail
+          archive="tvc-${TARGET}.tar.gz"
+          binary_dir="target/${TARGET}/release"
+
+          tar -C "${binary_dir}" -czf "${archive}" tvc
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "${archive}" > "${archive}.sha256"
+          else
+            shasum -a 256 "${archive}" > "${archive}.sha256"
+          fi
+          cat "${archive}.sha256"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: tvc-${{ matrix.target }}
+          path: |
+            tvc-${{ matrix.target }}.tar.gz
+            tvc-${{ matrix.target }}.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
+
+  publish:
+    name: Publish tvc release assets
+    if: >
+      github.repository_owner == 'tkhq' &&
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.name == 'Release-plz' &&
+      github.event.workflow_run.conclusion == 'success'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      # The `Release-plz` workflow can succeed while its `release-plz-release` job was skipped.
+      # For example, if a `release-plz-*` PR that was opened but closed without being merged.
+      # The `workflow_run` context (used above in the `if`) only exposes the overall conclusion,
+      # so we must query with `gh api` below
+      - name: Verify release-plz-release job succeeded
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_PLZ_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          conclusion=$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${RELEASE_PLZ_RUN_ID}/jobs?filter=latest" \
+            --jq '[.jobs[] | select(.name == "Release-plz release") | .conclusion] | first // ""')
+
+          if [[ "${conclusion}" != "success" ]]; then
+            echo "Release-plz release did not succeed: ${conclusion:-not found}" >&2
+            exit 1
+          fi
+
+      - name: Checkout release source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+
+      - name: Read tvc version
+        id: version
+        run: |
+          set -euo pipefail
+          version=$(cargo metadata --no-deps --format-version 1 |
+            jq -r '.packages[] | select(.name == "tvc") | .version')
+          if [[ -z "${version}" || "${version}" == "null" ]]; then
+            echo "Could not determine the tvc version" >&2
+            exit 1
+          fi
+          echo "tag=tvc-v${version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: tvc-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Upload tvc release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release view "${RELEASE_TAG}" >/dev/null
+          gh release upload "${RELEASE_TAG}" \
+            artifacts/*.tar.gz \
+            artifacts/*.tar.gz.sha256 \
+            --clobber
