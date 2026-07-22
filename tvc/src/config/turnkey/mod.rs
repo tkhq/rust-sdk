@@ -20,6 +20,7 @@ use std::fmt::{self, Display, Formatter};
 use std::path::Path;
 use std::path::PathBuf;
 use tracing::debug;
+use uuid::Uuid;
 
 const CONFIG_DIR: &str = ".config/turnkey";
 const CONFIG_FILE: &str = "tvc.config.toml";
@@ -247,7 +248,7 @@ impl Display for OperatorKind {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct OperatorRecord {
-    /// Unique human-readable name within the organization.
+    /// Human-readable name within the organization.
     pub name: String,
     #[serde(flatten)]
     pub kind: OperatorRecordKind,
@@ -298,8 +299,8 @@ pub struct LocalOperatorRecord {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct HostedOperatorRecord {
-    pub operator_id: String,
-    pub wallet_id: String,
+    pub operator_id: Uuid,
+    pub wallet_id: Uuid,
     pub path: String,
     pub encrypt_public_key: String,
     pub sign_public_key: String,

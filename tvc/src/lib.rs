@@ -13,6 +13,7 @@ pub mod commands;
 pub mod config;
 pub(crate) mod local_operator_key;
 pub mod logging;
+pub mod operator;
 pub mod outcome;
 pub mod output;
 pub mod pair;
