@@ -1,10 +1,9 @@
 //! App configuration file format for `tvc app create`.
 
-use std::fmt::Display;
-
 use crate::prompts;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::fmt::{self, Display, Formatter};
 use thiserror::Error;
 
 pub const MIN_SHARE_SET_THRESHOLD: u32 = 2;
@@ -310,7 +309,7 @@ impl AppConfigValidationError {
 }
 
 impl Display for AppConfigValidationErrors {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let s = self
             .0
             .iter()

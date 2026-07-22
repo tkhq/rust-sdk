@@ -1,12 +1,14 @@
 //! Deploy delete command - marks a deployment for deletion.
 
 use crate::client::build_client;
+use crate::outcome::Outcome;
 use crate::output::StdCtx;
-use crate::shell_println;
 use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
+use serde::Serialize;
+use std::fmt::{self, Display, Formatter};
 use std::time::{SystemTime, UNIX_EPOCH};
-use turnkey_client::generated::DeleteTvcDeploymentIntent;
+use turnkey_client::generated::{ActivityStatus, DeleteTvcDeploymentIntent};
 
 /// Delete a TVC deployment by marking it for deletion.
 #[derive(Debug, ClapArgs)]
@@ -18,7 +20,7 @@ pub struct Args {
 }
 
 /// Run the deploy delete command.
-pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<()> {
+pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     let auth = build_client().await?;
 
     let intent = DeleteTvcDeploymentIntent {
@@ -36,15 +38,47 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<()> {
         .await
         .context("failed to delete TVC deployment")?;
 
-    shell_println!(ctx)?;
-    shell_println!(
-        ctx,
-        "Deployment delete accepted; deployment is marked for deletion."
-    )?;
-    shell_println!(ctx)?;
-    shell_println!(ctx, "Deployment ID: {}", result.result.deployment_id)?;
-    shell_println!(ctx, "Activity ID: {}", result.activity_id)?;
-    shell_println!(ctx, "Activity Status: {:?}", result.status)?;
+    Ok(Outcome::DeployDelete(DeploymentDeleted {
+        deployment_id: result.result.deployment_id,
+        activity_id: result.activity_id,
+        activity_status: result.status,
+    }))
+}
 
-    Ok(())
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeploymentDeleted {
+    deployment_id: String,
+    activity_id: String,
+    /// Stable proto status name, e.g. `ACTIVITY_STATUS_COMPLETED`.
+    activity_status: ActivityStatus,
+}
+
+/// Manual because the generated `ActivityStatus` does not implement
+/// `Default`; the zero value is the enum's `Unspecified` variant.
+impl Default for DeploymentDeleted {
+    fn default() -> Self {
+        Self {
+            deployment_id: String::default(),
+            activity_id: String::default(),
+            activity_status: ActivityStatus::Unspecified,
+        }
+    }
+}
+
+impl Display for DeploymentDeleted {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            r#"
+Deployment delete accepted; deployment is marked for deletion.
+
+Deployment ID: {}
+Activity ID: {}
+Activity Status: {}"#,
+            self.deployment_id,
+            self.activity_id,
+            self.activity_status.as_str_name()
+        )
+    }
 }

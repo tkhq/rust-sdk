@@ -1,6 +1,7 @@
 //! CLI parsing and dispatch.
 
 use crate::commands;
+use crate::outcome::Outcome;
 use crate::output::{ColorChoice, Ctx, ErrorMessage, MessageFormat, Shell, StdCtx};
 use clap::{ArgAction, Parser, Subcommand, builder::BoolishValueParser};
 use std::io::Write;
@@ -85,7 +86,16 @@ impl Cli {
         let mut ctx = Ctx::new(shell, args.non_interactive);
         let result = args.command.run(&mut ctx).await;
         match result {
-            Ok(()) => ExitCode::SUCCESS,
+            Ok(outcome) => {
+                // Fail open: the command itself already succeeded, so a failure
+                // to deliver the outcome message should not flip the exit code.
+                // Make a best-effort warning on stderr and still exit successfully.
+                if let Err(emit_error) = ctx.shell().emit(&outcome) {
+                    let mut stderr = std::io::stderr();
+                    let _ = writeln!(stderr, "warning: failed to write CLI output: {emit_error}");
+                }
+                ExitCode::SUCCESS
+            }
             Err(error) => {
                 let shell = ctx.shell();
                 let emit_result = if shell.message_format().is_json() {
@@ -104,7 +114,7 @@ impl Cli {
 }
 
 impl Commands {
-    async fn run(self, ctx: &mut StdCtx) -> anyhow::Result<()> {
+    async fn run(self, ctx: &mut StdCtx) -> anyhow::Result<Outcome> {
         match self {
             Commands::Deploy { command } => match command {
                 DeployCommands::Approve(args) => commands::deploy::approve::run(ctx, args).await,

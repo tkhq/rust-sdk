@@ -5,13 +5,16 @@ use crate::config::turnkey::{
     StoredQosOperatorKey, dashboard_base_url, default_api_key_path, default_operator_key_path,
     default_org_dir,
 };
+use crate::outcome::Outcome;
 use crate::output::StdCtx;
 use crate::prompts::{self, error_required_in_non_interactive};
 use crate::{shell_eprintln, shell_print, shell_println};
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Args as ClapArgs;
 use qos_p256::P256Pair;
+use serde::Serialize;
 use std::collections::BTreeSet;
+use std::fmt::{self, Display, Formatter};
 use std::io::BufRead;
 use tracing::debug;
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
@@ -60,7 +63,7 @@ struct LoginPlan {
     api_key_policy: ApiKeyPolicy,
 }
 
-pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<()> {
+pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     debug!(
         non_interactive = ctx.is_non_interactive(),
         org_arg_present = args.org.is_some(),
@@ -81,7 +84,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<()> {
 
 /// Permanently delete a saved login profile: its config entry and its API and
 /// operator key files on disk.
-pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs) -> Result<()> {
+pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs) -> Result<Outcome> {
     let is_non_interactive = ctx.is_non_interactive();
     debug!(
         non_interactive = is_non_interactive,
@@ -212,36 +215,17 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs) -> Result<()> {
     // succeeds, so a failure leaves the profile listed and the delete retryable.
     config.save().await?;
 
-    shell_println!(ctx, "Deleted login profile '{alias}' ({}).", removed.id)?;
-    if let Some(dir) = removed_dir {
-        shell_println!(ctx, "Removed key directory: {}", dir.display())?;
-    }
-
     // A local delete does not touch the dashboard-registered API key, and we
     // can't tell whether it is still there, so hedge with "may" and give steps.
     let dashboard_url = dashboard_base_url(&removed.api_base_url);
-    shell_println!(ctx)?;
-    shell_println!(
-        ctx,
-        "IMPORTANT: The API key may still be registered on the Turnkey dashboard."
-    )?;
-    shell_println!(
-        ctx,
-        "It will remain valid until it is manually removed. To remove it:"
-    )?;
-    shell_println!(
-        ctx,
-        "  1. Go to {dashboard_url}/dashboard/v2/users and click your user"
-    )?;
-    match api_public_key {
-        Some(public_key) => {
-            shell_println!(ctx, "  2. Delete the API key with public key:")?;
-            shell_println!(ctx, "       {public_key}")?;
-        }
-        None => shell_println!(ctx, "  2. Delete the API key associated with this profile")?,
-    }
 
-    Ok(())
+    Ok(Outcome::ProfileDelete(ProfileDeleted {
+        alias,
+        organization_id: removed.id,
+        removed_key_directory: removed_dir.map(|dir| dir.display().to_string()),
+        dashboard_url: dashboard_url.to_string(),
+        api_public_key,
+    }))
 }
 
 /// Resolve the alias of a configured profile to delete. Prompts interactively
@@ -284,8 +268,8 @@ struct ProfileChoice<'a> {
     is_active: bool,
 }
 
-impl std::fmt::Display for ProfileChoice<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for ProfileChoice<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let suffix = if self.is_active { " (active)" } else { "" };
         write!(f, "{} ({}){suffix}", self.alias, self.org_id)
     }
@@ -319,7 +303,7 @@ fn build_login_plan_non_interactive(args: Args) -> Result<LoginPlan> {
     })
 }
 
-async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) -> Result<()> {
+async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) -> Result<Outcome> {
     let (alias, org_config) = match plan.org {
         OrgPlan::Existing(query) => {
             let alias = match find_org(&config, &query) {
@@ -374,7 +358,29 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
     let whoami = verify_credentials(&api_key, &org_config.id, &org_config.api_base_url).await?;
     let operator_key = find_or_generate_operator_key(ctx, &alias, &org_config).await?;
 
-    print_success(ctx, &alias, &org_config, &api_key, &operator_key, &whoami)
+    // Operator key path now lives in the org's local operator record (the
+    // versioned registry), not on `OrgConfig` directly. Resolve it before the
+    // struct literal so `alias` is still available (the struct moves it).
+    let operator_key_path = org_config
+        .select_local_record(&alias)?
+        .key_path
+        .display()
+        .to_string();
+
+    Ok(Outcome::Login(LoggedIn {
+        organization_name: whoami.organization_name,
+        organization_id: whoami.organization_id,
+        username: whoami.username,
+        user_id: whoami.user_id,
+        alias,
+        api_public_key: api_key.public_key.clone(),
+        operator_public_key: operator_key.public_key.clone(),
+        config_file_path: crate::config::turnkey::config_file_path()?
+            .display()
+            .to_string(),
+        api_key_path: org_config.api_key_path.display().to_string(),
+        operator_key_path,
+    }))
 }
 
 fn prompt_for_org_plan(
@@ -444,8 +450,8 @@ enum OrgChoice {
     New,
 }
 
-impl std::fmt::Display for OrgChoice {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for OrgChoice {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             OrgChoice::Existing { display, .. } => write!(f, "{display}"),
             OrgChoice::New => write!(f, "[new] Add a new organization"),
@@ -636,45 +642,95 @@ async fn verify_credentials(
     })
 }
 
-fn print_success(
-    ctx: &mut StdCtx,
-    alias: &str,
-    org_config: &OrgConfig,
-    api_key: &StoredApiKey,
-    operator_key: &StoredQosOperatorKey,
-    whoami: &WhoamiResult,
-) -> Result<()> {
-    let local = org_config.select_local_record(alias)?;
-    shell_println!(ctx)?;
-    shell_println!(ctx, "Successfully logged in!")?;
-    shell_println!(ctx)?;
-    shell_println!(
-        ctx,
-        "Organization: {} ({})",
-        whoami.organization_name,
-        whoami.organization_id
-    )?;
-    shell_println!(ctx, "User: {} ({})", whoami.username, whoami.user_id)?;
-    shell_println!(ctx, "Active Org: {alias}")?;
-    shell_println!(ctx)?;
-    shell_println!(ctx, "Credentials")?;
-    shell_println!(ctx, "  API public key:        {}", api_key.public_key)?;
-    shell_println!(ctx, "  Operator public key:   {}", operator_key.public_key)?;
-    shell_println!(ctx)?;
-    shell_println!(ctx, "Saved to")?;
-    shell_println!(
-        ctx,
-        "  Config file:    {}",
-        crate::config::turnkey::config_file_path()?.display()
-    )?;
-    shell_println!(
-        ctx,
-        "  API key:        {}",
-        org_config.api_key_path.display()
-    )?;
-    shell_println!(ctx, "  Operator key:   {}", local.key_path.display())?;
+#[derive(Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoggedIn {
+    organization_name: String,
+    organization_id: String,
+    username: String,
+    user_id: String,
+    alias: String,
+    api_public_key: String,
+    operator_public_key: String,
+    config_file_path: String,
+    api_key_path: String,
+    operator_key_path: String,
+}
 
-    Ok(())
+#[derive(Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileDeleted {
+    alias: String,
+    organization_id: String,
+    removed_key_directory: Option<String>,
+    dashboard_url: String,
+    api_public_key: Option<String>,
+}
+
+impl Display for ProfileDeleted {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let mut lines = vec![format!(
+            "Deleted login profile '{}' ({}).",
+            self.alias, self.organization_id
+        )];
+
+        if let Some(directory) = &self.removed_key_directory {
+            lines.push(format!("Removed key directory: {directory}"));
+        }
+
+        lines.extend([
+            String::new(),
+            "IMPORTANT: The API key may still be registered on the Turnkey dashboard.".to_string(),
+            "It will remain valid until it is manually removed. To remove it:".to_string(),
+            format!(
+                "  1. Go to {}/dashboard/v2/users and click your user",
+                self.dashboard_url
+            ),
+        ]);
+
+        match &self.api_public_key {
+            Some(public_key) => {
+                lines.push("  2. Delete the API key with public key:".to_string());
+                lines.push(format!("       {public_key}"));
+            }
+            None => lines.push("  2. Delete the API key associated with this profile".to_string()),
+        }
+
+        f.write_str(&lines.join("\n"))
+    }
+}
+
+impl Display for LoggedIn {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            r#"
+Successfully logged in!
+
+Organization: {} ({})
+User: {} ({})
+Active Org: {}
+
+Credentials
+  API public key:        {}
+  Operator public key:   {}
+
+Saved to
+  Config file:    {}
+  API key:        {}
+  Operator key:   {}"#,
+            self.organization_name,
+            self.organization_id,
+            self.username,
+            self.user_id,
+            self.alias,
+            self.api_public_key,
+            self.operator_public_key,
+            self.config_file_path,
+            self.api_key_path,
+            self.operator_key_path
+        )
+    }
 }
 
 #[cfg(test)]

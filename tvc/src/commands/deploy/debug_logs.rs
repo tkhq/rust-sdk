@@ -1,11 +1,15 @@
 //! Deploy debug-logs command.
 
-use crate::output::{Ctx, StdCtx};
-use crate::{shell_eprintln, shell_println};
+use crate::commands::app_status::TimestampPayload;
+use crate::outcome::Outcome;
+use crate::output::{Ctx, Message, StdCtx};
+use crate::shell_eprintln;
 use anyhow::Context;
 use chrono::{DateTime, SecondsFormat, Utc};
 use clap::Args as ClapArgs;
+use serde::Serialize;
 use std::collections::{HashSet, VecDeque};
+use std::fmt::{self, Display, Formatter};
 use std::io::Write;
 use std::time::Duration;
 use turnkey_client::TurnkeyP256ApiKey;
@@ -119,7 +123,7 @@ pub struct Args {
 }
 
 /// Run the `deploy debug-logs` command.
-pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<()> {
+pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
     let auth = crate::client::build_client().await?;
 
     let request = DebugLogQueryRequest {
@@ -175,7 +179,8 @@ async fn query_debug_logs(
     ctx: &mut StdCtx,
     client: &turnkey_client::TurnkeyClient<TurnkeyP256ApiKey>,
     request: DebugLogQueryRequest,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Outcome> {
+    let deployment_id = request.deployment_id.clone();
     let mut log_printer = DebugLogPrinter::new(
         request.include_platform_timestamp,
         request.recent_line_capacity,
@@ -189,10 +194,15 @@ async fn query_debug_logs(
     };
 
     let response = fetch_debug_logs(client, current_request).await?;
-    log_printer.print_response(ctx, &response)?;
+    let line_count = log_printer.print_response(ctx, &response)?;
 
+    // In poll mode the loop below runs until killed (or errors), so the
+    // terminal outcome is only reachable in non-poll mode.
     let Some(poll_request) = poll_request else {
-        return Ok(());
+        return Ok(Outcome::DeployDebugLogs(DebugLogsFetched {
+            deployment_id,
+            line_count,
+        }));
     };
 
     shell_eprintln!(ctx, "Connected; polling for debug logs...")?;
@@ -202,6 +212,56 @@ async fn query_debug_logs(
         tokio::time::sleep(poll_interval).await;
         let response = fetch_debug_logs(client, poll_request.clone()).await?;
         log_printer.print_response(ctx, &response)?;
+    }
+}
+
+/// One streamed log line (NDJSON in JSON mode; the formatted line in human
+/// mode). Emitted inline by `deploy debug-logs`, not part of `Outcome`.
+#[derive(Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DebugLogLine {
+    replica: String,
+    content: String,
+    ts: Option<TimestampPayload>,
+    /// Human-rendering knob only; not part of the JSON payload.
+    #[serde(skip)]
+    include_platform_timestamp: bool,
+}
+
+impl Message for DebugLogLine {
+    fn reason(&self) -> &'static str {
+        "debug-log-line"
+    }
+
+    fn human_message(&self) -> String {
+        // Rebuild the API line and defer to `format_log_line` so human output
+        // stays byte-identical to the pre-outcome rendering.
+        let line = LogLine {
+            content: self.content.clone(),
+            ts: self.ts.as_ref().map(|ts| Timestamp {
+                seconds: ts.seconds.clone(),
+                nanos: ts.nanos.clone(),
+            }),
+        };
+        format_log_line(&self.replica, &line, self.include_platform_timestamp)
+    }
+}
+
+/// Terminal outcome for non-poll `deploy debug-logs` runs. Machine-only: the
+/// log lines themselves stream as `debug-log-line` messages, so human mode
+/// prints nothing extra for this outcome.
+#[derive(Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DebugLogsFetched {
+    deployment_id: String,
+    /// Number of log lines actually printed (after dedupe).
+    line_count: usize,
+}
+
+impl Display for DebugLogsFetched {
+    fn fmt(&self, _f: &mut Formatter<'_>) -> fmt::Result {
+        // Machine-only terminal outcome; no human rendering.
+        Ok(())
     }
 }
 
@@ -282,16 +342,6 @@ impl RecentLogLineDeduper {
 
         self.insert(key)
     }
-
-    #[cfg(test)]
-    fn len(&self) -> usize {
-        self.seen.len()
-    }
-
-    #[cfg(test)]
-    fn capacity(&self) -> usize {
-        self.order.capacity()
-    }
 }
 
 #[derive(Debug)]
@@ -325,11 +375,13 @@ impl DebugLogPrinter {
         }
     }
 
+    /// Emit new log lines and return how many were printed.
     fn print_response<W: Write, W2: Write>(
         &mut self,
         ctx: &mut Ctx<W, W2>,
         response: &GetTvcDeploymentDebugLogsResponse,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<usize> {
+        let mut printed = 0;
         for entry in &response.entries {
             let Some(line) = entry.line.as_ref() else {
                 continue;
@@ -337,14 +389,16 @@ impl DebugLogPrinter {
             let replica = entry.replica_label.as_str();
 
             if self.should_print_line(replica, line) {
-                shell_println!(
-                    ctx,
-                    "{}",
-                    format_log_line(replica, line, self.include_platform_timestamp)
-                )?;
+                ctx.shell().emit(&DebugLogLine {
+                    replica: replica.to_string(),
+                    content: line.content.clone(),
+                    ts: line.ts.clone().map(Into::into),
+                    include_platform_timestamp: self.include_platform_timestamp,
+                })?;
+                printed += 1;
             }
         }
-        Ok(())
+        Ok(printed)
     }
 }
 
@@ -456,7 +510,7 @@ mod tests {
 
         assert!(deduper.record_if_new("replica 1/3", &line));
         assert!(deduper.record_if_new("replica 1/3", &line));
-        assert_eq!(deduper.len(), 0);
+        assert_eq!(deduper.seen.len(), 0);
     }
 
     #[test]
@@ -506,7 +560,7 @@ mod tests {
 
         assert!(deduper.record_if_new("replica 1/2", &line));
         assert!(deduper.record_if_new("replica 1/2", &line));
-        assert_eq!(deduper.len(), 0);
+        assert_eq!(deduper.seen.len(), 0);
     }
 
     #[test]
@@ -516,7 +570,7 @@ mod tests {
 
         assert!(deduper.record_if_new("replica 1/2", &line));
         assert!(!deduper.record_if_new("replica 1/2", &line));
-        assert_eq!(deduper.len(), 1);
+        assert_eq!(deduper.seen.len(), 1);
     }
 
     #[test]
@@ -545,7 +599,7 @@ mod tests {
 
         printer.print_response(&mut ctx, &response).unwrap();
 
-        assert_eq!(printer.deduper.as_ref().unwrap().len(), 1);
+        assert_eq!(printer.deduper.as_ref().unwrap().seen.len(), 1);
     }
 
     #[test]
@@ -570,9 +624,9 @@ mod tests {
         assert!(!deduper.insert(first.clone()));
         assert!(deduper.insert(third));
 
-        assert_eq!(deduper.len(), 2);
+        assert_eq!(deduper.seen.len(), 2);
         assert!(deduper.insert(first));
-        assert_eq!(deduper.len(), 2);
+        assert_eq!(deduper.seen.len(), 2);
     }
 
     #[test]
@@ -581,13 +635,42 @@ mod tests {
         let second = log_line_key("replica 1/2", "second", "1710000000", "2");
         let third = log_line_key("replica 1/2", "third", "1710000000", "3");
         let mut deduper = RecentLogLineDeduper::new(2);
-        let initial_capacity = deduper.capacity();
+        let initial_capacity = deduper.order.capacity();
 
         assert!(deduper.insert(first));
         assert!(deduper.insert(second));
         assert!(deduper.insert(third));
 
-        assert_eq!(deduper.len(), 2);
-        assert_eq!(deduper.capacity(), initial_capacity);
+        assert_eq!(deduper.seen.len(), 2);
+        assert_eq!(deduper.order.capacity(), initial_capacity);
+    }
+
+    fn sample_debug_log_line() -> DebugLogLine {
+        DebugLogLine {
+            replica: "replica 1/2".to_string(),
+            content: "hello".to_string(),
+            ts: Some(TimestampPayload {
+                seconds: "1710000000".to_string(),
+                nanos: "123456789".to_string(),
+            }),
+            include_platform_timestamp: false,
+        }
+    }
+
+    #[test]
+    fn debug_log_line_human_message_matches_previous_rendering() {
+        let mut line = sample_debug_log_line();
+        assert_eq!(line.human_message(), "replica 1/2 hello");
+
+        line.include_platform_timestamp = true;
+        assert_eq!(
+            line.human_message(),
+            "2024-03-09T16:00:00.123456789Z replica 1/2 hello"
+        );
+    }
+
+    #[test]
+    fn debug_logs_fetched_is_machine_only_in_human_mode() {
+        assert!(DebugLogsFetched::default().to_string().is_empty());
     }
 }

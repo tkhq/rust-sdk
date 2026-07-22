@@ -6,11 +6,14 @@ use crate::{
         app::{AppConfig, AppConfigValidationErrors, OperatorSetParams},
         turnkey::{self, StoredQosOperatorKey},
     },
+    outcome::Outcome,
     output::{Ctx, StdCtx},
     prompts, shell_println,
 };
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Args as ClapArgs;
+use serde::Serialize;
+use std::fmt::{self, Display, Formatter};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
     io,
@@ -51,7 +54,7 @@ struct Overrides {
     pub dangerous_enable_debug_mode_deployments: bool,
 }
 
-pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<()> {
+pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     let config = if ctx.is_non_interactive() {
         build_app_config_non_interactive(&args).await?
     } else {
@@ -233,7 +236,7 @@ async fn load_saved_operator_public_key() -> Option<String> {
     Some(operator_key.public_key)
 }
 
-async fn run_with_config(ctx: &mut StdCtx, args: Args, app_config: AppConfig) -> Result<()> {
+async fn run_with_config(ctx: &mut StdCtx, args: Args, app_config: AppConfig) -> Result<Outcome> {
     shell_println!(ctx, "Creating app '{}'...", app_config.name)?;
 
     let auth = build_client().await?;
@@ -259,27 +262,55 @@ async fn run_with_config(ctx: &mut StdCtx, args: Args, app_config: AppConfig) ->
     config.set_last_operator_ids(&operator_ids)?;
     config.save().await?;
 
-    shell_println!(ctx)?;
-    shell_println!(ctx, "App created successfully!")?;
-    shell_println!(ctx)?;
-    shell_println!(ctx, "App ID: {app_id}")?;
-    shell_println!(ctx, "Name: {}", app_config.name)?;
-    shell_println!(ctx, "Manifest Set ID: {}", result.result.manifest_set_id)?;
-    if !operator_ids.is_empty() {
-        shell_println!(
-            ctx,
-            "Manifest Set Operator IDs: {}",
-            operator_ids.join(", ")
-        )?;
-    }
-    shell_println!(ctx, "Config: {}", args.config_file.display())?;
-    shell_println!(ctx)?;
-    shell_println!(
-        ctx,
-        "Use one of the Manifest Set Operator IDs above with `tvc deploy approve --operator-id`"
-    )?;
+    Ok(Outcome::AppCreate(AppCreated {
+        app_id,
+        name: app_config.name,
+        manifest_set_id: result.result.manifest_set_id,
+        manifest_set_operator_ids: operator_ids,
+        config_path: args.config_file.display().to_string(),
+    }))
+}
 
-    Ok(())
+#[derive(Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppCreated {
+    app_id: String,
+    name: String,
+    manifest_set_id: String,
+    manifest_set_operator_ids: Vec<String>,
+    config_path: String,
+}
+
+impl Display for AppCreated {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            r#"
+App created successfully!
+
+App ID: {}
+Name: {}
+Manifest Set ID: {}"#,
+            self.app_id, self.name, self.manifest_set_id
+        )?;
+
+        if !self.manifest_set_operator_ids.is_empty() {
+            write!(
+                f,
+                "\nManifest Set Operator IDs: {}",
+                self.manifest_set_operator_ids.join(", ")
+            )?;
+        }
+
+        write!(
+            f,
+            r#"
+Config: {}
+
+Use one of the Manifest Set Operator IDs above with `tvc deploy approve --operator-id`"#,
+            self.config_path
+        )
+    }
 }
 
 fn build_create_tvc_app_intent(app_config: &AppConfig) -> CreateTvcAppIntent {

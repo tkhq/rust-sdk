@@ -1,12 +1,14 @@
 //! App set-live-deploy command.
 
 use crate::client::build_client;
+use crate::outcome::Outcome;
 use crate::output::StdCtx;
-use crate::shell_println;
 use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
+use serde::Serialize;
+use std::fmt::{self, Display, Formatter};
 use std::time::{SystemTime, UNIX_EPOCH};
-use turnkey_client::generated::UpdateTvcAppLiveDeploymentIntent;
+use turnkey_client::generated::{ActivityStatus, UpdateTvcAppLiveDeploymentIntent};
 
 /// Set the live deployment for a TVC app.
 #[derive(Debug, ClapArgs)]
@@ -18,7 +20,7 @@ pub struct Args {
 }
 
 /// Run the app set-live-deploy command.
-pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<()> {
+pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     let auth = build_client().await?;
 
     let intent = UpdateTvcAppLiveDeploymentIntent {
@@ -36,12 +38,47 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<()> {
         .await
         .context("failed to set TVC app live deployment")?;
 
-    shell_println!(ctx)?;
-    shell_println!(ctx, "Set-live-deploy accepted.")?;
-    shell_println!(ctx)?;
-    shell_println!(ctx, "Deployment ID: {}", args.deploy_id)?;
-    shell_println!(ctx, "Activity ID: {}", result.activity_id)?;
-    shell_println!(ctx, "Activity Status: {:?}", result.status)?;
+    Ok(Outcome::AppSetLiveDeploy(LiveDeploymentSet {
+        deployment_id: args.deploy_id,
+        activity_id: result.activity_id,
+        activity_status: result.status,
+    }))
+}
 
-    Ok(())
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LiveDeploymentSet {
+    deployment_id: String,
+    activity_id: String,
+    /// Stable proto status name, e.g. `ACTIVITY_STATUS_COMPLETED`.
+    activity_status: ActivityStatus,
+}
+
+/// Manual because the generated `ActivityStatus` does not implement
+/// `Default`; the zero value is the enum's `Unspecified` variant.
+impl Default for LiveDeploymentSet {
+    fn default() -> Self {
+        Self {
+            deployment_id: String::default(),
+            activity_id: String::default(),
+            activity_status: ActivityStatus::Unspecified,
+        }
+    }
+}
+
+impl Display for LiveDeploymentSet {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            r#"
+Set-live-deploy accepted.
+
+Deployment ID: {}
+Activity ID: {}
+Activity Status: {}"#,
+            self.deployment_id,
+            self.activity_id,
+            self.activity_status.as_str_name()
+        )
+    }
 }

@@ -1,14 +1,12 @@
 //! Create a hosted quorum key from operator encryption public keys.
 
-use crate::{
-    client::build_client,
-    output::{Message, StdCtx},
-};
+use crate::{client::build_client, outcome::Outcome, output::StdCtx};
 use anyhow::{Context, Result, anyhow, ensure};
 use clap::Args as ClapArgs;
 use p256::{PublicKey, elliptic_curve::sec1::ToEncodedPoint};
 use serde::Serialize;
 use std::collections::HashSet;
+use std::fmt::{self, Display, Formatter};
 use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::{CreateTvcQuorumKeyIntent, CreateTvcQuorumKeyResult};
 
@@ -29,21 +27,18 @@ pub struct Args {
     pub operator_encrypt_keys: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct QuorumKeyCreated {
+pub struct QuorumKeyCreated {
     quorum_key_id: String,
     quorum_public_key: String,
     share_ids: Vec<String>,
 }
 
-impl Message for QuorumKeyCreated {
-    fn reason(&self) -> &'static str {
-        "quorum-key-created"
-    }
-
-    fn human_message(&self) -> String {
-        format!(
+impl Display for QuorumKeyCreated {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
             "Quorum Key ID: {}\nQuorum Public Key: {}\nShare IDs: {}",
             self.quorum_key_id,
             self.quorum_public_key,
@@ -53,7 +48,7 @@ impl Message for QuorumKeyCreated {
 }
 
 /// Run the hosted quorum-key creation command.
-pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<()> {
+pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     let operator_encrypt_keys = parse_operator_encrypt_keys(&args.operator_encrypt_keys)?;
     validate_operator_count(operator_encrypt_keys.len())?;
     validate_threshold(args.threshold, operator_encrypt_keys.len())?;
@@ -73,7 +68,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<()> {
         .map_err(|error| anyhow!("failed to create hosted TVC quorum key: {error}"))?;
     let output = validate_result(result.result, expected_share_count)?;
 
-    ctx.shell().emit(&output)
+    Ok(Outcome::KeysCreateQuorumKey(output))
 }
 
 fn parse_operator_encrypt_keys(input: &str) -> Result<Vec<String>> {
@@ -322,15 +317,16 @@ mod tests {
             }
         );
         assert_eq!(
-            output.human_message(),
+            output.to_string(),
             "Quorum Key ID: quorum-key-id\nQuorum Public Key: quorum-public-key\nShare IDs: share-1, share-2"
         );
 
-        let json: Value = serde_json::from_str(&output.to_json_string()).unwrap();
+        // The payload serializes without a `reason`; the reason is the
+        // `Outcome`'s responsibility.
+        let json: Value = serde_json::to_value(&output).unwrap();
         assert_eq!(
             json,
             serde_json::json!({
-                "reason": "quorum-key-created",
                 "quorumKeyId": "quorum-key-id",
                 "quorumPublicKey": "quorum-public-key",
                 "shareIds": ["share-1", "share-2"],

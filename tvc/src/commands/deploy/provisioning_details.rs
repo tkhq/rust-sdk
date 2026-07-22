@@ -1,15 +1,18 @@
 //! Deploy provisioning-details command.
 
+use crate::outcome::Outcome;
 use crate::output::StdCtx;
 use crate::provisioning::{
     ProvisionBundle, extract_ephemeral_public_key_bytes, verify_provisioning_details,
 };
-use crate::shell_println;
 use crate::util::write_file;
 use anyhow::{Context, bail};
 use clap::Args as ClapArgs;
 use qos_core::protocol::services::boot::{Approval, VersionedManifestEnvelope};
 use qos_nsm::types::NsmDigest;
+use serde::Serialize;
+use std::fmt::Write;
+use std::fmt::{self, Display, Formatter};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::{
@@ -58,7 +61,7 @@ struct AttestationSummary {
 const SUMMARY_PCR_MAX_INDEX: usize = 17;
 
 /// Run the deploy provisioning-details command.
-pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<()> {
+pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
     let auth = crate::client::build_client().await?;
 
     let request = GetTvcDeploymentProvisioningDetailsRequest {
@@ -100,37 +103,41 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<()> {
         None,
     )?;
 
-    if let Some(path) = args.provision_bundle_out.as_ref() {
-        let bundle = ProvisionBundle::new(
-            args.deploy_id.clone(),
-            &attestation_document,
-            manifest_envelope.clone(),
-            fetched_at_unix_ms,
-            &summary.ephemeral_key,
-        );
-        write_provision_bundle(ctx, path, &bundle).await?;
-        shell_println!(ctx)?;
-    }
+    let bundle_path = match args.provision_bundle_out.as_ref() {
+        Some(path) => {
+            let bundle = ProvisionBundle::new(
+                args.deploy_id.clone(),
+                &attestation_document,
+                manifest_envelope.clone(),
+                fetched_at_unix_ms,
+                &summary.ephemeral_key,
+            );
+            write_provision_bundle(path, &bundle).await?;
+            Some(path.display().to_string())
+        }
+        None => None,
+    };
 
     let verification_status = if args.dangerous_skip_verification {
         "skipped attestation, PCR, and approval verification (--dangerous-skip-verification)"
     } else {
         "verified (attestation + approvals)"
     };
-    print_summary(ctx, &args.deploy_id, verification_status, &summary)?;
 
-    Ok(())
+    Ok(Outcome::DeployProvisioningDetails(
+        ProvisioningDetails::from_summary(
+            args.deploy_id,
+            verification_status,
+            bundle_path,
+            &summary,
+        ),
+    ))
 }
 
-async fn write_provision_bundle(
-    ctx: &mut StdCtx,
-    path: &Path,
-    bundle: &ProvisionBundle,
-) -> anyhow::Result<()> {
+async fn write_provision_bundle(path: &Path, bundle: &ProvisionBundle) -> anyhow::Result<()> {
     let contents =
         serde_json::to_vec_pretty(bundle).context("failed to serialize provision bundle")?;
     write_file(path, &contents).await?;
-    shell_println!(ctx, "Provision bundle written to: {}", path.display())?;
     Ok(())
 }
 
@@ -187,88 +194,162 @@ fn approval_summaries(approvals: &[Approval]) -> Vec<ApprovalSummary> {
         .collect()
 }
 
-fn print_summary(
-    ctx: &mut StdCtx,
-    deploy_id: &str,
-    verification_status: &str,
-    summary: &AttestationSummary,
-) -> anyhow::Result<()> {
-    shell_println!(ctx, "Deployment: {deploy_id}")?;
-    shell_println!(ctx, "Verification: {verification_status}")?;
-    shell_println!(
-        ctx,
-        "Ephemeral Key: {}",
-        hex::encode(&summary.ephemeral_key)
-    )?;
-    shell_println!(ctx, "Module ID: {}", summary.module_id)?;
-    shell_println!(ctx, "Digest: {:?}", summary.digest)?;
-    shell_println!(ctx, "Timestamp (ms): {}", summary.timestamp_ms)?;
-    shell_println!(
-        ctx,
-        "User Data: {}",
-        summary
-            .user_data
-            .as_ref()
-            .map(hex::encode)
-            .unwrap_or_else(|| "(none)".to_string())
-    )?;
-    shell_println!(
-        ctx,
-        "Nonce: {}",
-        summary
-            .nonce
-            .as_ref()
-            .map(hex::encode)
-            .unwrap_or_else(|| "(none)".to_string())
-    )?;
-    shell_println!(ctx, "PCRs:")?;
-    for (index, pcr) in &summary.pcrs {
-        let label = match *index {
-            16 => " (setup manifest/key commitment)",
-            17 => " (live manifest/key commitment)",
-            _ => "",
-        };
-        shell_println!(ctx, "  PCR{index}{label}: {}", hex::encode(pcr))?;
-    }
-    shell_println!(ctx, "Certificate Length: {} bytes", summary.certificate_len)?;
-    shell_println!(
-        ctx,
-        "CA Bundle Certificates: {}",
-        summary.ca_bundle_cert_count
-    )?;
-    shell_println!(
-        ctx,
-        "Manifest Set Approvals: {}/{}",
-        summary.manifest_set_approvals.len(),
-        summary.manifest_set_threshold
-    )?;
-    print_approval_summary_entries(ctx, &summary.manifest_set_approvals)?;
-    if summary.share_set_approvals.is_empty() {
-        shell_println!(ctx, "Share Set Approvals: (none)")?;
-    } else {
-        shell_println!(
-            ctx,
-            "Share Set Approvals: {}",
-            summary.share_set_approvals.len()
-        )?;
-        print_approval_summary_entries(ctx, &summary.share_set_approvals)?;
-    }
-    Ok(())
+/// Wide terminal outcome for `deploy provisioning-details`. Byte fields are
+/// hex-encoded; `digest` carries the Debug rendering of the NSM digest so the
+/// same string serves both the payload and the human line.
+#[derive(Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProvisioningDetails {
+    deployment_id: String,
+    verification: String,
+    ephemeral_key: String,
+    module_id: String,
+    digest: String,
+    timestamp_ms: u64,
+    user_data: Option<String>,
+    nonce: Option<String>,
+    pcrs: Vec<PcrEntry>,
+    certificate_length: usize,
+    ca_bundle_certificates: usize,
+    manifest_set_threshold: u32,
+    manifest_set_approvals: Vec<ApprovalEntry>,
+    share_set_approvals: Vec<ApprovalEntry>,
+    /// Present when `--provision-bundle-out` wrote a bundle file.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    bundle_path: Option<String>,
 }
 
-fn print_approval_summary_entries(
-    ctx: &mut StdCtx,
-    approvals: &[ApprovalSummary],
-) -> anyhow::Result<()> {
-    for approval in approvals {
-        shell_println!(
-            ctx,
-            "  {}: {}",
-            approval.alias,
-            hex::encode(&approval.public_key)
-        )?;
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PcrEntry {
+    index: usize,
+    value: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ApprovalEntry {
+    alias: String,
+    public_key: String,
+}
+
+impl ProvisioningDetails {
+    fn from_summary(
+        deployment_id: String,
+        verification: &str,
+        bundle_path: Option<String>,
+        summary: &AttestationSummary,
+    ) -> Self {
+        Self {
+            deployment_id,
+            verification: verification.to_string(),
+            ephemeral_key: hex::encode(&summary.ephemeral_key),
+            module_id: summary.module_id.clone(),
+            digest: format!("{:?}", summary.digest),
+            timestamp_ms: summary.timestamp_ms,
+            user_data: summary.user_data.as_ref().map(hex::encode),
+            nonce: summary.nonce.as_ref().map(hex::encode),
+            pcrs: summary
+                .pcrs
+                .iter()
+                .map(|(index, pcr)| PcrEntry {
+                    index: *index,
+                    value: hex::encode(pcr),
+                })
+                .collect(),
+            certificate_length: summary.certificate_len,
+            ca_bundle_certificates: summary.ca_bundle_cert_count,
+            manifest_set_threshold: summary.manifest_set_threshold,
+            manifest_set_approvals: approval_entries(&summary.manifest_set_approvals),
+            share_set_approvals: approval_entries(&summary.share_set_approvals),
+            bundle_path,
+        }
     }
-    Ok(())
+}
+
+fn approval_entries(approvals: &[ApprovalSummary]) -> Vec<ApprovalEntry> {
+    approvals
+        .iter()
+        .map(|approval| ApprovalEntry {
+            alias: approval.alias.clone(),
+            public_key: hex::encode(&approval.public_key),
+        })
+        .collect()
+}
+
+impl Display for ProvisioningDetails {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let mut message = String::new();
+
+        if let Some(path) = &self.bundle_path {
+            let _ = write!(message, "Provision bundle written to: {path}\n\n");
+        }
+
+        // Fixed attestation summary; `PCRs:` deliberately has no trailing
+        // newline so the PCR loop below appends its own leading-newline lines
+        // (and the section reads correctly even when there are no PCRs).
+        let _ = write!(
+            message,
+            r#"Deployment: {}
+Verification: {}
+Ephemeral Key: {}
+Module ID: {}
+Digest: {}
+Timestamp (ms): {}
+User Data: {}
+Nonce: {}
+PCRs:"#,
+            self.deployment_id,
+            self.verification,
+            self.ephemeral_key,
+            self.module_id,
+            self.digest,
+            self.timestamp_ms,
+            self.user_data.as_deref().unwrap_or("(none)"),
+            self.nonce.as_deref().unwrap_or("(none)"),
+        );
+
+        for pcr in &self.pcrs {
+            let label = match pcr.index {
+                16 => " (setup manifest/key commitment)",
+                17 => " (live manifest/key commitment)",
+                _ => "",
+            };
+            let _ = write!(message, "\n  PCR{}{label}: {}", pcr.index, pcr.value);
+        }
+
+        let _ = write!(
+            message,
+            r#"
+Certificate Length: {} bytes
+CA Bundle Certificates: {}
+Manifest Set Approvals: {}/{}"#,
+            self.certificate_length,
+            self.ca_bundle_certificates,
+            self.manifest_set_approvals.len(),
+            self.manifest_set_threshold,
+        );
+        write_approval_entries(&mut message, &self.manifest_set_approvals);
+
+        if self.share_set_approvals.is_empty() {
+            let _ = write!(message, "\nShare Set Approvals: (none)");
+        } else {
+            let _ = write!(
+                message,
+                "\nShare Set Approvals: {}",
+                self.share_set_approvals.len()
+            );
+            write_approval_entries(&mut message, &self.share_set_approvals);
+        }
+
+        f.write_str(&message)
+    }
+}
+
+fn write_approval_entries(message: &mut String, approvals: &[ApprovalEntry]) {
+    for approval in approvals {
+        let _ = write!(message, "\n  {}: {}", approval.alias, approval.public_key);
+    }
 }
 
 #[cfg(test)]
@@ -340,6 +421,104 @@ mod tests {
                 Some(fixture.validation_time_secs),
             )
             .is_err()
+        );
+    }
+
+    use super::{ApprovalEntry, PcrEntry, ProvisioningDetails};
+
+    fn full_details() -> ProvisioningDetails {
+        ProvisioningDetails {
+            deployment_id: "dep_123".to_string(),
+            verification: "verified".to_string(),
+            ephemeral_key: "abcd".to_string(),
+            module_id: "mod-1".to_string(),
+            digest: "SHA384".to_string(),
+            timestamp_ms: 1_700_000_000_000,
+            user_data: Some("aa".to_string()),
+            nonce: Some("bb".to_string()),
+            pcrs: vec![
+                PcrEntry {
+                    index: 0,
+                    value: "00".to_string(),
+                },
+                PcrEntry {
+                    index: 16,
+                    value: "1616".to_string(),
+                },
+                PcrEntry {
+                    index: 17,
+                    value: "1717".to_string(),
+                },
+            ],
+            certificate_length: 1234,
+            ca_bundle_certificates: 3,
+            manifest_set_threshold: 2,
+            manifest_set_approvals: vec![
+                ApprovalEntry {
+                    alias: "alice".to_string(),
+                    public_key: "aaaa".to_string(),
+                },
+                ApprovalEntry {
+                    alias: "bob".to_string(),
+                    public_key: "bbbb".to_string(),
+                },
+            ],
+            share_set_approvals: vec![ApprovalEntry {
+                alias: "carol".to_string(),
+                public_key: "cccc".to_string(),
+            }],
+            bundle_path: Some("/tmp/bundle.json".to_string()),
+        }
+    }
+
+    #[test]
+    fn human_message_full_golden() {
+        assert_eq!(
+            full_details().to_string(),
+            r#"Provision bundle written to: /tmp/bundle.json
+
+Deployment: dep_123
+Verification: verified
+Ephemeral Key: abcd
+Module ID: mod-1
+Digest: SHA384
+Timestamp (ms): 1700000000000
+User Data: aa
+Nonce: bb
+PCRs:
+  PCR0: 00
+  PCR16 (setup manifest/key commitment): 1616
+  PCR17 (live manifest/key commitment): 1717
+Certificate Length: 1234 bytes
+CA Bundle Certificates: 3
+Manifest Set Approvals: 2/2
+  alice: aaaa
+  bob: bbbb
+Share Set Approvals: 1
+  carol: cccc"#
+        );
+    }
+
+    #[test]
+    fn human_message_minimal_golden() {
+        let details = ProvisioningDetails::default();
+        // NOTE: the first five lines have empty values, so they end in a
+        // significant trailing space — do not strip trailing whitespace here.
+        assert_eq!(
+            details.to_string(),
+            r#"Deployment: 
+Verification: 
+Ephemeral Key: 
+Module ID: 
+Digest: 
+Timestamp (ms): 0
+User Data: (none)
+Nonce: (none)
+PCRs:
+Certificate Length: 0 bytes
+CA Bundle Certificates: 0
+Manifest Set Approvals: 0/0
+Share Set Approvals: (none)"#
         );
     }
 }

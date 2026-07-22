@@ -1,15 +1,17 @@
 //! Generate local quorum key command - generates and encrypts a quorum key from a given config.
 
 use crate::config::quorum_key::QuorumKeyConfig;
+use crate::outcome::Outcome;
 use crate::output::StdCtx;
 use crate::quorum_key_metadata::{
     EncryptedShareMetadata, QuorumKeyMetadata, decode_p256_public_key_hex,
 };
-use crate::shell_println;
 use crate::util::read_json_file;
 use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
 use qos_p256::{P256Pair, P256Public};
+use serde::Serialize;
+use std::fmt::{self, Display, Formatter};
 use std::fs;
 use std::path::PathBuf;
 use zeroize::Zeroizing;
@@ -40,7 +42,7 @@ struct OperatorPublicKey {
 struct PlaintextShares(Vec<Zeroizing<Vec<u8>>>);
 
 /// Run the quorum key generation command.
-pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<()> {
+pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     let config: QuorumKeyConfig =
         read_json_file(&args.config_file, "quorum key config file").await?;
     config.validate()?;
@@ -65,16 +67,31 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<()> {
         )
     })?;
 
-    shell_println!(
-        ctx,
-        "Quorum key metadata written to: {}",
-        args.quorum_key_metadata_out.display()
-    )?;
+    Ok(Outcome::KeysGenerateQuorumKey(QuorumKeyGenerated {
+        quorum_key_public,
+        threshold: config.threshold,
+        metadata_path: args.quorum_key_metadata_out.display().to_string(),
+    }))
+}
 
-    shell_println!(ctx, "Quorum Public Key: {quorum_key_public}")?;
-    shell_println!(ctx, "Threshold: {}", config.threshold)?;
+#[derive(Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuorumKeyGenerated {
+    quorum_key_public: String,
+    threshold: u32,
+    metadata_path: String,
+}
 
-    Ok(())
+impl Display for QuorumKeyGenerated {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            r#"Quorum key metadata written to: {}
+Quorum Public Key: {}
+Threshold: {}"#,
+            self.metadata_path, self.quorum_key_public, self.threshold
+        )
+    }
 }
 
 fn parse_operator_public_keys(operator_public_keys: &[String]) -> Result<Vec<OperatorPublicKey>> {

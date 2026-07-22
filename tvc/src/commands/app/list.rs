@@ -2,12 +2,14 @@
 
 use anyhow::Context;
 use clap::Args as ClapArgs;
+use serde::Serialize;
+use std::fmt::{self, Display, Formatter};
 use turnkey_client::generated::GetTvcAppsRequest;
 use turnkey_client::generated::external::data::v1::TvcApp;
 
-use crate::commands::display::format_egress_enabled;
+use crate::commands::display::{format_egress_enabled, yes_no};
+use crate::outcome::Outcome;
 use crate::output::StdCtx;
-use crate::shell_println;
 
 const SEPARATOR_WIDTH: usize = 40;
 
@@ -21,7 +23,7 @@ pub struct Args {
 }
 
 /// Run the app list command.
-pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<()> {
+pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
     let auth = crate::client::build_client().await?;
 
     let response = auth
@@ -36,16 +38,9 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<()> {
 
     filter_by_name(&mut apps, args.name.as_deref());
 
-    if apps.is_empty() {
-        shell_println!(ctx, "No apps found.")?;
-        return Ok(());
-    }
-
-    for app in &apps {
-        render_app(ctx, app)?;
-    }
-
-    Ok(())
+    Ok(Outcome::AppList(AppsListed {
+        apps: apps.into_iter().map(AppSummary::from).collect(),
+    }))
 }
 
 fn filter_by_name(apps: &mut Vec<TvcApp>, name: Option<&str>) {
@@ -54,24 +49,97 @@ fn filter_by_name(apps: &mut Vec<TvcApp>, name: Option<&str>) {
     }
 }
 
-fn render_app(ctx: &mut StdCtx, app: &TvcApp) -> anyhow::Result<()> {
-    let live = app.live_deployment_id.as_deref().unwrap_or("(none)");
-    let mut lines = vec![
-        format!("Name: {}", app.name),
-        format!("ID: {}", app.id),
-        format!("Quorum Public Key: {}", app.quorum_public_key),
-        format!("Live Deployment: {live}"),
-        format_egress_enabled(app.enable_egress),
-    ];
+#[derive(Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppsListed {
+    apps: Vec<AppSummary>,
+}
 
-    if !app.public_domain.is_empty() {
-        lines.push(format!("Public Domain: {}", app.public_domain));
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AppSummary {
+    id: String,
+    name: String,
+    quorum_public_key: String,
+    live_deployment_id: Option<String>,
+    egress_enabled: bool,
+    debug_mode_deployments_enabled: bool,
+    /// Empty when the app has no public domain configured.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    public_domain: String,
+}
+
+impl From<TvcApp> for AppSummary {
+    fn from(app: TvcApp) -> Self {
+        // Destructure exhaustively (rather than `..`) so that adding a field to
+        // the generated `TvcApp` forces a compile error here
+        let TvcApp {
+            id,
+            name,
+            quorum_public_key,
+            live_deployment_id,
+            public_domain,
+            enable_egress: egress_enabled,
+            enable_debug_mode_deployments: debug_mode_deployments_enabled,
+            organization_id: _,
+            manifest_set: _,
+            share_set: _,
+            created_at: _,
+            updated_at: _,
+        } = app;
+
+        Self {
+            id,
+            name,
+            quorum_public_key,
+            live_deployment_id,
+            egress_enabled,
+            debug_mode_deployments_enabled,
+            public_domain,
+        }
     }
+}
 
-    lines.push("─".repeat(SEPARATOR_WIDTH));
+impl Display for AppsListed {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        if self.apps.is_empty() {
+            return f.write_str("No apps found.");
+        }
 
-    shell_println!(ctx, "{}", lines.join("\n"))?;
-    Ok(())
+        let body = self
+            .apps
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("\n");
+        f.write_str(&body)
+    }
+}
+
+impl Display for AppSummary {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let live = self.live_deployment_id.as_deref().unwrap_or("(none)");
+        write!(
+            f,
+            r#"Name: {}
+ID: {}
+Quorum Public Key: {}
+Live Deployment: {live}
+{}
+Debug Mode Deployments: {}"#,
+            self.name,
+            self.id,
+            self.quorum_public_key,
+            format_egress_enabled(self.egress_enabled),
+            yes_no(self.debug_mode_deployments_enabled),
+        )?;
+
+        if !self.public_domain.is_empty() {
+            write!(f, "\nPublic Domain: {}", self.public_domain)?;
+        }
+
+        write!(f, "\n{}", "─".repeat(SEPARATOR_WIDTH))
+    }
 }
 
 #[cfg(test)]
@@ -168,6 +236,59 @@ mod tests {
         assert_eq!(
             format_egress_enabled(app.enable_egress),
             "Egress Enabled: yes"
+        );
+    }
+
+    fn full_summary() -> AppSummary {
+        AppSummary {
+            id: "app-1".to_string(),
+            name: "my-app".to_string(),
+            quorum_public_key: "04abcd".to_string(),
+            live_deployment_id: Some("dep-9".to_string()),
+            egress_enabled: true,
+            debug_mode_deployments_enabled: true,
+            public_domain: "my-app.example.com".to_string(),
+        }
+    }
+
+    fn minimal_summary() -> AppSummary {
+        AppSummary {
+            id: "app-2".to_string(),
+            name: "bare".to_string(),
+            quorum_public_key: "04ef".to_string(),
+            live_deployment_id: None,
+            egress_enabled: false,
+            debug_mode_deployments_enabled: false,
+            public_domain: String::new(),
+        }
+    }
+
+    #[test]
+    fn render_full_golden() {
+        assert_eq!(
+            full_summary().to_string(),
+            r#"Name: my-app
+ID: app-1
+Quorum Public Key: 04abcd
+Live Deployment: dep-9
+Egress Enabled: yes
+Debug Mode Deployments: yes
+Public Domain: my-app.example.com
+────────────────────────────────────────"#
+        );
+    }
+
+    #[test]
+    fn render_minimal_golden() {
+        assert_eq!(
+            minimal_summary().to_string(),
+            r#"Name: bare
+ID: app-2
+Quorum Public Key: 04ef
+Live Deployment: (none)
+Egress Enabled: no
+Debug Mode Deployments: no
+────────────────────────────────────────"#
         );
     }
 }

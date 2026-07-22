@@ -1,6 +1,7 @@
 //! Shared app status normalization and formatting helpers.
 
-use turnkey_client::generated::external::data::v1::{AppStatus, DeploymentStatus};
+use serde::Serialize;
+use turnkey_client::generated::external::data::v1::{AppStatus, Timestamp};
 
 /// Normalize API-specific deployment ID prefixes so CLI commands compare bare IDs.
 pub fn sanitize_app_status(mut app_status: AppStatus) -> AppStatus {
@@ -13,12 +14,34 @@ pub fn sanitize_app_status(mut app_status: AppStatus) -> AppStatus {
     app_status
 }
 
+/// Serializable `{seconds, nanos}` pair for outcome payloads (both values are
+/// stringified integers, mirroring the API's `Timestamp`).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimestampPayload {
+    pub seconds: String,
+    pub nanos: String,
+}
+
+impl From<Timestamp> for TimestampPayload {
+    fn from(timestamp: Timestamp) -> Self {
+        // Exhaustive destructure so a new `Timestamp` field forces a decision here.
+        let Timestamp { seconds, nanos } = timestamp;
+        Self { seconds, nanos }
+    }
+}
+
+/// Ready/desired replica counts for outcome payloads.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReplicaCounts {
+    pub ready: i32,
+    pub desired: i32,
+}
+
 /// Render replica counts consistently across app and deployment status commands.
-pub fn format_replica_status(deployment_status: &DeploymentStatus) -> String {
-    format!(
-        "Healthy / Desired Replicas: {}/{}",
-        deployment_status.ready_replicas, deployment_status.desired_replicas
-    )
+pub fn format_replica_counts(ready: i32, desired: i32) -> String {
+    format!("Healthy / Desired Replicas: {ready}/{desired}")
 }
 
 fn strip_deploy_prefix(deploy_id: &str) -> String {
@@ -30,7 +53,7 @@ fn strip_deploy_prefix(deploy_id: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{format_replica_status, sanitize_app_status};
+    use super::{format_replica_counts, sanitize_app_status};
     use turnkey_client::generated::external::data::v1::{AppStatus, DeploymentStatus};
 
     #[test]
@@ -59,16 +82,9 @@ mod tests {
     }
 
     #[test]
-    fn format_replica_status_uses_shared_label() {
-        let deployment_status = DeploymentStatus {
-            deployment_id: "deploy-123".to_string(),
-            ready_replicas: 3,
-            desired_replicas: 5,
-            last_updated_time: None,
-        };
-
+    fn format_replica_counts_uses_shared_label() {
         assert_eq!(
-            format_replica_status(&deployment_status),
+            format_replica_counts(3, 5),
             "Healthy / Desired Replicas: 3/5"
         );
     }

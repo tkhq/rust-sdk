@@ -5,7 +5,7 @@ use anyhow::Result;
 use clap::ValueEnum;
 use serde::Serialize;
 use std::error::Error;
-use std::fmt::{self, Display};
+use std::fmt::{self, Display, Formatter};
 use std::io::{self, IsTerminal, Stderr, Stdout, Write};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
@@ -93,9 +93,20 @@ impl<W, W2> Shell<W, W2> {
 }
 
 impl<W: Write, W2: Write> Shell<W, W2> {
+    /// Emit a machine-consumable message: one JSON line in JSON mode, or the
+    /// message's `human_message()` in human mode.
+    ///
+    /// An empty `human_message()` means the outcome is machine-only; human
+    /// mode prints nothing (JSON mode still emits the message).
     pub fn emit<M: Message>(&mut self, message: &M) -> Result<()> {
         match self.message_format {
-            MessageFormat::Human => self.human().line(message.human_message()),
+            MessageFormat::Human => {
+                let text = message.human_message();
+                if text.is_empty() {
+                    return Ok(());
+                }
+                self.human().line(text)
+            }
             MessageFormat::Json => {
                 writeln!(self.stdout, "{}", message.to_json_string())?;
                 Ok(())
@@ -271,7 +282,7 @@ impl MissingRequiredInput {
 }
 
 impl Display for MissingRequiredInput {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.write_str(&self.message)
     }
 }
@@ -392,6 +403,44 @@ mod tests {
         shell.emit(&TestMessage { value: "ok" }).unwrap();
 
         assert_eq!(shell.into_stdout(), "value: ok\n".as_bytes());
+    }
+
+    #[derive(Serialize)]
+    struct MachineOnlyMessage {
+        value: &'static str,
+    }
+
+    impl Message for MachineOnlyMessage {
+        fn reason(&self) -> &'static str {
+            "machine-only-message"
+        }
+
+        fn human_message(&self) -> String {
+            String::new()
+        }
+    }
+
+    #[test]
+    fn shell_emit_human_skips_empty_human_message() {
+        let mut shell = TestShell::with_human_formatter();
+
+        shell.emit(&MachineOnlyMessage { value: "ok" }).unwrap();
+
+        let output = String::from_utf8(shell.into_stdout()).unwrap();
+        assert_eq!(output, "");
+    }
+
+    #[test]
+    fn shell_emit_json_still_emits_message_with_empty_human_message() {
+        let mut shell = TestShell::with_json_formatter();
+
+        shell.emit(&MachineOnlyMessage { value: "ok" }).unwrap();
+
+        let output = String::from_utf8(shell.into_stdout()).unwrap();
+        assert_eq!(
+            output,
+            concat!(r#"{"reason":"machine-only-message","value":"ok"}"#, "\n")
+        );
     }
 
     #[test]

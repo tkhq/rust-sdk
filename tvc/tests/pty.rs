@@ -61,7 +61,7 @@ fn approve_walks_all_sections_with_yeses() {
     session.send_line("y").unwrap();
 
     session.exp_string("ALL SECTIONS APPROVED").unwrap();
-    session.exp_string("\"signature\"").unwrap();
+    session.exp_string(r#""signature""#).unwrap();
     session.exp_eof().unwrap();
 }
 

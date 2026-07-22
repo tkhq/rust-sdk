@@ -1,7 +1,8 @@
 //! Re-encrypt local share command.
 
 use crate::local_operator_key::{LocalOperatorSeedSource, resolve_local_operator};
-use crate::output::{Message, StdCtx};
+use crate::outcome::Outcome;
+use crate::output::StdCtx;
 use crate::pair::{HexSeed, Pair};
 use crate::provisioning::ProvisionBundle;
 use crate::quorum_key_metadata::QuorumKeyMetadata;
@@ -11,6 +12,7 @@ use anyhow::{Context, anyhow};
 use clap::Args as ClapArgs;
 use qos_core::protocol::services::boot::{Approval, QuorumMember, VersionedManifestEnvelope};
 use serde::{Deserialize, Serialize};
+use std::fmt::{self, Display, Formatter};
 use std::path::{Path, PathBuf};
 
 /// Re-encrypt a share with an ephemeral key.
@@ -65,19 +67,38 @@ pub(crate) struct ReEncryptedShareOutput {
     pub(crate) share_approval: Approval,
 }
 
-impl Message for ReEncryptedShareOutput {
-    fn reason(&self) -> &'static str {
-        "re-encrypted-share-generated"
-    }
+/// Wide terminal outcome covering both output branches: the share payload
+/// inline (no `--re-encrypted-out`) or the path it was written to.
+#[derive(Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReEncryptedShareGenerated {
+    /// Present when the share is returned inline (no `--re-encrypted-out`).
+    #[serde(flatten)]
+    share: Option<ReEncryptedShareOutput>,
+    /// Present when the share was written to a file via `--re-encrypted-out`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    written_to: Option<String>,
+}
 
-    fn human_message(&self) -> String {
-        // Preserve the previous human behavior: pretty-printed share JSON.
-        serde_json::to_string_pretty(self).expect("serializing re-encrypted share should not fail")
+impl Display for ReEncryptedShareGenerated {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match &self.share {
+            // Preserve the previous human behavior: pretty-printed share JSON.
+            Some(share) => {
+                let json = serde_json::to_string_pretty(share)
+                    .expect("serializing re-encrypted share should not fail");
+                f.write_str(&json)
+            }
+            // File branch: the "Re-encrypted share written to: ..." narration
+            // prints inline on stderr; the outcome is machine-only, so human
+            // mode prints nothing here.
+            None => Ok(()),
+        }
     }
 }
 
 /// Run the re-encrypt-local-share command.
-pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<()> {
+pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
     let operator_seed_source =
         LocalOperatorSeedSource::from_args(args.operator_seed, args.operator_seed_path)?;
 
@@ -102,7 +123,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<()> {
     )
     .await?;
 
-    write_output(ctx, args.re_encrypted_out.as_deref(), &output).await
+    write_output(ctx, args.re_encrypted_out.as_deref(), output).await
 }
 
 async fn build_re_encrypted_share_output(
@@ -191,29 +212,35 @@ fn find_share_set_member(
 async fn write_output(
     ctx: &mut StdCtx,
     path: Option<&Path>,
-    output: &ReEncryptedShareOutput,
-) -> anyhow::Result<()> {
-    if let Some(path) = path {
-        let contents = serde_json::to_string_pretty(output)
+    output: ReEncryptedShareOutput,
+) -> anyhow::Result<Outcome> {
+    let generated = if let Some(path) = path {
+        let contents = serde_json::to_string_pretty(&output)
             .context("failed to serialize re-encrypted share")?;
         write_file(path, &contents).await?;
         shell_eprintln!(ctx, "Re-encrypted share written to: {}", path.display())?;
+        ReEncryptedShareGenerated {
+            share: None,
+            written_to: Some(path.display().to_string()),
+        }
     } else {
-        // Emit the share output as the machine-relevant payload. In human mode
-        // this prints pretty JSON exactly as before; in JSON mode it is wrapped
-        // in a stable `reason` envelope so the share survives suppression.
-        ctx.shell().emit(output)?;
-    }
+        ReEncryptedShareGenerated {
+            share: Some(output),
+            written_to: None,
+        }
+    };
 
-    Ok(())
+    Ok(Outcome::KeysReEncryptShare(generated))
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        ReEncryptedShareOutput, build_re_encrypted_share_output,
+        ReEncryptedShareGenerated, ReEncryptedShareOutput, build_re_encrypted_share_output,
         ensure_quorum_key_matches_manifest, find_share_set_member,
     };
+    use crate::outcome::Outcome;
+    use crate::output::Message;
     use crate::pair::LocalPair;
     use crate::provisioning::ProvisionBundle;
     use crate::quorum_key_metadata::{EncryptedShareMetadata, QuorumKeyMetadata};
@@ -507,5 +534,75 @@ mod tests {
             .unwrap_err();
 
         assert!(err.to_string().contains("does not match"));
+    }
+
+    fn generated_inline() -> ReEncryptedShareGenerated {
+        ReEncryptedShareGenerated {
+            share: Some(ReEncryptedShareOutput {
+                deployment_id: "deploy-123".to_string(),
+                ephemeral_public_key_hex: "04abcd".to_string(),
+                re_encrypted_share: "010203".to_string(),
+                share_approval: Approval {
+                    signature: vec![0xde, 0xad, 0xbe, 0xef],
+                    member: QuorumMember {
+                        alias: "operator-1".to_string(),
+                        pub_key: vec![0xaa, 0xbb, 0xcc],
+                    },
+                },
+            }),
+            written_to: None,
+        }
+    }
+
+    fn generated_written_to() -> ReEncryptedShareGenerated {
+        ReEncryptedShareGenerated {
+            share: None,
+            written_to: Some("re_encrypted_share.json".to_string()),
+        }
+    }
+
+    #[test]
+    fn inline_branch_serializes_flattened_share_payload() {
+        let value: serde_json::Value =
+            serde_json::from_str(&Outcome::KeysReEncryptShare(generated_inline()).to_json_string())
+                .unwrap();
+
+        assert_eq!(
+            value,
+            json!({
+                "reason": "re-encrypted-share-generated",
+                "deploymentId": "deploy-123",
+                "ephemeralPublicKeyHex": "04abcd",
+                "reEncryptedShare": "010203",
+                "shareApproval": {
+                    "signature": "deadbeef",
+                    "member": {
+                        "alias": "operator-1",
+                        "pubKey": "aabbcc",
+                    },
+                },
+            })
+        );
+    }
+
+    #[test]
+    fn file_branch_serializes_written_to_path() {
+        let value: serde_json::Value = serde_json::from_str(
+            &Outcome::KeysReEncryptShare(generated_written_to()).to_json_string(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            value,
+            json!({
+                "reason": "re-encrypted-share-generated",
+                "writtenTo": "re_encrypted_share.json",
+            })
+        );
+    }
+
+    #[test]
+    fn file_branch_is_machine_only_in_human_mode() {
+        assert!(generated_written_to().to_string().is_empty());
     }
 }
