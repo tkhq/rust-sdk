@@ -120,7 +120,7 @@ jobs:
     timeout-minutes: 60
     if: >
       github.event.action != 'closed' &&
-      github.event.pull_request.head.ref == 'daniil/tvc-release-binaries'
+      github.event.pull_request.head.ref == 'daniil/release-tvc-binaries'
     strategy:
       fail-fast: false
       matrix:
