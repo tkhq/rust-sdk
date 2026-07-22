@@ -11,11 +11,19 @@ use crate::pair::{LocalPair, Pair};
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use p256::{PublicKey, elliptic_curve::sec1::ToEncodedPoint};
 use qos_core::protocol::services::boot::{Approval, VersionedManifest};
-use std::time::{SystemTime, UNIX_EPOCH};
-use turnkey_client::TurnkeyClientError;
-use turnkey_client::generated::immutable::common::v1::{HashFunction, PayloadEncoding};
-use turnkey_client::generated::{
-    CreateTvcOperatorIntent, CreateTvcOperatorResult, SignRawPayloadIntentV2, SignRawPayloadResult,
+use std::{
+    fmt::{self, Display, Formatter},
+    str::FromStr,
+    time::{SystemTime, UNIX_EPOCH},
+};
+use thiserror::Error;
+use turnkey_client::{
+    TurnkeyClientError,
+    generated::{
+        CreateTvcOperatorIntent, CreateTvcOperatorResult, SignRawPayloadIntentV2,
+        SignRawPayloadResult,
+        immutable::common::v1::{HashFunction, PayloadEncoding},
+    },
 };
 use uuid::Uuid;
 
@@ -28,6 +36,57 @@ use uuid::Uuid;
 /// signing account. Callers creating more than one operator in the same wallet
 /// must currently provide a different base path themselves.
 pub const DEFAULT_HOSTED_OPERATOR_BASE_PATH: &str = "m/5527107'/0'/0'";
+
+/// A validated, uncompressed P-256 operator public key.
+///
+/// String parsing accepts bare hexadecimal input with surrounding whitespace.
+/// Display always emits canonical lowercase hexadecimal.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct OperatorPublicKey(PublicKey);
+
+/// Error returned when parsing an [`OperatorPublicKey`].
+#[derive(Debug, Error)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
+pub(crate) enum OperatorPublicKeyParseError {
+    /// The input was empty after trimming surrounding whitespace.
+    #[error("must not be empty")]
+    Empty,
+    /// The input was not bare hexadecimal.
+    #[error("must be bare hex encoded")]
+    InvalidHex,
+    /// The bytes were not an uncompressed 65-byte SEC1 point.
+    #[error("must be a 65-byte uncompressed P-256 public key")]
+    InvalidEncoding,
+    /// The bytes did not identify a valid point on the P-256 curve.
+    #[error("is not a valid P-256 point")]
+    InvalidPoint,
+}
+
+impl FromStr for OperatorPublicKey {
+    type Err = OperatorPublicKeyParseError;
+
+    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
+        let value = value.trim();
+        if value.is_empty() {
+            return Err(OperatorPublicKeyParseError::Empty);
+        }
+
+        let bytes = hex::decode(value).map_err(|_| OperatorPublicKeyParseError::InvalidHex)?;
+        if bytes.len() != 65 || bytes.first() != Some(&0x04) {
+            return Err(OperatorPublicKeyParseError::InvalidEncoding);
+        }
+
+        PublicKey::from_sec1_bytes(&bytes)
+            .map(Self)
+            .map_err(|_| OperatorPublicKeyParseError::InvalidPoint)
+    }
+}
+
+impl Display for OperatorPublicKey {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&hex::encode(self.0.to_encoded_point(false).as_bytes()))
+    }
+}
 
 /// Inputs for creating one hosted TVC operator.
 #[derive(Debug, PartialEq, Eq)]
@@ -117,38 +176,40 @@ fn parse_uuid(value: &str, field: &str) -> Result<Uuid> {
     Uuid::parse_str(value).map_err(|_| anyhow!("{field} must be a UUID"))
 }
 
+fn parse_public_key(value: &str, field: &str) -> Result<OperatorPublicKey> {
+    value
+        .parse()
+        .map_err(|error: OperatorPublicKeyParseError| anyhow!("{field} {error}"))
+}
+
 fn normalize_public_key(value: &str, field: &str) -> Result<String> {
-    let bytes = hex::decode(value).with_context(|| format!("{field} must be hex encoded"))?;
-    ensure!(
-        bytes.len() == 65 && bytes.first() == Some(&0x04),
-        "{field} must be a 65-byte uncompressed P-256 public key"
-    );
-    let key = PublicKey::from_sec1_bytes(&bytes)
-        .with_context(|| format!("{field} is not a valid P-256 point"))?;
-    Ok(hex::encode(key.to_encoded_point(false).as_bytes()))
+    Ok(parse_public_key(value, field)?.to_string())
 }
 
 fn composite_public_key(record: &HostedOperatorRecord) -> Result<Vec<u8>> {
-    let encrypt = hex::decode(normalize_public_key(
+    let encrypt = parse_public_key(
         &record.encrypt_public_key,
         "hosted operator encryption public key",
-    )?)?;
-    let sign = hex::decode(normalize_public_key(
+    )?;
+    let sign = parse_public_key(
         &record.sign_public_key,
         "hosted operator signing public key",
-    )?)?;
+    )?;
     ensure!(
         encrypt != sign,
         "hosted operator encryption and signing public keys must be distinct"
     );
 
-    Ok(encrypt.into_iter().chain(sign).collect())
+    let mut composite = Vec::with_capacity(130);
+    composite.extend_from_slice(encrypt.0.to_encoded_point(false).as_bytes());
+    composite.extend_from_slice(sign.0.to_encoded_point(false).as_bytes());
+    Ok(composite)
 }
 
 fn validate_hosted_record(
     name: &str,
     record: HostedOperatorRecord,
-) -> Result<HostedOperatorRecord> {
+) -> Result<ValidatedHostedOperatorRecord> {
     let HostedOperatorRecord {
         operator_id,
         wallet_id,
@@ -166,22 +227,26 @@ fn validate_hosted_record(
         "hosted operator account path must not be empty"
     );
 
-    let validated = HostedOperatorRecord {
+    let encrypt_public_key =
+        parse_public_key(&encrypt_public_key, "hosted operator encryption public key")?;
+    let sign_public_key = parse_public_key(&sign_public_key, "hosted operator signing public key")?;
+    ensure!(
+        encrypt_public_key != sign_public_key,
+        "hosted operator encryption and signing public keys must be distinct"
+    );
+
+    let record = HostedOperatorRecord {
         operator_id,
         wallet_id,
         path,
-        encrypt_public_key: normalize_public_key(
-            &encrypt_public_key,
-            "hosted operator encryption public key",
-        )?,
-        sign_public_key: normalize_public_key(
-            &sign_public_key,
-            "hosted operator signing public key",
-        )?,
+        encrypt_public_key: encrypt_public_key.to_string(),
+        sign_public_key: sign_public_key.to_string(),
         extra,
     };
-    let _ = composite_public_key(&validated)?;
-    Ok(validated)
+    Ok(ValidatedHostedOperatorRecord {
+        record,
+        encrypt_public_key,
+    })
 }
 
 /// A non-serializable operator with its credentials resolved for use.
@@ -204,6 +269,11 @@ pub(crate) enum ResolvedOperatorKind {
 /// Shared dependencies for operator-level workflows.
 pub(crate) struct OperatorCtx<'a> {
     pub(crate) auth: Option<&'a AuthenticatedClient>,
+}
+
+struct ValidatedHostedOperatorRecord {
+    record: HostedOperatorRecord,
+    encrypt_public_key: OperatorPublicKey,
 }
 
 impl ResolvedOperator {
@@ -314,7 +384,8 @@ pub(crate) async fn resolve_operator(
         None => None,
     };
 
-    if let Some((organization_id, name, record)) = hosted {
+    if let Some((organization_id, name, validated)) = hosted {
+        let record = validated.record;
         return Ok(ResolvedOperator {
             name: Some(name),
             operator_id: Some(record.operator_id),
@@ -370,7 +441,7 @@ pub(crate) async fn resolve_operator(
 fn find_hosted_operator(
     config: &Config,
     operator_id: &Uuid,
-) -> Result<Option<(String, String, HostedOperatorRecord)>> {
+) -> Result<Option<(String, String, ValidatedHostedOperatorRecord)>> {
     let Some((_, org)) = config.active_org_config() else {
         return Ok(None);
     };
@@ -394,6 +465,22 @@ fn find_hosted_operator(
         ))),
         _ => bail!("multiple hosted operators have ID {operator_id}"),
     }
+}
+
+/// Resolve a hosted operator's encryption public key from the active organization.
+pub(crate) fn resolve_hosted_operator_encrypt_key(
+    config: &Config,
+    operator_id: &Uuid,
+) -> Result<OperatorPublicKey> {
+    let (alias, _) = config
+        .active_org_config()
+        .context("No active organization. Run `tvc login` first.")?;
+
+    let (_, _, validated) = find_hosted_operator(config, operator_id)?.ok_or_else(|| {
+        anyhow!("hosted operator ID '{operator_id}' was not found in org '{alias}'")
+    })?;
+
+    Ok(validated.encrypt_public_key)
 }
 
 async fn sign_hosted_manifest(
@@ -456,7 +543,10 @@ fn timestamp_ms() -> Result<u128> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::turnkey::{LocalOperatorRecord, OrgConfig};
     use qos_p256::P256Pair;
+    use std::collections::HashMap;
+    use std::path::PathBuf;
 
     const OPERATOR_ID: &str = "11111111-1111-4111-8111-111111111111";
     const WALLET_ID: &str = "22222222-2222-4222-8222-222222222222";
@@ -477,6 +567,157 @@ mod tests {
             sign_public_key,
             extra: toml::Table::new(),
         }
+    }
+
+    fn config_with_operators(operators: Vec<OperatorRecord>) -> Config {
+        Config {
+            active_org: Some("active".to_string()),
+            orgs: HashMap::from([(
+                "active".to_string(),
+                OrgConfig {
+                    id: "org-id".to_string(),
+                    api_key_path: PathBuf::from("api-key.json"),
+                    api_base_url: "https://api.turnkey.com".to_string(),
+                    default_operator_kind: OperatorKind::Local,
+                    operators,
+                    extra: toml::Table::new(),
+                },
+            )]),
+            ..Config::default()
+        }
+    }
+
+    fn hosted_operator(name: &str, record: HostedOperatorRecord) -> OperatorRecord {
+        OperatorRecord {
+            name: name.to_string(),
+            kind: OperatorRecordKind::Hosted(record),
+        }
+    }
+
+    #[test]
+    fn operator_public_key_parses_and_canonicalizes() {
+        let (key, _) = public_keys();
+        let parsed: OperatorPublicKey = format!("  {}  ", key.to_uppercase()).parse().unwrap();
+
+        assert_eq!(parsed.to_string(), key);
+    }
+
+    #[test]
+    fn operator_public_key_rejects_invalid_inputs() {
+        assert_eq!(
+            " ".parse::<OperatorPublicKey>().unwrap_err(),
+            OperatorPublicKeyParseError::Empty
+        );
+        assert_eq!(
+            "not-hex".parse::<OperatorPublicKey>().unwrap_err(),
+            OperatorPublicKeyParseError::InvalidHex
+        );
+        assert_eq!(
+            "04abcd".parse::<OperatorPublicKey>().unwrap_err(),
+            OperatorPublicKeyParseError::InvalidEncoding
+        );
+
+        let (uncompressed, _) = public_keys();
+        let public_key = PublicKey::from_sec1_bytes(&hex::decode(uncompressed).unwrap()).unwrap();
+        let compressed = hex::encode(public_key.to_encoded_point(true).as_bytes());
+        assert_eq!(
+            compressed.parse::<OperatorPublicKey>().unwrap_err(),
+            OperatorPublicKeyParseError::InvalidEncoding
+        );
+
+        let invalid_point = format!("04{}", "00".repeat(64));
+        assert_eq!(
+            invalid_point.parse::<OperatorPublicKey>().unwrap_err(),
+            OperatorPublicKeyParseError::InvalidPoint
+        );
+    }
+
+    #[test]
+    fn resolves_hosted_operator_encrypt_key_from_active_org() {
+        let record = hosted_record();
+        let expected = record.encrypt_public_key.parse().unwrap();
+        let config = config_with_operators(vec![hosted_operator("hosted", record)]);
+        let operator_id = Uuid::parse_str(OPERATOR_ID).unwrap();
+
+        let resolved = resolve_hosted_operator_encrypt_key(&config, &operator_id).unwrap();
+
+        assert_eq!(resolved, expected);
+    }
+
+    #[test]
+    fn hosted_operator_resolution_requires_active_org_and_matching_hosted_record() {
+        let operator_id = Uuid::parse_str(OPERATOR_ID).unwrap();
+        let no_active = Config::default();
+        assert_eq!(
+            resolve_hosted_operator_encrypt_key(&no_active, &operator_id)
+                .unwrap_err()
+                .to_string(),
+            "No active organization. Run `tvc login` first."
+        );
+
+        let local = OperatorRecord {
+            name: "local".to_string(),
+            kind: OperatorRecordKind::Local(LocalOperatorRecord {
+                key_path: PathBuf::from("operator.json"),
+                operator_id: Some(OPERATOR_ID.to_string()),
+                extra: toml::Table::new(),
+            }),
+        };
+        let config = config_with_operators(vec![local]);
+        assert_eq!(
+            resolve_hosted_operator_encrypt_key(&config, &operator_id)
+                .unwrap_err()
+                .to_string(),
+            "hosted operator ID '11111111-1111-4111-8111-111111111111' was not found in org 'active'"
+        );
+
+        let mut cross_org = config_with_operators(Vec::new());
+        let mut inactive_org = cross_org.orgs["active"].clone();
+        inactive_org.id = "inactive-org-id".to_string();
+        inactive_org.operators = vec![hosted_operator("hosted", hosted_record())];
+        cross_org.orgs.insert("inactive".to_string(), inactive_org);
+        assert_eq!(
+            resolve_hosted_operator_encrypt_key(&cross_org, &operator_id)
+                .unwrap_err()
+                .to_string(),
+            "hosted operator ID '11111111-1111-4111-8111-111111111111' was not found in org 'active'"
+        );
+    }
+
+    #[test]
+    fn hosted_operator_resolution_rejects_duplicate_and_malformed_records() {
+        let operator_id = Uuid::parse_str(OPERATOR_ID).unwrap();
+        let record = hosted_record();
+        let duplicate = config_with_operators(vec![
+            hosted_operator("first", record.clone()),
+            hosted_operator("second", record.clone()),
+        ]);
+        assert_eq!(
+            resolve_hosted_operator_encrypt_key(&duplicate, &operator_id)
+                .unwrap_err()
+                .to_string(),
+            "multiple hosted operators have ID 11111111-1111-4111-8111-111111111111"
+        );
+
+        let mut malformed = record;
+        malformed.encrypt_public_key = "not-hex".to_string();
+        let malformed = config_with_operators(vec![hosted_operator("hosted", malformed)]);
+        assert_eq!(
+            resolve_hosted_operator_encrypt_key(&malformed, &operator_id)
+                .unwrap_err()
+                .to_string(),
+            "hosted operator encryption public key must be bare hex encoded"
+        );
+    }
+
+    #[test]
+    fn authenticated_org_must_match_configured_org() {
+        assert_eq!(
+            ensure_authenticated_org("authenticated", "configured")
+                .unwrap_err()
+                .to_string(),
+            "authenticated organization (authenticated) does not match configured organization (configured)"
+        );
     }
 
     #[test]
