@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.12.0](https://github.com/tkhq/rust-sdk/compare/tvc-v0.11.0...tvc-v0.12.0) - 2026-07-22
+
+### Added
+
+- *(tvc)* add outcomes
+- *(tvc)* add outcomes
+- *(tvc)* add outcomes
+- *(tvc)* [**breaking**] add versioned operator registry
+- *(tvc)* [**breaking**] reuse operator by default in app create
+- *(tvc)* add hosted quorum key create command
+- *(tvc)* add json output shell
+- *(tvc)* add json output shell
+- *(tvc)* add json output shell
+- *(tvc)* add json output shell
+- *(tvc)* add json output shell
+- *(tvc)* add json output
+- *(tvc)* route deploy debug-logs output through Shell (TVC-116)
+- *(tvc)* route command output through Shell (TVC-116)
+- *(tvc)* add json output shell plumbing
+
+### Fixed
+
+- *(tvc)* correct deploy create next-steps hints
+
+### Other
+
+- *(tvc)* [**breaking**] explicitly rename local key commands
+- Remove generics that aren't necessary
+- Merge pull request #198 from tkhq/richard/tvc-124-tvc-deploy-create-next-steps-output-include-operator-id-drop
+
 ## [0.11.0](https://github.com/tkhq/rust-sdk/compare/tvc-v0.10.0...tvc-v0.11.0) - 2026-07-15
 
 ### Added
