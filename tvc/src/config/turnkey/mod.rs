@@ -331,8 +331,8 @@ pub struct OrgConfig {
 }
 
 impl OrgConfig {
-    /// Return the sole active local operator record.
-    pub fn select_local_record(&self, org_alias: &str) -> Result<&LocalOperatorRecord> {
+    /// Return the sole active local operator registry entry.
+    pub(crate) fn select_local_operator(&self, org_alias: &str) -> Result<&OperatorRecord> {
         if self.default_operator_kind != OperatorKind::Local {
             bail!(
                 "the active operator kind for org '{org_alias}' is {}",
@@ -343,10 +343,7 @@ impl OrgConfig {
         let candidates: Vec<_> = self
             .operators
             .iter()
-            .filter_map(|operator| match &operator.kind {
-                OperatorRecordKind::Local(local) => Some(local),
-                _ => None,
-            })
+            .filter(|operator| matches!(operator.kind, OperatorRecordKind::Local(_)))
             .collect();
 
         // TODO: Decouple this function from its org_alias callsite so it is more
@@ -356,6 +353,15 @@ impl OrgConfig {
             [operator] => Ok(*operator),
             _ => bail!("Multiple local operators are configured for org '{org_alias}'"),
         }
+    }
+
+    /// Return the kind-specific record for the sole active local operator.
+    pub fn select_local_record(&self, org_alias: &str) -> Result<&LocalOperatorRecord> {
+        let operator = self.select_local_operator(org_alias)?;
+        let OperatorRecordKind::Local(local) = &operator.kind else {
+            bail!("selected operator is not local");
+        };
+        Ok(local)
     }
 }
 

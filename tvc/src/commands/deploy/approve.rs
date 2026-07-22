@@ -1,32 +1,33 @@
 //! Approve deploy command - cryptographically approve a QOS manifest.
 
-use crate::config::turnkey::Config;
-use crate::local_operator_key::{LocalOperatorSeedSource, resolve_local_operator};
-use crate::outcome::Outcome;
-use crate::output::StdCtx;
-use crate::pair::HexSeed;
-use crate::prompts;
-use crate::prompts::{bail_required_in_non_interactive, stdin_can_prompt};
-use crate::util::{read_file_to_string, write_file};
-use crate::{shell_print, shell_println};
+use crate::{
+    client::build_client,
+    config::turnkey::Config,
+    local_operator_key::LocalOperatorSeedSource,
+    operator::{OperatorCtx, ResolvedOperator, resolve_operator},
+    outcome::Outcome,
+    output::StdCtx,
+    pair::HexSeed,
+    prompts::{self, bail_required_in_non_interactive, stdin_can_prompt},
+    shell_print, shell_println,
+    util::{read_file_to_string, write_file},
+};
 use anyhow::{Context, anyhow, bail};
 use clap::{ArgGroup, Args as ClapArgs};
-use qos_core::protocol::services::boot::Approval;
 use qos_core::protocol::services::boot::{
-    ManifestSet, Namespace, NitroConfig, QuorumMember, ShareSet, VersionedManifest,
+    Approval, ManifestSet, Namespace, NitroConfig, QuorumMember, ShareSet, VersionedManifest,
 };
 use serde::{Serialize, Serializer};
 use std::collections::HashSet;
-use std::fmt::Write;
-use std::fmt::{self, Display, Formatter};
-use std::path::Path;
-use std::path::PathBuf;
+use std::fmt::{self, Display, Formatter, Write};
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::debug;
 use turnkey_client::generated::external::data::v1::TvcDeployment;
 use turnkey_client::generated::{
     CreateTvcManifestApprovalsIntent, GetTvcDeploymentRequest, TvcManifestApproval,
 };
+use uuid::Uuid;
 
 const QUORUM_REACHED_MESSAGE: &str =
     "Manifest approval quorum reached. Your deployment will be available soon.";
@@ -60,10 +61,11 @@ pub struct Args {
     #[arg(long, env = "TVC_MANIFEST_ID")]
     pub manifest_id: Option<String>,
 
-    /// Turnkey operator ID (UUID) for the approving operator.
-    /// Required when posting approval to the API.
+    /// Turnkey operator UUID for the approving operator. When posting without
+    /// this flag, TVC selects from the last manifest's saved operator IDs. A
+    /// configured hosted operator is selected by its UUID.
     #[arg(long, env = "TVC_OPERATOR_ID")]
-    pub operator_id: Option<String>,
+    pub operator_id: Option<Uuid>,
 
     /// Hex-encoded 32-byte master seed for the operator key.
     /// If no seed flag is provided, uses the operator key from the logged-in org config.
@@ -96,14 +98,15 @@ pub struct Args {
     #[arg(short = 'o', long, value_name = "PATH", env = "TVC_APPROVAL_OUT")]
     pub approval_out: Option<PathBuf>,
 
-    /// Don't post approval to the API.
+    /// Generate a local-operator approval without posting it to the API. This
+    /// supports offline signing and cannot be used with a hosted operator.
     #[arg(long, env = "TVC_SKIP_POST")]
     pub skip_post: bool,
 }
 
 struct PostApprovalPlan<'a> {
     manifest_id: &'a str,
-    operator_id: &'a str,
+    operator_id: &'a Uuid,
     deploy_id: Option<&'a str>,
 }
 
@@ -238,15 +241,16 @@ impl Display for ApprovalDryRun {
 
 struct PostTarget {
     manifest_id: String,
-    operator_id: String,
     deploy_id: Option<String>,
 }
 
 struct ResolvedApproveInputs {
     manifest: VersionedManifest,
     operator_seed_source: Option<LocalOperatorSeedSource>,
+    operator_id: Option<Uuid>,
     approval_out: Option<PathBuf>,
     dry_run: bool,
+    skip_post: bool,
     post_target: Option<PostTarget>,
 }
 
@@ -285,11 +289,11 @@ async fn build_inputs_interactive(
         interactive_approve(ctx, &manifest)?;
     }
 
+    let mut operator_id = args.operator_id;
     let post_target = if !args.dry_run && !args.skip_post {
         let manifest_id = resolve_manifest_id(&args, fetched_manifest_id.as_deref())?;
-        let operator_id = match &args.operator_id {
-            Some(id) => id.clone(),
-            None => {
+        if operator_id.is_none() {
+            operator_id = Some({
                 let saved_ids = load_saved_operator_ids().await?;
                 match &*saved_ids {
                     [] => bail!(
@@ -297,21 +301,18 @@ async fn build_inputs_interactive(
                          No saved operator IDs found. \
                          Use --skip-post to only generate the approval locally."
                     ),
-                    [id] => id.clone(),
-                    _ if stdin_can_prompt() => prompts::select(
-                        "Select approving operator",
-                        saved_ids.iter().map(String::as_str).collect::<Vec<_>>(),
-                    )?
-                    .to_string(),
+                    [id] => *id,
+                    _ if stdin_can_prompt() => {
+                        prompts::select("Select approving operator", saved_ids)?
+                    }
                     _ => bail!(
                         "--operator-id is required to post approval to API when multiple saved operator IDs are available"
                     ),
                 }
-            }
-        };
+            });
+        }
         Some(PostTarget {
             manifest_id,
-            operator_id,
             deploy_id: args.deploy_id.clone(),
         })
     } else {
@@ -321,8 +322,10 @@ async fn build_inputs_interactive(
     Ok(ResolvedApproveInputs {
         manifest,
         operator_seed_source,
+        operator_id,
         approval_out: args.approval_out,
         dry_run: args.dry_run,
+        skip_post: args.skip_post,
         post_target,
     })
 }
@@ -338,11 +341,11 @@ async fn build_inputs_non_interactive(
 
     let (manifest, fetched_manifest_id) = load_manifest(ctx, &args).await?;
 
+    let mut operator_id = args.operator_id;
     let post_target = if !args.dry_run && !args.skip_post {
         let manifest_id = resolve_manifest_id(&args, fetched_manifest_id.as_deref())?;
-        let operator_id = match &args.operator_id {
-            Some(id) => id.clone(),
-            None => {
+        if operator_id.is_none() {
+            operator_id = Some({
                 let saved_ids = load_saved_operator_ids().await?;
                 match &*saved_ids {
                     [] => bail!(
@@ -350,16 +353,15 @@ async fn build_inputs_non_interactive(
                          No saved operator IDs found. \
                          Use --skip-post to only generate the approval locally."
                     ),
-                    [id] => id.clone(),
+                    [id] => *id,
                     _ => bail!(
                         "--operator-id is required to post approval to API when multiple saved operator IDs are available"
                     ),
                 }
-            }
-        };
+            });
+        }
         Some(PostTarget {
             manifest_id,
-            operator_id,
             deploy_id: args.deploy_id.clone(),
         })
     } else {
@@ -369,8 +371,10 @@ async fn build_inputs_non_interactive(
     Ok(ResolvedApproveInputs {
         manifest,
         operator_seed_source,
+        operator_id,
         approval_out: args.approval_out,
         dry_run: args.dry_run,
+        skip_post: args.skip_post,
         post_target,
     })
 }
@@ -383,8 +387,20 @@ async fn run_with_resolved_inputs(
         return Ok(ApproveOutcome::DryRun(ApprovalDryRun {}));
     }
 
+    let operator = resolve_operator(inputs.operator_seed_source, inputs.operator_id).await?;
+    if inputs.skip_post && operator.is_hosted() {
+        bail!("--skip-post is only supported for local operators");
+    }
+    let auth = if operator.is_hosted() {
+        Some(build_client().await?)
+    } else {
+        None
+    };
     let approval = sign_and_write_approval(
-        inputs.operator_seed_source,
+        &operator,
+        &OperatorCtx {
+            auth: auth.as_ref(),
+        },
         inputs.approval_out.as_deref(),
         &inputs.manifest,
     )
@@ -404,9 +420,12 @@ async fn run_with_resolved_inputs(
 
     match inputs.post_target {
         Some(target) => {
+            let operator_id = operator
+                .id()
+                .context("resolved operator ID required to post approval")?;
             let plan = PostApprovalPlan {
                 manifest_id: target.manifest_id.as_str(),
-                operator_id: target.operator_id.as_str(),
+                operator_id: &operator_id,
                 deploy_id: target.deploy_id.as_deref(),
             };
             let posted = post_approval_to_api(ctx, plan, &approval).await?;
@@ -415,7 +434,7 @@ async fn run_with_resolved_inputs(
                 approval: inline_approval,
                 written_to,
                 manifest_id: target.manifest_id,
-                operator_id: target.operator_id,
+                operator_id: operator_id.to_string(),
                 approval_ids: posted.approval_ids,
                 quorum_reached: posted.quorum_reached,
             }))
@@ -445,14 +464,12 @@ async fn load_manifest(
 /// that file. Reporting the approval (inline payload or file path) is the
 /// terminal outcome's job.
 async fn sign_and_write_approval(
-    operator_seed_source: Option<LocalOperatorSeedSource>,
+    operator: &ResolvedOperator,
+    operator_ctx: &OperatorCtx<'_>,
     approval_out: Option<&Path>,
     manifest: &VersionedManifest,
 ) -> anyhow::Result<Approval> {
-    let pair: Box<dyn crate::pair::Pair> =
-        Box::new(resolve_local_operator(operator_seed_source).await?);
-
-    let approval = generate_approval(pair, manifest).await?;
+    let approval = operator.approve_manifest(operator_ctx, manifest).await?;
 
     if let Some(path) = approval_out {
         let json = serde_json::to_string_pretty(&approval)?;
@@ -474,9 +491,16 @@ fn resolve_manifest_id(args: &Args, fetched_manifest_id: Option<&str>) -> anyhow
         })
 }
 
-async fn load_saved_operator_ids() -> anyhow::Result<Vec<String>> {
+async fn load_saved_operator_ids() -> anyhow::Result<Vec<Uuid>> {
     let config = Config::load().await?;
-    Ok(config.get_last_operator_ids().unwrap_or_default())
+    config
+        .get_last_operator_ids()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|id| {
+            Uuid::parse_str(&id).with_context(|| format!("saved operator ID '{id}' is not a UUID"))
+        })
+        .collect()
 }
 
 async fn post_approval_to_api(
@@ -490,7 +514,7 @@ async fn post_approval_to_api(
     let auth = crate::client::build_client().await?;
 
     let tvc_approval = TvcManifestApproval {
-        operator_id: plan.operator_id.into(),
+        operator_id: plan.operator_id.to_string(),
         signature: hex::encode(&approval.signature),
     };
 
@@ -566,29 +590,6 @@ fn manifest_approval_quorum_reached(deployment: &TvcDeployment) -> bool {
     }
 
     operator_ids.len() >= manifest_set.threshold as usize
-}
-
-async fn generate_approval(
-    pair: Box<dyn crate::pair::Pair>,
-    manifest: &VersionedManifest,
-) -> anyhow::Result<Approval> {
-    let public_key = pair.public_key();
-    let member = manifest
-        .manifest_set()
-        .members
-        .iter()
-        .find(|m| m.pub_key == public_key)
-        .cloned()
-        .ok_or_else(|| {
-            anyhow!(
-                "operator ({}) not part of manifest set",
-                hex::encode(&public_key)
-            )
-        })?;
-
-    let signature = pair.sign(manifest.manifest_hash().to_vec()).await?;
-
-    Ok(Approval { signature, member })
 }
 
 /// Walk the user through each section of the manifest for approval.
