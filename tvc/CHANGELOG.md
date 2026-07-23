@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.13.0](https://github.com/tkhq/rust-sdk/compare/tvc-v0.12.0...tvc-v0.13.0) - 2026-07-23
+
+### Added
+
+- *(tvc)* extend create-quorum-key to accept operator-ids; also refactor to use PubKey struct
+- *(tvc)* support hosted operators in deploy approve
+- *(tvc)* add hosted operator create command
+
+### Other
+
+- *(tvc)* update AGENTS.md from related reviews
+- Merge pull request #205 from tkhq/annie/tvc-191-cli-add-hosted-operator-creation-and-deploy-approval
+
 ## [0.12.0](https://github.com/tkhq/rust-sdk/compare/tvc-v0.11.0...tvc-v0.12.0) - 2026-07-22
 
 ### Added
