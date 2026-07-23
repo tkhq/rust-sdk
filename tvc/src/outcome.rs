@@ -149,7 +149,7 @@ mod tests {
             Outcome::DeployApprove(ApproveOutcome::AlreadyPosted(
                 ApprovalAlreadyPosted::default(),
             )),
-            Outcome::DeployApprove(ApproveOutcome::DryRun(ApprovalDryRun::default())),
+            Outcome::DeployApprove(ApproveOutcome::DryRun(ApprovalDryRun)),
             Outcome::DeployGetStatus(deploy::get_status::DeploymentRuntimeStatus::default()),
             Outcome::DeployProvisioningDetails(
                 deploy::provisioning_details::ProvisioningDetails::default(),

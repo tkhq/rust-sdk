@@ -153,29 +153,51 @@ impl Display for ApproveOutcome {
     }
 }
 
-/// Render the approval payload part of a human message: the pretty-printed
-/// approval JSON, or the path it was written to (`--approval-out`).
-fn approval_payload_human_message(
-    approval: &Option<Approval>,
-    written_to: &Option<String>,
-) -> String {
-    match (approval, written_to) {
-        (Some(approval), _) => serde_json::to_string_pretty(approval)
-            .expect("serializing manifest approval should not fail"),
-        (None, Some(path)) => format!("Approval written to: {path}"),
-        (None, None) => String::new(),
+/// The approval payload as an outcome reports it: inline when it went to
+/// stdout, the file path when `--approval-out` wrote it.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+enum ApprovalOrPath {
+    WrittenTo(String),
+    Approval(Approval),
+}
+
+impl ApprovalOrPath {
+    fn new(approval: Approval, approval_out: Option<&Path>) -> Self {
+        match approval_out {
+            Some(path) => Self::WrittenTo(path.display().to_string()),
+            None => Self::Approval(approval),
+        }
     }
 }
 
-#[derive(Default, Serialize)]
+impl Display for ApprovalOrPath {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::WrittenTo(path) => write!(f, "Approval written to: {path}"),
+            Self::Approval(approval) => f.write_str(
+                &serde_json::to_string_pretty(approval)
+                    .expect("serializing manifest approval should not fail"),
+            ),
+        }
+    }
+}
+
+// `#[default]` only applies to unit variants, so the registry-fixture Default
+// is a manual, test-only impl.
+#[cfg(test)]
+impl Default for ApprovalOrPath {
+    fn default() -> Self {
+        Self::WrittenTo(String::new())
+    }
+}
+
+#[derive(Serialize)]
+#[cfg_attr(test, derive(Default))]
 #[serde(rename_all = "camelCase")]
 pub struct ApprovalPosted {
-    /// Present when the approval was printed inline (no `--approval-out`).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    approval: Option<Approval>,
-    /// Present when the approval was written to a file via `--approval-out`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    written_to: Option<String>,
+    #[serde(flatten)]
+    approval_or_path: ApprovalOrPath,
     manifest_id: String,
     operator_id: String,
     approval_ids: Vec<String>,
@@ -186,19 +208,15 @@ pub struct ApprovalPosted {
 
 impl Display for ApprovalPosted {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.write_str(&approval_payload_human_message(
-            &self.approval,
-            &self.written_to,
-        ))?;
         write!(
             f,
-            r#"
+            r#"{}
 Approval posted successfully!
 
 Approval IDs: {:?}
 Manifest ID: {}
 Operator ID: {}"#,
-            self.approval_ids, self.manifest_id, self.operator_id
+            self.approval_or_path, self.approval_ids, self.manifest_id, self.operator_id
         )?;
 
         if let Some(reached) = self.quorum_reached {
@@ -207,6 +225,7 @@ Operator ID: {}"#,
             } else {
                 "Your approval has been posted. Deployment requires additional manifest approvals before it can be deployed on TVC."
             };
+
             write!(f, "\n\n{quorum_line}")?;
         }
 
@@ -214,23 +233,13 @@ Operator ID: {}"#,
     }
 }
 
-#[derive(Default, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ApprovalGenerated {
-    /// Present when the approval was printed inline (no `--approval-out`).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    approval: Option<Approval>,
-    /// Present when the approval was written to a file via `--approval-out`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    written_to: Option<String>,
-}
+#[derive(Serialize)]
+#[cfg_attr(test, derive(Default))]
+pub struct ApprovalGenerated(ApprovalOrPath);
 
 impl Display for ApprovalGenerated {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.write_str(&approval_payload_human_message(
-            &self.approval,
-            &self.written_to,
-        ))
+        self.0.fmt(f)
     }
 }
 
@@ -252,7 +261,7 @@ impl Display for ApprovalAlreadyPosted {
 }
 
 #[derive(Default, Serialize)]
-pub struct ApprovalDryRun {}
+pub struct ApprovalDryRun;
 
 impl Display for ApprovalDryRun {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -410,7 +419,7 @@ async fn run_with_resolved_inputs(
     inputs: ResolvedApproveInputs,
 ) -> anyhow::Result<ApproveOutcome> {
     if inputs.dry_run {
-        return Ok(ApproveOutcome::DryRun(ApprovalDryRun {}));
+        return Ok(ApproveOutcome::DryRun(ApprovalDryRun));
     }
 
     if let Some(deployment) = &inputs.deployment {
@@ -435,18 +444,6 @@ async fn run_with_resolved_inputs(
         &inputs.manifest,
     )
     .await?;
-
-    let written_to = inputs
-        .approval_out
-        .as_ref()
-        .map(|path| path.display().to_string());
-    // The approval payload rides in the outcome only when it was not written
-    // to a file; otherwise the outcome carries the file path.
-    let inline_approval = if written_to.is_none() {
-        Some(approval.clone())
-    } else {
-        None
-    };
 
     match inputs.post_target {
         Some(target) => {
@@ -476,18 +473,16 @@ async fn run_with_resolved_inputs(
             let posted = post_approval_to_api(ctx, plan, &approval, &inputs.manifest).await?;
 
             Ok(ApproveOutcome::Posted(ApprovalPosted {
-                approval: inline_approval,
-                written_to,
+                approval_or_path: ApprovalOrPath::new(approval, inputs.approval_out.as_deref()),
                 manifest_id: target.manifest_id,
                 operator_id: operator_id.to_string(),
                 approval_ids: posted.approval_ids,
                 quorum_reached: posted.quorum_reached,
             }))
         }
-        None => Ok(ApproveOutcome::NotPosted(ApprovalGenerated {
-            approval: inline_approval,
-            written_to,
-        })),
+        None => Ok(ApproveOutcome::NotPosted(ApprovalGenerated(
+            ApprovalOrPath::new(approval, inputs.approval_out.as_deref()),
+        ))),
     }
 }
 
@@ -914,8 +909,7 @@ mod tests {
 
     fn posted_to_file() -> ApprovalPosted {
         ApprovalPosted {
-            approval: None,
-            written_to: Some("approval.json".to_string()),
+            approval_or_path: ApprovalOrPath::WrittenTo("approval.json".to_string()),
             manifest_id: "manifest-123".to_string(),
             operator_id: "operator-456".to_string(),
             approval_ids: vec!["approval-1".to_string()],
@@ -945,16 +939,13 @@ mod tests {
 
     #[test]
     fn approval_generated_serializes_expected_json() {
-        let generated = ApprovalGenerated {
-            approval: Some(Approval {
-                signature: vec![0xde, 0xad],
-                member: QuorumMember {
-                    alias: "operator-alice".to_string(),
-                    pub_key: vec![0xaa],
-                },
-            }),
-            written_to: None,
-        };
+        let generated = ApprovalGenerated(ApprovalOrPath::Approval(Approval {
+            signature: vec![0xde, 0xad],
+            member: QuorumMember {
+                alias: "operator-alice".to_string(),
+                pub_key: vec![0xaa],
+            },
+        }));
 
         let value: serde_json::Value = serde_json::from_str(
             &Outcome::DeployApprove(ApproveOutcome::NotPosted(generated)).to_json_string(),
