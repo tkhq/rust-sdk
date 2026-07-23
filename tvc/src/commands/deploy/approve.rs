@@ -1,6 +1,7 @@
 //! Approve deploy command - cryptographically approve a QOS manifest.
 
 use crate::{
+    approvals::{ApprovalVerdict, validate_deployment_approvals},
     client::build_client,
     config::turnkey::Config,
     local_operator_key::LocalOperatorSeedSource,
@@ -18,12 +19,11 @@ use qos_core::protocol::services::boot::{
     Approval, ManifestSet, Namespace, NitroConfig, QuorumMember, ShareSet, VersionedManifest,
 };
 use serde::{Serialize, Serializer};
-use std::collections::HashSet;
 use std::fmt::{self, Display, Formatter, Write};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::debug;
-use turnkey_client::generated::external::data::v1::TvcDeployment;
+use turnkey_client::generated::external::data::v1::{TvcDeployment, TvcOperatorApproval};
 use turnkey_client::generated::{
     CreateTvcManifestApprovalsIntent, GetTvcDeploymentRequest, TvcManifestApproval,
 };
@@ -125,6 +125,8 @@ pub enum ApproveOutcome {
     Posted(ApprovalPosted),
     /// Approval generated but not posted (`--skip-post`).
     NotPosted(ApprovalGenerated),
+    /// The operator already has an approval on this manifest; nothing posted.
+    AlreadyPosted(ApprovalAlreadyPosted),
     /// `--dry-run`: manifest review completed, no approval generated.
     DryRun(ApprovalDryRun),
 }
@@ -134,6 +136,7 @@ impl Serialize for ApproveOutcome {
         match self {
             ApproveOutcome::Posted(msg) => msg.serialize(serializer),
             ApproveOutcome::NotPosted(msg) => msg.serialize(serializer),
+            ApproveOutcome::AlreadyPosted(msg) => msg.serialize(serializer),
             ApproveOutcome::DryRun(msg) => msg.serialize(serializer),
         }
     }
@@ -144,34 +147,57 @@ impl Display for ApproveOutcome {
         match self {
             ApproveOutcome::Posted(msg) => msg.fmt(f),
             ApproveOutcome::NotPosted(msg) => msg.fmt(f),
+            ApproveOutcome::AlreadyPosted(msg) => msg.fmt(f),
             ApproveOutcome::DryRun(msg) => msg.fmt(f),
         }
     }
 }
 
-/// Render the approval payload part of a human message: the pretty-printed
-/// approval JSON, or the path it was written to (`--approval-out`).
-fn approval_payload_human_message(
-    approval: &Option<Approval>,
-    written_to: &Option<String>,
-) -> String {
-    match (approval, written_to) {
-        (Some(approval), _) => serde_json::to_string_pretty(approval)
-            .expect("serializing manifest approval should not fail"),
-        (None, Some(path)) => format!("Approval written to: {path}"),
-        (None, None) => String::new(),
+/// The approval payload as an outcome reports it: inline when it went to
+/// stdout, the file path when `--approval-out` wrote it.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+enum ApprovalOrPath {
+    WrittenTo(String),
+    Approval(Approval),
+}
+
+impl ApprovalOrPath {
+    fn new(approval: Approval, approval_out: Option<&Path>) -> Self {
+        match approval_out {
+            Some(path) => Self::WrittenTo(path.display().to_string()),
+            None => Self::Approval(approval),
+        }
     }
 }
 
-#[derive(Default, Serialize)]
+impl Display for ApprovalOrPath {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::WrittenTo(path) => write!(f, "Approval written to: {path}"),
+            Self::Approval(approval) => f.write_str(
+                &serde_json::to_string_pretty(approval)
+                    .expect("serializing manifest approval should not fail"),
+            ),
+        }
+    }
+}
+
+// `#[default]` only applies to unit variants, so the registry-fixture Default
+// is a manual, test-only impl.
+#[cfg(test)]
+impl Default for ApprovalOrPath {
+    fn default() -> Self {
+        Self::WrittenTo(String::new())
+    }
+}
+
+#[derive(Serialize)]
+#[cfg_attr(test, derive(Default))]
 #[serde(rename_all = "camelCase")]
 pub struct ApprovalPosted {
-    /// Present when the approval was printed inline (no `--approval-out`).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    approval: Option<Approval>,
-    /// Present when the approval was written to a file via `--approval-out`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    written_to: Option<String>,
+    #[serde(flatten)]
+    approval_or_path: ApprovalOrPath,
     manifest_id: String,
     operator_id: String,
     approval_ids: Vec<String>,
@@ -182,19 +208,15 @@ pub struct ApprovalPosted {
 
 impl Display for ApprovalPosted {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.write_str(&approval_payload_human_message(
-            &self.approval,
-            &self.written_to,
-        ))?;
         write!(
             f,
-            r#"
+            r#"{}
 Approval posted successfully!
 
 Approval IDs: {:?}
 Manifest ID: {}
 Operator ID: {}"#,
-            self.approval_ids, self.manifest_id, self.operator_id
+            self.approval_or_path, self.approval_ids, self.manifest_id, self.operator_id
         )?;
 
         if let Some(reached) = self.quorum_reached {
@@ -203,6 +225,7 @@ Operator ID: {}"#,
             } else {
                 "Your approval has been posted. Deployment requires additional manifest approvals before it can be deployed on TVC."
             };
+
             write!(f, "\n\n{quorum_line}")?;
         }
 
@@ -210,28 +233,35 @@ Operator ID: {}"#,
     }
 }
 
-#[derive(Default, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ApprovalGenerated {
-    /// Present when the approval was printed inline (no `--approval-out`).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    approval: Option<Approval>,
-    /// Present when the approval was written to a file via `--approval-out`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    written_to: Option<String>,
-}
+#[derive(Serialize)]
+#[cfg_attr(test, derive(Default))]
+pub struct ApprovalGenerated(ApprovalOrPath);
 
 impl Display for ApprovalGenerated {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.write_str(&approval_payload_human_message(
-            &self.approval,
-            &self.written_to,
-        ))
+        self.0.fmt(f)
     }
 }
 
 #[derive(Default, Serialize)]
-pub struct ApprovalDryRun {}
+#[serde(rename_all = "camelCase")]
+pub struct ApprovalAlreadyPosted {
+    operator_id: String,
+    approval_id: String,
+}
+
+impl Display for ApprovalAlreadyPosted {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Operator {} has already approved this manifest (approval ID: {}). Nothing to post.",
+            self.operator_id, self.approval_id
+        )
+    }
+}
+
+#[derive(Default, Serialize)]
+pub struct ApprovalDryRun;
 
 impl Display for ApprovalDryRun {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -252,6 +282,9 @@ struct ResolvedApproveInputs {
     dry_run: bool,
     skip_post: bool,
     post_target: Option<PostTarget>,
+    /// Present only when the manifest came from a deployment fetch; carries
+    /// the already-posted approvals for validation and duplicate checks.
+    deployment: Option<TvcDeployment>,
 }
 
 pub async fn run(ctx: &mut StdCtx, mut args: Args) -> anyhow::Result<Outcome> {
@@ -283,7 +316,7 @@ async fn build_inputs_interactive(
         bail_required_in_non_interactive("--dangerous-skip-interactive")?;
     }
 
-    let (manifest, fetched_manifest_id) = load_manifest(ctx, &args).await?;
+    let (manifest, fetched_manifest_id, deployment) = load_manifest(ctx, &args).await?;
 
     if do_prompt_user {
         interactive_approve(ctx, &manifest)?;
@@ -327,6 +360,7 @@ async fn build_inputs_interactive(
         dry_run: args.dry_run,
         skip_post: args.skip_post,
         post_target,
+        deployment,
     })
 }
 
@@ -339,7 +373,7 @@ async fn build_inputs_non_interactive(
         bail_required_in_non_interactive("--dangerous-skip-interactive")?;
     }
 
-    let (manifest, fetched_manifest_id) = load_manifest(ctx, &args).await?;
+    let (manifest, fetched_manifest_id, deployment) = load_manifest(ctx, &args).await?;
 
     let mut operator_id = args.operator_id;
     let post_target = if !args.dry_run && !args.skip_post {
@@ -376,6 +410,7 @@ async fn build_inputs_non_interactive(
         dry_run: args.dry_run,
         skip_post: args.skip_post,
         post_target,
+        deployment,
     })
 }
 
@@ -384,7 +419,11 @@ async fn run_with_resolved_inputs(
     inputs: ResolvedApproveInputs,
 ) -> anyhow::Result<ApproveOutcome> {
     if inputs.dry_run {
-        return Ok(ApproveOutcome::DryRun(ApprovalDryRun {}));
+        return Ok(ApproveOutcome::DryRun(ApprovalDryRun));
+    }
+
+    if let Some(deployment) = &inputs.deployment {
+        warn_invalid_approvals(ctx, &inputs.manifest, &deployment.manifest_approvals)?;
     }
 
     let operator = resolve_operator(inputs.operator_seed_source, inputs.operator_id).await?;
@@ -406,55 +445,94 @@ async fn run_with_resolved_inputs(
     )
     .await?;
 
-    let written_to = inputs
-        .approval_out
-        .as_ref()
-        .map(|path| path.display().to_string());
-    // The approval payload rides in the outcome only when it was not written
-    // to a file; otherwise the outcome carries the file path.
-    let inline_approval = if written_to.is_none() {
-        Some(approval.clone())
-    } else {
-        None
-    };
-
     match inputs.post_target {
         Some(target) => {
             let operator_id = operator
                 .id()
                 .context("resolved operator ID required to post approval")?;
+
+            let existing = inputs.deployment.as_ref().and_then(|deployment| {
+                find_own_approval(
+                    &deployment.manifest_approvals,
+                    &operator_id,
+                    &approval.member.pub_key,
+                )
+            });
+            if let Some(existing) = existing {
+                return Ok(ApproveOutcome::AlreadyPosted(ApprovalAlreadyPosted {
+                    operator_id: operator_id.to_string(),
+                    approval_id: existing.id.clone(),
+                }));
+            }
+
             let plan = PostApprovalPlan {
                 manifest_id: target.manifest_id.as_str(),
                 operator_id: &operator_id,
                 deploy_id: target.deploy_id.as_deref(),
             };
-            let posted = post_approval_to_api(ctx, plan, &approval).await?;
+            let posted = post_approval_to_api(ctx, plan, &approval, &inputs.manifest).await?;
 
             Ok(ApproveOutcome::Posted(ApprovalPosted {
-                approval: inline_approval,
-                written_to,
+                approval_or_path: ApprovalOrPath::new(approval, inputs.approval_out.as_deref()),
                 manifest_id: target.manifest_id,
                 operator_id: operator_id.to_string(),
                 approval_ids: posted.approval_ids,
                 quorum_reached: posted.quorum_reached,
             }))
         }
-        None => Ok(ApproveOutcome::NotPosted(ApprovalGenerated {
-            approval: inline_approval,
-            written_to,
-        })),
+        None => Ok(ApproveOutcome::NotPosted(ApprovalGenerated(
+            ApprovalOrPath::new(approval, inputs.approval_out.as_deref()),
+        ))),
     }
+}
+
+/// Warn about already-posted approvals that QOS would reject at enclave boot.
+fn warn_invalid_approvals(
+    ctx: &mut StdCtx,
+    manifest: &VersionedManifest,
+    approvals: &[TvcOperatorApproval],
+) -> anyhow::Result<()> {
+    let validation = validate_deployment_approvals(manifest, approvals);
+    for approval in &validation.approvals {
+        if approval.verdict == ApprovalVerdict::Valid {
+            continue;
+        }
+
+        ctx.shell().human().warn(format!(
+            "existing approval from {} is {}; QOS will reject it at enclave boot",
+            approval.operator_label(),
+            approval.verdict
+        ))?;
+    }
+
+    Ok(())
+}
+
+/// Find an approval already posted by this operator, matched by operator ID or
+/// by the manifest set member public key.
+fn find_own_approval<'a>(
+    approvals: &'a [TvcOperatorApproval],
+    operator_id: &Uuid,
+    member_pub_key: &[u8],
+) -> Option<&'a TvcOperatorApproval> {
+    approvals.iter().find(|approval| {
+        approval.operator.as_ref().is_some_and(|operator| {
+            operator.id.parse::<Uuid>().ok().as_ref() == Some(operator_id)
+                || hex::decode(&operator.public_key).is_ok_and(|key| key == member_pub_key)
+        })
+    })
 }
 
 async fn load_manifest(
     ctx: &mut StdCtx,
     args: &Args,
-) -> anyhow::Result<(VersionedManifest, Option<String>)> {
+) -> anyhow::Result<(VersionedManifest, Option<String>, Option<TvcDeployment>)> {
     match (&args.manifest, &args.deploy_id) {
-        (Some(path), _) => Ok((read_manifest_from_path(path).await?, None)),
+        (Some(path), _) => Ok((read_manifest_from_path(path).await?, None, None)),
         (_, Some(deploy_id)) => {
-            let (manifest, manifest_id) = fetch_manifest_from_deploy(ctx, deploy_id).await?;
-            Ok((manifest, Some(manifest_id)))
+            let (manifest, manifest_id, deployment) =
+                fetch_manifest_from_deploy(ctx, deploy_id).await?;
+            Ok((manifest, Some(manifest_id), Some(deployment)))
         }
         (None, None) => bail!("a manifest source is required"),
     }
@@ -507,6 +585,7 @@ async fn post_approval_to_api(
     ctx: &mut StdCtx,
     plan: PostApprovalPlan<'_>,
     approval: &Approval,
+    manifest: &VersionedManifest,
 ) -> anyhow::Result<PostedApproval> {
     shell_println!(ctx)?;
     shell_println!(ctx, "Posting approval to Turnkey...")?;
@@ -542,12 +621,10 @@ async fn post_approval_to_api(
             };
 
             match auth.client.get_tvc_deployment(request).await {
-                Ok(response) => Some(
-                    response
-                        .tvc_deployment
-                        .as_ref()
-                        .is_some_and(manifest_approval_quorum_reached),
-                ),
+                Ok(response) => Some(response.tvc_deployment.is_some_and(|deployment| {
+                    validate_deployment_approvals(manifest, &deployment.manifest_approvals)
+                        .quorum_reached()
+                })),
                 Err(error) => {
                     debug!(
                         deploy_id,
@@ -565,31 +642,6 @@ async fn post_approval_to_api(
         approval_ids: result.result.approval_ids,
         quorum_reached,
     })
-}
-
-fn manifest_approval_quorum_reached(deployment: &TvcDeployment) -> bool {
-    let Some(manifest_set) = &deployment.manifest_set else {
-        return false;
-    };
-
-    if manifest_set.threshold == 0 {
-        return false;
-    }
-
-    let mut operator_ids = HashSet::new();
-    for approval in &deployment.manifest_approvals {
-        let Some(operator) = &approval.operator else {
-            return false;
-        };
-
-        if operator.id.is_empty() {
-            return false;
-        }
-
-        operator_ids.insert(operator.id.as_str());
-    }
-
-    operator_ids.len() >= manifest_set.threshold as usize
 }
 
 /// Walk the user through each section of the manifest for approval.
@@ -716,11 +768,11 @@ async fn read_manifest_from_path(path: &Path) -> anyhow::Result<VersionedManifes
 }
 
 /// Fetch manifest from Turnkey using GetTvcDeployment API.
-/// Returns the manifest and its Turnkey manifest_id.
+/// Returns the manifest, its Turnkey manifest_id, and the deployment itself.
 async fn fetch_manifest_from_deploy(
     ctx: &mut StdCtx,
     deploy_id: &str,
-) -> anyhow::Result<(VersionedManifest, String)> {
+) -> anyhow::Result<(VersionedManifest, String, TvcDeployment)> {
     shell_println!(ctx, "Fetching deployment {deploy_id}...")?;
 
     let auth = crate::client::build_client().await?;
@@ -742,23 +794,23 @@ async fn fetch_manifest_from_deploy(
 
     let tvc_manifest = deployment
         .manifest
+        .as_ref()
         .ok_or_else(|| anyhow!("manifest not found in deployment"))?;
 
     let manifest = VersionedManifest::try_from_slice_compat(&tvc_manifest.manifest)
         .context("failed to parse manifest from deployment")?;
+    let manifest_id = tvc_manifest.id.clone();
 
-    shell_println!(ctx, "✓ Manifest loaded (manifest_id: {})", tvc_manifest.id)?;
+    shell_println!(ctx, "✓ Manifest loaded (manifest_id: {manifest_id})")?;
 
-    Ok((manifest, tvc_manifest.id))
+    Ok((manifest, manifest_id, deployment))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::output::Message;
-    use turnkey_client::generated::external::data::v1::{
-        TvcOperator, TvcOperatorApproval, TvcOperatorSet,
-    };
+    use turnkey_client::generated::external::data::v1::TvcOperator;
 
     fn fixture_manifest() -> VersionedManifest {
         VersionedManifest::try_from_slice_compat(include_bytes!("../../../fixtures/manifest.json"))
@@ -783,44 +835,6 @@ mod tests {
             approval: vec![],
             created_at: None,
             updated_at: None,
-        }
-    }
-
-    fn test_deployment(
-        manifest_threshold: Option<u32>,
-        approval_operator_ids: &[Option<&str>],
-    ) -> TvcDeployment {
-        let operators = approval_operator_ids
-            .iter()
-            .filter_map(|operator_id| operator_id.map(test_operator))
-            .collect();
-
-        TvcDeployment {
-            id: "deployment-123".to_string(),
-            organization_id: "org-123".to_string(),
-            app_id: "app-123".to_string(),
-            manifest_set: manifest_threshold.map(|threshold| TvcOperatorSet {
-                id: "manifest-set-123".to_string(),
-                name: "manifest-set".to_string(),
-                organization_id: "org-123".to_string(),
-                operators,
-                threshold,
-                created_at: None,
-                updated_at: None,
-            }),
-            share_set: None,
-            manifest: None,
-            manifest_approvals: approval_operator_ids
-                .iter()
-                .enumerate()
-                .map(|(index, operator_id)| test_approval(index, *operator_id))
-                .collect(),
-            qos_version: "qos-v1".to_string(),
-            pivot_container: None,
-            debug_mode: false,
-            created_at: None,
-            updated_at: None,
-            delete: false,
         }
     }
 
@@ -867,58 +881,35 @@ mod tests {
     }
 
     #[test]
-    fn manifest_approval_quorum_reached_is_false_below_threshold() {
-        let deployment = test_deployment(Some(2), &[Some("operator-1")]);
+    fn find_own_approval_matches_by_operator_id() {
+        let operator_id = Uuid::from_u128(1);
+        let approvals = [test_approval(0, Some(&operator_id.to_string()))];
 
-        assert!(!manifest_approval_quorum_reached(&deployment));
+        let found = find_own_approval(&approvals, &operator_id, &[0xab]).unwrap();
+        assert_eq!(found.id, "approval-0");
     }
 
     #[test]
-    fn manifest_approval_quorum_reached_is_true_at_threshold() {
-        let deployment = test_deployment(Some(2), &[Some("operator-1"), Some("operator-2")]);
+    fn find_own_approval_matches_by_member_public_key() {
+        let mut approval = test_approval(0, Some(&Uuid::from_u128(1).to_string()));
+        approval.operator.as_mut().unwrap().public_key = hex::encode([0xab, 0xcd]);
 
-        assert!(manifest_approval_quorum_reached(&deployment));
+        assert!(find_own_approval(&[approval], &Uuid::from_u128(2), &[0xab, 0xcd]).is_some());
     }
 
     #[test]
-    fn manifest_approval_quorum_counts_distinct_operators() {
-        let deployment = test_deployment(Some(2), &[Some("operator-1"), Some("operator-1")]);
+    fn find_own_approval_ignores_other_operators() {
+        let approvals = [
+            test_approval(0, Some(&Uuid::from_u128(1).to_string())),
+            test_approval(1, None),
+        ];
 
-        assert!(!manifest_approval_quorum_reached(&deployment));
-    }
-
-    #[test]
-    fn manifest_approval_quorum_is_false_without_manifest_set() {
-        let deployment = test_deployment(None, &[Some("operator-1"), Some("operator-2")]);
-
-        assert!(!manifest_approval_quorum_reached(&deployment));
-    }
-
-    #[test]
-    fn manifest_approval_quorum_is_false_with_zero_threshold() {
-        let deployment = test_deployment(Some(0), &[Some("operator-1")]);
-
-        assert!(!manifest_approval_quorum_reached(&deployment));
-    }
-
-    #[test]
-    fn manifest_approval_quorum_is_false_when_approval_lacks_operator() {
-        let deployment = test_deployment(Some(2), &[Some("operator-1"), None]);
-
-        assert!(!manifest_approval_quorum_reached(&deployment));
-    }
-
-    #[test]
-    fn manifest_approval_quorum_is_false_when_operator_id_is_empty() {
-        let deployment = test_deployment(Some(1), &[Some("")]);
-
-        assert!(!manifest_approval_quorum_reached(&deployment));
+        assert!(find_own_approval(&approvals, &Uuid::from_u128(2), &[0xab]).is_none());
     }
 
     fn posted_to_file() -> ApprovalPosted {
         ApprovalPosted {
-            approval: None,
-            written_to: Some("approval.json".to_string()),
+            approval_or_path: ApprovalOrPath::WrittenTo("approval.json".to_string()),
             manifest_id: "manifest-123".to_string(),
             operator_id: "operator-456".to_string(),
             approval_ids: vec!["approval-1".to_string()],
@@ -948,16 +939,13 @@ mod tests {
 
     #[test]
     fn approval_generated_serializes_expected_json() {
-        let generated = ApprovalGenerated {
-            approval: Some(Approval {
-                signature: vec![0xde, 0xad],
-                member: QuorumMember {
-                    alias: "operator-alice".to_string(),
-                    pub_key: vec![0xaa],
-                },
-            }),
-            written_to: None,
-        };
+        let generated = ApprovalGenerated(ApprovalOrPath::Approval(Approval {
+            signature: vec![0xde, 0xad],
+            member: QuorumMember {
+                alias: "operator-alice".to_string(),
+                pub_key: vec![0xaa],
+            },
+        }));
 
         let value: serde_json::Value = serde_json::from_str(
             &Outcome::DeployApprove(ApproveOutcome::NotPosted(generated)).to_json_string(),
@@ -975,6 +963,28 @@ mod tests {
                         "pubKey": "aa",
                     },
                 },
+            })
+        );
+    }
+
+    #[test]
+    fn approval_already_posted_serializes_expected_json() {
+        let already_posted = ApprovalAlreadyPosted {
+            operator_id: "operator-456".to_string(),
+            approval_id: "approval-1".to_string(),
+        };
+
+        let value: serde_json::Value = serde_json::from_str(
+            &Outcome::DeployApprove(ApproveOutcome::AlreadyPosted(already_posted)).to_json_string(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            value,
+            serde_json::json!({
+                "reason": "manifest-approval-already-posted",
+                "operatorId": "operator-456",
+                "approvalId": "approval-1",
             })
         );
     }
