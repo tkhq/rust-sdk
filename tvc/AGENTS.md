@@ -25,8 +25,7 @@ Default guidance for coding-agent runs in this repository.
   longer/module-qualified form when it disambiguates from another in-scope name —
   e.g. `fmt::Result` stays qualified (via `use std::fmt::{self, Display, Formatter}`)
   so it doesn't collide with `anyhow::Result`, and `std::fmt::Write` may need
-  `as _` where `std::io::Write` is also in scope. Merge imports from the same
-  module where practical.
+  `as _` where `std::io::Write` is also in scope.
 - In doc comments and module docs, describe responsibilities, contracts, and
   relationships without naming specific source files or inventorying current
   consumers. File paths and call-site lists go stale when code moves. When a
