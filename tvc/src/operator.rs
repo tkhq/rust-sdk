@@ -1,5 +1,6 @@
 //! TVC operator creation and manifest approval.
 
+use crate::approvals::ValidatedManifest;
 use crate::client::AuthenticatedClient;
 use crate::config::turnkey::{
     Config, HostedOperatorRecord, OperatorKind, OperatorRecord, OperatorRecordKind,
@@ -340,7 +341,7 @@ impl ResolvedOperator {
     pub(crate) async fn approve_manifest(
         &self,
         ctx: &OperatorCtx<'_>,
-        manifest: &VersionedManifest,
+        manifest: &ValidatedManifest<'_>,
     ) -> Result<Approval> {
         let public_key = self.public_key()?;
         let member = manifest_member(manifest, &public_key, self.name())?;
@@ -361,7 +362,13 @@ impl ResolvedOperator {
             }
         };
 
-        Ok(Approval { signature, member })
+        let approval = Approval { signature, member };
+
+        // Membership is already proven — `member` came out of the manifest
+        // set — so verifying the fresh signature is the only remaining check.
+        manifest.verify_approval(&approval)?;
+
+        Ok(approval)
     }
 }
 

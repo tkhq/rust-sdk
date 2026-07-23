@@ -363,7 +363,7 @@ fn approve_non_interactive_requires_operator_id_when_saved_ids_are_ambiguous() {
         .arg("fixtures/seed.hex")
         .arg("--dangerous-skip-interactive")
         .arg("--manifest-id")
-        .arg("manifest-id")
+        .arg("11111111-1111-4111-8111-111111111111")
         .assert()
         .failure()
         .stderr(predicate::str::contains("--operator-id"))

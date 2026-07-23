@@ -2,12 +2,15 @@
 
 use anyhow::Context;
 use clap::Args as ClapArgs;
+use qos_core::protocol::services::boot::VersionedManifest;
 use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
+use tracing::debug;
 use turnkey_client::generated::GetTvcDeploymentRequest;
-use turnkey_client::generated::external::data::v1::TvcDeployment;
+use turnkey_client::generated::external::data::v1::{TvcDeployment, TvcManifest};
 use uuid::Uuid;
 
+use crate::approvals::{ApprovalValidationWithMeta, OperatorApproval, ValidatedManifest};
 use crate::client::fetch_tvc_app;
 use crate::commands::app_status::TimestampPayload;
 use crate::commands::display::{format_egress_enabled, yes_no};
@@ -25,7 +28,7 @@ pub struct Args {
 }
 
 /// Run the deploy status command.
-pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
+pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
     let auth = crate::client::build_client().await?;
     let deploy_id = args.deploy_id.to_string();
 
@@ -59,18 +62,46 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
         organization_id: _,
         manifest_set: _,
         share_set: _,
-        manifest_approvals: _,
+        manifest_approvals,
     } = deployment;
 
-    let manifest =
-        manifest.ok_or_else(|| MissingResource::new("manifest", format!("deployment {id}")))?;
+    let TvcManifest {
+        id: manifest_id,
+        manifest: manifest_bytes,
+        created_at: _,
+        updated_at: _,
+    } = manifest.ok_or_else(|| MissingResource::new("manifest", format!("deployment {id}")))?;
+
     let app = fetch_tvc_app(&auth, &app_id).await?;
+
+    let manifest_approvals = manifest_approvals
+        .into_iter()
+        .map(OperatorApproval::try_from)
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let manifest = VersionedManifest::try_from_slice_compat(&manifest_bytes)
+        .inspect_err(|error| {
+            let write_result = ctx.shell().human().warn(format!(
+                "failed to parse manifest; cannot validate approvals: {error}"
+            ));
+
+            if let Err(write_error) = write_result {
+                debug!(%write_error, "failed to write manifest-parse warning");
+            }
+        })
+        .ok();
+
+    let manifest_approvals = manifest
+        .as_ref()
+        .map(ValidatedManifest::try_from)
+        .transpose()?
+        .map(|manifest| manifest.validate(manifest_approvals).with_meta());
 
     Ok(Outcome::DeploymentStatus(DeploymentStatusReport {
         deployment_id: id,
         app_id,
         egress_enabled: app.enable_egress,
-        manifest_id: manifest.id,
+        manifest_id,
         qos_version,
         marked_for_deletion: delete,
         debug_mode,
@@ -81,6 +112,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
         }),
         created_at: created_at.map(Into::into),
         updated_at: updated_at.map(Into::into),
+        manifest_approvals,
     }))
 }
 
@@ -97,6 +129,9 @@ pub struct DeploymentStatusReport {
     pivot_container: Option<PivotContainerSummary>,
     created_at: Option<TimestampPayload>,
     updated_at: Option<TimestampPayload>,
+    /// Cryptographic validation of the posted approvals against the manifest
+    /// set; `None` when the manifest bytes could not be parsed.
+    manifest_approvals: Option<ApprovalValidationWithMeta>,
 }
 
 #[derive(Serialize)]
@@ -150,6 +185,18 @@ Pivot Container:
             write!(f, "\nUpdated: {}.{:09}s", updated.seconds, updated.nanos)?;
         }
 
+        if let Some(ApprovalValidationWithMeta { validation, meta }) = &self.manifest_approvals {
+            write!(
+                f,
+                "\n\nManifest Approvals: {}/{} valid",
+                meta.valid_count, validation.threshold
+            )?;
+            for validated in &validation.approvals {
+                write!(f, "\n  {}: {}", validated.approval, validated.verdict)?;
+            }
+            write!(f, "\nQuorum reached: {}", yes_no(meta.quorum_reached))?;
+        }
+
         Ok(())
     }
 }
@@ -160,7 +207,8 @@ fn format_marked_for_deletion(delete: bool) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::format_marked_for_deletion;
+    use super::{DeploymentStatusReport, format_marked_for_deletion};
+    use crate::approvals::{ApprovalValidation, ApprovalVerdict, test_uuid, validated_approval};
 
     #[test]
     fn marked_for_deletion_formats_yes_when_delete_is_true() {
@@ -170,5 +218,37 @@ mod tests {
     #[test]
     fn marked_for_deletion_formats_no_when_delete_is_false() {
         assert_eq!(format_marked_for_deletion(false), "Marked for deletion: no");
+    }
+
+    #[test]
+    fn status_report_renders_mixed_approval_verdicts() {
+        let report = DeploymentStatusReport {
+            manifest_approvals: Some(
+                ApprovalValidation {
+                    approvals: vec![
+                        validated_approval("op-1", "operator-alice", ApprovalVerdict::Valid),
+                        validated_approval(
+                            "op-2",
+                            "operator-bob",
+                            ApprovalVerdict::InvalidSignature,
+                        ),
+                    ],
+                    threshold: 2,
+                }
+                .with_meta(),
+            ),
+            ..DeploymentStatusReport::default()
+        };
+
+        let expected = format!(
+            r#"Manifest Approvals: 1/2 valid
+  operator-alice ({}): valid
+  operator-bob ({}): invalid signature
+Quorum reached: no"#,
+            test_uuid("op-1"),
+            test_uuid("op-2"),
+        );
+
+        assert!(report.to_string().ends_with(&expected));
     }
 }
