@@ -13,7 +13,7 @@ trust chain: manifest → attestation document → response signature.
 | Header | Contents |
 | --- | --- |
 | `Content-Digest` | `sha-256=:BASE64(sha256(body)):` (RFC 9530) |
-| `Signature-Input` | `ephemeral=("@method" "@path" "@status" "content-digest");created=UNIX;keyid="ephemeral";alg="ecdsa-p256-sha256"` plus a `quorum=(...)` entry when a quorum key is configured (RFC 9421) |
+| `Signature-Input` | `ephemeral=("@method";req "@path";req "@query";req "@status" "content-digest");created=UNIX;keyid="ephemeral";alg="ecdsa-p256-sha256"` plus a `quorum=(...)` entry when a quorum key is configured (RFC 9421) |
 | `Signature` | `ephemeral=:BASE64:` plus `quorum=:BASE64:` when configured (RFC 9421) |
 | `x-tvc-attestation-doc` | base64 NSM attestation document; `user_data` = manifest hash, `public_key` = ephemeral public key |
 | `x-tvc-manifest-envelope` | base64 canonical manifest envelope bytes (`VersionedManifestEnvelope::to_storage_vec`) |

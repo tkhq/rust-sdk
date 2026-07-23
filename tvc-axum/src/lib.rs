@@ -67,7 +67,8 @@ pub const MANIFEST_ENVELOPE_HEADER: &str = "x-tvc-manifest-envelope";
 /// re-requesting only refreshes its timestamp.
 const ATTESTATION_DOC_TTL: Duration = Duration::from_secs(300);
 
-const SIGNATURE_COMPONENTS: &str = "(\"@method\" \"@path\" \"@status\" \"content-digest\")";
+const SIGNATURE_COMPONENTS: &str =
+    "(\"@method\";req \"@path\";req \"@query\";req \"@status\" \"content-digest\")";
 const SIGNATURE_ALG: &str = "ecdsa-p256-sha256";
 
 /// Errors from building a [`ResponseSigningLayer`].
@@ -108,12 +109,14 @@ fn signature_input(label: &str, created: u64) -> String {
 pub(crate) fn signature_base(
     method: &str,
     path: &str,
+    query: Option<&str>,
     status: StatusCode,
     digest: &str,
     params: &str,
 ) -> Vec<u8> {
+    let query = query.map_or_else(|| "?".to_owned(), |query| format!("?{query}"));
     format!(
-        "\"@method\": {method}\n\"@path\": {path}\n\"@status\": {}\n\"content-digest\": {digest}\n\"@signature-params\": {params}",
+        "\"@method\";req: {method}\n\"@path\";req: {path}\n\"@query\";req: {query}\n\"@status\": {}\n\"content-digest\": {digest}\n\"@signature-params\": {params}",
         status.as_u16(),
     )
     .into_bytes()
@@ -214,6 +217,7 @@ impl Shared {
         &self,
         method: &str,
         path: &str,
+        query: Option<&str>,
         response: Response<ResBody>,
     ) -> Result<Response<Body>, &'static str>
     where
@@ -230,7 +234,7 @@ impl Shared {
         let digest = content_digest(&body);
         let sign = |label: &str, key: &P256Pair| {
             let params = signature_input(label, created);
-            let base = signature_base(method, path, parts.status, &digest, &params);
+            let base = signature_base(method, path, query, parts.status, &digest, &params);
             let signature = key.sign(&base).ok()?;
             Some((
                 format!("{label}={params}"),
@@ -425,13 +429,14 @@ where
     fn call(&mut self, request: Request<ReqBody>) -> Self::Future {
         let method = request.method().as_str().to_owned();
         let path = request.uri().path().to_owned();
+        let query = request.uri().query().map(str::to_owned);
         let future = self.inner.call(request);
         let shared = Arc::clone(&self.shared);
 
         Box::pin(async move {
             let response = future.await?;
             Ok(shared
-                .sign_response(&method, &path, response)
+                .sign_response(&method, &path, query.as_deref(), response)
                 .await
                 .unwrap_or_else(internal_error_response))
         })

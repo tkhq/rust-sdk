@@ -192,6 +192,7 @@ struct SignedFixture {
     quorum_public: P256Public,
     method: &'static str,
     path: &'static str,
+    query: Option<&'static str>,
     status: StatusCode,
     body: Vec<u8>,
     signature_input: String,
@@ -205,6 +206,7 @@ impl SignedFixture {
         SignedResponseParts {
             method: self.method,
             path: self.path,
+            query: self.query,
             status: self.status,
             body: &self.body,
             signature_input: &self.signature_input,
@@ -231,7 +233,7 @@ impl SignedFixture {
 
 /// Drive one request through a quorum-signing layer whose manifest carries
 /// the quorum public key and whose NSM passes full verification.
-async fn signed_fixture(method: &'static str, path: &'static str) -> SignedFixture {
+async fn signed_fixture(method: &'static str, uri: &'static str) -> SignedFixture {
     let ephemeral_key = Arc::new(P256Pair::generate().expect("key should generate"));
     let quorum_key = Arc::new(P256Pair::generate().expect("key should generate"));
     let envelope = approved_envelope_with_quorum(quorum_key.public_key().to_bytes());
@@ -243,7 +245,10 @@ async fn signed_fixture(method: &'static str, path: &'static str) -> SignedFixtu
         .build()
         .expect("layer should build");
 
-    let response = oneshot_response(&layer, method, path).await;
+    let response = oneshot_response(&layer, method, uri).await;
+    let (path, query) = uri
+        .split_once('?')
+        .map_or((uri, None), |(path, query)| (path, Some(query)));
     let status = response.status();
     let signature_input = header_str(&response, "signature-input").to_owned();
     let signature = header_str(&response, "signature").to_owned();
@@ -258,6 +263,7 @@ async fn signed_fixture(method: &'static str, path: &'static str) -> SignedFixtu
             .expect("quorum public key should decode"),
         method,
         path,
+        query,
         status,
         body,
         signature_input,
@@ -330,6 +336,22 @@ async fn tampered_responses_and_wrong_keys_fail() {
 }
 
 #[tokio::test]
+async fn changed_query_fails_verification() {
+    let fixture = signed_fixture("GET", "/query?account=a").await;
+    verify_quorum_signature(&fixture.parts(), &fixture.quorum_public)
+        .expect("original query should verify");
+
+    let changed_query = SignedResponseParts {
+        query: Some("account=b"),
+        ..fixture.parts()
+    };
+    assert!(matches!(
+        verify_quorum_signature(&changed_query, &fixture.quorum_public),
+        Err(VerifyResponseError::InvalidSignature("quorum"))
+    ));
+}
+
+#[tokio::test]
 async fn no_quorum_signature_without_quorum_key() {
     let ephemeral_key = Arc::new(P256Pair::generate().expect("key should generate"));
     let layer = ResponseSigningLayer::builder()
@@ -347,6 +369,7 @@ async fn no_quorum_signature_without_quorum_key() {
     let parts = SignedResponseParts {
         method: "GET",
         path: "/no-quorum",
+        query: None,
         status: StatusCode::OK,
         body: &body,
         signature_input: &signature_input,

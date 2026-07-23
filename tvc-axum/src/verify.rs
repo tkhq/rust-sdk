@@ -57,6 +57,9 @@ pub struct SignedResponseParts<'a> {
     pub method: &'a str,
     /// Path of the request the response answers, excluding the query string.
     pub path: &'a str,
+    /// Query string of the request the response answers, excluding the leading
+    /// `?`, or [`None`] when the request has no query string.
+    pub query: Option<&'a str>,
     /// Response status code.
     pub status: StatusCode,
     /// Response body bytes.
@@ -93,7 +96,14 @@ fn verify_signature(
         .and_then(|value| STANDARD.decode(value).ok())
         .ok_or(VerifyResponseError::MalformedSignature(label))?;
     let digest = content_digest(parts.body);
-    let base = signature_base(parts.method, parts.path, parts.status, &digest, params);
+    let base = signature_base(
+        parts.method,
+        parts.path,
+        parts.query,
+        parts.status,
+        &digest,
+        params,
+    );
     key.verify(&base, &signature)
         .map_err(|_| VerifyResponseError::InvalidSignature(label))
 }
