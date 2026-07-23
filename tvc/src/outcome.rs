@@ -94,6 +94,9 @@ impl Message for Outcome {
             Outcome::ProfileDelete(_) => "profile-deleted",
             Outcome::DeployApprove(ApproveOutcome::Posted(_)) => "manifest-approval-posted",
             Outcome::DeployApprove(ApproveOutcome::NotPosted(_)) => "manifest-approval-generated",
+            Outcome::DeployApprove(ApproveOutcome::AlreadyPosted(_)) => {
+                "manifest-approval-already-posted"
+            }
             Outcome::DeployApprove(ApproveOutcome::DryRun(_)) => "manifest-approval-dry-run",
             Outcome::DeployGetStatus(_) => "deployment-runtime-status",
             Outcome::DeployProvisioningDetails(_) => "provisioning-details",
@@ -128,7 +131,7 @@ impl Message for Outcome {
 mod tests {
     use super::*;
     use crate::commands::deploy::approve::{
-        ApprovalDryRun, ApprovalGenerated, ApprovalPosted, ApproveOutcome,
+        ApprovalAlreadyPosted, ApprovalDryRun, ApprovalGenerated, ApprovalPosted, ApproveOutcome,
     };
     use std::collections::HashSet;
 
@@ -143,6 +146,9 @@ mod tests {
             Outcome::ProfileDelete(login::ProfileDeleted::default()),
             Outcome::DeployApprove(ApproveOutcome::Posted(ApprovalPosted::default())),
             Outcome::DeployApprove(ApproveOutcome::NotPosted(ApprovalGenerated::default())),
+            Outcome::DeployApprove(ApproveOutcome::AlreadyPosted(
+                ApprovalAlreadyPosted::default(),
+            )),
             Outcome::DeployApprove(ApproveOutcome::DryRun(ApprovalDryRun::default())),
             Outcome::DeployGetStatus(deploy::get_status::DeploymentRuntimeStatus::default()),
             Outcome::DeployProvisioningDetails(

@@ -1,5 +1,6 @@
 //! TVC operator creation and manifest approval.
 
+use crate::approvals::verify_own_approval;
 use crate::client::AuthenticatedClient;
 use crate::config::turnkey::{
     Config, HostedOperatorRecord, OperatorKind, OperatorRecord, OperatorRecordKind,
@@ -250,7 +251,14 @@ impl ResolvedOperator {
             }
         };
 
-        Ok(Approval { signature, member })
+        let approval = Approval { signature, member };
+
+        verify_own_approval(manifest, &approval).context(
+            "freshly generated approval failed verification; \
+             check that the operator key matches the manifest set member key",
+        )?;
+
+        Ok(approval)
     }
 }
 
