@@ -345,7 +345,10 @@ fn approve_non_interactive_requires_operator_id_when_saved_ids_are_ambiguous() {
         &temp,
         api_key_path.clone(),
         operator_key_path,
-        vec!["operator-1".to_string(), "operator-2".to_string()],
+        vec![
+            "11111111-1111-4111-8111-111111111111".to_string(),
+            "22222222-2222-4222-8222-222222222222".to_string(),
+        ],
     );
     write_api_key(&api_key_path);
 

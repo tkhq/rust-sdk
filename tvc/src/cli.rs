@@ -161,6 +161,9 @@ impl Commands {
                 }
             },
             Commands::Login(args) => commands::login::run(ctx, args).await,
+            Commands::Operator { command } => match command {
+                OperatorCommands::Create(args) => commands::operator::create::run(ctx, args).await,
+            },
             Commands::Profile { command } => match command {
                 ProfileCommands::Delete(delete_args) => {
                     commands::login::run_delete(ctx, delete_args).await
@@ -174,6 +177,11 @@ impl Commands {
 enum Commands {
     /// Authenticate with Turnkey.
     Login(commands::login::Args),
+    /// Manage hosted TVC operators.
+    Operator {
+        #[command(subcommand)]
+        command: OperatorCommands,
+    },
     /// Manage saved login profiles.
     Profile {
         #[command(subcommand)]
@@ -200,6 +208,9 @@ impl Commands {
     fn name(&self) -> &'static str {
         match self {
             Commands::Login(_) => "login",
+            Commands::Operator { command } => match command {
+                OperatorCommands::Create(_) => "operator create",
+            },
             Commands::Profile { command } => match command {
                 ProfileCommands::Delete(_) => "profile delete",
             },
@@ -208,6 +219,12 @@ impl Commands {
             Commands::Keys { command } => command.name(),
         }
     }
+}
+
+#[derive(Debug, Subcommand)]
+enum OperatorCommands {
+    /// Create a hosted TVC operator and save it to the active organization.
+    Create(commands::operator::create::Args),
 }
 
 #[derive(Debug, Subcommand)]

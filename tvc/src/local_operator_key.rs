@@ -58,11 +58,19 @@ pub async fn resolve_local_operator(
                 )
             })?;
             let local = org_config.select_local_record(alias)?;
-            LocalCredentialSource::RegisteredKeyFile(local.key_path.clone())
+            return resolve_registered_local_operator(local.key_path.clone()).await;
         }
     };
 
     resolve_local_credential(source).await
+}
+
+/// Resolve a registered local operator without loading its registry entry
+/// again. The path points to `StoredQosOperatorKey` JSON.
+pub(crate) async fn resolve_registered_local_operator(
+    key_path: PathBuf,
+) -> anyhow::Result<LocalPair> {
+    resolve_local_credential(LocalCredentialSource::RegisteredKeyFile(key_path)).await
 }
 
 /// Load a local pair with the parser required by the credential source.

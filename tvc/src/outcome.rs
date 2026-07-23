@@ -11,7 +11,7 @@
 //! deliberately, never renamed after release.
 
 use crate::commands::deploy::approve::ApproveOutcome;
-use crate::commands::{app, deploy, keys, login};
+use crate::commands::{app, deploy, keys, login, operator};
 use crate::output::Message;
 use serde::{Serialize, Serializer};
 
@@ -22,6 +22,7 @@ use serde::{Serialize, Serializer};
 /// this enum; the command still returns its terminal variant.
 pub enum Outcome {
     Login(login::LoggedIn),
+    OperatorCreate(operator::create::OperatorCreated),
     ProfileDelete(login::ProfileDeleted),
     DeployApprove(ApproveOutcome),
     DeployGetStatus(deploy::get_status::DeploymentRuntimeStatus),
@@ -50,6 +51,7 @@ macro_rules! with_message {
     ($self:expr, |$msg:ident| $body:expr) => {
         match $self {
             Outcome::Login($msg) => $body,
+            Outcome::OperatorCreate($msg) => $body,
             Outcome::ProfileDelete($msg) => $body,
             Outcome::DeployApprove($msg) => $body,
             Outcome::DeployGetStatus($msg) => $body,
@@ -88,6 +90,7 @@ impl Message for Outcome {
     fn reason(&self) -> &'static str {
         match self {
             Outcome::Login(_) => "logged-in",
+            Outcome::OperatorCreate(_) => "operator-created",
             Outcome::ProfileDelete(_) => "profile-deleted",
             Outcome::DeployApprove(ApproveOutcome::Posted(_)) => "manifest-approval-posted",
             Outcome::DeployApprove(ApproveOutcome::NotPosted(_)) => "manifest-approval-generated",
@@ -136,6 +139,7 @@ mod tests {
     fn all_terminal_shapes() -> Vec<Outcome> {
         vec![
             Outcome::Login(login::LoggedIn::default()),
+            Outcome::OperatorCreate(operator::create::OperatorCreated::default()),
             Outcome::ProfileDelete(login::ProfileDeleted::default()),
             Outcome::DeployApprove(ApproveOutcome::Posted(ApprovalPosted::default())),
             Outcome::DeployApprove(ApproveOutcome::NotPosted(ApprovalGenerated::default())),
