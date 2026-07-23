@@ -83,6 +83,9 @@ pub enum Error {
     /// The builder was not given a manifest envelope.
     #[error("a manifest envelope is required to build attestation headers")]
     MissingManifestEnvelope,
+    /// The signing quorum key does not match the quorum key in the manifest.
+    #[error("the signing quorum key does not match the manifest quorum key")]
+    QuorumKeyMismatch,
     /// The manifest envelope could not be serialized.
     #[error("failed to serialize manifest envelope: {0}")]
     ManifestSerialization(String),
@@ -354,8 +357,9 @@ impl ResponseSigningLayerBuilder {
     ///
     /// # Errors
     ///
-    /// Returns an [`Error`] if a required input is missing, the manifest
-    /// envelope cannot be serialized, or the NSM attestation request fails.
+    /// Returns an [`Error`] if a required input is missing, the signing quorum
+    /// key does not match the manifest, the manifest envelope cannot be
+    /// serialized, or the NSM attestation request fails.
     pub fn build(self) -> Result<ResponseSigningLayer, Error> {
         let ephemeral_key = self.ephemeral_key.ok_or(Error::MissingEphemeralKey)?;
         let nsm = self.nsm.ok_or(Error::MissingNsm)?;
@@ -369,6 +373,14 @@ impl ResponseSigningLayerBuilder {
         let manifest_envelope_header = HeaderValue::from_str(&STANDARD.encode(manifest_bytes))
             .map_err(|e| Error::ManifestSerialization(e.to_string()))?;
         let manifest_hash = manifest_envelope.manifest_hash();
+        if let Some(quorum_key) = &self.quorum_key {
+            let manifest = manifest_envelope.manifest();
+            if quorum_key.public_key().to_bytes().as_slice()
+                != manifest.namespace().quorum_key.as_slice()
+            {
+                return Err(Error::QuorumKeyMismatch);
+            }
+        }
         let ephemeral_public_key = ephemeral_key.public_key().to_bytes();
 
         let attestation_header =

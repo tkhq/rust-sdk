@@ -17,9 +17,9 @@ use qos_nsm::types::{NsmRequest, NsmResponse};
 use qos_p256::{P256Pair, P256Public};
 use tower::{ServiceBuilder, ServiceExt, service_fn};
 use tvc_axum::{
-    ATTESTATION_DOC_HEADER, MANIFEST_ENVELOPE_HEADER, ManifestCommitmentKind, ResponseSigningLayer,
-    SignedResponseParts, VerificationExpectations, VerifyResponseError, verify_quorum_signature,
-    verify_response_trust_chain,
+    ATTESTATION_DOC_HEADER, Error as ResponseSigningError, MANIFEST_ENVELOPE_HEADER,
+    ManifestCommitmentKind, ResponseSigningLayer, SignedResponseParts, VerificationExpectations,
+    VerifyResponseError, verify_quorum_signature, verify_response_trust_chain,
 };
 
 /// NSM wrapper that counts attestation requests. Only for tests.
@@ -380,6 +380,27 @@ async fn no_quorum_signature_without_quorum_key() {
     assert!(matches!(
         verify_quorum_signature(&parts, &any_key),
         Err(VerifyResponseError::MissingSignatureInput("quorum"))
+    ));
+}
+
+#[test]
+fn mismatched_manifest_quorum_key_is_rejected() {
+    let ephemeral_key = Arc::new(P256Pair::generate().expect("key should generate"));
+    let manifest_quorum_key = P256Pair::generate().expect("key should generate");
+    let signing_quorum_key = Arc::new(P256Pair::generate().expect("key should generate"));
+
+    let result = ResponseSigningLayer::builder()
+        .ephemeral_key(ephemeral_key)
+        .quorum_key(signing_quorum_key)
+        .nsm(Arc::new(MockNsm::new()))
+        .manifest_envelope(approved_envelope_with_quorum(
+            manifest_quorum_key.public_key().to_bytes(),
+        ))
+        .build();
+
+    assert!(matches!(
+        result,
+        Err(ResponseSigningError::QuorumKeyMismatch)
     ));
 }
 
