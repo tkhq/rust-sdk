@@ -20,6 +20,7 @@ jobs:
     outputs:
       releases: ${{ steps.release-plz.outputs.releases }}
       releases_created: ${{ steps.release-plz.outputs.releases_created }}
+      tvc_tag: ${{ steps.tvc-tag.outputs.tag }}
     # This environment releases crates on crates.io, requires approval
     environment: release
     # only trigger this job if the push to main is from a merged PR with a "release" label
@@ -50,6 +51,20 @@ jobs:
           command: release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Determine tvc release tag
+        id: tvc-tag
+        if: steps.release-plz.outputs.releases_created == 'true'
+        env:
+          RELEASES: ${{ steps.release-plz.outputs.releases }}
+        run: |
+          set -euo pipefail
+          # Robustly extract the single tvc tag: normalize to an array, select the
+          # tvc package, take the first match, and emit empty (not "null") if absent.
+          tag=$(jq -r 'if type == "array" then . else [.] end
+                       | map(select(.package_name == "tvc"))
+                       | first
+                       | .tag // empty' <<< "${RELEASES}")
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
 
   upload-tvc-binaries:
     name: Upload tvc binary (${{ matrix.target }})
@@ -58,8 +73,7 @@ jobs:
     timeout-minutes: 60
     if: >
       github.repository_owner == 'tkhq' &&
-      needs.release-plz-release.outputs.releases_created == 'true' &&
-      contains(needs.release-plz-release.outputs.releases, '"package_name":"tvc"')
+      needs.release-plz-release.outputs.tvc_tag != ''
     permissions:
       contents: write
     strategy:
@@ -97,18 +111,6 @@ jobs:
         with:
           tool: cross
         if: contains(matrix.target, '-musl')
-      - name: Extract tvc release tag
-        id: tvc-release
-        env:
-          RELEASES: ${{ needs.release-plz-release.outputs.releases }}
-        run: |
-          set -euo pipefail
-          tag=$(jq -r '.[] | select(.package_name == "tvc") | .tag' <<< "${RELEASES}")
-          if [[ -z "${tag}" || "${tag}" == "null" ]]; then
-            echo "No tvc release tag found in release-plz outputs" >&2
-            exit 1
-          fi
-          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
       - name: Upload tvc binary
         uses: taiki-e/upload-rust-binary-action@f0d45ae91ee7b8ee928de7a9d04d893a08bcbec6 # v1.30.2
         with:
@@ -118,7 +120,7 @@ jobs:
           build-tool: ${{ matrix.build-tool }}
           locked: true
           tar: all
-          ref: refs/tags/${{ steps.tvc-release.outputs.tag }}
+          ref: refs/tags/${{ needs.release-plz-release.outputs.tvc_tag }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
   # TEMPORARY: dry-run validation of the binary build matrix — remove before merge
@@ -137,8 +139,16 @@ jobs:
             os: ubuntu-latest
             build-tool: cross
             rustflags: -C target-feature=+crt-static
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            build-tool: cross
+            rustflags: -C target-feature=+crt-static
           - target: aarch64-apple-darwin
             os: macos-14
+            build-tool: cargo
+            rustflags: ""
+          - target: x86_64-apple-darwin
+            os: macos-13
             build-tool: cargo
             rustflags: ""
     env:
