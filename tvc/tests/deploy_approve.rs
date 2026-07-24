@@ -454,7 +454,7 @@ fn manifest_and_deploy_id_are_mutually_exclusive() {
         .arg("--manifest")
         .arg("fixtures/manifest.json")
         .arg("--deploy-id")
-        .arg("some-deploy-id")
+        .arg("5376f492-d014-4e01-a6bb-20fc97448e25")
         .arg("--dangerous-skip-interactive")
         .assert()
         .failure()

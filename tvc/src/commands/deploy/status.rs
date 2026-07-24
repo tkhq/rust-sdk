@@ -6,6 +6,7 @@ use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
 use turnkey_client::generated::GetTvcDeploymentRequest;
 use turnkey_client::generated::external::data::v1::TvcDeployment;
+use uuid::Uuid;
 
 use crate::client::fetch_tvc_app;
 use crate::commands::app_status::TimestampPayload;
@@ -19,16 +20,17 @@ use crate::output::StdCtx;
 pub struct Args {
     /// ID of the deployment.
     #[arg(short, long, env = "TVC_DEPLOY_ID")]
-    pub deploy_id: String,
+    pub deploy_id: Uuid,
 }
 
 /// Run the deploy status command.
 pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
     let auth = crate::client::build_client().await?;
+    let deploy_id = args.deploy_id.to_string();
 
     let request = GetTvcDeploymentRequest {
         organization_id: auth.org_id.clone(),
-        deployment_id: args.deploy_id.clone(),
+        deployment_id: deploy_id.clone(),
     };
 
     let response = auth
@@ -39,7 +41,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
 
     let deployment = response
         .tvc_deployment
-        .ok_or_else(|| anyhow::anyhow!("deployment not found: {}", args.deploy_id))?;
+        .ok_or_else(|| anyhow::anyhow!("deployment not found: {deploy_id}"))?;
 
     // Exhaustive destructure (rather than `..`) so a new `TvcDeployment` field
     // forces a compile error here and forces a deliberate decision about usage
