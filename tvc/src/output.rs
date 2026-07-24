@@ -423,6 +423,18 @@ impl ErrorMessage {
             message: format!("{error:#}"),
         }
     }
+
+    /// Build a `usage_error` message for a CLI argument-parsing failure. Emitted
+    /// from `cli.rs` on the clap parse-failure path when JSON output was
+    /// requested; `message` is clap's rendered (ANSI-stripped) error text.
+    pub fn usage_error(message: String) -> Self {
+        Self {
+            reason: Self::RUNTIME_REASON,
+            code: ErrorCode::UsageError,
+            http_status: None,
+            message,
+        }
+    }
 }
 
 /// Walk the cause chain and classify the first typed error we recognize into a

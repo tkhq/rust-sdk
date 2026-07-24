@@ -2,8 +2,9 @@
 
 use crate::commands;
 use crate::outcome::Outcome;
-use crate::output::{ColorChoice, Ctx, ErrorMessage, MessageFormat, Shell, StdCtx};
-use clap::{ArgAction, Parser, Subcommand, builder::BoolishValueParser};
+use crate::output::{ColorChoice, Ctx, ErrorMessage, Message, MessageFormat, Shell, StdCtx};
+use clap::{ArgAction, Parser, Subcommand, builder::BoolishValueParser, error::ErrorKind};
+use std::ffi::OsString;
 use std::io::Write;
 use std::process::ExitCode;
 use tracing::debug;
@@ -89,7 +90,10 @@ pub struct Cli {
 impl Cli {
     /// Run the CLI.
     pub async fn run() -> ExitCode {
-        let args = Cli::parse();
+        let args = match Cli::try_parse() {
+            Ok(args) => args,
+            Err(error) => return handle_parse_error(error),
+        };
         debug!(
             command = args.command.name(),
             non_interactive = args.non_interactive,
@@ -129,6 +133,98 @@ impl Cli {
             }
         }
     }
+}
+
+/// Exit code for a usage error (bad flags/args). Matches clap's default.
+const USAGE_ERROR_EXIT_CODE: i32 = 2;
+
+/// Handle a clap parse failure.
+///
+/// `--help`/`-h` and `--version` also surface as `Err`; those must always print
+/// clap's own text (never JSON), so we defer to `error.exit()` for them. Real
+/// parse failures are emitted as a single `command-error`/`usage_error` NDJSON
+/// line on stdout when `--message-format json` was requested, otherwise handed
+/// back to clap's default rendering via `error.exit()`.
+fn handle_parse_error(error: clap::Error) -> ExitCode {
+    match error.kind() {
+        // Help/version output must never be JSON — let clap print and exit.
+        ErrorKind::DisplayHelp
+        | ErrorKind::DisplayVersion
+        | ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand => error.exit(),
+        _ => {
+            if argv_requests_json(std::env::args_os()) {
+                // Emit clap's full text (including the "Usage:" line) with any
+                // ANSI stripped so agents get pure NDJSON they can self-correct
+                // from, regardless of terminal/color detection.
+                let message = strip_ansi(&error.render().to_string());
+                let error_message = ErrorMessage::usage_error(message);
+                let mut stdout = std::io::stdout();
+                // Best-effort: if writing fails we still exit with the usage code.
+                let _ = writeln!(stdout, "{}", error_message.to_json_string());
+                std::process::exit(USAGE_ERROR_EXIT_CODE)
+            } else {
+                error.exit()
+            }
+        }
+    }
+}
+
+/// Heuristic scan of raw argv for `--message-format json`, used only on the
+/// parse-failure path where clap could not give us the parsed flag value.
+///
+/// Matches both spellings: the two-token `--message-format json` and the
+/// single-token `--message-format=json`. This is intentionally a heuristic: a
+/// tolerable false positive is a stray `--message-format json` where `json`
+/// actually belongs to a different flag's value. Getting an extra JSON error
+/// line in that rare case is preferable to hiding usage errors from agents that
+/// asked for JSON.
+fn argv_requests_json(args: impl IntoIterator<Item = OsString>) -> bool {
+    const FLAG: &str = "--message-format";
+    let mut expect_value = false;
+    for arg in args {
+        let Some(arg) = arg.to_str() else {
+            expect_value = false;
+            continue;
+        };
+        if expect_value {
+            return arg == "json";
+        }
+        if let Some(value) = arg.strip_prefix(&format!("{FLAG}=")) {
+            if value == "json" {
+                return true;
+            }
+        } else if arg == FLAG {
+            expect_value = true;
+        }
+    }
+    false
+}
+
+/// Remove ANSI escape sequences (CSI `\x1b[ ... m` etc.) from `input`.
+///
+/// clap's `.ansi()` rendering embeds styling escapes; strip them so the JSON
+/// `message` is plain text regardless of terminal detection.
+fn strip_ansi(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            // CSI sequences are ESC '[' <params/intermediates> <final>, where
+            // the final byte is in the range @-~ (0x40-0x7e). Skip the leading
+            // '[' (also in that range) before scanning for the final byte.
+            if chars.peek() == Some(&'[') {
+                chars.next();
+            }
+            for next in chars.by_ref() {
+                if ('@'..='~').contains(&next) {
+                    break;
+                }
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }
 
 impl Commands {
@@ -347,5 +443,77 @@ impl KeysCommands {
             KeysCommands::InitLocalQuorumKey(_) => "keys init-local-quorum-key",
             KeysCommands::ReEncryptLocalShare(_) => "keys re-encrypt-local-share",
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn argv(tokens: &[&str]) -> Vec<OsString> {
+        tokens.iter().map(OsString::from).collect()
+    }
+
+    #[test]
+    fn argv_json_two_token_spelling_is_detected() {
+        assert!(argv_requests_json(argv(&[
+            "tvc",
+            "deploy",
+            "status",
+            "--message-format",
+            "json",
+        ])));
+    }
+
+    #[test]
+    fn argv_json_equals_spelling_is_detected() {
+        assert!(argv_requests_json(argv(&[
+            "tvc",
+            "deploy",
+            "status",
+            "--message-format=json",
+        ])));
+    }
+
+    #[test]
+    fn argv_human_format_is_not_json() {
+        assert!(!argv_requests_json(argv(&[
+            "tvc",
+            "deploy",
+            "status",
+            "--message-format",
+            "human",
+        ])));
+        assert!(!argv_requests_json(argv(&[
+            "tvc",
+            "--message-format=human",
+        ])));
+    }
+
+    #[test]
+    fn argv_without_message_format_is_not_json() {
+        assert!(!argv_requests_json(argv(&["tvc", "deploy", "status"])));
+    }
+
+    #[test]
+    fn argv_tolerable_false_positive_when_value_belongs_to_another_flag() {
+        // Documented, accepted heuristic limitation: a `json` token immediately
+        // after a bare `--message-format` is treated as its value even if the
+        // real intent was for `json` to belong elsewhere. The scan cannot know
+        // the true arg grammar on the parse-failure path, so this counts as
+        // JSON. An extra JSON error line is preferable to hiding a usage error
+        // from a consumer that asked for JSON.
+        assert!(argv_requests_json(argv(&[
+            "tvc",
+            "--message-format",
+            "json",
+            "--some-other-flag",
+        ])));
+    }
+
+    #[test]
+    fn strip_ansi_removes_escape_sequences() {
+        let styled = "\x1b[1mUsage:\x1b[0m tvc \x1b[32m<COMMAND>\x1b[0m";
+        assert_eq!(strip_ansi(styled), "Usage: tvc <COMMAND>");
     }
 }
