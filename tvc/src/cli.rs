@@ -42,7 +42,23 @@ Output format:
     --message-format json to emit machine-readable output instead: one JSON
     object per line (newline-delimited JSON), each with a \"reason\" field
     identifying the message, including errors. JSON mode implies
-    --non-interactive, so commands never prompt and fail fast on missing input.";
+    --non-interactive, so commands never prompt and fail fast on missing input.
+
+    Errors emit reason \"command-error\" (or \"missing-required-input\") plus a
+    \"code\" classifying the failure, an optional numeric \"httpStatus\", and a
+    \"message\" carrying the full error chain. The \"code\" taxonomy is:
+        missing_required_input  a required value was absent (non-interactive)
+        usage_error             bad flags/args (argument parsing failed)
+        invalid_input           semantic validation failed in the command
+        unauthorized            HTTP 401/403
+        not_found               HTTP 404, or a resource that resolved to empty
+        api_error               other non-success HTTP status, or a failed or
+                                unexpected activity
+        approval_required       the activity needs more approvals
+        network_error           connect/timeout/DNS: request never reached the
+                                server
+        command_error           fallback for everything else
+    Exit codes are unchanged: 0 success, 1 runtime error, 2 usage error.";
 
 /// CLI command parsing and dispatch.
 #[derive(Debug, Parser)]

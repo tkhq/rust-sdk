@@ -353,6 +353,21 @@ impl ErrorCode {
             ErrorCode::CommandError => "command_error",
         }
     }
+
+    /// Every taxonomy variant, in declaration order. Single source of truth for
+    /// the registry uniqueness/snake_case test below.
+    #[cfg(test)]
+    const ALL: [ErrorCode; 9] = [
+        ErrorCode::MissingRequiredInput,
+        ErrorCode::UsageError,
+        ErrorCode::InvalidInput,
+        ErrorCode::Unauthorized,
+        ErrorCode::NotFound,
+        ErrorCode::ApiError,
+        ErrorCode::ApprovalRequired,
+        ErrorCode::NetworkError,
+        ErrorCode::CommandError,
+    ];
 }
 
 impl Display for ErrorCode {
@@ -604,6 +619,40 @@ mod tests {
 
     fn client_error(error: TurnkeyClientError) -> anyhow::Error {
         anyhow::Error::new(error)
+    }
+
+    // --- Taxonomy registry (Part B / F8) ---
+    //
+    // Mirrors outcome.rs's `all_reasons_are_unique`: the `code` taxonomy is an
+    // external contract, so every code must be unique and snake_case.
+
+    #[test]
+    fn all_codes_are_unique() {
+        use std::collections::HashSet;
+
+        let codes: Vec<&str> = ErrorCode::ALL.iter().map(|c| c.as_str()).collect();
+        let unique: HashSet<&str> = codes.iter().copied().collect();
+        assert_eq!(
+            unique.len(),
+            codes.len(),
+            "duplicate error code strings in: {codes:?}"
+        );
+    }
+
+    #[test]
+    fn all_codes_are_snake_case() {
+        for code in ErrorCode::ALL {
+            let s = code.as_str();
+            assert!(
+                s.chars().all(|c| c.is_ascii_lowercase() || c == '_'),
+                "code `{s}` is not snake_case"
+            );
+            assert!(
+                !s.starts_with('_') && !s.ends_with('_'),
+                "code `{s}` edge _"
+            );
+            assert!(!s.contains("__"), "code `{s}` has a double underscore");
+        }
     }
 
     #[test]
