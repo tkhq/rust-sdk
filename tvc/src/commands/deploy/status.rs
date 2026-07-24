@@ -10,8 +10,9 @@ use turnkey_client::generated::external::data::v1::TvcDeployment;
 use crate::client::fetch_tvc_app;
 use crate::commands::app_status::TimestampPayload;
 use crate::commands::display::{format_egress_enabled, yes_no};
+use crate::errors::NotFound;
 use crate::outcome::Outcome;
-use crate::output::{NotFound, StdCtx};
+use crate::output::StdCtx;
 
 /// Get the status of a deployment.
 #[derive(Debug, ClapArgs)]

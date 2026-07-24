@@ -1,7 +1,7 @@
 //! Client utilities for authenticated API calls.
 
 use crate::config::turnkey::{Config, StoredApiKey};
-use crate::output::NotFound;
+use crate::errors::NotFound;
 use anyhow::{Context, Result, anyhow, bail};
 use tracing::debug;
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;

@@ -1,6 +1,7 @@
 //! CLI parsing and dispatch.
 
 use crate::commands;
+use crate::errors::strip_ansi;
 use crate::outcome::Outcome;
 use crate::output::{ColorChoice, Ctx, ErrorMessage, Message, MessageFormat, Shell, StdCtx};
 use clap::{ArgAction, Parser, Subcommand, builder::BoolishValueParser, error::ErrorKind};
@@ -198,33 +199,6 @@ fn argv_requests_json(args: impl IntoIterator<Item = OsString>) -> bool {
         }
     }
     false
-}
-
-/// Remove ANSI escape sequences (CSI `\x1b[ ... m` etc.) from `input`.
-///
-/// clap's `.ansi()` rendering embeds styling escapes; strip them so the JSON
-/// `message` is plain text regardless of terminal detection.
-fn strip_ansi(input: &str) -> String {
-    let mut out = String::with_capacity(input.len());
-    let mut chars = input.chars().peekable();
-    while let Some(c) = chars.next() {
-        if c == '\x1b' {
-            // CSI sequences are ESC '[' <params/intermediates> <final>, where
-            // the final byte is in the range @-~ (0x40-0x7e). Skip the leading
-            // '[' (also in that range) before scanning for the final byte.
-            if chars.peek() == Some(&'[') {
-                chars.next();
-            }
-            for next in chars.by_ref() {
-                if ('@'..='~').contains(&next) {
-                    break;
-                }
-            }
-        } else {
-            out.push(c);
-        }
-    }
-    out
 }
 
 impl Commands {
@@ -509,11 +483,5 @@ mod tests {
             "json",
             "--some-other-flag",
         ])));
-    }
-
-    #[test]
-    fn strip_ansi_removes_escape_sequences() {
-        let styled = "\x1b[1mUsage:\x1b[0m tvc \x1b[32m<COMMAND>\x1b[0m";
-        assert_eq!(strip_ansi(styled), "Usage: tvc <COMMAND>");
     }
 }

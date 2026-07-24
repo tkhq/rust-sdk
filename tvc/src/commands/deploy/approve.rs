@@ -3,10 +3,11 @@
 use crate::{
     client::build_client,
     config::turnkey::Config,
+    errors::NotFound,
     local_operator_key::LocalOperatorSeedSource,
     operator::{OperatorCtx, ResolvedOperator, resolve_operator},
     outcome::Outcome,
-    output::{NotFound, StdCtx},
+    output::StdCtx,
     pair::HexSeed,
     prompts::{self, bail_required_in_non_interactive, stdin_can_prompt},
     shell_print, shell_println,

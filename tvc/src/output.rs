@@ -1,14 +1,13 @@
 //! User-facing output primitives for TVC.
 
+use crate::errors::{Classification, ErrorCode, classify};
 use anstyle::{AnsiColor, Color, Style};
 use anyhow::Result;
 use clap::ValueEnum;
-use reqwest::StatusCode;
-use serde::{Serialize, Serializer};
+use serde::Serialize;
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 use std::io::{self, IsTerminal, Stderr, Stdout, Write};
-use turnkey_client::TurnkeyClientError;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
 pub enum MessageFormat {
@@ -280,108 +279,6 @@ impl Display for MissingRequiredInput {
 
 impl Error for MissingRequiredInput {}
 
-/// A resource lookup that returned successfully but found nothing — e.g. an API
-/// `Ok` response whose optional payload is `None`. Downcast in
-/// [`ErrorMessage::from_error`] to classify these as [`ErrorCode::NotFound`],
-/// alongside HTTP 404s.
-#[derive(Debug)]
-pub struct NotFound {
-    resource: &'static str,
-    id: String,
-}
-
-impl NotFound {
-    pub fn new(resource: &'static str, id: impl Into<String>) -> Self {
-        Self {
-            resource,
-            id: id.into(),
-        }
-    }
-}
-
-impl Display for NotFound {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let Self { resource, id } = self;
-        write!(f, "{resource} not found: {id}")
-    }
-}
-
-impl Error for NotFound {}
-
-/// The stable, machine-readable classification of a runtime error, carried in
-/// the `code` field of a `command-error` (or `missing-required-input`) message.
-///
-/// `code` is the taxonomy axis; the message `reason` stays stable
-/// (`command-error` for all runtime errors) so the outcome registry is
-/// unaffected. Every variant serializes to its snake_case [`ErrorCode::as_str`]
-/// name, and that mapping is the single source of truth for the taxonomy —
-/// exercised by the uniqueness/snake_case registry test below.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ErrorCode {
-    /// A required value was absent in non-interactive mode.
-    MissingRequiredInput,
-    /// Bad flags/args — a clap parse failure (emitted from `cli.rs`).
-    UsageError,
-    /// Semantic validation failure in command code.
-    InvalidInput,
-    /// HTTP 401/403.
-    Unauthorized,
-    /// HTTP 404, or an OK response with an empty resource.
-    NotFound,
-    /// Any other non-success HTTP status, or a failed/unexpected activity.
-    ApiError,
-    /// An activity needs more approvals.
-    ApprovalRequired,
-    /// A connect/timeout/DNS failure — the request never reached the server.
-    NetworkError,
-    /// Fallback for everything else.
-    CommandError,
-}
-
-impl ErrorCode {
-    /// The snake_case wire name. Single source of truth for the taxonomy.
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            ErrorCode::MissingRequiredInput => "missing_required_input",
-            ErrorCode::UsageError => "usage_error",
-            ErrorCode::InvalidInput => "invalid_input",
-            ErrorCode::Unauthorized => "unauthorized",
-            ErrorCode::NotFound => "not_found",
-            ErrorCode::ApiError => "api_error",
-            ErrorCode::ApprovalRequired => "approval_required",
-            ErrorCode::NetworkError => "network_error",
-            ErrorCode::CommandError => "command_error",
-        }
-    }
-
-    /// Every taxonomy variant, in declaration order. Single source of truth for
-    /// the registry uniqueness/snake_case test below.
-    #[cfg(test)]
-    const ALL: [ErrorCode; 9] = [
-        ErrorCode::MissingRequiredInput,
-        ErrorCode::UsageError,
-        ErrorCode::InvalidInput,
-        ErrorCode::Unauthorized,
-        ErrorCode::NotFound,
-        ErrorCode::ApiError,
-        ErrorCode::ApprovalRequired,
-        ErrorCode::NetworkError,
-        ErrorCode::CommandError,
-    ];
-}
-
-impl Display for ErrorCode {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-impl Serialize for ErrorCode {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
 #[derive(Serialize)]
 pub struct ErrorMessage {
     #[serde(skip)]
@@ -415,7 +312,7 @@ impl ErrorMessage {
             };
         }
 
-        let (code, http_status) = classify(error);
+        let Classification { code, http_status } = classify(error);
         Self {
             reason: Self::RUNTIME_REASON,
             code,
@@ -434,51 +331,6 @@ impl ErrorMessage {
             http_status: None,
             message,
         }
-    }
-}
-
-/// Walk the cause chain and classify the first typed error we recognize into a
-/// `(code, http_status)` pair. Falls back to `command_error` with no status.
-fn classify(error: &anyhow::Error) -> (ErrorCode, Option<u16>) {
-    for cause in error.chain() {
-        if cause.downcast_ref::<NotFound>().is_some() {
-            return (ErrorCode::NotFound, None);
-        }
-        if let Some(client_error) = cause.downcast_ref::<TurnkeyClientError>() {
-            return classify_client_error(client_error);
-        }
-    }
-    (ErrorCode::CommandError, None)
-}
-
-/// Map a [`TurnkeyClientError`] to its taxonomy code and optional HTTP status.
-fn classify_client_error(error: &TurnkeyClientError) -> (ErrorCode, Option<u16>) {
-    match error {
-        TurnkeyClientError::UnexpectedHttpStatus(status, _) => {
-            let code = match StatusCode::from_u16(*status) {
-                Ok(StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN) => ErrorCode::Unauthorized,
-                Ok(StatusCode::NOT_FOUND) => ErrorCode::NotFound,
-                _ => ErrorCode::ApiError,
-            };
-            (code, Some(*status))
-        }
-        // A connect/timeout/DNS failure means the request never reached the
-        // server — classify as a network error rather than an API error.
-        TurnkeyClientError::Http(reqwest_error)
-            if reqwest_error.is_connect()
-                || reqwest_error.is_timeout()
-                || reqwest_error.is_request() =>
-        {
-            (ErrorCode::NetworkError, None)
-        }
-        TurnkeyClientError::ActivityRequiresApproval(_) => (ErrorCode::ApprovalRequired, None),
-        TurnkeyClientError::ActivityFailed(_)
-        | TurnkeyClientError::UnexpectedActivityStatus(_)
-        | TurnkeyClientError::UnexpectedInnerActivityResult(_)
-        | TurnkeyClientError::MissingActivity
-        | TurnkeyClientError::MissingResult
-        | TurnkeyClientError::MissingInnerResult => (ErrorCode::ApiError, None),
-        _ => (ErrorCode::CommandError, None),
     }
 }
 
@@ -614,10 +466,12 @@ mod tests {
         );
     }
 
-    // --- Error classification (Part A / F1) ---
+    // --- Error envelope wiring (Part A / F1) ---
 
+    use crate::errors::NotFound;
     use anyhow::anyhow;
     use serde_json::Value;
+    use turnkey_client::TurnkeyClientError;
 
     /// Emit `error` through a JSON `TestShell` and parse the single NDJSON line.
     fn emit_error_json(error: &anyhow::Error) -> Value {
@@ -629,43 +483,11 @@ mod tests {
         serde_json::from_str(line.trim_end()).expect("emitted line should be valid JSON")
     }
 
-    fn client_error(error: TurnkeyClientError) -> anyhow::Error {
-        anyhow::Error::new(error)
-    }
-
-    // --- Taxonomy registry (Part B / F8) ---
-    //
-    // Mirrors outcome.rs's `all_reasons_are_unique`: the `code` taxonomy is an
-    // external contract, so every code must be unique and snake_case.
-
-    #[test]
-    fn all_codes_are_unique() {
-        use std::collections::HashSet;
-
-        let codes: Vec<&str> = ErrorCode::ALL.iter().map(|c| c.as_str()).collect();
-        let unique: HashSet<&str> = codes.iter().copied().collect();
-        assert_eq!(
-            unique.len(),
-            codes.len(),
-            "duplicate error code strings in: {codes:?}"
-        );
-    }
-
-    #[test]
-    fn all_codes_are_snake_case() {
-        for code in ErrorCode::ALL {
-            let s = code.as_str();
-            assert!(
-                s.chars().all(|c| c.is_ascii_lowercase() || c == '_'),
-                "code `{s}` is not snake_case"
-            );
-            assert!(
-                !s.starts_with('_') && !s.ends_with('_'),
-                "code `{s}` edge _"
-            );
-            assert!(!s.contains("__"), "code `{s}` has a double underscore");
-        }
-    }
+    // The `code` taxonomy and its classification are owned and unit-tested in
+    // `crate::errors`. The tests below only assert the consumer wiring: that
+    // `ErrorMessage::from_error` renders the full chain, serializes
+    // `code`/`httpStatus` correctly, and preserves the `missing-required-input`
+    // reason override.
 
     #[test]
     fn missing_required_input_keeps_its_reason_and_code() {
@@ -683,7 +505,7 @@ mod tests {
 
     #[test]
     fn unexpected_http_404_is_not_found_with_status_and_full_chain() {
-        let error = client_error(TurnkeyClientError::UnexpectedHttpStatus(
+        let error = anyhow::Error::new(TurnkeyClientError::UnexpectedHttpStatus(
             404,
             r#"{"message":"missing deployment"}"#.to_string(),
         ))
@@ -701,7 +523,7 @@ mod tests {
     }
 
     #[test]
-    fn empty_response_not_found_maps_to_not_found_without_status() {
+    fn empty_response_not_found_serializes_without_http_status() {
         let error = anyhow::Error::new(NotFound::new("deployment", "abc-123"))
             .context("failed to fetch deployment abc-123");
         let json = emit_error_json(&error);
@@ -712,48 +534,6 @@ mod tests {
         let message = json["message"].as_str().unwrap();
         assert!(message.contains("failed to fetch deployment abc-123"));
         assert!(message.contains("deployment not found: abc-123"));
-    }
-
-    #[test]
-    fn http_401_and_403_map_to_unauthorized() {
-        for status in [401u16, 403] {
-            let error = client_error(TurnkeyClientError::UnexpectedHttpStatus(
-                status,
-                "denied".to_string(),
-            ));
-            let json = emit_error_json(&error);
-            assert_eq!(json["code"], "unauthorized", "status {status}");
-            assert_eq!(json["httpStatus"], status);
-        }
-    }
-
-    #[test]
-    fn other_http_status_maps_to_api_error() {
-        let error = client_error(TurnkeyClientError::UnexpectedHttpStatus(
-            500,
-            "boom".to_string(),
-        ));
-        let json = emit_error_json(&error);
-        assert_eq!(json["code"], "api_error");
-        assert_eq!(json["httpStatus"], 500);
-    }
-
-    #[test]
-    fn activity_failed_maps_to_api_error_without_status() {
-        let error = client_error(TurnkeyClientError::ActivityFailed(None));
-        let json = emit_error_json(&error);
-        assert_eq!(json["code"], "api_error");
-        assert!(json.get("httpStatus").is_none());
-    }
-
-    #[test]
-    fn activity_requires_approval_maps_to_approval_required() {
-        let error = client_error(TurnkeyClientError::ActivityRequiresApproval(
-            "act-1".to_string(),
-        ));
-        let json = emit_error_json(&error);
-        assert_eq!(json["code"], "approval_required");
-        assert!(json.get("httpStatus").is_none());
     }
 
     #[test]
