@@ -11,6 +11,7 @@ use uuid::Uuid;
 use crate::client::fetch_tvc_app;
 use crate::commands::app_status::TimestampPayload;
 use crate::commands::display::{format_egress_enabled, yes_no};
+use crate::errors::MissingResource;
 use crate::outcome::Outcome;
 use crate::output::StdCtx;
 
@@ -37,11 +38,11 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
         .client
         .get_tvc_deployment(request)
         .await
-        .context("failed to fetch deployment")?;
+        .with_context(|| format!("failed to fetch deployment {deploy_id}"))?;
 
     let deployment = response
         .tvc_deployment
-        .ok_or_else(|| anyhow::anyhow!("deployment not found: {deploy_id}"))?;
+        .ok_or_else(|| MissingResource::new("deployment", args.deploy_id))?;
 
     // Exhaustive destructure (rather than `..`) so a new `TvcDeployment` field
     // forces a compile error here and forces a deliberate decision about usage
@@ -61,7 +62,8 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
         manifest_approvals: _,
     } = deployment;
 
-    let manifest = manifest.ok_or_else(|| anyhow::anyhow!("manifest not found in deployment"))?;
+    let manifest =
+        manifest.ok_or_else(|| MissingResource::new("manifest", format!("deployment {id}")))?;
     let app = fetch_tvc_app(&auth, &app_id).await?;
 
     Ok(Outcome::DeployStatus(DeploymentStatusReport {

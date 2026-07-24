@@ -45,7 +45,7 @@ fn deploy_init_json_output_emits_structured_message() {
     assert_eq!(lines.len(), 1, "expected one JSON message, got {stdout:?}");
 
     let message: Value = serde_json::from_str(lines[0]).unwrap();
-    assert_eq!(message["reason"], "deployment-config-created");
+    assert_eq!(message["reason"], "deployment_config_created");
     assert_eq!(message["command"], "deploy init");
     assert_eq!(message["path"], output.display().to_string());
     assert_eq!(message["template"], true);
@@ -78,7 +78,7 @@ fn app_init_json_output_emits_structured_message() {
     assert_eq!(lines.len(), 1, "expected one JSON message, got {stdout:?}");
 
     let message: Value = serde_json::from_str(lines[0]).unwrap();
-    assert_eq!(message["reason"], "app-config-created");
+    assert_eq!(message["reason"], "app_config_created");
     assert_eq!(message["command"], "app init");
     assert_eq!(message["path"], output.display().to_string());
     assert_eq!(message["template"], true);
@@ -107,7 +107,7 @@ fn keys_init_local_quorum_key_json_output_emits_structured_message() {
     assert_eq!(lines.len(), 1, "expected one JSON message, got {stdout:?}");
 
     let message: Value = serde_json::from_str(lines[0]).unwrap();
-    assert_eq!(message["reason"], "quorum-key-config-created");
+    assert_eq!(message["reason"], "quorum_key_config_created");
     assert_eq!(message["path"], output.display().to_string());
 }
 
@@ -128,7 +128,7 @@ fn login_missing_org_in_json_mode_outputs_structured_error_to_stdout() {
     assert_eq!(lines.len(), 1, "expected one JSON error, got {stdout:?}");
 
     let message: Value = serde_json::from_str(lines[0]).unwrap();
-    assert_eq!(message["reason"], "missing-required-input");
+    assert_eq!(message["reason"], "missing_required_input");
     assert_eq!(message["code"], "missing_required_input");
     assert!(message["message"].as_str().unwrap().contains("--org"));
 }

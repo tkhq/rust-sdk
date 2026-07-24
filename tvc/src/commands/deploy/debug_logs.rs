@@ -231,7 +231,7 @@ pub(crate) struct DebugLogLine {
 
 impl Message for DebugLogLine {
     fn reason(&self) -> &'static str {
-        "debug-log-line"
+        "debug_log_line"
     }
 
     fn human_message(&self) -> String {
@@ -248,8 +248,8 @@ impl Message for DebugLogLine {
     }
 }
 
-/// Terminal outcome for non-poll `deploy debug-logs` runs. Machine-only: the
-/// log lines themselves stream as `debug-log-line` messages, so human mode
+/// Terminal outcome for non-poll `deploy debug-logs` runs.
+/// Machine-only: the log lines themselves stream as `debug_log_line` messages, so human mode
 /// prints nothing extra for this outcome.
 #[derive(Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -656,6 +656,25 @@ mod tests {
             }),
             include_platform_timestamp: false,
         }
+    }
+
+    #[test]
+    fn debug_log_line_serializes_snake_case_reason() {
+        let value: serde_json::Value =
+            serde_json::from_str(&sample_debug_log_line().to_json_string()).unwrap();
+
+        assert_eq!(
+            value,
+            serde_json::json!({
+                "reason": "debug_log_line",
+                "replica": "replica 1/2",
+                "content": "hello",
+                "ts": {
+                    "seconds": "1710000000",
+                    "nanos": "123456789",
+                },
+            })
+        );
     }
 
     #[test]

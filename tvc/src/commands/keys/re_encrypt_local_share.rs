@@ -570,7 +570,7 @@ mod tests {
         assert_eq!(
             value,
             json!({
-                "reason": "re-encrypted-share-generated",
+                "reason": "re_encrypted_share_generated",
                 "deploymentId": "deploy-123",
                 "ephemeralPublicKeyHex": "04abcd",
                 "reEncryptedShare": "010203",
@@ -595,7 +595,7 @@ mod tests {
         assert_eq!(
             value,
             json!({
-                "reason": "re-encrypted-share-generated",
+                "reason": "re_encrypted_share_generated",
                 "writtenTo": "re_encrypted_share.json",
             })
         );

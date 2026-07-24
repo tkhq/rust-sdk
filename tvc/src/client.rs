@@ -1,6 +1,7 @@
 //! Client utilities for authenticated API calls.
 
 use crate::config::turnkey::{Config, StoredApiKey};
+use crate::errors::MissingResource;
 use anyhow::{Context, Result, anyhow, bail};
 use tracing::debug;
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
@@ -67,11 +68,11 @@ pub async fn fetch_tvc_app(auth: &AuthenticatedClient, app_id: &str) -> Result<T
             tvc_app_id: app_id.to_string(),
         })
         .await
-        .context("failed to fetch app")?;
+        .with_context(|| format!("failed to fetch app {app_id}"))?;
 
     response
         .tvc_app
-        .ok_or_else(|| anyhow!("app not found: {app_id}"))
+        .ok_or_else(|| MissingResource::new("app", app_id).into())
 }
 
 pub async fn fetch_tvc_deployment(
@@ -83,14 +84,14 @@ pub async fn fetch_tvc_deployment(
         .client
         .get_tvc_deployment(GetTvcDeploymentRequest {
             organization_id,
-            deployment_id,
+            deployment_id: deployment_id.clone(),
         })
         .await
-        .context("failed to fetch deployment")?;
+        .with_context(|| format!("failed to fetch deployment {deployment_id}"))?;
 
     response
         .tvc_deployment
-        .ok_or_else(|| anyhow!("deployment not found"))
+        .ok_or_else(|| MissingResource::new("deployment", deployment_id).into())
 }
 
 async fn load_credentials_from_config() -> Result<(String, String, String, String)> {

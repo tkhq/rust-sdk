@@ -1,14 +1,12 @@
 //! The closed vocabulary of command outcomes.
 //!
-//! `Outcome` has exactly one variant per command, named after the command and
-//! ordered to mirror `cli.rs`'s subcommand tree, so the two can be diffed at a
-//! glance. Per-command message structs live in their own command modules; this
+//! `Outcome` has exactly one variant per command, named after the command.
+//! Per-command message structs live in their own command modules; this
 //! enum only aggregates and delegates. A command with multiple terminal shapes
 //! (e.g. `deploy approve`) owns a command-local enum in its own module, and
 //! the top-level variant here wraps it.
 //!
-//! `reason` strings are an external, stable contract: kebab-case, named
-//! deliberately, never renamed after release.
+//! `reason` strings are stable snake_case discriminators
 
 use crate::commands::deploy::approve::ApproveOutcome;
 use crate::commands::{app, deploy, keys, login, operator};
@@ -18,7 +16,7 @@ use serde::{Serialize, Serializer};
 /// One wide terminal outcome per command (the wide-event model).
 ///
 /// Streaming messages (today: only `deploy debug-logs`'s per-line
-/// `debug-log-line`) are emitted inline by their command and are not part of
+/// `debug_log_line`) are emitted inline by their command and are not part of
 /// this enum; the command still returns its terminal variant.
 pub enum Outcome {
     Login(login::LoggedIn),
@@ -91,32 +89,32 @@ impl Message for Outcome {
     /// at a glance (and, in a follow-up, enforceable by a proc-macro).
     fn reason(&self) -> &'static str {
         match self {
-            Outcome::Login(_) => "logged-in",
-            Outcome::OperatorCreate(_) => "operator-created",
-            Outcome::ProfileDelete(_) => "profile-deleted",
-            Outcome::DeployApprove(ApproveOutcome::Posted(_)) => "manifest-approval-posted",
-            Outcome::DeployApprove(ApproveOutcome::NotPosted(_)) => "manifest-approval-generated",
-            Outcome::DeployApprove(ApproveOutcome::DryRun(_)) => "manifest-approval-dry-run",
-            Outcome::DeployGetStatus(_) => "deployment-runtime-status",
-            Outcome::DeployProvisioningDetails(_) => "provisioning-details",
-            Outcome::DeployProvision(_) => "provisioning-share-created",
-            Outcome::DeployPostShare(_) => "quorum-key-share-posted",
-            Outcome::DeployStatus(_) => "deployment-status",
-            Outcome::DeployCreate(_) => "deployment-created",
-            Outcome::DeployInit(_) => "deployment-config-created",
-            Outcome::DeployDebugLogs(_) => "debug-logs-fetched",
-            Outcome::DeployDelete(_) => "deployment-deleted",
-            Outcome::DeployRestore(_) => "deployment-restored",
-            Outcome::AppStatus(_) => "app-status",
-            Outcome::AppList(_) => "apps-listed",
-            Outcome::AppCreate(_) => "app-created",
-            Outcome::AppInit(_) => "app-config-created",
-            Outcome::AppSetLiveDeploy(_) => "live-deployment-set",
-            Outcome::AppDelete(_) => "app-deleted",
-            Outcome::KeysCreateQuorumKey(_) => "quorum-key-created",
-            Outcome::KeysGenerateQuorumKey(_) => "quorum-key-generated",
-            Outcome::KeysInitQuorumKey(_) => "quorum-key-config-created",
-            Outcome::KeysReEncryptShare(_) => "re-encrypted-share-generated",
+            Outcome::Login(_) => "logged_in",
+            Outcome::OperatorCreate(_) => "operator_created",
+            Outcome::ProfileDelete(_) => "profile_deleted",
+            Outcome::DeployApprove(ApproveOutcome::Posted(_)) => "manifest_approval_posted",
+            Outcome::DeployApprove(ApproveOutcome::NotPosted(_)) => "manifest_approval_generated",
+            Outcome::DeployApprove(ApproveOutcome::DryRun(_)) => "manifest_approval_dry_run",
+            Outcome::DeployGetStatus(_) => "deployment_runtime_status",
+            Outcome::DeployProvisioningDetails(_) => "provisioning_details",
+            Outcome::DeployProvision(_) => "provisioning_share_created",
+            Outcome::DeployPostShare(_) => "quorum_key_share_posted",
+            Outcome::DeployStatus(_) => "deployment_status",
+            Outcome::DeployCreate(_) => "deployment_created",
+            Outcome::DeployInit(_) => "deployment_config_created",
+            Outcome::DeployDebugLogs(_) => "debug_logs_fetched",
+            Outcome::DeployDelete(_) => "deployment_deleted",
+            Outcome::DeployRestore(_) => "deployment_restored",
+            Outcome::AppStatus(_) => "app_status",
+            Outcome::AppList(_) => "apps_listed",
+            Outcome::AppCreate(_) => "app_created",
+            Outcome::AppInit(_) => "app_config_created",
+            Outcome::AppSetLiveDeploy(_) => "live_deployment_set",
+            Outcome::AppDelete(_) => "app_deleted",
+            Outcome::KeysCreateQuorumKey(_) => "quorum_key_created",
+            Outcome::KeysGenerateQuorumKey(_) => "quorum_key_generated",
+            Outcome::KeysInitQuorumKey(_) => "quorum_key_config_created",
+            Outcome::KeysReEncryptShare(_) => "re_encrypted_share_generated",
         }
     }
 
@@ -179,15 +177,20 @@ mod tests {
     }
 
     /// Reasons that live outside `Outcome`: the `deploy debug-logs` streaming
-    /// message and the error envelope reasons from `output.rs`.
+    /// message and the error envelope reasons
     const NON_TERMINAL_REASONS: [&str; 3] =
-        ["debug-log-line", "command-error", "missing-required-input"];
+        ["debug_log_line", "command_error", "missing_required_input"];
+
+    fn all_reasons() -> Vec<&'static str> {
+        let mut reasons: Vec<&str> = all_terminal_shapes().iter().map(Message::reason).collect();
+        reasons.extend(NON_TERMINAL_REASONS);
+        reasons
+    }
 
     // TODO - proc macro here
     #[test]
     fn all_reasons_are_unique() {
-        let mut reasons: Vec<&str> = all_terminal_shapes().iter().map(Message::reason).collect();
-        reasons.extend(NON_TERMINAL_REASONS);
+        let reasons = all_reasons();
 
         let unique: HashSet<&str> = reasons.iter().copied().collect();
         assert_eq!(
@@ -198,14 +201,17 @@ mod tests {
     }
 
     #[test]
-    fn reasons_are_kebab_case() {
-        for outcome in all_terminal_shapes() {
-            let reason = outcome.reason();
+    fn reasons_are_snake_case() {
+        for reason in all_reasons() {
             assert!(
-                reason
-                    .chars()
-                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'),
-                "reason `{reason}` is not kebab-case"
+                !reason.is_empty()
+                    && reason.split('_').all(|word| {
+                        !word.is_empty()
+                            && word
+                                .chars()
+                                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+                    }),
+                "reason `{reason}` is not snake_case"
             );
         }
     }

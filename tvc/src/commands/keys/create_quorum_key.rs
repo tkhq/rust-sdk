@@ -3,11 +3,14 @@
 use crate::{
     client::build_client,
     config::turnkey::Config,
-    operator::{OperatorPublicKey, ensure_authenticated_org, resolve_hosted_operator_encrypt_key},
+    operator::{
+        OperatorPublicKey, ensure_authenticated_org, hosted_activity_error,
+        resolve_hosted_operator_encrypt_key,
+    },
     outcome::Outcome,
     output::StdCtx,
 };
-use anyhow::{Context, Result, anyhow, ensure};
+use anyhow::{Context, Result, ensure};
 use clap::{ArgAction, ArgGroup, Args as ClapArgs, builder::RangedU64ValueParser};
 use serde::Serialize;
 use std::{
@@ -136,7 +139,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
         .client
         .create_tvc_quorum_key(auth.org_id, timestamp_ms, intent)
         .await
-        .map_err(|error| anyhow!("failed to create hosted TVC quorum key: {error}"))?;
+        .map_err(|error| hosted_activity_error("create hosted TVC quorum key", error))?;
     let output = validate_result(result.result, expected_share_count)?;
 
     Ok(Outcome::KeysCreateQuorumKey(output))

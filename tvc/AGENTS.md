@@ -27,6 +27,15 @@ Default guidance for coding-agent runs in this repository.
   so it doesn't collide with `anyhow::Result`, and `std::fmt::Write` may need
   `as _` where `std::io::Write` is also in scope. Merge imports from the same
   module where practical.
+- In doc comments and module docs, describe responsibilities, contracts, and
+  relationships without naming specific source files or inventorying current
+  consumers. File paths and call-site lists go stale when code moves. When a
+  relationship matters, prefer Rustdoc intra-doc links to stable items (for
+  example, [`ErrorCode`] or [`crate::errors::classify`]) and describe other
+  participants by their role, such as "the CLI output layer" or "callers."
+  Reference an exact path only when the path itself is part of an operational
+  or compatibility contract (for example, a user-facing config location or
+  migration input), or when no stable symbol exists.
 - When converting from an external/generated type (e.g. the API's `TvcApp`,
   `TvcDeployment`, `AppStatus`) into one of our own structs, destructure it
   exhaustively — `let Foo { a, b, c: _ } = value;` with no trailing `..` —
@@ -84,6 +93,28 @@ Default guidance for coding-agent runs in this repository.
 - Prefer typed errors when callers need to make recovery decisions. Add
   user-facing remediation at the command layer instead of embedding a specific
   CLI command in reusable helpers.
+- Preserve typed errors through `anyhow` chains so machine classification can
+  downcast them. Add operation and identifier context with `.context()` or
+  `.with_context()`; do not stringify an error with `anyhow!("{error}")`,
+  `bail!("{error}")`, or a formatting-only `map_err`, because that discards its
+  type and source chain.
+- Use `MissingResource::new` only when a lookup request succeeded but its
+  decoded response omitted the expected resource, such as an optional payload
+  being `None`. This means callers should verify or re-resolve the identifier
+  or prerequisite state; it does not imply that blindly retrying the same
+  lookup will help. Pass a stable resource noun and the most actionable
+  identifier, for example `MissingResource::new("deployment", deployment_id)`.
+  Do not use `MissingResource` for unsuccessful HTTP responses; propagate the
+  typed `TurnkeyClientError` so its status and response body remain available.
+- Do not assign `ErrorCode` values in command code. Preserve or introduce a
+  typed error and let `crate::errors::classify` own the mapping. Classify new
+  upstream error variants explicitly rather than adding a wildcard fallback.
+- Do not render runtime errors at call sites. Pass the `anyhow::Error` to the
+  output boundary so human and JSON modes use the same chain rendering,
+  truncation, classification, and HTTP-status behavior.
+- Prefer `thiserror` derives for error types whose `Display` is a straightforward
+  field-formatting template. Reserve manual `Display` and `Error`
+  implementations for behavior the derive cannot express clearly.
 - Implement `Display` for domain values used in user-facing errors rather than
   hard-coding their variants at call sites.
 

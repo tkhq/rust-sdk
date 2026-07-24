@@ -219,7 +219,7 @@ mod tests {
         assert_eq!(
             value,
             serde_json::json!({
-                "reason": "operator-created",
+                "reason": "operator_created",
                 "name": "tvc-operator",
                 "operatorId": "11111111-1111-4111-8111-111111111111",
                 "encryptPublicKey": format!("04{}", "11".repeat(64)),

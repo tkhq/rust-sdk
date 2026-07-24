@@ -1,15 +1,16 @@
 //! CLI parsing and dispatch.
 
 use crate::commands;
+use crate::errors::strip_ansi;
 use crate::outcome::Outcome;
-use crate::output::{ColorChoice, Ctx, ErrorMessage, MessageFormat, Shell, StdCtx};
-use clap::{ArgAction, Parser, Subcommand, builder::BoolishValueParser};
+use crate::output::{ColorChoice, Ctx, ErrorMessage, Message, MessageFormat, Shell, StdCtx};
+use clap::{ArgAction, Parser, Subcommand, builder::BoolishValueParser, error::ErrorKind};
+use std::ffi::OsString;
 use std::io::Write;
 use std::process::ExitCode;
 use tracing::debug;
 
-const LONG_ABOUT: &str = "\
-CLI for building with Turnkey Verifiable Cloud.
+const LONG_ABOUT: &str = r#"CLI for building with Turnkey Verifiable Cloud.
 
 Some commands accept multiple configuration input types.
 Configuration values are resolved in this order, highest priority first:
@@ -40,9 +41,25 @@ Interactive behavior:
 Output format:
     --message-format human (default) prints human-readable text. Use
     --message-format json to emit machine-readable output instead: one JSON
-    object per line (newline-delimited JSON), each with a \"reason\" field
+    object per line (newline-delimited JSON), each with a "reason" field
     identifying the message, including errors. JSON mode implies
-    --non-interactive, so commands never prompt and fail fast on missing input.";
+    --non-interactive, so commands never prompt and fail fast on missing input.
+
+    Errors emit reason "command_error" (or "missing_required_input") plus a
+    "code" classifying the failure, an optional numeric "httpStatus", and a
+    "message" carrying the full error chain. The "code" taxonomy is:
+        missing_required_input  a required value was absent (non-interactive)
+        usage_error             bad flags/args (argument parsing failed)
+        invalid_input           semantic validation failed in the command
+        unauthorized            HTTP 401/403
+        not_found               HTTP 404, or a resource that resolved to empty
+        api_error               other non-success HTTP status, or a failed or
+                                unexpected activity
+        approval_required       the activity needs more approvals
+        network_error           connect/timeout/DNS: request never reached the
+                                server
+        command_error           fallback for everything else
+    Exit codes are unchanged: 0 success, 1 runtime error, 2 usage error."#;
 
 /// CLI command parsing and dispatch.
 #[derive(Debug, Parser)]
@@ -73,7 +90,10 @@ pub struct Cli {
 impl Cli {
     /// Run the CLI.
     pub async fn run() -> ExitCode {
-        let args = Cli::parse();
+        let args = match Cli::try_parse() {
+            Ok(args) => args,
+            Err(error) => return handle_parse_error(error),
+        };
         debug!(
             command = args.command.name(),
             non_interactive = args.non_interactive,
@@ -111,6 +131,62 @@ impl Cli {
             }
         }
     }
+}
+
+/// Exit code for a usage error (bad flags/args). Matches clap's default.
+const USAGE_ERROR_EXIT_CODE: i32 = 2;
+
+/// Handle a clap parse failure.
+///
+/// `--help`/`-h` and `--version` also surface as `Err`; those must always print
+/// clap's own text (never JSON), so we defer to `error.exit()` for them. Real
+/// parse failures are emitted as a single `command_error`/`usage_error` NDJSON
+/// line on stdout when `--message-format json` was requested, otherwise handed
+/// back to clap's default rendering via `error.exit()`.
+fn handle_parse_error(error: clap::Error) -> ExitCode {
+    match error.kind() {
+        // Help/version output must never be JSON — let clap print and exit.
+        ErrorKind::DisplayHelp
+        | ErrorKind::DisplayVersion
+        | ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand => error.exit(),
+        _ => {
+            if args_request_json_output(std::env::args_os()) {
+                // Emit clap's full text (including the "Usage:" line) with any
+                // ANSI stripped so agents get pure NDJSON they can self-correct
+                // from, regardless of terminal/color detection.
+                let message = strip_ansi(&error.render().to_string())
+                    .trim_end()
+                    .to_string();
+                let error_message = ErrorMessage::usage_error(message);
+                let mut stdout = std::io::stdout();
+                // Best-effort: if writing fails we still exit with the usage code.
+                let _ = writeln!(stdout, "{}", error_message.to_json_string());
+                std::process::exit(USAGE_ERROR_EXIT_CODE)
+            } else {
+                error.exit()
+            }
+        }
+    }
+}
+
+/// Check if the command args wanted `json` output.
+///
+/// Matches both `--message-format json` and `--message-format=json`. This is
+/// intentionally a heuristic: it recognizes raw token patterns without
+/// reconstructing clap's command grammar, so flag-like positional values (for
+/// example, after `--`) can produce a false positive. Emitting JSON in that
+/// ambiguous case is preferable to returning non-JSON output to a consumer
+/// that may have requested JSON.
+fn args_request_json_output(args: impl IntoIterator<Item = OsString>) -> bool {
+    const FLAG: &str = "--message-format";
+    const JSON_FLAG: &str = "--message-format=json";
+
+    let args: Vec<_> = args.into_iter().collect();
+
+    args.iter().any(|arg| arg == JSON_FLAG)
+        || args
+            .windows(2)
+            .any(|pair| pair[0] == FLAG && pair[1] == "json")
 }
 
 impl Commands {
@@ -335,5 +411,43 @@ impl KeysCommands {
             KeysCommands::InitLocalQuorumKey(_) => "keys init-local-quorum-key",
             KeysCommands::ReEncryptLocalShare(_) => "keys re-encrypt-local-share",
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn argv(tokens: &[&str]) -> Vec<OsString> {
+        tokens.iter().map(OsString::from).collect()
+    }
+
+    #[test]
+    fn argv_human_format_is_not_json() {
+        assert!(!args_request_json_output(argv(&[
+            "tvc",
+            "deploy",
+            "status",
+            "--message-format",
+            "human",
+        ])));
+        assert!(!args_request_json_output(argv(&[
+            "tvc",
+            "--message-format=human",
+        ])));
+    }
+
+    #[test]
+    fn args_tolerable_false_positive_after_end_of_options() {
+        // Documented, accepted heuristic limitation: the scan does not
+        // interpret `--`, so flag-like positional values after it still count
+        // as a request for JSON output.
+        assert!(args_request_json_output(argv(&[
+            "tvc",
+            "some-command",
+            "--",
+            "--message-format",
+            "json",
+        ])));
     }
 }
