@@ -54,7 +54,7 @@ pub struct Args {
         env = "TVC_DEPLOY_ID",
         help_heading = "Manifest source (pick one)"
     )]
-    pub deploy_id: Option<String>,
+    pub deploy_id: Option<Uuid>,
 
     /// Turnkey manifest ID (UUID) for the manifest being approved.
     /// Required when posting approval to the API.
@@ -313,7 +313,7 @@ async fn build_inputs_interactive(
         }
         Some(PostTarget {
             manifest_id,
-            deploy_id: args.deploy_id.clone(),
+            deploy_id: args.deploy_id.map(|id| id.to_string()),
         })
     } else {
         None
@@ -362,7 +362,7 @@ async fn build_inputs_non_interactive(
         }
         Some(PostTarget {
             manifest_id,
-            deploy_id: args.deploy_id.clone(),
+            deploy_id: args.deploy_id.map(|id| id.to_string()),
         })
     } else {
         None
@@ -453,7 +453,8 @@ async fn load_manifest(
     match (&args.manifest, &args.deploy_id) {
         (Some(path), _) => Ok((read_manifest_from_path(path).await?, None)),
         (_, Some(deploy_id)) => {
-            let (manifest, manifest_id) = fetch_manifest_from_deploy(ctx, deploy_id).await?;
+            let (manifest, manifest_id) =
+                fetch_manifest_from_deploy(ctx, &deploy_id.to_string()).await?;
             Ok((manifest, Some(manifest_id)))
         }
         (None, None) => bail!("a manifest source is required"),

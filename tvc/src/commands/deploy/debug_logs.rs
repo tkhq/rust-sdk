@@ -17,6 +17,7 @@ use turnkey_client::generated::external::data::v1::{LogLine, Timestamp};
 use turnkey_client::generated::{
     GetTvcDeploymentDebugLogsRequest, GetTvcDeploymentDebugLogsResponse,
 };
+use uuid::Uuid;
 
 const DEFAULT_POLL_INTERVAL_SECONDS: i64 = 2;
 const POLL_OVERLAP_SECONDS: i64 = 2;
@@ -67,7 +68,7 @@ for more info."#;
 pub struct Args {
     /// ID of the deployment.
     #[arg(short = 'd', long, env = "TVC_DEPLOY_ID")]
-    pub deploy_id: String,
+    pub deploy_id: Uuid,
 
     /// Keep polling for new lines.
     #[arg(long, env = "TVC_DEBUG_LOGS_POLL")]
@@ -128,7 +129,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
 
     let request = DebugLogQueryRequest {
         organization_id: auth.org_id,
-        deployment_id: args.deploy_id,
+        deployment_id: args.deploy_id.to_string(),
         poll: args.poll,
         poll_interval_seconds: args.poll_interval_seconds,
         tail_lines: args.tail_lines,

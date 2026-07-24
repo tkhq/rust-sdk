@@ -9,6 +9,7 @@ use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
 use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::{ActivityStatus, DeleteTvcDeploymentIntent};
+use uuid::Uuid;
 
 /// Delete a TVC deployment by marking it for deletion.
 #[derive(Debug, ClapArgs)]
@@ -16,7 +17,7 @@ use turnkey_client::generated::{ActivityStatus, DeleteTvcDeploymentIntent};
 pub struct Args {
     /// ID of the deployment to delete.
     #[arg(long, env = "TVC_DEPLOY_ID", value_name = "DEPLOY_ID")]
-    pub deploy_id: String,
+    pub deploy_id: Uuid,
 }
 
 /// Run the deploy delete command.
@@ -24,7 +25,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     let auth = build_client().await?;
 
     let intent = DeleteTvcDeploymentIntent {
-        deployment_id: args.deploy_id.clone(),
+        deployment_id: args.deploy_id.to_string(),
     };
 
     let timestamp_ms = SystemTime::now()

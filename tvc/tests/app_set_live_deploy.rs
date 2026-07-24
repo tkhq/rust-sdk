@@ -40,7 +40,7 @@ fn missing_deploy_id_fails() {
 fn set_live_deploy_reaches_auth_setup() {
     set_live_deploy_cmd()
         .arg("--deploy-id")
-        .arg("deploy_test")
+        .arg("5376f492-d014-4e01-a6bb-20fc97448e25")
         .env("TVC_ORG_ID", "org_env")
         .assert()
         .failure()

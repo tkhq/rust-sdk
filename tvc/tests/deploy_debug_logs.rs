@@ -75,7 +75,7 @@ fn debug_logs_accepts_flags_before_authentication() {
 
     debug_logs_cmd(&temp)
         .arg("--deploy-id")
-        .arg("deploy-123")
+        .arg("5376f492-d014-4e01-a6bb-20fc97448e25")
         .arg("--poll")
         .arg("--poll-interval-seconds")
         .arg("3")
@@ -98,7 +98,7 @@ fn debug_logs_rejects_negative_tail_lines_before_authentication() {
 
     debug_logs_cmd(&temp)
         .arg("--deploy-id")
-        .arg("deploy-123")
+        .arg("5376f492-d014-4e01-a6bb-20fc97448e25")
         .arg("--tail-lines")
         .arg("-1")
         .assert()
@@ -114,7 +114,7 @@ fn debug_logs_rejects_zero_poll_interval_before_authentication() {
 
     debug_logs_cmd(&temp)
         .arg("--deploy-id")
-        .arg("deploy-123")
+        .arg("5376f492-d014-4e01-a6bb-20fc97448e25")
         .arg("--poll")
         .arg("--poll-interval-seconds")
         .arg("0")
@@ -133,7 +133,7 @@ fn debug_logs_rejects_negative_poll_interval_before_authentication() {
 
     debug_logs_cmd(&temp)
         .arg("--deploy-id")
-        .arg("deploy-123")
+        .arg("5376f492-d014-4e01-a6bb-20fc97448e25")
         .arg("--poll")
         .arg("--poll-interval-seconds")
         .arg("-1")
@@ -152,7 +152,7 @@ fn debug_logs_rejects_zero_poll_interval_without_poll_before_authentication() {
 
     debug_logs_cmd(&temp)
         .arg("--deploy-id")
-        .arg("deploy-123")
+        .arg("5376f492-d014-4e01-a6bb-20fc97448e25")
         .arg("--poll-interval-seconds")
         .arg("0")
         .assert()
@@ -170,7 +170,7 @@ fn debug_logs_rejects_negative_since_seconds_before_authentication() {
 
     debug_logs_cmd(&temp)
         .arg("--deploy-id")
-        .arg("deploy-123")
+        .arg("5376f492-d014-4e01-a6bb-20fc97448e25")
         .arg("--since-seconds")
         .arg("-1")
         .assert()
@@ -186,7 +186,7 @@ fn debug_logs_rejects_zero_recent_line_capacity_before_authentication() {
 
     debug_logs_cmd(&temp)
         .arg("--deploy-id")
-        .arg("deploy-123")
+        .arg("5376f492-d014-4e01-a6bb-20fc97448e25")
         .arg("--recent-line-capacity")
         .arg("0")
         .assert()

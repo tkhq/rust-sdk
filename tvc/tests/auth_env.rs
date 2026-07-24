@@ -19,7 +19,7 @@ fn app_status_cmd() -> assert_cmd::Command {
         .arg("app")
         .arg("status")
         .arg("--app-id")
-        .arg("app_test");
+        .arg("5376f492-d014-4e01-a6bb-20fc97448e25");
     cmd
 }
 
