@@ -9,6 +9,7 @@ use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
 use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::{ActivityStatus, DeleteTvcAppAndDeploymentsIntent};
+use uuid::Uuid;
 
 /// Delete a TVC application and all of its deployments.
 #[derive(Debug, ClapArgs)]
@@ -16,7 +17,7 @@ use turnkey_client::generated::{ActivityStatus, DeleteTvcAppAndDeploymentsIntent
 pub struct Args {
     /// ID of the app to delete.
     #[arg(long, value_name = "APP_ID", env = "TVC_APP_ID")]
-    pub app_id: String,
+    pub app_id: Uuid,
 }
 
 /// Run the app delete command.
@@ -24,7 +25,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     let auth = build_client().await?;
 
     let intent = DeleteTvcAppAndDeploymentsIntent {
-        app_id: args.app_id.clone(),
+        app_id: args.app_id.to_string(),
     };
 
     let timestamp_ms = SystemTime::now()

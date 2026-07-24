@@ -6,6 +6,7 @@ use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
 use turnkey_client::generated::GetAppStatusRequest;
 use turnkey_client::generated::external::data::v1::{AppStatus, DeploymentStatus};
+use uuid::Uuid;
 
 use crate::client::fetch_tvc_app;
 use crate::commands::app_status::{
@@ -21,16 +22,18 @@ use crate::output::StdCtx;
 pub struct Args {
     /// ID of the app.
     #[arg(short, long, env = "TVC_APP_ID")]
-    pub app_id: String,
+    pub app_id: Uuid,
 }
 
 /// Run the app status command.
 pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
     let auth = crate::client::build_client().await?;
 
+    let app_id = args.app_id.to_string();
+
     let request = GetAppStatusRequest {
         organization_id: auth.org_id.clone(),
-        app_id: args.app_id.clone(),
+        app_id: app_id.clone(),
     };
 
     let response = auth
@@ -42,9 +45,9 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
     let app_status = sanitize_app_status(
         response
             .app_status
-            .ok_or_else(|| anyhow!("no status returned for app: {}", args.app_id))?,
+            .ok_or_else(|| anyhow!("no status returned for app: {app_id}"))?,
     );
-    let app = fetch_tvc_app(&auth, &args.app_id).await?;
+    let app = fetch_tvc_app(&auth, &app_id).await?;
 
     // Exhaustive destructure so a new `AppStatus` field forces a decision here
     // rather than being silently dropped.

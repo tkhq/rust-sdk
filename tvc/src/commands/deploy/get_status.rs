@@ -8,6 +8,7 @@ use turnkey_client::generated::{
     GetAppStatusRequest,
     external::data::v1::{AppStatus, DeploymentStatus},
 };
+use uuid::Uuid;
 
 use crate::{
     client::{fetch_tvc_app, fetch_tvc_deployment},
@@ -23,14 +24,12 @@ use crate::{
 pub struct Args {
     /// ID of the deployment.
     #[arg(short, long, env = "TVC_DEPLOY_ID")]
-    pub deploy_id: String,
+    pub deploy_id: Uuid,
 }
 
 /// Run the deploy get-status command.
 pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
-    let Args {
-        deploy_id: deployment_id,
-    } = args;
+    let deployment_id = args.deploy_id.to_string();
 
     // TODO (TVC-154):
     // this is a little backwards, all the variables that are needed to build the client
@@ -140,8 +139,35 @@ fn find_deployment_status<'a>(
 
 #[cfg(test)]
 mod tests {
-    use super::find_deployment_status;
+    use super::{Args, find_deployment_status};
+    use clap::Parser;
     use turnkey_client::generated::external::data::v1::{AppStatus, DeploymentStatus};
+    use uuid::Uuid;
+
+    #[derive(Debug, Parser)]
+    struct TestCli {
+        #[command(flatten)]
+        args: Args,
+    }
+
+    #[test]
+    fn parses_valid_uuid_deploy_id() {
+        let cli =
+            TestCli::try_parse_from(["tvc", "--deploy-id", "5376f492-d014-4e01-a6bb-20fc97448e25"])
+                .expect("valid UUID should parse");
+
+        assert_eq!(
+            cli.args.deploy_id,
+            Uuid::parse_str("5376f492-d014-4e01-a6bb-20fc97448e25").unwrap()
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_uuid_deploy_id() {
+        let error = TestCli::try_parse_from(["tvc", "--deploy-id", "not-a-uuid"]).unwrap_err();
+
+        assert_eq!(error.kind(), clap::error::ErrorKind::ValueValidation);
+    }
 
     #[test]
     fn find_deployment_status_matches_sanitized_ids() {

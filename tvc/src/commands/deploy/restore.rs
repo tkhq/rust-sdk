@@ -6,6 +6,7 @@ use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
 use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::{ActivityStatus, RestoreTvcDeploymentIntent};
+use uuid::Uuid;
 
 use crate::outcome::Outcome;
 use crate::output::StdCtx;
@@ -16,7 +17,7 @@ use crate::output::StdCtx;
 pub struct Args {
     /// ID of the deployment.
     #[arg(short, long, env = "TVC_DEPLOY_ID")]
-    pub deploy_id: String,
+    pub deploy_id: Uuid,
 }
 
 /// Run the deploy restore command.
@@ -24,7 +25,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
     let auth = crate::client::build_client().await?;
 
     let intent = RestoreTvcDeploymentIntent {
-        deployment_id: args.deploy_id,
+        deployment_id: args.deploy_id.to_string(),
     };
 
     let timestamp_ms = SystemTime::now()
