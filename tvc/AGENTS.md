@@ -25,8 +25,7 @@ Default guidance for coding-agent runs in this repository.
   longer/module-qualified form when it disambiguates from another in-scope name —
   e.g. `fmt::Result` stays qualified (via `use std::fmt::{self, Display, Formatter}`)
   so it doesn't collide with `anyhow::Result`, and `std::fmt::Write` may need
-  `as _` where `std::io::Write` is also in scope. Merge imports from the same
-  module where practical.
+  `as _` where `std::io::Write` is also in scope.
 - When converting from an external/generated type (e.g. the API's `TvcApp`,
   `TvcDeployment`, `AppStatus`) into one of our own structs, destructure it
   exhaustively — `let Foo { a, b, c: _ } = value;` with no trailing `..` —
