@@ -3,10 +3,11 @@
 use crate::outcome::Outcome;
 use crate::output::StdCtx;
 use crate::provisioning::{
-    ProvisionBundle, extract_ephemeral_public_key_bytes, verify_provisioning_details,
+    ProvisionBundle, extract_ephemeral_public_key_bytes, fetch_provisioning_details,
+    verify_provisioning_details,
 };
 use crate::util::write_file;
-use anyhow::{Context, bail};
+use anyhow::Context;
 use clap::Args as ClapArgs;
 use qos_core::protocol::services::boot::{Approval, VersionedManifestEnvelope};
 use qos_nsm::types::NsmDigest;
@@ -14,10 +15,6 @@ use serde::Serialize;
 use std::fmt::Write;
 use std::fmt::{self, Display, Formatter};
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
-use turnkey_client::generated::{
-    GetTvcDeploymentProvisioningDetailsRequest, GetTvcDeploymentProvisioningDetailsResponse,
-};
 use uuid::Uuid;
 
 /// Get provisioning details for a deployment.
@@ -64,53 +61,23 @@ const SUMMARY_PCR_MAX_INDEX: usize = 17;
 /// Run the deploy provisioning-details command.
 pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
     let auth = crate::client::build_client().await?;
-    let deploy_id = args.deploy_id.to_string();
-
-    let request = GetTvcDeploymentProvisioningDetailsRequest {
-        organization_id: auth.org_id.clone(),
-        deployment_id: deploy_id.clone(),
-    };
-    let fetched_at_unix_ms = u64::try_from(
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .context("system time before unix epoch")?
-            .as_millis(),
-    )
-    .context("system time exceeded u64 milliseconds")?;
-
-    let GetTvcDeploymentProvisioningDetailsResponse {
-        attestation_document,
-        manifest_envelope: manifest_envelope_bytes,
-    } = auth
-        .client
-        .get_tvc_deployment_provisioning_details(request)
-        .await
-        .context("failed to fetch deployment provisioning details")?;
-
-    if attestation_document.is_empty() {
-        bail!("attestation document missing in provisioning details response");
-    }
-    if manifest_envelope_bytes.is_empty() {
-        bail!("manifest envelope missing in provisioning details response");
-    }
-
-    let manifest_envelope =
-        VersionedManifestEnvelope::try_from_slice_compat(&manifest_envelope_bytes)
-            .context("failed to parse manifest envelope from provisioning details")?;
+    let details = fetch_provisioning_details(&auth, &args.deploy_id).await?;
 
     let summary = build_summary_with_optional_verify(
-        &attestation_document,
-        &manifest_envelope,
+        details.attestation_document(),
+        details.manifest_envelope(),
         args.dangerous_skip_verification,
         None,
     )?;
+    let (deployment_id, attestation_document, manifest_envelope, fetched_at_unix_ms) =
+        details.into_parts();
 
     let bundle_path = match args.provision_bundle_out.as_ref() {
         Some(path) => {
             let bundle = ProvisionBundle::new(
-                deploy_id.clone(),
+                deployment_id.to_string(),
                 &attestation_document,
-                manifest_envelope.clone(),
+                manifest_envelope,
                 fetched_at_unix_ms,
                 &summary.ephemeral_key,
             );
@@ -127,7 +94,12 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
     };
 
     Ok(Outcome::DeployProvisioningDetails(
-        ProvisioningDetails::from_summary(deploy_id, verification_status, bundle_path, &summary),
+        ProvisioningDetails::from_summary(
+            deployment_id.to_string(),
+            verification_status,
+            bundle_path,
+            &summary,
+        ),
     ))
 }
 

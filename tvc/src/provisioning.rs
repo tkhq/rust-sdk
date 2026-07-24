@@ -1,5 +1,6 @@
 //! Shared provisioning bundle and attestation verification helpers.
 
+use crate::client::AuthenticatedClient;
 use anyhow::{Context, anyhow, bail};
 use aws_nitro_enclaves_nsm_api::api::AttestationDoc;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
@@ -7,6 +8,112 @@ use qos_core::protocol::services::boot::VersionedManifestEnvelope;
 use qos_p256::P256Public;
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
+use turnkey_client::generated::{
+    GetTvcDeploymentProvisioningDetailsRequest, GetTvcDeploymentProvisioningDetailsResponse,
+};
+use uuid::Uuid;
+
+/// Provisioning details fetched from TVC with the manifest envelope decoded.
+#[cfg_attr(test, derive(Debug, PartialEq))]
+pub(crate) struct FetchedProvisioningDetails {
+    deployment_id: Uuid,
+    attestation_document: Vec<u8>,
+    manifest_envelope: VersionedManifestEnvelope,
+    fetched_at_unix_ms: u64,
+}
+
+impl FetchedProvisioningDetails {
+    pub(crate) fn new(
+        deployment_id: Uuid,
+        attestation_document: Vec<u8>,
+        manifest_envelope: VersionedManifestEnvelope,
+        fetched_at_unix_ms: u64,
+    ) -> Self {
+        Self {
+            deployment_id,
+            attestation_document,
+            manifest_envelope,
+            fetched_at_unix_ms,
+        }
+    }
+
+    pub(crate) fn attestation_document(&self) -> &[u8] {
+        &self.attestation_document
+    }
+
+    pub(crate) fn manifest_envelope(&self) -> &VersionedManifestEnvelope {
+        &self.manifest_envelope
+    }
+
+    pub(crate) fn into_parts(self) -> (Uuid, Vec<u8>, VersionedManifestEnvelope, u64) {
+        let Self {
+            deployment_id,
+            attestation_document,
+            manifest_envelope,
+            fetched_at_unix_ms,
+        } = self;
+        (
+            deployment_id,
+            attestation_document,
+            manifest_envelope,
+            fetched_at_unix_ms,
+        )
+    }
+}
+
+/// Fetch and parse provisioning details for one deployment.
+pub(crate) async fn fetch_provisioning_details(
+    auth: &AuthenticatedClient,
+    deployment_id: &Uuid,
+) -> anyhow::Result<FetchedProvisioningDetails> {
+    let request = GetTvcDeploymentProvisioningDetailsRequest {
+        organization_id: auth.org_id.clone(),
+        deployment_id: deployment_id.to_string(),
+    };
+    let fetched_at_unix_ms = u64::try_from(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .context("system time before unix epoch")?
+            .as_millis(),
+    )
+    .context("system time exceeded u64 milliseconds")?;
+
+    let response = auth
+        .client
+        .get_tvc_deployment_provisioning_details(request)
+        .await
+        .context("failed to fetch deployment provisioning details")?;
+
+    provisioning_details_from_response(*deployment_id, response, fetched_at_unix_ms)
+}
+
+fn provisioning_details_from_response(
+    deployment_id: Uuid,
+    response: GetTvcDeploymentProvisioningDetailsResponse,
+    fetched_at_unix_ms: u64,
+) -> anyhow::Result<FetchedProvisioningDetails> {
+    let GetTvcDeploymentProvisioningDetailsResponse {
+        attestation_document,
+        manifest_envelope,
+    } = response;
+
+    if attestation_document.is_empty() {
+        bail!("attestation document missing in provisioning details response");
+    }
+    if manifest_envelope.is_empty() {
+        bail!("manifest envelope missing in provisioning details response");
+    }
+
+    let manifest_envelope = VersionedManifestEnvelope::try_from_slice_compat(&manifest_envelope)
+        .context("failed to parse manifest envelope from provisioning details")?;
+
+    Ok(FetchedProvisioningDetails::new(
+        deployment_id,
+        attestation_document,
+        manifest_envelope,
+        fetched_at_unix_ms,
+    ))
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -160,12 +267,19 @@ fn validation_time_secs(validation_time_override: Option<u64>) -> anyhow::Result
 
 #[cfg(test)]
 mod tests {
-    use super::{ProvisionBundle, extract_ephemeral_public_key_bytes, verify_provisioning_details};
+    use super::{
+        FetchedProvisioningDetails, ProvisionBundle, extract_ephemeral_public_key_bytes,
+        provisioning_details_from_response, verify_provisioning_details,
+    };
     use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
     use qos_core::protocol::services::boot::{ManifestEnvelope, VersionedManifestEnvelope};
     use qos_p256::P256Pair;
     use serde::Deserialize;
     use serde_json::json;
+    use turnkey_client::generated::GetTvcDeploymentProvisioningDetailsResponse;
+    use uuid::Uuid;
+
+    const DEPLOYMENT_ID: &str = "33333333-3333-4333-8333-333333333333";
 
     #[derive(Debug, Deserialize)]
     struct ValidProvisioningDetailsFixture {
@@ -228,6 +342,71 @@ mod tests {
         }))
         .unwrap();
         envelope.into()
+    }
+
+    fn deployment_id() -> Uuid {
+        Uuid::parse_str(DEPLOYMENT_ID).unwrap()
+    }
+
+    #[test]
+    fn provisioning_response_parses_complete_details() {
+        let manifest_envelope = sample_manifest_envelope();
+        let response = GetTvcDeploymentProvisioningDetailsResponse {
+            attestation_document: vec![1, 2, 3],
+            manifest_envelope: manifest_envelope.to_storage_vec().unwrap(),
+        };
+        let expected = FetchedProvisioningDetails::new(
+            deployment_id(),
+            vec![1, 2, 3],
+            manifest_envelope,
+            1234,
+        );
+
+        let details = provisioning_details_from_response(deployment_id(), response, 1234).unwrap();
+
+        assert_eq!(details, expected);
+    }
+
+    #[test]
+    fn provisioning_response_rejects_missing_fields() {
+        let manifest_envelope = sample_manifest_envelope().to_storage_vec().unwrap();
+        let missing_attestation = GetTvcDeploymentProvisioningDetailsResponse {
+            attestation_document: Vec::new(),
+            manifest_envelope: manifest_envelope.clone(),
+        };
+        assert_eq!(
+            provisioning_details_from_response(deployment_id(), missing_attestation, 1234)
+                .unwrap_err()
+                .to_string(),
+            "attestation document missing in provisioning details response"
+        );
+
+        let missing_manifest = GetTvcDeploymentProvisioningDetailsResponse {
+            attestation_document: vec![1, 2, 3],
+            manifest_envelope: Vec::new(),
+        };
+        assert_eq!(
+            provisioning_details_from_response(deployment_id(), missing_manifest, 1234)
+                .unwrap_err()
+                .to_string(),
+            "manifest envelope missing in provisioning details response"
+        );
+    }
+
+    #[test]
+    fn provisioning_response_rejects_malformed_manifest_envelope() {
+        let response = GetTvcDeploymentProvisioningDetailsResponse {
+            attestation_document: vec![1, 2, 3],
+            manifest_envelope: vec![4, 5, 6],
+        };
+
+        let error =
+            provisioning_details_from_response(deployment_id(), response, 1234).unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "failed to parse manifest envelope from provisioning details"
+        );
     }
 
     #[test]
