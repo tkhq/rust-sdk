@@ -13,6 +13,7 @@ use crate::commands::app_status::{
     ReplicaCounts, TimestampPayload, format_replica_counts, sanitize_app_status,
 };
 use crate::commands::display::format_egress_enabled;
+use crate::commands::live_deployments::warn_on_live_deployments;
 use crate::outcome::Outcome;
 use crate::output::StdCtx;
 
@@ -26,7 +27,7 @@ pub struct Args {
 }
 
 /// Run the app status command.
-pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
+pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
     let auth = crate::client::build_client().await?;
 
     let app_id = args.app_id.to_string();
@@ -57,29 +58,42 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
         targeted_deployment_id,
     } = app_status;
 
+    let deployments: Vec<DeploymentReplicaStatus> = deployments
+        .into_iter()
+        .map(|deployment| {
+            let DeploymentStatus {
+                deployment_id,
+                ready_replicas,
+                desired_replicas,
+                last_updated_time,
+            } = deployment;
+            DeploymentReplicaStatus {
+                deployment_id,
+                replicas: ReplicaCounts {
+                    ready: ready_replicas,
+                    desired: desired_replicas,
+                },
+                last_updated: last_updated_time.map(Into::into),
+            }
+        })
+        .collect();
+
+    // Everything the cluster reports for the app is running, and therefore
+    // billed, so this list needs no live/deleted filtering.
+    warn_on_live_deployments(
+        ctx,
+        &app_id,
+        &deployments
+            .iter()
+            .map(|deployment| deployment.deployment_id.as_str())
+            .collect::<Vec<_>>(),
+    )?;
+
     Ok(Outcome::AppStatus(AppStatusReport {
         app_id,
         targeted_deployment_id,
         egress_enabled: app.enable_egress,
-        deployments: deployments
-            .into_iter()
-            .map(|deployment| {
-                let DeploymentStatus {
-                    deployment_id,
-                    ready_replicas,
-                    desired_replicas,
-                    last_updated_time,
-                } = deployment;
-                DeploymentReplicaStatus {
-                    deployment_id,
-                    replicas: ReplicaCounts {
-                        ready: ready_replicas,
-                        desired: desired_replicas,
-                    },
-                    last_updated: last_updated_time.map(Into::into),
-                }
-            })
-            .collect(),
+        deployments,
     }))
 }
 

@@ -2,6 +2,7 @@
 
 use super::format_port_summary;
 use crate::client::{build_client, fetch_tvc_app};
+use crate::commands::live_deployments::warn_on_fetched_live_deployments;
 use crate::config::deploy::{DeployConfig, DeployConfigValidationErrors};
 use crate::config::turnkey::Config;
 use crate::outcome::Outcome;
@@ -434,9 +435,13 @@ async fn run_with_resolved_inputs(
 
     let result = auth
         .client
-        .create_tvc_deployment(auth.org_id, timestamp_ms, intent)
+        .create_tvc_deployment(auth.org_id.clone(), timestamp_ms, intent)
         .await
         .context("failed to create TVC deployment")?;
+
+    // The deployment just created counts toward the app's live total, so this is
+    // the moment a caller iterating on deploys learns it is accumulating them.
+    warn_on_fetched_live_deployments(ctx, &auth, &deploy_config.app_id).await;
 
     Ok(Outcome::DeployCreate(DeploymentCreated {
         deployment_id: result.result.deployment_id,

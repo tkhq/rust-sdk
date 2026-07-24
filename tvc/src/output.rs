@@ -114,6 +114,19 @@ impl<W: Write, W2: Write> Shell<W, W2> {
         }
     }
 
+    /// Emit an advisory warning on stderr, in every message format.
+    ///
+    /// Unlike the [`Human`] writers this is not gated on
+    /// [`MessageFormat::Human`]: warnings are diagnostics rather than command
+    /// output, and stderr is never part of the machine-readable stdout stream,
+    /// so emitting in JSON mode keeps advisories visible to non-interactive
+    /// callers (CI, coding agents) without corrupting their parse.
+    pub fn warn(&mut self, message: impl Display) -> Result<()> {
+        let style = self.style(AnsiColor::Yellow);
+        writeln!(self.stderr, "{style}warning{style:#}: {message}")?;
+        Ok(())
+    }
+
     /// Human-only presentation writers.
     ///
     /// Every method on the returned [`Human`] handle writes only when the
@@ -152,14 +165,6 @@ impl<W: Write, W2: Write> Human<'_, W, W2> {
         if matches!(self.0.message_format, MessageFormat::Human) {
             let style = self.0.style(AnsiColor::Green);
             writeln!(self.0.stderr, "{style}{label}{style:#}: {message}")?;
-        }
-        Ok(())
-    }
-
-    pub fn warn(&mut self, message: impl Display) -> Result<()> {
-        if matches!(self.0.message_format, MessageFormat::Human) {
-            let style = self.0.style(AnsiColor::Yellow);
-            writeln!(self.0.stderr, "{style}warning{style:#}: {message}")?;
         }
         Ok(())
     }
@@ -440,6 +445,34 @@ mod tests {
         assert_eq!(
             output,
             concat!(r#"{"reason":"machine-only-message","value":"ok"}"#, "\n")
+        );
+    }
+
+    /// Warnings are advisory diagnostics, so they must reach JSON consumers too
+    /// — on stderr, leaving the newline-delimited JSON on stdout untouched.
+    #[test]
+    fn shell_warn_writes_to_stderr_in_json_mode() {
+        let mut shell = TestShell::with_json_formatter();
+
+        shell.warn("too many live deployments").unwrap();
+
+        assert!(shell.stdout.is_empty(), "stdout must stay machine-readable");
+        assert_eq!(
+            String::from_utf8(shell.into_stderr()).unwrap(),
+            "warning: too many live deployments\n"
+        );
+    }
+
+    #[test]
+    fn shell_warn_writes_to_stderr_in_human_mode() {
+        let mut shell = TestShell::with_human_formatter();
+
+        shell.warn("too many live deployments").unwrap();
+
+        assert!(shell.stdout.is_empty());
+        assert_eq!(
+            String::from_utf8(shell.into_stderr()).unwrap(),
+            "warning: too many live deployments\n"
         );
     }
 
