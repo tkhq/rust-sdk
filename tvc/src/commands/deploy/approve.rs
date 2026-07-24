@@ -6,7 +6,7 @@ use crate::{
     local_operator_key::LocalOperatorSeedSource,
     operator::{OperatorCtx, ResolvedOperator, resolve_operator},
     outcome::Outcome,
-    output::StdCtx,
+    output::{NotFound, StdCtx},
     pair::HexSeed,
     prompts::{self, bail_required_in_non_interactive, stdin_can_prompt},
     shell_print, shell_println,
@@ -738,11 +738,11 @@ async fn fetch_manifest_from_deploy(
 
     let deployment = response
         .tvc_deployment
-        .ok_or_else(|| anyhow!("deployment not found: {deploy_id}"))?;
+        .ok_or_else(|| NotFound::new("deployment", deploy_id.to_string()))?;
 
     let tvc_manifest = deployment
         .manifest
-        .ok_or_else(|| anyhow!("manifest not found in deployment"))?;
+        .ok_or_else(|| NotFound::new("manifest", format!("deployment {deploy_id}")))?;
 
     let manifest = VersionedManifest::try_from_slice_compat(&tvc_manifest.manifest)
         .context("failed to parse manifest from deployment")?;

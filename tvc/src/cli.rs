@@ -101,7 +101,9 @@ impl Cli {
                 let emit_result = if shell.message_format().is_json() {
                     shell.emit(&ErrorMessage::from_error(&error))
                 } else {
-                    shell.human().error(&error)
+                    // Render the FULL anyhow chain (alternate Display joins every
+                    // context layer with ": "), not just the top layer.
+                    shell.human().error(format!("{error:#}"))
                 };
                 if let Err(emit_error) = emit_result {
                     let mut stderr = std::io::stderr();
