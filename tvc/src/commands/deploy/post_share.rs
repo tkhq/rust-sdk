@@ -11,6 +11,7 @@ use std::fmt::{self, Display, Formatter};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::{PostTvcQuorumKeyShareIntent, QuorumKeyShareApprovalBundle};
+use uuid::Uuid;
 
 /// Post a re-encrypted quorum key share for a deployment.
 #[derive(Debug, ClapArgs)]
@@ -22,15 +23,18 @@ pub struct Args {
 
     /// Turnkey share set operator ID (UUID) for the operator posting this share.
     #[arg(long, env = "TVC_SHARE_OPERATOR_ID")]
-    pub share_operator_id: String,
+    pub share_operator_id: Uuid,
 }
 
 /// Run the deploy post-share command.
 pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
     let re_encrypted_share: ReEncryptedShareOutput =
         read_json_file(&args.re_encrypted_share, "re-encrypted share output").await?;
-    let intent =
-        build_post_tvc_quorum_key_share_intent(&re_encrypted_share, &args.share_operator_id);
+
+    let intent = build_post_tvc_quorum_key_share_intent(
+        &re_encrypted_share,
+        &args.share_operator_id.to_string(),
+    );
 
     let auth = crate::client::build_client().await?;
     let timestamp_ms = SystemTime::now()

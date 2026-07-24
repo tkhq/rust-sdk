@@ -9,6 +9,7 @@ use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
 use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::{ActivityStatus, UpdateTvcAppLiveDeploymentIntent};
+use uuid::Uuid;
 
 /// Set the live deployment for a TVC app.
 #[derive(Debug, ClapArgs)]
@@ -16,15 +17,17 @@ use turnkey_client::generated::{ActivityStatus, UpdateTvcAppLiveDeploymentIntent
 pub struct Args {
     /// ID of the deployment to set live.
     #[arg(long, env = "TVC_DEPLOY_ID", value_name = "DEPLOY_ID")]
-    pub deploy_id: String,
+    pub deploy_id: Uuid,
 }
 
 /// Run the app set-live-deploy command.
 pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     let auth = build_client().await?;
 
+    let deployment_id = args.deploy_id.to_string();
+
     let intent = UpdateTvcAppLiveDeploymentIntent {
-        deployment_id: args.deploy_id.clone(),
+        deployment_id: deployment_id.clone(),
     };
 
     let timestamp_ms = SystemTime::now()
@@ -39,7 +42,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
         .context("failed to set TVC app live deployment")?;
 
     Ok(Outcome::AppSetLiveDeploy(LiveDeploymentSet {
-        deployment_id: args.deploy_id,
+        deployment_id,
         activity_id: result.activity_id,
         activity_status: result.status,
     }))

@@ -18,6 +18,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::{
     GetTvcDeploymentProvisioningDetailsRequest, GetTvcDeploymentProvisioningDetailsResponse,
 };
+use uuid::Uuid;
 
 /// Get provisioning details for a deployment.
 #[derive(Debug, ClapArgs)]
@@ -25,7 +26,7 @@ use turnkey_client::generated::{
 pub struct Args {
     /// ID of the deployment.
     #[arg(short = 'd', long, env = "TVC_DEPLOY_ID")]
-    pub deploy_id: String,
+    pub deploy_id: Uuid,
 
     /// Never use for sensitive applications! Skip attestation, PCR, and approval verification.
     #[arg(long, env = "TVC_DANGEROUS_SKIP_VERIFICATION")]
@@ -63,10 +64,11 @@ const SUMMARY_PCR_MAX_INDEX: usize = 17;
 /// Run the deploy provisioning-details command.
 pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
     let auth = crate::client::build_client().await?;
-
+    let deploy_id = args.deploy_id.to_string();
+    
     let request = GetTvcDeploymentProvisioningDetailsRequest {
         organization_id: auth.org_id.clone(),
-        deployment_id: args.deploy_id.clone(),
+        deployment_id: deploy_id.clone(),
     };
     let fetched_at_unix_ms = u64::try_from(
         SystemTime::now()
@@ -106,7 +108,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
     let bundle_path = match args.provision_bundle_out.as_ref() {
         Some(path) => {
             let bundle = ProvisionBundle::new(
-                args.deploy_id.clone(),
+                deploy_id.clone(),
                 &attestation_document,
                 manifest_envelope.clone(),
                 fetched_at_unix_ms,
@@ -125,12 +127,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
     };
 
     Ok(Outcome::DeployProvisioningDetails(
-        ProvisioningDetails::from_summary(
-            args.deploy_id,
-            verification_status,
-            bundle_path,
-            &summary,
-        ),
+        ProvisioningDetails::from_summary(deploy_id, verification_status, bundle_path, &summary),
     ))
 }
 
