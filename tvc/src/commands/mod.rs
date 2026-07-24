@@ -10,5 +10,6 @@ pub mod confirmation;
 pub mod deploy;
 pub mod display;
 pub mod keys;
+pub mod live_deployments;
 pub mod login;
 pub mod operator;
