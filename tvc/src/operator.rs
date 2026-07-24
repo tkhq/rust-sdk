@@ -246,6 +246,7 @@ fn validate_hosted_record(
     Ok(ValidatedHostedOperatorRecord {
         record,
         encrypt_public_key,
+        sign_public_key,
     })
 }
 
@@ -274,6 +275,46 @@ pub(crate) struct OperatorCtx<'a> {
 struct ValidatedHostedOperatorRecord {
     record: HostedOperatorRecord,
     encrypt_public_key: OperatorPublicKey,
+    sign_public_key: OperatorPublicKey,
+}
+
+/// One validated hosted operator resolved from the active organization.
+#[cfg_attr(test, derive(Debug, PartialEq, Eq))]
+pub(crate) struct ResolvedHostedOperator {
+    organization_id: String,
+    name: String,
+    operator_id: Uuid,
+    encrypt_public_key: OperatorPublicKey,
+    sign_public_key: OperatorPublicKey,
+}
+
+impl ResolvedHostedOperator {
+    pub(crate) fn organization_id(&self) -> &str {
+        &self.organization_id
+    }
+
+    pub(crate) fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub(crate) fn operator_id(&self) -> Uuid {
+        self.operator_id
+    }
+
+    pub(crate) fn encrypt_public_key(&self) -> &OperatorPublicKey {
+        &self.encrypt_public_key
+    }
+
+    pub(crate) fn sign_public_key(&self) -> &OperatorPublicKey {
+        &self.sign_public_key
+    }
+
+    pub(crate) fn composite_public_key(&self) -> Vec<u8> {
+        let mut composite = Vec::with_capacity(130);
+        composite.extend_from_slice(self.encrypt_public_key.0.to_encoded_point(false).as_bytes());
+        composite.extend_from_slice(self.sign_public_key.0.to_encoded_point(false).as_bytes());
+        composite
+    }
 }
 
 impl ResolvedOperator {
@@ -467,20 +508,39 @@ fn find_hosted_operator(
     }
 }
 
+/// Resolve one validated hosted operator from the active organization.
+pub(crate) fn resolve_hosted_operator(
+    config: &Config,
+    operator_id: &Uuid,
+) -> Result<ResolvedHostedOperator> {
+    let (alias, _) = config
+        .active_org_config()
+        .context("No active organization. Run `tvc login` first.")?;
+    let (organization_id, name, validated) = find_hosted_operator(config, operator_id)?
+        .ok_or_else(|| {
+            anyhow!("hosted operator ID '{operator_id}' was not found in org '{alias}'")
+        })?;
+    let ValidatedHostedOperatorRecord {
+        record,
+        encrypt_public_key,
+        sign_public_key,
+    } = validated;
+
+    Ok(ResolvedHostedOperator {
+        organization_id,
+        name,
+        operator_id: record.operator_id,
+        encrypt_public_key,
+        sign_public_key,
+    })
+}
+
 /// Resolve a hosted operator's encryption public key from the active organization.
 pub(crate) fn resolve_hosted_operator_encrypt_key(
     config: &Config,
     operator_id: &Uuid,
 ) -> Result<OperatorPublicKey> {
-    let (alias, _) = config
-        .active_org_config()
-        .context("No active organization. Run `tvc login` first.")?;
-
-    let (_, _, validated) = find_hosted_operator(config, operator_id)?.ok_or_else(|| {
-        anyhow!("hosted operator ID '{operator_id}' was not found in org '{alias}'")
-    })?;
-
-    Ok(validated.encrypt_public_key)
+    Ok(resolve_hosted_operator(config, operator_id)?.encrypt_public_key)
 }
 
 async fn sign_hosted_manifest(
@@ -524,7 +584,7 @@ fn signature_component(value: &str, component: &str) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
-fn hosted_activity_error(operation: &str, error: TurnkeyClientError) -> anyhow::Error {
+pub(crate) fn hosted_activity_error(operation: &str, error: TurnkeyClientError) -> anyhow::Error {
     match error {
         TurnkeyClientError::ActivityRequiresApproval(activity_id) => anyhow!(
             "failed to {operation}: activity {activity_id} requires additional approvals or authentication"
@@ -533,7 +593,7 @@ fn hosted_activity_error(operation: &str, error: TurnkeyClientError) -> anyhow::
     }
 }
 
-fn timestamp_ms() -> Result<u128> {
+pub(crate) fn timestamp_ms() -> Result<u128> {
     Ok(SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .context("system time before unix epoch")?
@@ -642,6 +702,26 @@ mod tests {
         let resolved = resolve_hosted_operator_encrypt_key(&config, &operator_id).unwrap();
 
         assert_eq!(resolved, expected);
+    }
+
+    #[test]
+    fn resolves_complete_hosted_operator_from_active_org() {
+        let record = hosted_record();
+        let operator_id = Uuid::parse_str(OPERATOR_ID).unwrap();
+        let expected = ResolvedHostedOperator {
+            organization_id: "org-id".to_string(),
+            name: "hosted".to_string(),
+            operator_id,
+            encrypt_public_key: record.encrypt_public_key.parse().unwrap(),
+            sign_public_key: record.sign_public_key.parse().unwrap(),
+        };
+        let expected_composite = expected.composite_public_key();
+        let config = config_with_operators(vec![hosted_operator("hosted", record)]);
+
+        let resolved = resolve_hosted_operator(&config, &operator_id).unwrap();
+
+        assert_eq!(resolved, expected);
+        assert_eq!(resolved.composite_public_key(), expected_composite);
     }
 
     #[test]

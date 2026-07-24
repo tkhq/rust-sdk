@@ -124,6 +124,9 @@ impl Commands {
                 DeployCommands::ProvisioningDetails(args) => {
                     commands::deploy::provisioning_details::run(ctx, args).await
                 }
+                DeployCommands::Provision(args) => {
+                    commands::deploy::provision::run(ctx, args).await
+                }
                 DeployCommands::PostShare(args) => {
                     commands::deploy::post_share::run(ctx, args).await
                 }
@@ -241,6 +244,8 @@ enum DeployCommands {
     GetStatus(commands::deploy::get_status::Args),
     /// Get provisioning details for a deployment.
     ProvisioningDetails(commands::deploy::provisioning_details::Args),
+    /// Provision one hosted quorum-key share for a deployment.
+    Provision(commands::deploy::provision::Args),
     /// Post a re-encrypted quorum key share for a deployment.
     PostShare(commands::deploy::post_share::Args),
     /// Get the status of a deployment.
@@ -269,6 +274,7 @@ impl DeployCommands {
             DeployCommands::Approve(_) => "deploy approve",
             DeployCommands::GetStatus(_) => "deploy get-status",
             DeployCommands::ProvisioningDetails(_) => "deploy provisioning-details",
+            DeployCommands::Provision(_) => "deploy provision",
             DeployCommands::PostShare(_) => "deploy post-share",
             DeployCommands::Status(_) => "deploy status",
             DeployCommands::Create(_) => "deploy create",
