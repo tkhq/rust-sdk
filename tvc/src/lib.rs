@@ -11,6 +11,7 @@ pub mod cli;
 pub mod client;
 pub mod commands;
 pub mod config;
+pub mod errors;
 pub(crate) mod local_operator_key;
 pub mod logging;
 pub mod operator;

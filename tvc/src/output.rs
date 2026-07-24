@@ -1,5 +1,6 @@
 //! User-facing output primitives for TVC.
 
+use crate::errors::{Classification, ErrorCode, classify};
 use anstyle::{AnsiColor, Color, Style};
 use anyhow::Result;
 use clap::ValueEnum;
@@ -259,9 +260,6 @@ pub struct MissingRequiredInput {
 }
 
 impl MissingRequiredInput {
-    const CODE: &'static str = "missing_required_input";
-    const REASON: &'static str = "missing-required-input";
-
     pub fn new(flag_hint: &str) -> Self {
         Self {
             message: format!(
@@ -269,14 +267,6 @@ impl MissingRequiredInput {
                  (set {flag_hint} or run in a TTY without --non-interactive \
                  / TVC_NON_INTERACTIVE=true)"
             ),
-        }
-    }
-
-    fn to_error_message(&self) -> ErrorMessage {
-        ErrorMessage {
-            reason: Self::REASON,
-            code: Self::CODE,
-            message: self.message.clone(),
         }
     }
 }
@@ -293,20 +283,53 @@ impl Error for MissingRequiredInput {}
 pub struct ErrorMessage {
     #[serde(skip)]
     reason: &'static str,
-    code: &'static str,
+    code: ErrorCode,
+    #[serde(rename = "httpStatus", skip_serializing_if = "Option::is_none")]
+    http_status: Option<u16>,
     message: String,
 }
 
 impl ErrorMessage {
+    /// The message `reason` for every runtime error. `code` carries the finer
+    /// classification so the outcome `reason` registry stays unchanged.
+    const RUNTIME_REASON: &'static str = "command-error";
+    const MISSING_INPUT_REASON: &'static str = "missing-required-input";
+
+    /// Build an emitted error from an [`anyhow::Error`].
+    ///
+    /// The message is the FULL anyhow chain (`{error:#}`), not just the top
+    /// context layer. The `code` (and, when known, `httpStatus`) is derived by
+    /// walking the cause chain for the first typed error we recognize.
     pub fn from_error(error: &anyhow::Error) -> Self {
-        if let Some(missing) = error.downcast_ref::<MissingRequiredInput>() {
-            return missing.to_error_message();
+        // Preserve the historical special case first: missing required input
+        // keeps its own dedicated `reason`.
+        if error.downcast_ref::<MissingRequiredInput>().is_some() {
+            return Self {
+                reason: Self::MISSING_INPUT_REASON,
+                code: ErrorCode::MissingRequiredInput,
+                http_status: None,
+                message: format!("{error:#}"),
+            };
         }
 
+        let Classification { code, http_status } = classify(error);
         Self {
-            reason: "command-error",
-            code: "command_error",
-            message: error.to_string(),
+            reason: Self::RUNTIME_REASON,
+            code,
+            http_status,
+            message: format!("{error:#}"),
+        }
+    }
+
+    /// Build a `usage_error` message for a CLI argument-parsing failure. Emitted
+    /// from `cli.rs` on the clap parse-failure path when JSON output was
+    /// requested; `message` is clap's rendered (ANSI-stripped) error text.
+    pub fn usage_error(message: String) -> Self {
+        Self {
+            reason: Self::RUNTIME_REASON,
+            code: ErrorCode::UsageError,
+            http_status: None,
+            message,
         }
     }
 }
@@ -441,6 +464,99 @@ mod tests {
             output,
             concat!(r#"{"reason":"machine-only-message","value":"ok"}"#, "\n")
         );
+    }
+
+    // --- Error envelope wiring (Part A / F1) ---
+
+    use crate::errors::NotFound;
+    use anyhow::anyhow;
+    use serde_json::Value;
+    use turnkey_client::TurnkeyClientError;
+
+    /// Emit `error` through a JSON `TestShell` and parse the single NDJSON line.
+    fn emit_error_json(error: &anyhow::Error) -> Value {
+        let mut shell = TestShell::with_json_formatter();
+        shell.emit(&ErrorMessage::from_error(error)).unwrap();
+        let line = String::from_utf8(shell.into_stdout()).unwrap();
+        // Exactly one NDJSON object, newline-terminated.
+        assert_eq!(line.matches('\n').count(), 1, "expected one NDJSON line");
+        serde_json::from_str(line.trim_end()).expect("emitted line should be valid JSON")
+    }
+
+    // The `code` taxonomy and its classification are owned and unit-tested in
+    // `crate::errors`. The tests below only assert the consumer wiring: that
+    // `ErrorMessage::from_error` renders the full chain, serializes
+    // `code`/`httpStatus` correctly, and preserves the `missing-required-input`
+    // reason override.
+
+    #[test]
+    fn missing_required_input_keeps_its_reason_and_code() {
+        let error = anyhow::Error::new(MissingRequiredInput::new("--app-id"))
+            .context("resolving required inputs");
+        let json = emit_error_json(&error);
+
+        assert_eq!(json["reason"], "missing-required-input");
+        assert_eq!(json["code"], "missing_required_input");
+        assert!(json.get("httpStatus").is_none());
+        let message = json["message"].as_str().unwrap();
+        assert!(message.contains("resolving required inputs"));
+        assert!(message.contains("--app-id is required in non-interactive mode"));
+    }
+
+    #[test]
+    fn unexpected_http_404_is_not_found_with_status_and_full_chain() {
+        let error = anyhow::Error::new(TurnkeyClientError::UnexpectedHttpStatus(
+            404,
+            r#"{"message":"missing deployment"}"#.to_string(),
+        ))
+        .context("failed to fetch deployment abc-123");
+        let json = emit_error_json(&error);
+
+        assert_eq!(json["reason"], "command-error");
+        assert_eq!(json["code"], "not_found");
+        assert_eq!(json["httpStatus"], 404);
+        let message = json["message"].as_str().unwrap();
+        // Full chain: both the context layer AND the underlying body.
+        assert!(message.contains("failed to fetch deployment abc-123"));
+        assert!(message.contains("404"));
+        assert!(message.contains("missing deployment"));
+    }
+
+    #[test]
+    fn empty_response_not_found_serializes_without_http_status() {
+        let error = anyhow::Error::new(NotFound::new("deployment", "abc-123"))
+            .context("failed to fetch deployment abc-123");
+        let json = emit_error_json(&error);
+
+        assert_eq!(json["reason"], "command-error");
+        assert_eq!(json["code"], "not_found");
+        assert!(json.get("httpStatus").is_none());
+        let message = json["message"].as_str().unwrap();
+        assert!(message.contains("failed to fetch deployment abc-123"));
+        assert!(message.contains("deployment not found: abc-123"));
+    }
+
+    #[test]
+    fn unrecognized_error_falls_back_to_command_error() {
+        let error = anyhow!("some other failure").context("while doing a thing");
+        let json = emit_error_json(&error);
+        assert_eq!(json["reason"], "command-error");
+        assert_eq!(json["code"], "command_error");
+        assert!(json.get("httpStatus").is_none());
+    }
+
+    #[test]
+    fn message_renders_full_anyhow_chain() {
+        // Two context layers stacked on a base error — all three must appear,
+        // proving `{:#}` (alternate) rendering rather than only the top layer.
+        let error = anyhow!("base failure")
+            .context("middle context")
+            .context("top context");
+        let json = emit_error_json(&error);
+        let message = json["message"].as_str().unwrap();
+        assert!(message.contains("top context"));
+        assert!(message.contains("middle context"));
+        assert!(message.contains("base failure"));
     }
 
     #[test]
