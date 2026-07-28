@@ -54,8 +54,10 @@ Default guidance for coding-agent runs in this repository.
 - Keep fields on Clap `Args` structs private unless another construction path is
   intentional. Downstream functions should accept validated domain inputs, not
   a publicly constructible bag of CLI options.
-- Reject incompatible modes before loading unrelated config, authenticating,
-  signing, or making network requests.
+- Reject incompatibilities that can be determined from parsed CLI arguments
+  immediately after parsing, before loading configuration or credentials,
+  authenticating, signing, or making network requests. If validation requires
+  configuration, load only the configuration needed for that validation first.
 
 ## Types and data flow
 
@@ -64,17 +66,18 @@ Default guidance for coding-agent runs in this repository.
   choices and required relationships.
 - Keep each identity or decision in one authoritative place. Do not duplicate
   values across related structs when they could diverge.
-- Parse identifiers into domain types such as `Uuid` at CLI, config, and API
-  boundaries. Compare typed values internally and convert them to strings only
-  when an external wire type requires it.
+- Parse identifiers whose domain contract guarantees a specific format into the
+  corresponding domain type, such as `Uuid`, at CLI, config, and API boundaries.
+  Do not assume that every field named `*_id` is a UUID; preserve opaque or
+  forward-compatible identifiers as strings or dedicated domain wrappers.
+  Compare typed values internally and convert them to strings only when an
+  external wire type requires it.
 - Validate or resolve inputs once, then pass a narrow validated type into
   creation or transformation code. Prefer an infallible transformation after
   validation over a helper that repeats validation deeper in the call stack.
 - Keep call stacks flat. Inline a one-use helper when it only adds nesting,
   caller-specific policy, or hidden cloning; retain helpers that provide a
   coherent reusable discovery or transformation operation.
-- Borrow before cloning when the source outlives the operation. Make deliberate
-  ownership-boundary clones visible at the call site.
 - Match enums exhaustively when variants require distinct behavior. Use a
   wildcard only when all current and future non-target variants are
   intentionally handled alike.
@@ -120,8 +123,11 @@ Default guidance for coding-agent runs in this repository.
 
 ## Tests and verification
 
-- Prefer complete structural equality over substring or partial-field
-  assertions. Use test-only `Debug` and `PartialEq` derives when those traits
+- Prefer complete structural equality when the complete value or serialized
+  shape is the contract. Use focused field or predicate assertions when a test
+  deliberately covers only one property and unrelated fields are outside its
+  scope; avoid substring assertions when an exact structured representation is
+  available. Use test-only `Debug` and `PartialEq` derives when those traits
   should not expand the release API.
 - Avoid `unreachable!()` in tests; use exact equality, pattern assertions, or a
   descriptive failure.
