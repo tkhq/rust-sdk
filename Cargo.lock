@@ -4206,6 +4206,7 @@ dependencies = [
  "qos_crypto",
  "qos_nsm",
  "qos_p256",
+ "reqwest",
  "rexpect",
  "serde",
  "serde_json",

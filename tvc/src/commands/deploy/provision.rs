@@ -481,7 +481,7 @@ mod tests {
         assert_eq!(
             value,
             serde_json::json!({
-                "reason": "provisioning-share-created",
+                "reason": "provisioning_share_created",
                 "provisioningShareId": "provisioning-share-id",
             })
         );

@@ -585,12 +585,14 @@ fn signature_component(value: &str, component: &str) -> Result<Vec<u8>> {
 }
 
 pub(crate) fn hosted_activity_error(operation: &str, error: TurnkeyClientError) -> anyhow::Error {
-    match error {
-        TurnkeyClientError::ActivityRequiresApproval(activity_id) => anyhow!(
+    let context = match &error {
+        TurnkeyClientError::ActivityRequiresApproval(activity_id) => format!(
             "failed to {operation}: activity {activity_id} requires additional approvals or authentication"
         ),
-        error => anyhow!("failed to {operation}: {error}"),
-    }
+        _ => format!("failed to {operation}"),
+    };
+
+    anyhow::Error::new(error).context(context)
 }
 
 pub(crate) fn timestamp_ms() -> Result<u128> {
@@ -924,5 +926,32 @@ mod tests {
             error.to_string(),
             "failed to sign manifest with hosted operator: activity activity-id requires additional approvals or authentication"
         );
+        assert!(matches!(
+            error.downcast_ref::<TurnkeyClientError>(),
+            Some(TurnkeyClientError::ActivityRequiresApproval(activity_id))
+                if activity_id == "activity-id"
+        ));
+    }
+
+    #[test]
+    fn hosted_activity_error_preserves_client_error_source() {
+        let error = hosted_activity_error(
+            "create hosted TVC operator",
+            TurnkeyClientError::UnexpectedHttpStatus(403, "forbidden".to_string()),
+        );
+
+        assert_eq!(error.to_string(), "failed to create hosted TVC operator");
+        assert_eq!(
+            crate::errors::render_error_chain(&error),
+            "failed to create hosted TVC operator: HTTP response was not successful: 403 (forbidden)"
+        );
+        let classification = crate::errors::classify(&error);
+        assert_eq!(classification.code, crate::errors::ErrorCode::Unauthorized);
+        assert_eq!(classification.http_status, Some(403));
+        assert!(matches!(
+            error.downcast_ref::<TurnkeyClientError>(),
+            Some(TurnkeyClientError::UnexpectedHttpStatus(403, body))
+                if body == "forbidden"
+        ));
     }
 }

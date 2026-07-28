@@ -165,7 +165,7 @@ fn generate_local_quorum_key_json_output_emits_structured_message() {
     assert_eq!(lines.len(), 1, "expected one JSON message, got {stdout:?}");
 
     let message: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
-    assert_eq!(message["reason"], "quorum-key-generated");
+    assert_eq!(message["reason"], "quorum_key_generated");
     assert_eq!(message["threshold"], 2);
     assert_eq!(message["metadataPath"], metadata_path.display().to_string());
     assert!(message["quorumKeyPublic"].is_string());

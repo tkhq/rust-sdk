@@ -3,6 +3,7 @@
 use crate::{
     client::build_client,
     config::turnkey::Config,
+    errors::MissingResource,
     local_operator_key::LocalOperatorSeedSource,
     operator::{OperatorCtx, ResolvedOperator, resolve_operator},
     outcome::Outcome,
@@ -118,8 +119,7 @@ struct PostedApproval {
     quorum_reached: Option<bool>,
 }
 
-/// Terminal shapes for `deploy approve` (reasons share the
-/// `manifest-approval-*` prefix).
+/// Terminal shapes for `deploy approve` (reasons share the `manifest_approval_*` prefix).
 pub enum ApproveOutcome {
     /// Approval generated and posted to the API.
     Posted(ApprovalPosted),
@@ -724,7 +724,7 @@ async fn fetch_manifest_from_deploy(
 ) -> anyhow::Result<(VersionedManifest, String)> {
     shell_println!(ctx, "Fetching deployment {deploy_id}...")?;
 
-    let auth = crate::client::build_client().await?;
+    let auth = build_client().await?;
 
     let request = GetTvcDeploymentRequest {
         organization_id: auth.org_id.clone(),
@@ -735,15 +735,15 @@ async fn fetch_manifest_from_deploy(
         .client
         .get_tvc_deployment(request)
         .await
-        .context("failed to fetch deployment")?;
+        .with_context(|| format!("failed to fetch deployment {deploy_id}"))?;
 
     let deployment = response
         .tvc_deployment
-        .ok_or_else(|| anyhow!("deployment not found: {deploy_id}"))?;
+        .ok_or_else(|| MissingResource::new("deployment", deploy_id.to_string()))?;
 
     let tvc_manifest = deployment
         .manifest
-        .ok_or_else(|| anyhow!("manifest not found in deployment"))?;
+        .ok_or_else(|| MissingResource::new("manifest", format!("deployment {deploy_id}")))?;
 
     let manifest = VersionedManifest::try_from_slice_compat(&tvc_manifest.manifest)
         .context("failed to parse manifest from deployment")?;
@@ -937,7 +937,7 @@ mod tests {
         assert_eq!(
             value,
             serde_json::json!({
-                "reason": "manifest-approval-posted",
+                "reason": "manifest_approval_posted",
                 "writtenTo": "approval.json",
                 "manifestId": "manifest-123",
                 "operatorId": "operator-456",
@@ -968,7 +968,7 @@ mod tests {
         assert_eq!(
             value,
             serde_json::json!({
-                "reason": "manifest-approval-generated",
+                "reason": "manifest_approval_generated",
                 "approval": {
                     "signature": "dead",
                     "member": {
@@ -989,7 +989,7 @@ mod tests {
 
         assert_eq!(
             value,
-            serde_json::json!({ "reason": "manifest-approval-dry-run" })
+            serde_json::json!({ "reason": "manifest_approval_dry_run" })
         );
     }
 
