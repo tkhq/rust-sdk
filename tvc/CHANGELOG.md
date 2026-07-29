@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.13.1](https://github.com/tkhq/rust-sdk/compare/tvc-v0.13.0...tvc-v0.13.1) - 2026-07-29
+
+### Other
+
+- Merge pull request #219 from tkhq/richard/agents.md
+- *(tvc)* add wallet_id to operator create output
+- *(tvc)* followup agents.md updates
+
 ## [0.13.0](https://github.com/tkhq/rust-sdk/compare/tvc-v0.12.0...tvc-v0.13.0) - 2026-07-28
 
 ### Added
