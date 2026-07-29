@@ -67,6 +67,7 @@ pub struct Args {
 pub struct OperatorCreated {
     name: String,
     operator_id: Uuid,
+    wallet_id: Uuid,
     encrypt_public_key: String,
     sign_public_key: String,
     composite_public_key: String,
@@ -80,12 +81,14 @@ impl Display for OperatorCreated {
             r#"Hosted operator created!
 Operator name: {}
 Operator ID: {}
+Wallet ID: {}
 Encryption public key: {}
 Signing public key: {}
 Composite public key: {}
 Saved: true"#,
             self.name,
             self.operator_id,
+            self.wallet_id,
             self.encrypt_public_key,
             self.sign_public_key,
             self.composite_public_key
@@ -153,6 +156,7 @@ fn output_from_record(record: OperatorRecord) -> Result<OperatorCreated> {
     Ok(OperatorCreated {
         name,
         operator_id: hosted.operator_id,
+        wallet_id: hosted.wallet_id,
         encrypt_public_key: hosted.encrypt_public_key,
         sign_public_key: hosted.sign_public_key,
         composite_public_key,
@@ -222,6 +226,7 @@ mod tests {
                 "reason": "operator_created",
                 "name": "tvc-operator",
                 "operatorId": "11111111-1111-4111-8111-111111111111",
+                "walletId": "22222222-2222-4222-8222-222222222222",
                 "encryptPublicKey": format!("04{}", "11".repeat(64)),
                 "signPublicKey": format!("04{}", "22".repeat(64)),
                 "compositePublicKey": format!("04{}04{}", "11".repeat(64), "22".repeat(64)),
