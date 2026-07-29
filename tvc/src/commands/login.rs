@@ -1,5 +1,6 @@
 //! Login command for authenticating with Turnkey.
 
+use crate::client::build_turnkey_client;
 use crate::config::turnkey::{
     API_BASE_URL_PROD, Config, KeyCurve, OperatorRecordKind, OrgConfig, StoredApiKey,
     StoredQosOperatorKey, dashboard_base_url, default_api_key_path, default_operator_key_path,
@@ -617,11 +618,7 @@ async fn verify_credentials(
     let stamper = TurnkeyP256ApiKey::from_strings(&api_key.private_key, Some(&api_key.public_key))
         .context("failed to load API key")?;
 
-    let client = turnkey_client::TurnkeyClient::builder()
-        .api_key(stamper)
-        .base_url(api_base_url)
-        .build()
-        .context("failed to build Turnkey client")?;
+    let client = build_turnkey_client(stamper, api_base_url)?;
 
     let request = GetWhoamiRequest {
         organization_id: org_id.to_string(),

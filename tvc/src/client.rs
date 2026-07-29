@@ -3,6 +3,7 @@
 use crate::config::turnkey::{Config, StoredApiKey};
 use crate::errors::MissingResource;
 use anyhow::{Context, Result, anyhow, bail};
+use reqwest::header::{HeaderMap, HeaderValue};
 use tracing::debug;
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use turnkey_client::{
@@ -120,6 +121,34 @@ async fn load_credentials_from_config() -> Result<(String, String, String, Strin
     ))
 }
 
+/// Header carrying the tvc release version on every API request. The backend
+/// enforces a minimum-version floor on it (enforce-when-present) to retire
+/// known-defective releases with an upgrade prompt.
+const TVC_CLIENT_VERSION_HEADER: &str = "X-TVC-CLIENT-VERSION";
+
+/// Build the Turnkey API client used for all tvc requests.
+///
+/// Every tvc client must be constructed here: this is the single place that
+/// stamps [`TVC_CLIENT_VERSION_HEADER`] with this crate's release version, and
+/// the backend's version gate relies on it riding every request.
+pub(crate) fn build_turnkey_client(
+    stamper: TurnkeyP256ApiKey,
+    api_base_url: &str,
+) -> Result<TurnkeyClient<TurnkeyP256ApiKey>> {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        TVC_CLIENT_VERSION_HEADER,
+        HeaderValue::from_static(env!("CARGO_PKG_VERSION")),
+    );
+
+    TurnkeyClient::builder()
+        .api_key(stamper)
+        .base_url(api_base_url)
+        .with_reqwest_builder(|builder| builder.default_headers(headers))
+        .build()
+        .context("failed to build Turnkey client")
+}
+
 fn build_authed_client(
     org_id: &str,
     api_base_url: &str,
@@ -131,11 +160,7 @@ fn build_authed_client(
         .context("failed to load API key")?;
 
     debug!(%api_base_url, "building Turnkey API client");
-    let client = TurnkeyClient::builder()
-        .api_key(stamper)
-        .base_url(api_base_url)
-        .build()
-        .context("failed to build Turnkey client")?;
+    let client = build_turnkey_client(stamper, api_base_url)?;
 
     debug!("authenticated Turnkey client ready");
 
@@ -208,4 +233,33 @@ fn load_credentials_from_env_vars() -> Result<Option<(String, String, String, St
         api_key_public.unwrap(),
         api_key_private.unwrap(),
     )))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wiremock::matchers::{header, method};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    #[tokio::test]
+    async fn built_clients_stamp_the_tvc_release_version_on_every_request() {
+        let server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(header("X-TVC-CLIENT-VERSION", env!("CARGO_PKG_VERSION")))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let client = build_turnkey_client(TurnkeyP256ApiKey::generate(), &server.uri())
+            .expect("client builds");
+        let response: serde_json::Value = client
+            .process_request(&serde_json::json!({}), "/any/path".to_string())
+            .await
+            .expect("request carrying the version header matches the mock");
+
+        assert_eq!(response, serde_json::json!({}));
+        server.verify().await;
+    }
 }

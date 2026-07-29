@@ -4220,6 +4220,7 @@ dependencies = [
  "turnkey_client",
  "turnkey_enclave_encrypt",
  "uuid",
+ "wiremock",
  "zeroize",
 ]
 
