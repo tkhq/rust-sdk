@@ -38,7 +38,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
 
     filter_by_name(&mut apps, args.name.as_deref());
 
-    Ok(Outcome::AppList(AppsListed {
+    Ok(Outcome::AppsListed(AppsListed {
         apps: apps.into_iter().map(AppSummary::from).collect(),
     }))
 }

@@ -41,7 +41,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
         .await
         .context("failed to set TVC app live deployment")?;
 
-    Ok(Outcome::AppSetLiveDeploy(LiveDeploymentSet {
+    Ok(Outcome::LiveDeploymentSet(LiveDeploymentSet {
         deployment_id,
         activity_id: result.activity_id,
         activity_status: result.status,

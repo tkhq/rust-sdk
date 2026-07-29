@@ -438,7 +438,7 @@ async fn run_with_resolved_inputs(
         .await
         .context("failed to create TVC deployment")?;
 
-    Ok(Outcome::DeployCreate(DeploymentCreated {
+    Ok(Outcome::DeploymentCreated(DeploymentCreated {
         deployment_id: result.result.deployment_id,
         app_id: deploy_config.app_id,
         pinned_image_url,

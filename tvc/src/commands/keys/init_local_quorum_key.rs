@@ -39,7 +39,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     std::fs::write(&args.output, json)
         .with_context(|| format!("failed to write file: {}", args.output.display()))?;
 
-    Ok(Outcome::KeysInitQuorumKey(QuorumKeyConfigCreated {
+    Ok(Outcome::QuorumKeyConfigCreated(QuorumKeyConfigCreated {
         path: args.output.display().to_string(),
     }))
 }

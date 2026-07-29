@@ -28,27 +28,6 @@ pub enum ColorChoice {
     Never,
 }
 
-pub trait Message: Serialize {
-    fn reason(&self) -> &'static str;
-
-    fn human_message(&self) -> String;
-
-    fn to_json_string(&self) -> String {
-        #[derive(Serialize)]
-        struct WithReason<'a, S: Serialize + ?Sized> {
-            reason: &'a str,
-            #[serde(flatten)]
-            msg: &'a S,
-        }
-
-        serde_json::to_string(&WithReason {
-            reason: self.reason(),
-            msg: self,
-        })
-        .expect("serializing TVC output message should not fail")
-    }
-}
-
 pub struct Shell<Out = Stdout, Err = Stderr> {
     stdout: Out,
     stderr: Err,
@@ -94,22 +73,27 @@ impl<W, W2> Shell<W, W2> {
 }
 
 impl<W: Write, W2: Write> Shell<W, W2> {
-    /// Emit a machine-consumable message: one JSON line in JSON mode, or the
-    /// message's `human_message()` in human mode.
+    /// Emit a machine-consumable message: one JSON line in JSON mode, or its
+    /// `Display` rendering in human mode.
     ///
-    /// An empty `human_message()` means the outcome is machine-only; human
-    /// mode prints nothing (JSON mode still emits the message).
-    pub fn emit<M: Message>(&mut self, message: &M) -> Result<()> {
+    /// An empty rendering means the message is machine-only; human mode
+    /// prints nothing (JSON mode still emits the message). Every message
+    /// carries its own `reason` discriminator in its serialized form —
+    /// `Outcome` via its serde tag, everything else as a field or
+    /// struct-level tag.
+    pub fn emit<M: Serialize + Display>(&mut self, message: &M) -> Result<()> {
         match self.message_format {
             MessageFormat::Human => {
-                let text = message.human_message();
+                let text = message.to_string();
+
                 if text.is_empty() {
                     return Ok(());
                 }
+
                 self.human().line(text)
             }
             MessageFormat::Json => {
-                writeln!(self.stdout, "{}", message.to_json_string())?;
+                writeln!(self.stdout, "{}", serde_json::to_string(message)?)?;
                 Ok(())
             }
         }
@@ -282,7 +266,6 @@ impl Error for MissingRequiredInput {}
 
 #[derive(Serialize)]
 pub struct ErrorMessage {
-    #[serde(skip)]
     reason: &'static str,
     code: ErrorCode,
     #[serde(rename = "httpStatus", skip_serializing_if = "Option::is_none")]
@@ -333,13 +316,9 @@ impl ErrorMessage {
     }
 }
 
-impl Message for ErrorMessage {
-    fn reason(&self) -> &'static str {
-        self.reason
-    }
-
-    fn human_message(&self) -> String {
-        self.message.clone()
+impl Display for ErrorMessage {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.message)
     }
 }
 
@@ -392,22 +371,19 @@ mod tests {
     }
 
     #[derive(Serialize)]
+    #[serde(tag = "reason", rename = "test_message")]
     struct TestMessage {
         value: &'static str,
     }
 
-    impl Message for TestMessage {
-        fn reason(&self) -> &'static str {
-            "test_message"
-        }
-
-        fn human_message(&self) -> String {
-            format!("value: {}", self.value)
+    impl Display for TestMessage {
+        fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+            write!(f, "value: {}", self.value)
         }
     }
 
     #[test]
-    fn shell_emit_json_flattens_reason_into_message() {
+    fn shell_emit_json_writes_one_self_tagged_line() {
         let mut shell = TestShell::with_json_formatter();
 
         shell.emit(&TestMessage { value: "ok" }).unwrap();
@@ -419,7 +395,7 @@ mod tests {
     }
 
     #[test]
-    fn shell_emit_human_uses_human_message() {
+    fn shell_emit_human_uses_display() {
         let mut shell = TestShell::with_human_formatter();
 
         shell.emit(&TestMessage { value: "ok" }).unwrap();
@@ -432,18 +408,14 @@ mod tests {
         value: &'static str,
     }
 
-    impl Message for MachineOnlyMessage {
-        fn reason(&self) -> &'static str {
-            "machine_only_message"
-        }
-
-        fn human_message(&self) -> String {
-            String::new()
+    impl Display for MachineOnlyMessage {
+        fn fmt(&self, _: &mut Formatter<'_>) -> fmt::Result {
+            Ok(())
         }
     }
 
     #[test]
-    fn shell_emit_human_skips_empty_human_message() {
+    fn shell_emit_human_skips_empty_rendering() {
         let mut shell = TestShell::with_human_formatter();
 
         shell.emit(&MachineOnlyMessage { value: "ok" }).unwrap();
@@ -453,16 +425,13 @@ mod tests {
     }
 
     #[test]
-    fn shell_emit_json_still_emits_message_with_empty_human_message() {
+    fn shell_emit_json_still_emits_message_with_empty_rendering() {
         let mut shell = TestShell::with_json_formatter();
 
         shell.emit(&MachineOnlyMessage { value: "ok" }).unwrap();
 
         let output = String::from_utf8(shell.into_stdout()).unwrap();
-        assert_eq!(
-            output,
-            concat!(r#"{"reason":"machine_only_message","value":"ok"}"#, "\n")
-        );
+        assert_eq!(output, concat!(r#"{"value":"ok"}"#, "\n"));
     }
 
     use anyhow::anyhow;

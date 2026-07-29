@@ -2,6 +2,7 @@
 
 use crate::{
     client::build_client,
+    commands::Run,
     config::turnkey::Config,
     errors::MissingResource,
     local_operator_key::LocalOperatorSeedSource,
@@ -129,6 +130,16 @@ pub enum ApproveOutcome {
     DryRun(ApprovalDryRun),
 }
 
+impl From<ApproveOutcome> for Outcome {
+    fn from(outcome: ApproveOutcome) -> Self {
+        match outcome {
+            ApproveOutcome::Posted(msg) => Outcome::ManifestApprovalPosted(msg),
+            ApproveOutcome::NotPosted(msg) => Outcome::ManifestApprovalGenerated(msg),
+            ApproveOutcome::DryRun(msg) => Outcome::ManifestApprovalDryRun(msg),
+        }
+    }
+}
+
 impl Serialize for ApproveOutcome {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match self {
@@ -231,6 +242,23 @@ impl Display for ApprovalGenerated {
 }
 
 #[derive(Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApprovalAlreadyPosted {
+    operator_id: String,
+    approval_id: String,
+}
+
+impl Display for ApprovalAlreadyPosted {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Operator {} has already approved this manifest (approval ID: {}). Nothing to post.",
+            self.operator_id, self.approval_id
+        )
+    }
+}
+
+#[derive(Default, Serialize)]
 pub struct ApprovalDryRun {}
 
 impl Display for ApprovalDryRun {
@@ -254,20 +282,23 @@ struct ResolvedApproveInputs {
     post_target: Option<PostTarget>,
 }
 
-pub async fn run(ctx: &mut StdCtx, mut args: Args) -> anyhow::Result<Outcome> {
-    let operator_seed_source = LocalOperatorSeedSource::from_args(
-        args.operator_seed.take(),
-        args.operator_seed_path.take(),
-    )?;
+impl Run for Args {
+    type Outcome = ApproveOutcome;
 
-    let inputs = if ctx.is_non_interactive() {
-        build_inputs_non_interactive(ctx, args, operator_seed_source).await?
-    } else {
-        build_inputs_interactive(ctx, args, operator_seed_source).await?
-    };
+    async fn run(mut self, ctx: &mut StdCtx) -> anyhow::Result<Self::Outcome> {
+        let operator_seed_source = LocalOperatorSeedSource::from_args(
+            self.operator_seed.take(),
+            self.operator_seed_path.take(),
+        )?;
 
-    let outcome = run_with_resolved_inputs(ctx, inputs).await?;
-    Ok(Outcome::DeployApprove(outcome))
+        let inputs = if ctx.is_non_interactive() {
+            build_inputs_non_interactive(ctx, self, operator_seed_source).await?
+        } else {
+            build_inputs_interactive(ctx, self, operator_seed_source).await?
+        };
+
+        run_with_resolved_inputs(ctx, inputs).await
+    }
 }
 
 async fn build_inputs_interactive(
@@ -756,7 +787,6 @@ async fn fetch_manifest_from_deploy(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::output::Message;
     use turnkey_client::generated::external::data::v1::{
         TvcOperator, TvcOperatorApproval, TvcOperatorSet,
     };
@@ -929,10 +959,8 @@ mod tests {
 
     #[test]
     fn approval_posted_serializes_expected_json() {
-        let value: serde_json::Value = serde_json::from_str(
-            &Outcome::DeployApprove(ApproveOutcome::Posted(posted_to_file())).to_json_string(),
-        )
-        .unwrap();
+        let value =
+            serde_json::to_value(Outcome::from(ApproveOutcome::Posted(posted_to_file()))).unwrap();
 
         assert_eq!(
             value,
@@ -960,10 +988,8 @@ mod tests {
             written_to: None,
         };
 
-        let value: serde_json::Value = serde_json::from_str(
-            &Outcome::DeployApprove(ApproveOutcome::NotPosted(generated)).to_json_string(),
-        )
-        .unwrap();
+        let value =
+            serde_json::to_value(Outcome::from(ApproveOutcome::NotPosted(generated))).unwrap();
 
         assert_eq!(
             value,
@@ -982,10 +1008,8 @@ mod tests {
 
     #[test]
     fn approval_dry_run_serializes_reason_only() {
-        let value: serde_json::Value = serde_json::from_str(
-            &Outcome::DeployApprove(ApproveOutcome::DryRun(ApprovalDryRun {})).to_json_string(),
-        )
-        .unwrap();
+        let value =
+            serde_json::to_value(Outcome::from(ApproveOutcome::DryRun(ApprovalDryRun {}))).unwrap();
 
         assert_eq!(
             value,

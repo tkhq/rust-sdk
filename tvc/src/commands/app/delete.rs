@@ -39,7 +39,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
         .await
         .context("failed to delete TVC app and deployments")?;
 
-    Ok(Outcome::AppDelete(AppDeleted {
+    Ok(Outcome::AppDeleted(AppDeleted {
         app_id: result.result.app_id,
         activity_id: result.activity_id,
         activity_status: result.status,

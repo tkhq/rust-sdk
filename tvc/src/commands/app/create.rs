@@ -262,7 +262,7 @@ async fn run_with_config(ctx: &mut StdCtx, args: Args, app_config: AppConfig) ->
     config.set_last_operator_ids(&operator_ids)?;
     config.save().await?;
 
-    Ok(Outcome::AppCreate(AppCreated {
+    Ok(Outcome::AppCreated(AppCreated {
         app_id,
         name: app_config.name,
         manifest_set_id: result.result.manifest_set_id,
