@@ -9,7 +9,7 @@
 //! `reason` strings are stable snake_case discriminators
 
 use crate::commands::deploy::approve::ApproveOutcome;
-use crate::commands::{app, deploy, keys, login, operator};
+use crate::commands::{app, deploy, keys, login, operator, version};
 use crate::output::Message;
 use serde::{Serialize, Serializer};
 
@@ -43,6 +43,7 @@ pub enum Outcome {
     KeysGenerateQuorumKey(keys::generate_local_quorum_key::QuorumKeyGenerated),
     KeysInitQuorumKey(keys::init_local_quorum_key::QuorumKeyConfigCreated),
     KeysReEncryptShare(keys::re_encrypt_local_share::ReEncryptedShareGenerated),
+    Version(version::CliVersion),
 }
 
 /// Apply `$body` to the message carried by whichever variant `$self` is.
@@ -73,6 +74,7 @@ macro_rules! with_message {
             Outcome::KeysGenerateQuorumKey($msg) => $body,
             Outcome::KeysInitQuorumKey($msg) => $body,
             Outcome::KeysReEncryptShare($msg) => $body,
+            Outcome::Version($msg) => $body,
         }
     };
 }
@@ -115,6 +117,7 @@ impl Message for Outcome {
             Outcome::KeysGenerateQuorumKey(_) => "quorum_key_generated",
             Outcome::KeysInitQuorumKey(_) => "quorum_key_config_created",
             Outcome::KeysReEncryptShare(_) => "re_encrypted_share_generated",
+            Outcome::Version(_) => "version",
         }
     }
 
@@ -173,6 +176,7 @@ mod tests {
             Outcome::KeysReEncryptShare(
                 keys::re_encrypt_local_share::ReEncryptedShareGenerated::default(),
             ),
+            Outcome::Version(version::CliVersion::default()),
         ]
     }
 

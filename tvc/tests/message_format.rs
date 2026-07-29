@@ -132,3 +132,29 @@ fn login_missing_org_in_json_mode_outputs_structured_error_to_stdout() {
     assert_eq!(message["code"], "missing_required_input");
     assert!(message["message"].as_str().unwrap().contains("--org"));
 }
+
+#[test]
+fn version_defaults_to_human_output() {
+    cargo_bin_cmd!("tvc")
+        .arg("version")
+        .assert()
+        .success()
+        .stdout(concat!(env!("CARGO_PKG_VERSION"), "\n"));
+}
+
+#[test]
+fn version_json_output_emits_structured_message() {
+    let assert = cargo_bin_cmd!("tvc")
+        .arg("--message-format=json")
+        .arg("version")
+        .assert()
+        .success();
+
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+    let lines: Vec<_> = stdout.lines().collect();
+    assert_eq!(lines.len(), 1, "expected one JSON message, got {stdout:?}");
+
+    let message: Value = serde_json::from_str(lines[0]).unwrap();
+    assert_eq!(message["reason"], "version");
+    assert_eq!(message["version"], env!("CARGO_PKG_VERSION"));
+}
