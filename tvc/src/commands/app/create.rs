@@ -88,6 +88,81 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
         }
     }
 
+    // Key-collision guards (after reuse resolution, which may have cleared
+    // new_operators): duplicated keys mint distinct operator IDs backed by
+    // identical keys. Detection is pure; this endpoint resolves per mode.
+    let saved_key = load_saved_operator_public_key().await;
+
+    if let Some(SavedKeyCollision {
+        operator_names,
+        existing_ids,
+    }) = find_saved_key_collision(
+        app_config.manifest_set_params.as_ref(),
+        saved_key.as_deref(),
+        &saved_ids,
+    ) {
+        let names = operator_names.join(", ");
+
+        if ctx.is_non_interactive() {
+            let ids = existing_ids.join(", ");
+            bail!(
+                r#"manifestSetParams.newOperators entries [{names}] use the saved local operator key, which already backs operator ID(s) [{ids}].
+Creating the app would mint another operator ID with identical keys.
+Set manifestSetParams.existingOperatorIds to reuse an existing operator, use a distinct newOperators publicKey to create a new one, or rerun interactively to choose."#
+            );
+        }
+
+        shell_println!(
+            ctx,
+            "Operator(s) [{names}] in manifestSetParams use the saved local operator key, which already backs existing operator(s)."
+        )?;
+
+        let mut options: Vec<SavedKeyResolution> = existing_ids
+            .into_iter()
+            .map(SavedKeyResolution::Reuse)
+            .collect();
+        options.push(SavedKeyResolution::CreateAnyway);
+        options.push(SavedKeyResolution::Cancel);
+
+        match prompts::select(
+            "A newOperators key already backs existing operator(s). How do you want to proceed?",
+            options,
+        )? {
+            SavedKeyResolution::Reuse(id) => apply_operator_reuse(ctx, &mut app_config, id)?,
+            SavedKeyResolution::CreateAnyway => {}
+            SavedKeyResolution::Cancel => bail!("operation cancelled by user: app creation"),
+        }
+    }
+
+    // Within-set duplicates, checked second (a Reuse choice above clears the
+    // manifest set's new_operators). Only sets the user wrote are checked; the
+    // built-in default share set is guarded by a unit test instead.
+    for (set, params) in [
+        ("manifestSetParams", app_config.manifest_set_params.as_ref()),
+        ("shareSetParams", app_config.share_set_params.as_ref()),
+    ] {
+        let Some(params) = params else { continue };
+
+        for group in find_duplicate_new_operator_keys(params) {
+            let names = group.join(", ");
+
+            if ctx.is_non_interactive() {
+                bail!(
+                    r#"{set}.newOperators entries [{names}] share the same public key.
+Each entry would become a separate operator ID backed by identical keys.
+Give each {set}.newOperators entry a distinct publicKey, or replace duplicates with {set}.existingOperatorIds."#
+                );
+            }
+
+            prompts::confirm_or_bail(
+                &format!(
+                    "{set}.newOperators entries [{names}] share the same public key; each will become a separate operator with identical keys. Create anyway?"
+                ),
+                "app creation",
+            )?;
+        }
+    }
+
     run_with_config(ctx, args, app_config).await
 }
 
@@ -158,6 +233,113 @@ async fn load_saved_operator_ids() -> Vec<String> {
     match turnkey::Config::load().await {
         Ok(config) => config.get_last_operator_ids().unwrap_or_default(),
         Err(_) => Vec::new(),
+    }
+}
+
+/// Canonical form for comparing operator public keys from configs and local
+/// key files: trimmed, ASCII-lowercased hex. A string comparison rather than a
+/// parse — app-config keys carry no format guarantee, and a non-key string
+/// simply never matches a real key.
+fn canonical_operator_key(key: &str) -> String {
+    key.trim().to_ascii_lowercase()
+}
+
+/// Manifest-set newOperators entries whose key already backs known operators.
+#[derive(Debug, PartialEq, Eq)]
+struct SavedKeyCollision {
+    /// Names of the newOperators entries using the saved local operator key.
+    operator_names: Vec<String>,
+    /// Operator IDs already backed by that key: config existingOperatorIds
+    /// first, then last-run IDs, deduplicated preserving order.
+    existing_ids: Vec<String>,
+}
+
+/// Detect manifest-set newOperators entries that reuse the saved local
+/// operator key when operator IDs backed by it are already known.
+///
+/// Pure and mode-agnostic: the caller prompts to choose (interactive) or
+/// errors with remediation (non-interactive). Returns `None` when there is no
+/// saved key, no known IDs, or no matching entry — a first run that filled the
+/// saved key into a fresh config stays untouched.
+fn find_saved_key_collision(
+    manifest_set_params: Option<&OperatorSetParams>,
+    saved_public_key: Option<&str>,
+    saved_operator_ids: &[String],
+) -> Option<SavedKeyCollision> {
+    let params = manifest_set_params?;
+    let saved_key = canonical_operator_key(saved_public_key?);
+
+    let operator_names: Vec<String> = params
+        .new_operators
+        .iter()
+        .filter(|operator| canonical_operator_key(&operator.public_key) == saved_key)
+        .map(|operator| operator.name.clone())
+        .collect();
+
+    if operator_names.is_empty() {
+        return None;
+    }
+
+    let mut existing_ids: Vec<String> = Vec::new();
+
+    for id in params
+        .existing_operator_ids
+        .iter()
+        .chain(saved_operator_ids)
+    {
+        if !existing_ids.contains(id) {
+            existing_ids.push(id.clone());
+        }
+    }
+
+    if existing_ids.is_empty() {
+        return None;
+    }
+
+    Some(SavedKeyCollision {
+        operator_names,
+        existing_ids,
+    })
+}
+
+/// Groups of newOperators names (within one set) sharing an identical public
+/// key, in first-occurrence order. Each group would mint multiple operator IDs
+/// backed by the same key.
+fn find_duplicate_new_operator_keys(params: &OperatorSetParams) -> Vec<Vec<String>> {
+    let mut groups: Vec<(String, Vec<String>)> = Vec::new();
+
+    for operator in &params.new_operators {
+        let key = canonical_operator_key(&operator.public_key);
+
+        match groups.iter_mut().find(|(existing, _)| *existing == key) {
+            Some((_, names)) => names.push(operator.name.clone()),
+            None => groups.push((key, vec![operator.name.clone()])),
+        }
+    }
+
+    groups
+        .into_iter()
+        .filter_map(|(_, names)| (names.len() > 1).then_some(names))
+        .collect()
+}
+
+/// How the user chose to resolve a saved-key collision.
+enum SavedKeyResolution {
+    /// Reuse this existing operator ID instead of creating a new operator.
+    Reuse(String),
+    /// Create a new operator ID backed by the same key anyway.
+    CreateAnyway,
+    /// Cancel app creation.
+    Cancel,
+}
+
+impl Display for SavedKeyResolution {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Reuse(id) => write!(f, "Reuse existing operator {id} (do not create a new one)"),
+            Self::CreateAnyway => f.write_str("Create a new operator ID backed by the same key"),
+            Self::Cancel => f.write_str("Cancel app creation"),
+        }
     }
 }
 
@@ -614,5 +796,157 @@ mod tests {
         let params = config.manifest_set_params.unwrap();
         assert!(params.new_operators.is_empty());
         assert_eq!(params.existing_operator_ids, vec!["op-1".to_string()]);
+    }
+
+    const SAVED_KEY: &str = "04abcdef";
+
+    fn params_with_operator_keys(operators: &[(&str, &str)]) -> OperatorSetParams {
+        OperatorSetParams {
+            name: "manifest-set".to_string(),
+            threshold: 1,
+            new_operators: operators
+                .iter()
+                .map(|(name, key)| OperatorParams {
+                    name: name.to_string(),
+                    public_key: key.to_string(),
+                })
+                .collect(),
+            existing_operator_ids: vec![],
+        }
+    }
+
+    /// A matching key with no known operator IDs is the first-run happy path
+    /// (fill_interactively defaulted the saved key) -> no collision.
+    #[test]
+    fn saved_key_collision_requires_known_operator_ids() {
+        let params = params_with_operator_keys(&[("op-a", SAVED_KEY)]);
+
+        assert_eq!(
+            find_saved_key_collision(Some(&params), Some(SAVED_KEY), &[]),
+            None
+        );
+    }
+
+    /// IDs saved from the last create run make a matching key a collision.
+    #[test]
+    fn saved_key_collision_fires_on_saved_last_run_ids() {
+        let params = params_with_operator_keys(&[("op-a", SAVED_KEY)]);
+        let saved = vec!["op-1".to_string()];
+
+        assert_eq!(
+            find_saved_key_collision(Some(&params), Some(SAVED_KEY), &saved),
+            Some(SavedKeyCollision {
+                operator_names: vec!["op-a".to_string()],
+                existing_ids: vec!["op-1".to_string()],
+            })
+        );
+    }
+
+    /// Config pinning existingOperatorIds alongside a colliding newOperators
+    /// entry counts as known IDs too.
+    #[test]
+    fn saved_key_collision_fires_on_config_existing_ids() {
+        let mut params = params_with_operator_keys(&[("op-a", SAVED_KEY)]);
+        params.existing_operator_ids = vec!["cfg-op".to_string()];
+
+        assert_eq!(
+            find_saved_key_collision(Some(&params), Some(SAVED_KEY), &[]),
+            Some(SavedKeyCollision {
+                operator_names: vec!["op-a".to_string()],
+                existing_ids: vec!["cfg-op".to_string()],
+            })
+        );
+    }
+
+    /// Config IDs come first, then saved last-run IDs, deduplicated.
+    #[test]
+    fn saved_key_collision_merges_and_dedupes_id_sources() {
+        let mut params = params_with_operator_keys(&[("op-a", SAVED_KEY)]);
+        params.existing_operator_ids = vec!["cfg-op".to_string(), "op-1".to_string()];
+        let saved = vec!["op-1".to_string(), "op-2".to_string()];
+
+        let collision = find_saved_key_collision(Some(&params), Some(SAVED_KEY), &saved).unwrap();
+
+        assert_eq!(collision.existing_ids, vec!["cfg-op", "op-1", "op-2"]);
+    }
+
+    /// A newOperators key that differs from the saved key is a genuinely new
+    /// operator -> no collision.
+    #[test]
+    fn saved_key_collision_ignores_non_matching_key() {
+        let params = params_with_operator_keys(&[("op-a", "04fedcba")]);
+        let saved = vec!["op-1".to_string()];
+
+        assert_eq!(
+            find_saved_key_collision(Some(&params), Some(SAVED_KEY), &saved),
+            None
+        );
+    }
+
+    /// Without a saved local key there is nothing to compare against.
+    #[test]
+    fn saved_key_collision_requires_saved_key() {
+        let params = params_with_operator_keys(&[("op-a", SAVED_KEY)]);
+        let saved = vec!["op-1".to_string()];
+
+        assert_eq!(find_saved_key_collision(Some(&params), None, &saved), None);
+    }
+
+    /// Key comparison canonicalizes hex case and surrounding whitespace.
+    #[test]
+    fn saved_key_collision_canonicalizes_case_and_whitespace() {
+        let params = params_with_operator_keys(&[("op-a", "  04ABCDEF  ")]);
+        let saved = vec!["op-1".to_string()];
+
+        assert_eq!(
+            find_saved_key_collision(Some(&params), Some(SAVED_KEY), &saved),
+            Some(SavedKeyCollision {
+                operator_names: vec!["op-a".to_string()],
+                existing_ids: vec!["op-1".to_string()],
+            })
+        );
+    }
+
+    /// Entries sharing a key are grouped under the key's first occurrence.
+    #[test]
+    fn duplicate_keys_within_set_are_grouped_by_first_occurrence() {
+        let params = params_with_operator_keys(&[("a", "04aa"), ("b", "04bb"), ("c", "04aa")]);
+
+        assert_eq!(
+            find_duplicate_new_operator_keys(&params),
+            vec![vec!["a".to_string(), "c".to_string()]]
+        );
+    }
+
+    /// Distinct keys never form a group.
+    #[test]
+    fn distinct_keys_produce_no_duplicate_groups() {
+        let params = params_with_operator_keys(&[("a", "04aa"), ("b", "04bb")]);
+
+        assert_eq!(
+            find_duplicate_new_operator_keys(&params),
+            Vec::<Vec<String>>::new()
+        );
+    }
+
+    /// Duplicate detection canonicalizes hex case and whitespace.
+    #[test]
+    fn duplicate_detection_canonicalizes_case() {
+        let params = params_with_operator_keys(&[("a", "04AA"), ("b", " 04aa ")]);
+
+        assert_eq!(
+            find_duplicate_new_operator_keys(&params),
+            vec![vec!["a".to_string(), "b".to_string()]]
+        );
+    }
+
+    /// The built-in dev share set must never trip the duplicate guard; this
+    /// protects the default happy path if KNOWN_SHARE_SET_KEYS ever change.
+    #[test]
+    fn default_dev_share_set_has_no_duplicate_keys() {
+        assert_eq!(
+            find_duplicate_new_operator_keys(&AppConfig::share_set_params()),
+            Vec::<Vec<String>>::new()
+        );
     }
 }

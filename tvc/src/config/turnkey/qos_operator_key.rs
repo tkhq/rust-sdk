@@ -8,7 +8,8 @@ use tracing::debug;
 /// Operator key stored in operator.json
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoredQosOperatorKey {
-    /// Hex-encoded compressed public key
+    /// Hex-encoded `qos_p256` composite public key: two uncompressed SEC1
+    /// points (encrypt then sign), 130 bytes total.
     pub public_key: String,
     /// Hex-encoded private key
     pub private_key: String,
