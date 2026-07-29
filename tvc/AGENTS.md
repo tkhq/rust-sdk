@@ -45,6 +45,13 @@ Default guidance for coding-agent runs in this repository.
   belongs in our output — instead of it being silently dropped. Skip this only
   where it adds noise for no value, e.g. reading one or two fields off a large
   API response result.
+- In `tracing` calls, use field shorthand when the variable name matches the
+  field name — `%value` for `Display`, `?value` for `Debug` — rather than
+  `value = %value`. Prefer `#[instrument]` on functions over manually built
+  spans: it captures arguments, propagates async context, and keeps the
+  function body clean. Use `#[instrument(skip(arg))]` for noisy or sensitive
+  arguments and `#[instrument(level = "debug", ret, err)]` when return or
+  error logging helps.
 
 ## CLI boundaries
 
@@ -75,9 +82,20 @@ Default guidance for coding-agent runs in this repository.
 - Validate or resolve inputs once, then pass a narrow validated type into
   creation or transformation code. Prefer an infallible transformation after
   validation over a helper that repeats validation deeper in the call stack.
-- Keep call stacks flat. Inline a one-use helper when it only adds nesting,
-  caller-specific policy, or hidden cloning; retain helpers that provide a
-  coherent reusable discovery or transformation operation.
+- Prefer infallible constructors. A constructor assembles an already-valid
+  value; it does not acquire what it needs. Do fallible acquisition — loading
+  config, resolving addresses, opening handles, fetching credentials — before
+  construction and pass the finished dependencies in, concentrating failure
+  handling at the wiring layer. Reserve a fallible constructor for a type
+  that exists to hold a live, long-lived resource, where constructing and
+  connecting are genuinely the same operation.
+- Keep call stacks flat. Default to inlining one-use helpers — a let-bound
+  block (`let approved = { … };`) names the result without adding a
+  signature. A helper must earn its boundary: actual repeated callers
+  (extract on the third occurrence, not in anticipation of reuse), a
+  genuinely generic unit, or an intentional `pub` surface. A `.clone()`
+  added only to satisfy an extracted signature means the boundary is
+  wrong — dissolve the helper rather than pay the clone.
 - Match enums exhaustively when variants require distinct behavior. Use a
   wildcard only when all current and future non-target variants are
   intentionally handled alike.
