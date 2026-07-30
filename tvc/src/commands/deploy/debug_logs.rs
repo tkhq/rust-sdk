@@ -231,9 +231,9 @@ pub(crate) struct DebugLogLine {
 }
 
 impl Display for DebugLogLine {
+    /// Rebuild the API line and defer to [`format_log_line`] so human output
+    /// stays byte-identical to the pre-outcome rendering.
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        // Rebuild the API line and defer to `format_log_line` so human output
-        // stays byte-identical to the pre-outcome rendering.
         let line = LogLine {
             content: self.content.clone(),
             ts: self.ts.as_ref().map(|ts| Timestamp {
