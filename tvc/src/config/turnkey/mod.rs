@@ -468,7 +468,12 @@ impl Config {
         self.orgs.get(alias).map(|config| (alias, config))
     }
 
-    /// Add or update an organization with default key paths
+    /// Add or update an organization with default key paths.
+    ///
+    /// Callers are responsible for ensuring the alias and organization ID are
+    /// not already registered under another profile; the login command
+    /// enforces one profile per organization before constructing new-org
+    /// inputs. An existing entry under the same alias is replaced wholesale.
     pub fn add_org(&mut self, alias: &str, org_id: String, api_base_url: String) -> Result<()> {
         debug!(org_alias = alias, %api_base_url, "adding organization config");
         let org_config = OrgConfig {
