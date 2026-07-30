@@ -1,6 +1,7 @@
 //! Login command for authenticating with Turnkey.
 
 use crate::client::build_turnkey_client;
+use crate::commands::keys::backup_operator_key;
 use crate::config::turnkey::{
     API_BASE_URL_PROD, Config, KeyCurve, OperatorRecordKind, OrgConfig, StoredApiKey,
     StoredQosOperatorKey, dashboard_base_url, default_api_key_path, default_operator_key_path,
@@ -17,6 +18,7 @@ use serde::Serialize;
 use std::collections::BTreeSet;
 use std::fmt::{self, Display, Formatter};
 use std::io::BufRead;
+use std::path::PathBuf;
 use tracing::{debug, instrument};
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use turnkey_client::generated::GetWhoamiRequest;
@@ -955,6 +957,7 @@ async fn find_or_generate_operator_key(
     if let Some(operator_key) = StoredQosOperatorKey::load(&local.key_path).await? {
         debug!("using existing operator key");
         shell_println!(ctx, "Using existing operator key.")?;
+        shell_println!(ctx, "Tip: back it up with `tvc keys backup-operator-key`.")?;
         return Ok(operator_key);
     }
 
@@ -987,6 +990,56 @@ async fn find_or_generate_operator_key(
         ctx,
         "Make sure to register this as an operator in your organization."
     )?;
+
+    // Onboarding nudge for the freshly generated key. JSON mode already
+    // forces non-interactive; the TTY check keeps piped runs from hanging on
+    // the prompt.
+    if !ctx.is_non_interactive() && prompts::stdin_can_prompt() {
+        shell_println!(ctx)?;
+        shell_println!(
+            ctx,
+            "This key exists only on this machine; if it's lost you cannot \
+             approve deployments with it."
+        )?;
+
+        let mut backed_up = false;
+
+        if prompts::confirm("Back up your operator key now?", true)? {
+            let destination = PathBuf::from(prompts::text(
+                "Backup file path",
+                Some(&format!("operator-{org_alias}-backup.json")),
+            )?);
+
+            // Declining the overwrite skips the backup rather than failing:
+            // login has already succeeded and must not die here.
+            let proceed = !destination.exists()
+                || prompts::confirm(&format!("Overwrite {}?", destination.display()), false)?;
+
+            if proceed {
+                match backup_operator_key::back_up_key(org_alias, &local.key_path, &destination)
+                    .await
+                {
+                    Ok(backed_up_key) => {
+                        shell_println!(ctx)?;
+                        shell_println!(ctx, "{backed_up_key}")?;
+                        backed_up = true;
+                    }
+                    Err(error) => {
+                        // Deliberately swallowed at this endpoint: the backup
+                        // is advisory and the login outcome must still land.
+                        shell_eprintln!(ctx, "WARNING: backup failed: {error:#}")?;
+                    }
+                }
+            }
+        }
+
+        if !backed_up {
+            shell_println!(
+                ctx,
+                "You can back up any time with `tvc keys backup-operator-key`."
+            )?;
+        }
+    }
 
     Ok(operator_key)
 }
