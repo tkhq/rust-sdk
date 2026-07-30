@@ -330,6 +330,26 @@ fn login_new_org_refuses_already_configured_org_id() {
     assert_eq!(saved.matches(r#"id = "org-dup-test""#).count(), 1);
 }
 
+/// Interactive `keys backup-operator-key` prompts for the destination and
+/// reports the copy.
+#[test]
+fn keys_backup_operator_key_prompts_for_destination() {
+    let temp = tempfile::TempDir::new().unwrap();
+    common::write_profiles_config(temp.path(), &[("alias-a", "org-backup")], Some("alias-a"));
+    common::write_profile_key_files(temp.path(), "alias-a");
+    let destination = temp.path().join("operator-backup.json");
+
+    let mut session = spawn_with_home(temp.path(), &["keys", "backup-operator-key"]);
+
+    session.exp_string("Backup file path").unwrap();
+    session.send_line(destination.to_str().unwrap()).unwrap();
+
+    session.exp_string("Operator key backed up!").unwrap();
+    session.exp_eof().unwrap();
+
+    assert!(destination.exists());
+}
+
 /// Reusing an existing profile alias for a different organization refuses
 /// instead of silently overwriting the profile.
 #[test]
