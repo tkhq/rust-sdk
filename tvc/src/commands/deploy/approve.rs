@@ -259,7 +259,7 @@ impl Display for ApprovalAlreadyPosted {
 }
 
 #[derive(Default, Serialize)]
-pub struct ApprovalDryRun {}
+pub struct ApprovalDryRun;
 
 impl Display for ApprovalDryRun {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
