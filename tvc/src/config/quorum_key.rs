@@ -5,9 +5,11 @@ use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
-/// Maximum number of shares and minimum threshold. Limits come from
-/// `qos_crypto::shamir::shares_generate` (see qos_crypto/src/shamir.rs).
+/// Maximum number of shares supported by
+/// [`qos_crypto::shamir::shares_generate`].
 pub const MAX_SHARES: u32 = 255;
+
+/// Minimum threshold supported by [`qos_crypto::shamir::shares_generate`].
 pub const MIN_THRESHOLD: u32 = 2;
 
 /// Quorum key configuration loaded from JSON file.
