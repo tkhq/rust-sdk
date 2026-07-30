@@ -10,7 +10,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use tvc::config::turnkey::{
-    Config, KeyCurve, OperatorKind, OperatorRecord, OrgConfig, StoredApiKey,
+    Config, KeyCurve, OperatorKind, OperatorRecord, OrgConfig, StoredApiKey, StoredQosOperatorKey,
 };
 
 /// Dead port: connection attempts fail immediately, so commands stop at their
@@ -75,7 +75,7 @@ pub fn write_profiles_config_with_defaults(
 
 /// Create the default-layout key files for `alias`: a valid generated
 /// `StoredApiKey` (login loads it before its first network step) and a
-/// placeholder operator key (never read before the flows under test stop).
+/// parseable operator key with per-alias placeholder key material.
 pub fn write_profile_key_files(home: &Path, alias: &str) {
     let dir = org_dir(home, alias);
     fs::create_dir_all(&dir).unwrap();
@@ -92,5 +92,14 @@ pub fn write_profile_key_files(home: &Path, alias: &str) {
         serde_json::to_string_pretty(&api_key).unwrap(),
     )
     .unwrap();
-    fs::write(dir.join("operator.json"), "placeholder operator key").unwrap();
+
+    let operator_key = StoredQosOperatorKey {
+        public_key: format!("operator-pub-{alias}"),
+        private_key: format!("operator-priv-{alias}"),
+    };
+    fs::write(
+        dir.join("operator.json"),
+        serde_json::to_string_pretty(&operator_key).unwrap(),
+    )
+    .unwrap();
 }
