@@ -513,28 +513,7 @@ fn build_login_plan_interactive(
     config: &Config,
 ) -> Result<LoginPlan> {
     let org = match args.org {
-        Some(query) => {
-            let aliases = find_org_aliases(config, &query);
-
-            let alias = match aliases.as_slice() {
-                [] => bail!(
-                    "Organization '{query}' not found. \
-                     Run `tvc login` without --org to set up a new organization."
-                ),
-                [alias] => alias.clone(),
-                // Unreachable while login consolidates duplicates up front;
-                // kept so --org-by-ID resolution stays deterministic if the
-                // consolidation gate ever moves.
-                _ => prompts::select(
-                    &format!("Select profile for organization '{query}'"),
-                    duplicate_alias_choices(config, &aliases),
-                )?
-                .alias
-                .to_string(),
-            };
-
-            OrgPlan::Existing(alias)
-        }
+        Some(query) => OrgPlan::Existing(resolve_org_query(ctx, config, &query)?),
         None => prompt_for_org_plan(ctx, config, args.api_base_url.as_deref())?,
     };
     Ok(LoginPlan {
@@ -553,11 +532,31 @@ fn build_login_plan_non_interactive(
         return Err(error_required_in_non_interactive("--org"));
     };
 
-    let aliases = find_org_aliases(config, &org_query);
+    let alias = resolve_org_query(ctx, config, &org_query)?;
 
-    let alias = match aliases.as_slice() {
+    Ok(LoginPlan {
+        org: OrgPlan::Existing(alias),
+        api_base_url_override: args.api_base_url,
+        api_key_policy: ApiKeyPolicy::RequireExisting,
+    })
+}
+
+/// Resolve an org query (profile alias or organization ID) to a single
+/// configured profile alias.
+///
+/// An explicitly named alias is an unambiguous choice and wins outright,
+/// except that non-interactive runs refuse a non-default duplicate. An org-ID
+/// query matching several profiles prompts for one interactively;
+/// non-interactively it follows the `default_alias` marker or fails with
+/// instructions. Read-only consumers (login, key backup) share these rules;
+/// destructive commands resolve via `resolve_profile_alias` instead, which
+/// never guesses among duplicates.
+pub(crate) fn resolve_org_query(ctx: &mut StdCtx, config: &Config, query: &str) -> Result<String> {
+    let aliases = find_org_aliases(config, query);
+
+    match aliases.as_slice() {
         [] => bail!(
-            "Organization '{org_query}' not found. \
+            "Organization '{query}' not found. \
              Run `tvc login` without --org to set up a new organization."
         ),
         [alias] => {
@@ -575,7 +574,7 @@ fn build_login_plan_non_interactive(
                 .collect();
             group.sort_unstable();
 
-            if group.len() > 1 {
+            if group.len() > 1 && ctx.is_non_interactive() {
                 let defaults: Vec<&str> = group
                     .iter()
                     .copied()
@@ -600,9 +599,9 @@ fn build_login_plan_non_interactive(
                 }
             }
 
-            alias.clone()
+            Ok(alias.clone())
         }
-        _ => {
+        _ if ctx.is_non_interactive() => {
             let defaults: Vec<&str> = aliases
                 .iter()
                 .map(String::as_str)
@@ -611,25 +610,20 @@ fn build_login_plan_non_interactive(
 
             match defaults.as_slice() {
                 [default] => {
-                    warn_duplicate_profiles(ctx, &org_query, &aliases.join(", "), default)?;
-                    default.to_string()
+                    warn_duplicate_profiles(ctx, query, &aliases.join(", "), default)?;
+                    Ok(default.to_string())
                 }
-                [] => return Err(no_default_alias_error(&org_query, &aliases.join(", "))),
-                marked => {
-                    return Err(multiple_default_aliases_error(
-                        &org_query,
-                        &marked.join(", "),
-                    ));
-                }
+                [] => Err(no_default_alias_error(query, &aliases.join(", "))),
+                marked => Err(multiple_default_aliases_error(query, &marked.join(", "))),
             }
         }
-    };
-
-    Ok(LoginPlan {
-        org: OrgPlan::Existing(alias),
-        api_base_url_override: args.api_base_url,
-        api_key_policy: ApiKeyPolicy::RequireExisting,
-    })
+        _ => Ok(prompts::select(
+            &format!("Select profile for organization '{query}'"),
+            duplicate_alias_choices(config, &aliases),
+        )?
+        .alias
+        .to_string()),
+    }
 }
 
 /// A duplicated organization with no profile marked `default_alias` cannot be
