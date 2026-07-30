@@ -47,6 +47,7 @@ fn write_config(
                 api_base_url: LOCAL_API_BASE_URL.to_string(),
                 default_operator_kind: OperatorKind::Local,
                 operators: vec![OperatorRecord::local(operator_key_path)],
+                default_alias: false,
                 extra: toml::Table::new(),
             },
         )]),

@@ -48,6 +48,16 @@ pub struct DeleteArgs {
     pub yes: bool,
 }
 
+/// Mark a profile as the default alias for its organization while duplicate
+/// profiles exist.
+#[derive(Debug, ClapArgs)]
+#[command(about, long_about = None)]
+pub struct SetDefaultAliasArgs {
+    /// Profile alias to mark as its organization's default.
+    #[arg(short, long, value_name = "ALIAS")]
+    pub org: String,
+}
+
 enum OrgPlan {
     /// A resolved alias of a configured profile. The plan builders validate
     /// the user's query (alias or organization ID) before constructing this,
@@ -82,7 +92,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     let config = Config::load().await?;
 
     let plan = if ctx.is_non_interactive() {
-        build_login_plan_non_interactive(args, &config)?
+        build_login_plan_non_interactive(ctx, args, &config)?
     } else {
         build_login_plan_interactive(ctx, args, &config)?
     };
@@ -236,6 +246,64 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs) -> Result<Outcome> {
     }))
 }
 
+/// Mark a profile as the default alias for its duplicated organization ID and
+/// clear the marker from the organization's other profiles. The marker only
+/// means something while duplicates exist, so a non-duplicated organization is
+/// refused.
+pub async fn run_set_default_alias(
+    _ctx: &mut StdCtx,
+    args: SetDefaultAliasArgs,
+) -> Result<Outcome> {
+    let mut config = Config::load().await?;
+    let alias = args.org;
+
+    let Some(org_id) = config.orgs.get(&alias).map(|org| org.id.clone()) else {
+        let id_matches = find_org_aliases(&config, &alias);
+
+        if !id_matches.is_empty() {
+            bail!(
+                "'{alias}' is an organization ID; pass the profile alias to mark as its default \
+                 (one of: {}).",
+                id_matches.join(", ")
+            );
+        }
+
+        bail!(
+            "Login profile '{alias}' not found. \
+             Run `tvc login` to see configured profiles."
+        );
+    };
+
+    let mut duplicates: Vec<String> = config
+        .orgs
+        .iter()
+        .filter(|(other, org)| org.id == org_id && *other != &alias)
+        .map(|(other, _)| other.clone())
+        .collect();
+    duplicates.sort_unstable();
+
+    if duplicates.is_empty() {
+        bail!(
+            "Organization '{org_id}' only has the profile '{alias}'; \
+             a default alias is only needed while duplicate profiles exist."
+        );
+    }
+
+    for (other, org) in config.orgs.iter_mut() {
+        if org.id == org_id {
+            org.default_alias = *other == alias;
+        }
+    }
+
+    config.save().await?;
+
+    Ok(Outcome::ProfileDefaultAliasSet(DefaultAliasSet {
+        alias,
+        organization_id: org_id,
+        duplicates,
+    }))
+}
+
 /// Resolve the alias of a configured profile to delete. Prompts interactively
 /// with a picker when no query is given, or when an org-ID query matches
 /// several profiles; non-interactive runs must name a single profile.
@@ -357,7 +425,11 @@ fn build_login_plan_interactive(
     })
 }
 
-fn build_login_plan_non_interactive(args: Args, config: &Config) -> Result<LoginPlan> {
+fn build_login_plan_non_interactive(
+    ctx: &mut StdCtx,
+    args: Args,
+    config: &Config,
+) -> Result<LoginPlan> {
     let Some(org_query) = args.org else {
         return Err(error_required_in_non_interactive("--org"));
     };
@@ -369,12 +441,69 @@ fn build_login_plan_non_interactive(args: Args, config: &Config) -> Result<Login
             "Organization '{org_query}' not found. \
              Run `tvc login` without --org to set up a new organization."
         ),
-        [alias] => alias.clone(),
-        _ => bail!(
-            "Organization '{org_query}' is configured under multiple profiles: {}. \
-             Re-run with --org <alias> to select one.",
-            aliases.join(", ")
-        ),
+        [alias] => {
+            let org_id = config
+                .orgs
+                .get(alias.as_str())
+                .expect("alias was resolved from this config")
+                .id
+                .as_str();
+            let mut group: Vec<&str> = config
+                .orgs
+                .iter()
+                .filter(|(_, org)| org.id == org_id)
+                .map(|(group_alias, _)| group_alias.as_str())
+                .collect();
+            group.sort_unstable();
+
+            if group.len() > 1 {
+                let defaults: Vec<&str> = group
+                    .iter()
+                    .copied()
+                    .filter(|group_alias| config.orgs[*group_alias].default_alias)
+                    .collect();
+
+                match defaults.as_slice() {
+                    [default] if *default == alias.as_str() => {
+                        warn_duplicate_profiles(ctx, org_id, &group.join(", "), default)?;
+                    }
+                    [default] => bail!(
+                        "Profile '{alias}' is a duplicate: the default profile for \
+                         organization '{org_id}' is '{default}'. \
+                         Log in with `tvc login --org {default}`, \
+                         delete this profile with `tvc profile delete --org {alias}`, \
+                         or make it the default with `tvc profile set-default-alias --org {alias}`."
+                    ),
+                    [] => return Err(no_default_alias_error(org_id, &group.join(", "))),
+                    marked => {
+                        return Err(multiple_default_aliases_error(org_id, &marked.join(", ")));
+                    }
+                }
+            }
+
+            alias.clone()
+        }
+        _ => {
+            let defaults: Vec<&str> = aliases
+                .iter()
+                .map(String::as_str)
+                .filter(|alias| config.orgs[*alias].default_alias)
+                .collect();
+
+            match defaults.as_slice() {
+                [default] => {
+                    warn_duplicate_profiles(ctx, &org_query, &aliases.join(", "), default)?;
+                    default.to_string()
+                }
+                [] => return Err(no_default_alias_error(&org_query, &aliases.join(", "))),
+                marked => {
+                    return Err(multiple_default_aliases_error(
+                        &org_query,
+                        &marked.join(", "),
+                    ));
+                }
+            }
+        }
     };
 
     Ok(LoginPlan {
@@ -382,6 +511,43 @@ fn build_login_plan_non_interactive(args: Args, config: &Config) -> Result<Login
         api_base_url_override: args.api_base_url,
         api_key_policy: ApiKeyPolicy::RequireExisting,
     })
+}
+
+/// A duplicated organization with no profile marked `default_alias` cannot be
+/// resolved non-interactively; name every exit.
+fn no_default_alias_error(org_id: &str, alias_list: &str) -> anyhow::Error {
+    anyhow!(
+        "Multiple profiles are configured for organization '{org_id}': {alias_list}. \
+         Mark the one to keep with `tvc profile set-default-alias --org <alias>`, \
+         delete an extra with `tvc profile delete --org <alias> --yes`, \
+         or run `tvc login` interactively to consolidate."
+    )
+}
+
+fn multiple_default_aliases_error(org_id: &str, marked_list: &str) -> anyhow::Error {
+    anyhow!(
+        "Multiple profiles are marked default_alias for organization '{org_id}': {marked_list}. \
+         Re-run `tvc profile set-default-alias --org <alias>` to leave exactly one."
+    )
+}
+
+fn warn_duplicate_profiles(
+    ctx: &mut StdCtx,
+    org_id: &str,
+    alias_list: &str,
+    default: &str,
+) -> Result<()> {
+    shell_eprintln!(
+        ctx,
+        "WARNING: organization '{org_id}' has duplicate profiles: {alias_list}. \
+         Using default profile '{default}'."
+    )?;
+    shell_eprintln!(
+        ctx,
+        "Run `tvc login` interactively to consolidate, \
+         or delete extras with `tvc profile delete --org <alias> --yes`."
+    )?;
+    Ok(())
 }
 
 async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) -> Result<Outcome> {
@@ -807,6 +973,26 @@ impl Display for ProfileDeleted {
     }
 }
 
+#[derive(Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DefaultAliasSet {
+    alias: String,
+    organization_id: String,
+    duplicates: Vec<String>,
+}
+
+impl Display for DefaultAliasSet {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Marked '{}' as the default alias for organization '{}' (duplicates: {}).",
+            self.alias,
+            self.organization_id,
+            self.duplicates.join(", ")
+        )
+    }
+}
+
 impl Display for LoggedIn {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
@@ -937,6 +1123,7 @@ mod tests {
                     api_base_url: api_base_url.to_string(),
                     default_operator_kind: OperatorKind::Local,
                     operators: vec![OperatorRecord::local(PathBuf::from("operator.json"))],
+                    default_alias: false,
                     extra: toml::Table::new(),
                 },
             )]),
@@ -960,6 +1147,7 @@ mod tests {
                             api_base_url: API_BASE_URL_PROD.to_string(),
                             default_operator_kind: OperatorKind::Local,
                             operators: vec![OperatorRecord::local(PathBuf::from("operator.json"))],
+                            default_alias: false,
                             extra: toml::Table::new(),
                         },
                     )

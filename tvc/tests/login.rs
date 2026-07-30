@@ -26,6 +26,7 @@ fn write_login_config(
                 api_base_url: "https://api.turnkey.com".to_string(),
                 default_operator_kind: OperatorKind::Local,
                 operators: vec![OperatorRecord::local(operator_key_path)],
+                default_alias: false,
                 extra: toml::Table::new(),
             },
         )]),
@@ -60,9 +61,10 @@ fn login_errors_when_provided_org_not_found() {
 }
 
 /// TVC-159: an org-ID query matching several profiles must not resolve to an
-/// arbitrary one; non-interactive login fails fast and names them all.
+/// arbitrary one; without a `default_alias` marker, non-interactive login
+/// fails fast naming the profiles and every exit.
 #[test]
-fn login_non_interactive_with_duplicate_org_id_lists_profiles() {
+fn login_non_interactive_without_default_alias_names_every_exit() {
     let temp = TempDir::new().unwrap();
     common::write_profiles_config(
         temp.path(),
@@ -79,9 +81,204 @@ fn login_non_interactive_with_duplicate_org_id_lists_profiles() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "Organization 'org-dup-test' is configured under multiple profiles: alias-a, alias-b",
+            "Multiple profiles are configured for organization 'org-dup-test': alias-a, alias-b",
         ))
-        .stderr(predicate::str::contains("--org <alias>"));
+        .stderr(predicate::str::contains(
+            "tvc profile set-default-alias --org <alias>",
+        ))
+        .stderr(predicate::str::contains(
+            "tvc profile delete --org <alias> --yes",
+        ))
+        .stderr(predicate::str::contains(
+            "run `tvc login` interactively to consolidate",
+        ));
+}
+
+/// With a `default_alias` marker, non-interactive login resolves an org-ID
+/// query to the marked profile and warns that duplicates remain.
+#[test]
+fn login_non_interactive_resolves_org_id_to_default_alias() {
+    let temp = TempDir::new().unwrap();
+    common::write_profiles_config_with_defaults(
+        temp.path(),
+        &[("alias-a", "org-dup-test"), ("alias-b", "org-dup-test")],
+        Some("alias-a"),
+        &["alias-b"],
+    );
+    common::write_profile_key_files(temp.path(), "alias-a");
+    common::write_profile_key_files(temp.path(), "alias-b");
+
+    // The command still exits nonzero at the network step (dead-port base
+    // URL), but selection happens and is reported before that.
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env(NON_INTERACTIVE_ENV, "1")
+        .arg("login")
+        .arg("--org")
+        .arg("org-dup-test")
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains(
+            "Selected org: alias-b (org-dup-test)",
+        ))
+        .stderr(predicate::str::contains("Using default profile 'alias-b'"));
+}
+
+/// Explicitly logging in with the marked default alias works, with the same
+/// duplicate warning; a non-default (secondary) alias is refused with
+/// instructions naming the default.
+#[test]
+fn login_non_interactive_refuses_secondary_alias() {
+    let temp = TempDir::new().unwrap();
+    common::write_profiles_config_with_defaults(
+        temp.path(),
+        &[("alias-a", "org-dup-test"), ("alias-b", "org-dup-test")],
+        Some("alias-a"),
+        &["alias-b"],
+    );
+    common::write_profile_key_files(temp.path(), "alias-a");
+    common::write_profile_key_files(temp.path(), "alias-b");
+
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env(NON_INTERACTIVE_ENV, "1")
+        .arg("login")
+        .arg("--org")
+        .arg("alias-b")
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains(
+            "Selected org: alias-b (org-dup-test)",
+        ))
+        .stderr(predicate::str::contains("duplicate profiles"));
+
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env(NON_INTERACTIVE_ENV, "1")
+        .arg("login")
+        .arg("--org")
+        .arg("alias-a")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Profile 'alias-a' is a duplicate: the default profile for organization \
+             'org-dup-test' is 'alias-b'.",
+        ))
+        .stderr(predicate::str::contains(
+            "tvc profile set-default-alias --org alias-a",
+        ));
+}
+
+/// Several profiles marked `default_alias` for one organization (hand-edited
+/// config) is refused with the command that repairs it.
+#[test]
+fn login_non_interactive_refuses_multiple_marked_defaults() {
+    let temp = TempDir::new().unwrap();
+    common::write_profiles_config_with_defaults(
+        temp.path(),
+        &[("alias-a", "org-dup-test"), ("alias-b", "org-dup-test")],
+        Some("alias-a"),
+        &["alias-a", "alias-b"],
+    );
+
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env(NON_INTERACTIVE_ENV, "1")
+        .arg("login")
+        .arg("--org")
+        .arg("org-dup-test")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Multiple profiles are marked default_alias for organization 'org-dup-test': \
+             alias-a, alias-b",
+        ));
+}
+
+/// `profile set-default-alias` marks the named profile and clears the marker
+/// from the organization's other profiles.
+#[test]
+fn profile_set_default_alias_marks_profile_and_clears_siblings() {
+    let temp = TempDir::new().unwrap();
+    common::write_profiles_config_with_defaults(
+        temp.path(),
+        &[("alias-a", "org-dup-test"), ("alias-b", "org-dup-test")],
+        Some("alias-a"),
+        &["alias-b"],
+    );
+
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env(NON_INTERACTIVE_ENV, "1")
+        .arg("profile")
+        .arg("set-default-alias")
+        .arg("--org")
+        .arg("alias-a")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Marked 'alias-a' as the default alias for organization 'org-dup-test' \
+             (duplicates: alias-b).",
+        ));
+
+    let saved = fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
+    let table: toml::Table = toml::from_str(&saved).unwrap();
+    let orgs = table["orgs"].as_table().unwrap();
+    assert_eq!(orgs["alias-a"]["default_alias"], toml::Value::Boolean(true));
+    assert!(
+        !orgs["alias-b"]
+            .as_table()
+            .unwrap()
+            .contains_key("default_alias"),
+        "cleared marker must not be serialized: {saved}"
+    );
+}
+
+/// A default alias is only meaningful while duplicates exist; a
+/// non-duplicated organization is refused.
+#[test]
+fn profile_set_default_alias_errors_without_duplicates() {
+    let temp = TempDir::new().unwrap();
+    common::write_profiles_config(temp.path(), &[("alias-a", "org-solo")], Some("alias-a"));
+
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env(NON_INTERACTIVE_ENV, "1")
+        .arg("profile")
+        .arg("set-default-alias")
+        .arg("--org")
+        .arg("alias-a")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "a default alias is only needed while duplicate profiles exist",
+        ));
+}
+
+/// The marker names one profile among several, so an org-ID query is
+/// ambiguous; the error lists the aliases to choose from.
+#[test]
+fn profile_set_default_alias_requires_alias_not_org_id() {
+    let temp = TempDir::new().unwrap();
+    common::write_profiles_config(
+        temp.path(),
+        &[("alias-a", "org-dup-test"), ("alias-b", "org-dup-test")],
+        Some("alias-a"),
+    );
+
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env(NON_INTERACTIVE_ENV, "1")
+        .arg("profile")
+        .arg("set-default-alias")
+        .arg("--org")
+        .arg("org-dup-test")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "'org-dup-test' is an organization ID; pass the profile alias to mark as its \
+             default (one of: alias-a, alias-b)",
+        ));
 }
 
 /// TVC-159: same fence for `profile delete` — an ambiguous org-ID query must
