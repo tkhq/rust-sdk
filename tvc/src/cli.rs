@@ -245,7 +245,7 @@ impl Commands {
             },
             Commands::Login(args) => commands::login::run(ctx, args).await,
             Commands::Operator { command } => match command {
-                OperatorCommands::Create(args) => commands::operator::create::run(ctx, args).await,
+                OperatorCommands::Create(args) => args.run(ctx).await.map(Into::into),
             },
             Commands::Profile { command } => match command {
                 ProfileCommands::Delete(delete_args) => {
