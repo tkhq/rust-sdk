@@ -64,7 +64,7 @@ async fn execute(args: Args) -> Result<Outcome> {
     std::fs::write(&args.output, json)
         .with_context(|| format!("failed to write file: {}", args.output.display()))?;
 
-    Ok(Outcome::AppInit(AppConfigCreated {
+    Ok(Outcome::AppConfigCreated(AppConfigCreated {
         command: "app init",
         path: args.output.display().to_string(),
         template: !args.interactive,

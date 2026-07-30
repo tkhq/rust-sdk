@@ -404,15 +404,13 @@ fn extract_field_enum_type(field: &syn::Field) -> Option<EnumField> {
 
         for meta in metas {
             match meta {
-                syn::Meta::NameValue(nv) => {
-                    if nv.path.is_ident("enumeration") {
-                        if let syn::Expr::Lit(syn::ExprLit {
-                            lit: syn::Lit::Str(lit_str),
-                            ..
-                        }) = &nv.value
-                        {
-                            name = Some(lit_str.value());
-                        }
+                syn::Meta::NameValue(nv) if nv.path.is_ident("enumeration") => {
+                    if let syn::Expr::Lit(syn::ExprLit {
+                        lit: syn::Lit::Str(lit_str),
+                        ..
+                    }) = &nv.value
+                    {
+                        name = Some(lit_str.value());
                     }
                 }
                 syn::Meta::Path(p) => {

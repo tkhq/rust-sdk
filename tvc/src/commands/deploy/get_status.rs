@@ -60,7 +60,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
 
     let deployment_status = find_deployment_status(&app_status, &deployment_id);
 
-    Ok(Outcome::DeployGetStatus(DeploymentRuntimeStatus {
+    Ok(Outcome::DeploymentRuntimeStatus(DeploymentRuntimeStatus {
         deployment_id: deployment.id,
         app_id: app_status.app_id.clone(),
         egress_enabled: app.enable_egress,

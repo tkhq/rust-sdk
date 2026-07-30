@@ -48,7 +48,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
         .await
         .context("failed to post quorum key share")?;
 
-    Ok(Outcome::DeployPostShare(QuorumKeySharePosted {
+    Ok(Outcome::QuorumKeySharePosted(QuorumKeySharePosted {
         provisioning_share_id: result.result.provisioning_share_id,
     }))
 }

@@ -142,7 +142,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
         .map_err(|error| hosted_activity_error("create hosted TVC quorum key", error))?;
     let output = validate_result(result.result, expected_share_count)?;
 
-    Ok(Outcome::KeysCreateQuorumKey(output))
+    Ok(Outcome::QuorumKeyCreated(output))
 }
 
 fn parse_operator_id(value: &str) -> std::result::Result<Uuid, String> {

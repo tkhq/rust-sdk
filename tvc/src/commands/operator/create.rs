@@ -134,7 +134,7 @@ Do not retry creation blindly; doing so would create another remote operator. Re
         ));
     }
 
-    Ok(Outcome::OperatorCreate(output))
+    Ok(Outcome::OperatorCreated(output))
 }
 
 fn hosted_operator_spec(args: Args) -> HostedOperatorSpec {
@@ -180,7 +180,6 @@ fn recovery_toml(alias: &str, record: &OperatorRecord) -> Result<String> {
 mod tests {
     use super::*;
     use crate::config::turnkey::HostedOperatorRecord;
-    use crate::output::Message;
 
     fn hosted_record() -> OperatorRecord {
         OperatorRecord {
@@ -217,8 +216,7 @@ mod tests {
     #[test]
     fn operator_created_serializes_expected_json() {
         let output = output_from_record(hosted_record()).unwrap();
-        let value: serde_json::Value =
-            serde_json::from_str(&Outcome::OperatorCreate(output).to_json_string()).unwrap();
+        let value = serde_json::to_value(Outcome::OperatorCreated(output)).unwrap();
 
         assert_eq!(
             value,

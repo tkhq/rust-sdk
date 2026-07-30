@@ -2,7 +2,7 @@
 
 use crate::commands::app_status::TimestampPayload;
 use crate::outcome::Outcome;
-use crate::output::{Ctx, Message, StdCtx};
+use crate::output::{Ctx, StdCtx};
 use crate::shell_eprintln;
 use anyhow::Context;
 use chrono::{DateTime, SecondsFormat, Utc};
@@ -200,7 +200,7 @@ async fn query_debug_logs(
     // In poll mode the loop below runs until killed (or errors), so the
     // terminal outcome is only reachable in non-poll mode.
     let Some(poll_request) = poll_request else {
-        return Ok(Outcome::DeployDebugLogs(DebugLogsFetched {
+        return Ok(Outcome::DebugLogsFetched(DebugLogsFetched {
             deployment_id,
             line_count,
         }));
@@ -217,9 +217,10 @@ async fn query_debug_logs(
 }
 
 /// One streamed log line (NDJSON in JSON mode; the formatted line in human
-/// mode). Emitted inline by `deploy debug-logs`, not part of `Outcome`.
+/// mode). Emitted inline by `deploy debug-logs`, not part of `Outcome`, so it
+/// carries its own `reason` via the struct-level serde tag.
 #[derive(Default, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(tag = "reason", rename = "debug_log_line", rename_all = "camelCase")]
 pub(crate) struct DebugLogLine {
     replica: String,
     content: String,
@@ -229,14 +230,10 @@ pub(crate) struct DebugLogLine {
     include_platform_timestamp: bool,
 }
 
-impl Message for DebugLogLine {
-    fn reason(&self) -> &'static str {
-        "debug_log_line"
-    }
-
-    fn human_message(&self) -> String {
-        // Rebuild the API line and defer to `format_log_line` so human output
-        // stays byte-identical to the pre-outcome rendering.
+impl Display for DebugLogLine {
+    /// Rebuild the API line and defer to [`format_log_line`] so human output
+    /// stays byte-identical to the pre-outcome rendering.
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let line = LogLine {
             content: self.content.clone(),
             ts: self.ts.as_ref().map(|ts| Timestamp {
@@ -244,7 +241,12 @@ impl Message for DebugLogLine {
                 nanos: ts.nanos.clone(),
             }),
         };
-        format_log_line(&self.replica, &line, self.include_platform_timestamp)
+
+        f.write_str(&format_log_line(
+            &self.replica,
+            &line,
+            self.include_platform_timestamp,
+        ))
     }
 }
 
@@ -660,8 +662,7 @@ mod tests {
 
     #[test]
     fn debug_log_line_serializes_snake_case_reason() {
-        let value: serde_json::Value =
-            serde_json::from_str(&sample_debug_log_line().to_json_string()).unwrap();
+        let value = serde_json::to_value(sample_debug_log_line()).unwrap();
 
         assert_eq!(
             value,
@@ -678,13 +679,13 @@ mod tests {
     }
 
     #[test]
-    fn debug_log_line_human_message_matches_previous_rendering() {
+    fn debug_log_line_human_rendering_matches_previous_rendering() {
         let mut line = sample_debug_log_line();
-        assert_eq!(line.human_message(), "replica 1/2 hello");
+        assert_eq!(line.to_string(), "replica 1/2 hello");
 
         line.include_platform_timestamp = true;
         assert_eq!(
-            line.human_message(),
+            line.to_string(),
             "2024-03-09T16:00:00.123456789Z replica 1/2 hello"
         );
     }

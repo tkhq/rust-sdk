@@ -1,9 +1,9 @@
 //! CLI parsing and dispatch.
 
-use crate::commands;
+use crate::commands::{self, Run};
 use crate::errors::strip_ansi;
 use crate::outcome::Outcome;
-use crate::output::{ColorChoice, Ctx, ErrorMessage, Message, MessageFormat, Shell, StdCtx};
+use crate::output::{ColorChoice, Ctx, ErrorMessage, MessageFormat, Shell, StdCtx};
 use clap::{ArgAction, Parser, Subcommand, builder::BoolishValueParser, error::ErrorKind};
 use std::ffi::OsString;
 use std::io::Write;
@@ -159,8 +159,12 @@ fn handle_parse_error(error: clap::Error) -> ExitCode {
                     .to_string();
                 let error_message = ErrorMessage::usage_error(message);
                 let mut stdout = std::io::stdout();
+
+                // it shouldn't be possible for serialization to fail here.
+                let msg = serde_json::to_string(&error_message).unwrap_or_else(|e| e.to_string());
+
                 // Best-effort: if writing fails we still exit with the usage code.
-                let _ = writeln!(stdout, "{}", error_message.to_json_string());
+                let _ = writeln!(stdout, "{msg}");
                 std::process::exit(USAGE_ERROR_EXIT_CODE)
             } else {
                 error.exit()
@@ -193,7 +197,7 @@ impl Commands {
     async fn run(self, ctx: &mut StdCtx) -> anyhow::Result<Outcome> {
         match self {
             Commands::Deploy { command } => match command {
-                DeployCommands::Approve(args) => commands::deploy::approve::run(ctx, args).await,
+                DeployCommands::Approve(args) => args.run(ctx).await.map(Into::into),
                 DeployCommands::GetStatus(args) => {
                     commands::deploy::get_status::run(ctx, args).await
                 }

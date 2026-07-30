@@ -220,7 +220,7 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs) -> Result<Outcome> {
     // can't tell whether it is still there, so hedge with "may" and give steps.
     let dashboard_url = dashboard_base_url(&removed.api_base_url);
 
-    Ok(Outcome::ProfileDelete(ProfileDeleted {
+    Ok(Outcome::ProfileDeleted(ProfileDeleted {
         alias,
         organization_id: removed.id,
         removed_key_directory: removed_dir.map(|dir| dir.display().to_string()),
@@ -368,7 +368,7 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
         .display()
         .to_string();
 
-    Ok(Outcome::Login(LoggedIn {
+    Ok(Outcome::LoggedIn(LoggedIn {
         organization_name: whoami.organization_name,
         organization_id: whoami.organization_id,
         username: whoami.username,

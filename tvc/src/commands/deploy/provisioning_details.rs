@@ -93,7 +93,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
         "verified (attestation + approvals)"
     };
 
-    Ok(Outcome::DeployProvisioningDetails(
+    Ok(Outcome::ProvisioningDetails(
         ProvisioningDetails::from_summary(
             deployment_id.to_string(),
             verification_status,

@@ -66,7 +66,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
         manifest.ok_or_else(|| MissingResource::new("manifest", format!("deployment {id}")))?;
     let app = fetch_tvc_app(&auth, &app_id).await?;
 
-    Ok(Outcome::DeployStatus(DeploymentStatusReport {
+    Ok(Outcome::DeploymentStatus(DeploymentStatusReport {
         deployment_id: id,
         app_id,
         egress_enabled: app.enable_egress,

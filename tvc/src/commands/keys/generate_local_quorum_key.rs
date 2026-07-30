@@ -67,7 +67,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
         )
     })?;
 
-    Ok(Outcome::KeysGenerateQuorumKey(QuorumKeyGenerated {
+    Ok(Outcome::QuorumKeyGenerated(QuorumKeyGenerated {
         quorum_key_public,
         threshold: config.threshold,
         metadata_path: args.quorum_key_metadata_out.display().to_string(),

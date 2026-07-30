@@ -46,5 +46,6 @@ hpke = { workspace = true }
 predicates = { workspace = true }
 qos_nsm = { workspace = true, features = ["mock"] }
 rexpect = { workspace = true }
+strum = { workspace = true }
 tempfile = { workspace = true }
 wiremock = { workspace = true }

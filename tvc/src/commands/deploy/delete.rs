@@ -39,7 +39,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
         .await
         .context("failed to delete TVC deployment")?;
 
-    Ok(Outcome::DeployDelete(DeploymentDeleted {
+    Ok(Outcome::DeploymentDeleted(DeploymentDeleted {
         deployment_id: result.result.deployment_id,
         activity_id: result.activity_id,
         activity_status: result.status,

@@ -50,6 +50,7 @@ pub enum ErrorCode {
     MissingRequiredInput,
     /// Bad flags/args — a clap parse failure
     UsageError,
+    #[allow(dead_code)]
     /// Semantic validation failure in command code.
     InvalidInput,
     /// HTTP 401/403.
@@ -103,7 +104,7 @@ pub fn classify(error: &anyhow::Error) -> Classification {
 ///
 /// Every source link is preserved, even when a parent error's `Display`
 /// already embeds the source text.
-pub fn render_error_chain(error: &anyhow::Error) -> String {
+pub(crate) fn render_error_chain(error: &anyhow::Error) -> String {
     let mut rendered = String::new();
     for cause in error.chain() {
         let text = cause.to_string();

@@ -1,212 +1,140 @@
 //! The closed vocabulary of command outcomes.
 //!
-//! `Outcome` has exactly one variant per command, named after the command.
-//! Per-command message structs live in their own command modules; this
-//! enum only aggregates and delegates. A command with multiple terminal shapes
-//! (e.g. `deploy approve`) owns a command-local enum in its own module, and
-//! the top-level variant here wraps it.
+//! `Outcome` has exactly one variant per terminal shape, and the variant name
+//! IS the wire `reason`: serde's internal tagging stamps
+//! `"reason": "<variant_in_snake_case>"` onto every serialized outcome, so
+//! the vocabulary cannot drift from the type and two shapes cannot share a
+//! reason without rustc rejecting the duplicate variant name. Do not add
+//! per-variant `#[serde(rename)]` overrides — that equality is the guarantee.
 //!
-//! `reason` strings are stable snake_case discriminators
+//! Payload structs live in their own command modules. A command with multiple
+//! terminal shapes (e.g. `deploy approve`) owns a command-local enum plus a
+//! `From` impl mapping it onto these variants.
+//!
+//! `reason` strings are stable snake_case discriminators; renaming a variant
+//! is a breaking change to the JSON contract.
 
-use crate::commands::deploy::approve::ApproveOutcome;
+use crate::commands::deploy::approve::{
+    ApprovalAlreadyPosted, ApprovalDryRun, ApprovalGenerated, ApprovalPosted,
+};
 use crate::commands::{app, deploy, keys, login, operator, version};
-use crate::output::Message;
-use serde::{Serialize, Serializer};
+use serde::Serialize;
+use std::fmt::{self, Display, Formatter};
 
-/// One wide terminal outcome per command (the wide-event model).
+/// One wide terminal outcome per command invocation (the wide-event model).
 ///
 /// Streaming messages (today: only `deploy debug-logs`'s per-line
 /// `debug_log_line`) are emitted inline by their command and are not part of
 /// this enum; the command still returns its terminal variant.
+#[derive(Serialize)]
+#[serde(tag = "reason", rename_all = "snake_case")]
+#[cfg_attr(test, derive(strum::EnumIter))]
 pub enum Outcome {
-    Login(login::LoggedIn),
-    OperatorCreate(operator::create::OperatorCreated),
-    ProfileDelete(login::ProfileDeleted),
-    DeployApprove(ApproveOutcome),
-    DeployGetStatus(deploy::get_status::DeploymentRuntimeStatus),
-    DeployProvisioningDetails(deploy::provisioning_details::ProvisioningDetails),
-    DeployProvision(deploy::provision::ProvisioningShareCreated),
-    DeployPostShare(deploy::post_share::QuorumKeySharePosted),
-    DeployStatus(deploy::status::DeploymentStatusReport),
-    DeployCreate(deploy::create::DeploymentCreated),
-    DeployInit(deploy::init::DeploymentConfigCreated),
-    DeployDebugLogs(deploy::debug_logs::DebugLogsFetched),
-    DeployDelete(deploy::delete::DeploymentDeleted),
-    DeployRestore(deploy::restore::DeploymentRestored),
+    LoggedIn(login::LoggedIn),
+    OperatorCreated(operator::create::OperatorCreated),
+    ProfileDeleted(login::ProfileDeleted),
+    ManifestApprovalPosted(ApprovalPosted),
+    ManifestApprovalGenerated(ApprovalGenerated),
+    ManifestApprovalAlreadyPosted(ApprovalAlreadyPosted),
+    ManifestApprovalDryRun(ApprovalDryRun),
+    DeploymentRuntimeStatus(deploy::get_status::DeploymentRuntimeStatus),
+    ProvisioningDetails(deploy::provisioning_details::ProvisioningDetails),
+    ProvisioningShareCreated(deploy::provision::ProvisioningShareCreated),
+    QuorumKeySharePosted(deploy::post_share::QuorumKeySharePosted),
+    DeploymentStatus(deploy::status::DeploymentStatusReport),
+    DeploymentCreated(deploy::create::DeploymentCreated),
+    DeploymentConfigCreated(deploy::init::DeploymentConfigCreated),
+    DebugLogsFetched(deploy::debug_logs::DebugLogsFetched),
+    DeploymentDeleted(deploy::delete::DeploymentDeleted),
+    DeploymentRestored(deploy::restore::DeploymentRestored),
     AppStatus(app::status::AppStatusReport),
-    AppList(app::list::AppsListed),
-    AppCreate(app::create::AppCreated),
-    AppInit(app::init::AppConfigCreated),
-    AppSetLiveDeploy(app::set_live_deploy::LiveDeploymentSet),
-    AppDelete(app::delete::AppDeleted),
-    KeysCreateQuorumKey(keys::create_quorum_key::QuorumKeyCreated),
-    KeysGenerateQuorumKey(keys::generate_local_quorum_key::QuorumKeyGenerated),
-    KeysInitQuorumKey(keys::init_local_quorum_key::QuorumKeyConfigCreated),
-    KeysReEncryptShare(keys::re_encrypt_local_share::ReEncryptedShareGenerated),
+    AppsListed(app::list::AppsListed),
+    AppCreated(app::create::AppCreated),
+    AppConfigCreated(app::init::AppConfigCreated),
+    LiveDeploymentSet(app::set_live_deploy::LiveDeploymentSet),
+    AppDeleted(app::delete::AppDeleted),
+    QuorumKeyCreated(keys::create_quorum_key::QuorumKeyCreated),
+    QuorumKeyGenerated(keys::generate_local_quorum_key::QuorumKeyGenerated),
+    QuorumKeyConfigCreated(keys::init_local_quorum_key::QuorumKeyConfigCreated),
+    ReEncryptedShareGenerated(keys::re_encrypt_local_share::ReEncryptedShareGenerated),
     Version(version::CliVersion),
 }
 
-/// Apply `$body` to the message carried by whichever variant `$self` is.
-macro_rules! with_message {
-    ($self:expr, |$msg:ident| $body:expr) => {
-        match $self {
-            Outcome::Login($msg) => $body,
-            Outcome::OperatorCreate($msg) => $body,
-            Outcome::ProfileDelete($msg) => $body,
-            Outcome::DeployApprove($msg) => $body,
-            Outcome::DeployGetStatus($msg) => $body,
-            Outcome::DeployProvisioningDetails($msg) => $body,
-            Outcome::DeployProvision($msg) => $body,
-            Outcome::DeployPostShare($msg) => $body,
-            Outcome::DeployStatus($msg) => $body,
-            Outcome::DeployCreate($msg) => $body,
-            Outcome::DeployInit($msg) => $body,
-            Outcome::DeployDebugLogs($msg) => $body,
-            Outcome::DeployDelete($msg) => $body,
-            Outcome::DeployRestore($msg) => $body,
-            Outcome::AppStatus($msg) => $body,
-            Outcome::AppList($msg) => $body,
-            Outcome::AppCreate($msg) => $body,
-            Outcome::AppInit($msg) => $body,
-            Outcome::AppSetLiveDeploy($msg) => $body,
-            Outcome::AppDelete($msg) => $body,
-            Outcome::KeysCreateQuorumKey($msg) => $body,
-            Outcome::KeysGenerateQuorumKey($msg) => $body,
-            Outcome::KeysInitQuorumKey($msg) => $body,
-            Outcome::KeysReEncryptShare($msg) => $body,
-            Outcome::Version($msg) => $body,
-        }
-    };
-}
-
-impl Serialize for Outcome {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        with_message!(self, |msg| msg.serialize(serializer))
-    }
-}
-
-impl Message for Outcome {
-    /// The single source of truth for the reason vocabulary. Every terminal
-    /// reason string is a literal in  this one match, so uniqueness is auditable
-    /// at a glance (and, in a follow-up, enforceable by a proc-macro).
-    fn reason(&self) -> &'static str {
+impl Display for Outcome {
+    /// Each payload renders itself; the terminal outcome just delegates. An
+    /// empty rendering means the outcome is machine-only.
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Outcome::Login(_) => "logged_in",
-            Outcome::OperatorCreate(_) => "operator_created",
-            Outcome::ProfileDelete(_) => "profile_deleted",
-            Outcome::DeployApprove(ApproveOutcome::Posted(_)) => "manifest_approval_posted",
-            Outcome::DeployApprove(ApproveOutcome::NotPosted(_)) => "manifest_approval_generated",
-            Outcome::DeployApprove(ApproveOutcome::DryRun(_)) => "manifest_approval_dry_run",
-            Outcome::DeployGetStatus(_) => "deployment_runtime_status",
-            Outcome::DeployProvisioningDetails(_) => "provisioning_details",
-            Outcome::DeployProvision(_) => "provisioning_share_created",
-            Outcome::DeployPostShare(_) => "quorum_key_share_posted",
-            Outcome::DeployStatus(_) => "deployment_status",
-            Outcome::DeployCreate(_) => "deployment_created",
-            Outcome::DeployInit(_) => "deployment_config_created",
-            Outcome::DeployDebugLogs(_) => "debug_logs_fetched",
-            Outcome::DeployDelete(_) => "deployment_deleted",
-            Outcome::DeployRestore(_) => "deployment_restored",
-            Outcome::AppStatus(_) => "app_status",
-            Outcome::AppList(_) => "apps_listed",
-            Outcome::AppCreate(_) => "app_created",
-            Outcome::AppInit(_) => "app_config_created",
-            Outcome::AppSetLiveDeploy(_) => "live_deployment_set",
-            Outcome::AppDelete(_) => "app_deleted",
-            Outcome::KeysCreateQuorumKey(_) => "quorum_key_created",
-            Outcome::KeysGenerateQuorumKey(_) => "quorum_key_generated",
-            Outcome::KeysInitQuorumKey(_) => "quorum_key_config_created",
-            Outcome::KeysReEncryptShare(_) => "re_encrypted_share_generated",
-            Outcome::Version(_) => "version",
+            Outcome::LoggedIn(msg) => msg.fmt(f),
+            Outcome::OperatorCreated(msg) => msg.fmt(f),
+            Outcome::ProfileDeleted(msg) => msg.fmt(f),
+            Outcome::ManifestApprovalPosted(msg) => msg.fmt(f),
+            Outcome::ManifestApprovalGenerated(msg) => msg.fmt(f),
+            Outcome::ManifestApprovalAlreadyPosted(msg) => msg.fmt(f),
+            Outcome::ManifestApprovalDryRun(msg) => msg.fmt(f),
+            Outcome::DeploymentRuntimeStatus(msg) => msg.fmt(f),
+            Outcome::ProvisioningDetails(msg) => msg.fmt(f),
+            Outcome::ProvisioningShareCreated(msg) => msg.fmt(f),
+            Outcome::QuorumKeySharePosted(msg) => msg.fmt(f),
+            Outcome::DeploymentStatus(msg) => msg.fmt(f),
+            Outcome::DeploymentCreated(msg) => msg.fmt(f),
+            Outcome::DeploymentConfigCreated(msg) => msg.fmt(f),
+            Outcome::DebugLogsFetched(msg) => msg.fmt(f),
+            Outcome::DeploymentDeleted(msg) => msg.fmt(f),
+            Outcome::DeploymentRestored(msg) => msg.fmt(f),
+            Outcome::AppStatus(msg) => msg.fmt(f),
+            Outcome::AppsListed(msg) => msg.fmt(f),
+            Outcome::AppCreated(msg) => msg.fmt(f),
+            Outcome::AppConfigCreated(msg) => msg.fmt(f),
+            Outcome::LiveDeploymentSet(msg) => msg.fmt(f),
+            Outcome::AppDeleted(msg) => msg.fmt(f),
+            Outcome::QuorumKeyCreated(msg) => msg.fmt(f),
+            Outcome::QuorumKeyGenerated(msg) => msg.fmt(f),
+            Outcome::QuorumKeyConfigCreated(msg) => msg.fmt(f),
+            Outcome::ReEncryptedShareGenerated(msg) => msg.fmt(f),
+            Outcome::Version(msg) => msg.fmt(f),
         }
-    }
-
-    fn human_message(&self) -> String {
-        // Each inner payload renders itself via `Display`; the terminal outcome
-        // just delegates. An empty rendering means the outcome is machine-only.
-        with_message!(self, |msg| msg.to_string())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::commands::deploy::approve::{
-        ApprovalDryRun, ApprovalGenerated, ApprovalPosted, ApproveOutcome,
-    };
-    use std::collections::HashSet;
-
-    /// One zero-value instance per terminal shape, in `Outcome`'s declaration
-    /// order (command-local shapes expanded in their own declaration order).
-    /// The registry tests only read reason strings, so `Default` fixtures
-    /// suffice; realistic payloads are exercised by each command's own tests.
-    fn all_terminal_shapes() -> Vec<Outcome> {
-        vec![
-            Outcome::Login(login::LoggedIn::default()),
-            Outcome::OperatorCreate(operator::create::OperatorCreated::default()),
-            Outcome::ProfileDelete(login::ProfileDeleted::default()),
-            Outcome::DeployApprove(ApproveOutcome::Posted(ApprovalPosted::default())),
-            Outcome::DeployApprove(ApproveOutcome::NotPosted(ApprovalGenerated::default())),
-            Outcome::DeployApprove(ApproveOutcome::DryRun(ApprovalDryRun::default())),
-            Outcome::DeployGetStatus(deploy::get_status::DeploymentRuntimeStatus::default()),
-            Outcome::DeployProvisioningDetails(
-                deploy::provisioning_details::ProvisioningDetails::default(),
-            ),
-            Outcome::DeployProvision(deploy::provision::ProvisioningShareCreated::default()),
-            Outcome::DeployPostShare(deploy::post_share::QuorumKeySharePosted::default()),
-            Outcome::DeployStatus(deploy::status::DeploymentStatusReport::default()),
-            Outcome::DeployCreate(deploy::create::DeploymentCreated::default()),
-            Outcome::DeployInit(deploy::init::DeploymentConfigCreated::default()),
-            Outcome::DeployDebugLogs(deploy::debug_logs::DebugLogsFetched::default()),
-            Outcome::DeployDelete(deploy::delete::DeploymentDeleted::default()),
-            Outcome::DeployRestore(deploy::restore::DeploymentRestored::default()),
-            Outcome::AppStatus(app::status::AppStatusReport::default()),
-            Outcome::AppList(app::list::AppsListed::default()),
-            Outcome::AppCreate(app::create::AppCreated::default()),
-            Outcome::AppInit(app::init::AppConfigCreated::default()),
-            Outcome::AppSetLiveDeploy(app::set_live_deploy::LiveDeploymentSet::default()),
-            Outcome::AppDelete(app::delete::AppDeleted::default()),
-            Outcome::KeysCreateQuorumKey(keys::create_quorum_key::QuorumKeyCreated::default()),
-            Outcome::KeysGenerateQuorumKey(
-                keys::generate_local_quorum_key::QuorumKeyGenerated::default(),
-            ),
-            Outcome::KeysInitQuorumKey(
-                keys::init_local_quorum_key::QuorumKeyConfigCreated::default(),
-            ),
-            Outcome::KeysReEncryptShare(
-                keys::re_encrypt_local_share::ReEncryptedShareGenerated::default(),
-            ),
-            Outcome::Version(version::CliVersion::default()),
-        ]
-    }
+    use strum::IntoEnumIterator;
 
     /// Reasons that live outside `Outcome`: the `deploy debug-logs` streaming
-    /// message and the error envelope reasons
+    /// message and the error envelope reasons.
     const NON_TERMINAL_REASONS: [&str; 3] =
         ["debug_log_line", "command_error", "missing_required_input"];
 
-    fn all_reasons() -> Vec<&'static str> {
-        let mut reasons: Vec<&str> = all_terminal_shapes().iter().map(Message::reason).collect();
-        reasons.extend(NON_TERMINAL_REASONS);
-        reasons
-    }
-
     // TODO - proc macro here
     #[test]
-    fn all_reasons_are_unique() {
-        let reasons = all_reasons();
+    fn terminal_reasons_do_not_collide_with_non_terminal_reasons() {
+        for outcome in Outcome::iter() {
+            let value = serde_json::to_value(&outcome)
+                .expect("every outcome payload must serialize as a JSON map");
+            let reason = value["reason"]
+                .as_str()
+                .expect("every serialized outcome must carry a `reason` tag");
 
-        let unique: HashSet<&str> = reasons.iter().copied().collect();
-        assert_eq!(
-            unique.len(),
-            reasons.len(),
-            "duplicate reason strings in: {reasons:?}"
-        );
+            assert!(
+                !NON_TERMINAL_REASONS.contains(&reason),
+                "terminal reason `{reason}` collides with a non-terminal reason"
+            );
+        }
     }
 
     #[test]
     fn reasons_are_snake_case() {
-        for reason in all_reasons() {
+        let terminal_reasons = Outcome::iter().map(|outcome| {
+            serde_json::to_value(outcome)
+                .expect("every outcome payload must serialize as a JSON map")["reason"]
+                .as_str()
+                .expect("every serialized outcome must carry a `reason` tag")
+                .to_string()
+        });
+
+        for reason in terminal_reasons.chain(NON_TERMINAL_REASONS.map(String::from)) {
             assert!(
                 !reason.is_empty()
                     && reason.split('_').all(|word| {

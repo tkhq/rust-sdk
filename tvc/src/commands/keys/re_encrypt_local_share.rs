@@ -230,7 +230,7 @@ async fn write_output(
         }
     };
 
-    Ok(Outcome::KeysReEncryptShare(generated))
+    Ok(Outcome::ReEncryptedShareGenerated(generated))
 }
 
 #[cfg(test)]
@@ -240,7 +240,7 @@ mod tests {
         ensure_quorum_key_matches_manifest, find_share_set_member,
     };
     use crate::outcome::Outcome;
-    use crate::output::Message;
+
     use crate::pair::LocalPair;
     use crate::provisioning::ProvisionBundle;
     use crate::quorum_key_metadata::{EncryptedShareMetadata, QuorumKeyMetadata};
@@ -563,9 +563,8 @@ mod tests {
 
     #[test]
     fn inline_branch_serializes_flattened_share_payload() {
-        let value: serde_json::Value =
-            serde_json::from_str(&Outcome::KeysReEncryptShare(generated_inline()).to_json_string())
-                .unwrap();
+        let value =
+            serde_json::to_value(Outcome::ReEncryptedShareGenerated(generated_inline())).unwrap();
 
         assert_eq!(
             value,
@@ -587,10 +586,9 @@ mod tests {
 
     #[test]
     fn file_branch_serializes_written_to_path() {
-        let value: serde_json::Value = serde_json::from_str(
-            &Outcome::KeysReEncryptShare(generated_written_to()).to_json_string(),
-        )
-        .unwrap();
+        let value =
+            serde_json::to_value(Outcome::ReEncryptedShareGenerated(generated_written_to()))
+                .unwrap();
 
         assert_eq!(
             value,

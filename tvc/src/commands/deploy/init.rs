@@ -119,7 +119,7 @@ async fn execute(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     std::fs::write(&output, json)
         .with_context(|| format!("failed to write file: {}", output.display()))?;
 
-    Ok(Outcome::DeployInit(DeploymentConfigCreated {
+    Ok(Outcome::DeploymentConfigCreated(DeploymentConfigCreated {
         command: "deploy init",
         path: output.display().to_string(),
         template: !is_interactive,

@@ -39,7 +39,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
         .await
         .context("failed to restore TVC deployment")?;
 
-    Ok(Outcome::DeployRestore(DeploymentRestored {
+    Ok(Outcome::DeploymentRestored(DeploymentRestored {
         deployment_id: result.result.deployment_id,
         activity_id: result.activity_id,
         activity_status: result.status,

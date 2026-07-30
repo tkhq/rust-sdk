@@ -109,7 +109,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
         .map_err(|error| hosted_activity_error("re-encrypt hosted TVC quorum-key share", error))?;
     let output = validate_result(result.result)?;
 
-    Ok(Outcome::DeployProvision(output))
+    Ok(Outcome::ProvisioningShareCreated(output))
 }
 
 fn build_re_encrypt_intent(
@@ -179,11 +179,8 @@ fn validate_result(result: ReEncryptTvcQuorumKeyShareResult) -> Result<Provision
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        config::turnkey::{
-            HostedOperatorRecord, OperatorKind, OperatorRecord, OperatorRecordKind, OrgConfig,
-        },
-        output::Message,
+    use crate::config::turnkey::{
+        HostedOperatorRecord, OperatorKind, OperatorRecord, OperatorRecordKind, OrgConfig,
     };
     use qos_core::protocol::services::boot::VersionedManifestEnvelope;
     use serde::Deserialize;
@@ -476,8 +473,7 @@ mod tests {
             "Provisioning Share ID: provisioning-share-id"
         );
 
-        let value: serde_json::Value =
-            serde_json::from_str(&Outcome::DeployProvision(output).to_json_string()).unwrap();
+        let value = serde_json::to_value(Outcome::ProvisioningShareCreated(output)).unwrap();
         assert_eq!(
             value,
             serde_json::json!({
