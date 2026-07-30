@@ -1,6 +1,6 @@
 //! Local quorum key init command - generates a template quorum key config file.
 
-use crate::config::quorum_key::QuorumKeyConfig;
+use crate::config::quorum_key::{MAX_SHARES, MIN_THRESHOLD, QuorumKeyConfig};
 use crate::config::turnkey::{Config, StoredQosOperatorKey};
 use crate::outcome::Outcome;
 use crate::output::StdCtx;
@@ -52,14 +52,13 @@ pub struct QuorumKeyConfigCreated {
 
 impl Display for QuorumKeyConfigCreated {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        // Constraints inherited from qos_crypto::shamir::shares_generate.
         write!(
             f,
             r#"Created quorum key config template: {}
 
-Constraints (see qos_crypto/src/shamir.rs):
-  shares    : 1..=255
-  threshold : >= 2 and <= shares
+Constraints:
+  shares    : 1..={MAX_SHARES}
+  threshold : >= {MIN_THRESHOLD} and <= shares
 
 Edit the file to fill in your values, then run:
   tvc keys generate-local-quorum-key --config-file {}"#,
