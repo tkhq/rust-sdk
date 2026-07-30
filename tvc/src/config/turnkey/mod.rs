@@ -15,7 +15,7 @@ pub use qos_operator_key::StoredQosOperatorKey;
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::{self, Display, Formatter};
 use std::path::Path;
 use std::path::PathBuf;
@@ -325,6 +325,12 @@ pub struct OrgConfig {
     /// Durable local and hosted operator metadata.
     #[serde(default)]
     pub operators: Vec<OperatorRecord>,
+    /// Marks the profile that org-ID resolution follows while several profiles
+    /// share this organization ID ("default_alias", not "default": profiles are
+    /// commonly literally aliased `default`). Only meaningful — and only
+    /// serialized — while such duplicates exist.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub default_alias: bool,
     /// Unrecognized organization fields retained across supported config rewrites.
     #[serde(default, flatten)]
     pub extra: toml::Table,
@@ -468,6 +474,29 @@ impl Config {
         self.orgs.get(alias).map(|config| (alias, config))
     }
 
+    /// Organization IDs registered under more than one alias, with the
+    /// aliases that share them. Sorted by organization ID and by alias so
+    /// callers report and prompt in a stable order.
+    pub fn duplicated_org_ids(&self) -> Vec<(String, Vec<String>)> {
+        let mut groups: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+
+        for (alias, org) in &self.orgs {
+            groups.entry(&org.id).or_default().push(alias);
+        }
+
+        groups
+            .into_iter()
+            .filter(|(_, aliases)| aliases.len() > 1)
+            .map(|(id, mut aliases)| {
+                aliases.sort_unstable();
+                (
+                    id.to_string(),
+                    aliases.into_iter().map(String::from).collect(),
+                )
+            })
+            .collect()
+    }
+
     /// Add or update an organization with default key paths.
     ///
     /// Callers are responsible for ensuring the alias and organization ID are
@@ -482,6 +511,7 @@ impl Config {
             api_base_url,
             default_operator_kind: OperatorKind::Local,
             operators: vec![OperatorRecord::local(default_operator_key_path(alias)?)],
+            default_alias: false,
             extra: toml::Table::new(),
         };
         self.orgs.insert(alias.to_string(), org_config);
@@ -500,9 +530,24 @@ impl Config {
         debug!(org_alias = alias, "removing organization config");
         self.last_created_app_id.remove(alias);
         self.last_operator_ids.remove(alias);
+
         if self.active_org.as_deref() == Some(alias) {
             self.active_org = None;
         }
+
+        // The default-alias marker only means something while several profiles
+        // share an organization ID; clear it when the removal dissolves the
+        // removed profile's group to a single survivor.
+        let mut survivors: Vec<_> = self
+            .orgs
+            .values_mut()
+            .filter(|org| org.id == removed.id)
+            .collect();
+
+        if let [survivor] = survivors.as_mut_slice() {
+            survivor.default_alias = false;
+        }
+
         Some(removed)
     }
 
@@ -636,5 +681,76 @@ default = ["operator-123"]
                 .to_string()
                 .contains("config version must be an unsigned 16-bit integer")
         );
+    }
+
+    fn config_with_org_entries(entries: &[(&str, &str, bool)]) -> Config {
+        Config {
+            orgs: entries
+                .iter()
+                .map(|(alias, org_id, default_alias)| {
+                    (
+                        alias.to_string(),
+                        OrgConfig {
+                            id: org_id.to_string(),
+                            api_key_path: PathBuf::from("api_key.json"),
+                            api_base_url: API_BASE_URL_PROD.to_string(),
+                            default_operator_kind: OperatorKind::Local,
+                            operators: Vec::new(),
+                            default_alias: *default_alias,
+                            extra: toml::Table::new(),
+                        },
+                    )
+                })
+                .collect(),
+            ..Config::default()
+        }
+    }
+
+    #[test]
+    fn duplicated_org_ids_ignores_unique_ids() {
+        let config = config_with_org_entries(&[("a", "org-1", false), ("b", "org-2", false)]);
+
+        assert_eq!(config.duplicated_org_ids(), Vec::new());
+    }
+
+    #[test]
+    fn duplicated_org_ids_groups_and_sorts() {
+        let config = config_with_org_entries(&[
+            ("c", "org-2", false),
+            ("b", "org-1", false),
+            ("a", "org-2", false),
+            ("e", "org-1", false),
+            ("d", "org-3", false),
+        ]);
+
+        assert_eq!(
+            config.duplicated_org_ids(),
+            vec![
+                ("org-1".to_string(), vec!["b".to_string(), "e".to_string()]),
+                ("org-2".to_string(), vec!["a".to_string(), "c".to_string()]),
+            ]
+        );
+    }
+
+    #[test]
+    fn remove_org_clears_default_alias_on_sole_survivor() {
+        let mut config = config_with_org_entries(&[("a", "org-1", true), ("b", "org-1", false)]);
+
+        config.remove_org("b").expect("b is configured");
+
+        assert!(!config.orgs["a"].default_alias);
+    }
+
+    #[test]
+    fn remove_org_keeps_default_alias_while_duplicates_remain() {
+        let mut config = config_with_org_entries(&[
+            ("a", "org-1", true),
+            ("b", "org-1", false),
+            ("c", "org-1", false),
+        ]);
+
+        config.remove_org("c").expect("c is configured");
+
+        assert!(config.orgs["a"].default_alias);
     }
 }

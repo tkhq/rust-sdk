@@ -313,6 +313,7 @@ mod tests {
                     api_base_url: "https://api.turnkey.com".to_string(),
                     default_operator_kind: OperatorKind::Local,
                     operators,
+                    default_alias: false,
                     extra: toml::Table::new(),
                 },
             )]),
