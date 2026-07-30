@@ -12,3 +12,4 @@ pub mod display;
 pub mod keys;
 pub mod login;
 pub mod operator;
+pub mod version;

@@ -248,6 +248,7 @@ impl Commands {
                     commands::login::run_delete(ctx, delete_args).await
                 }
             },
+            Commands::Version => commands::version::run(),
         }
     }
 }
@@ -281,6 +282,8 @@ enum Commands {
         #[command(subcommand)]
         command: KeysCommands,
     },
+    /// Print the tvc CLI version.
+    Version,
 }
 
 impl Commands {
@@ -296,6 +299,7 @@ impl Commands {
             Commands::Deploy { command } => command.name(),
             Commands::App { command } => command.name(),
             Commands::Keys { command } => command.name(),
+            Commands::Version => "version",
         }
     }
 }
