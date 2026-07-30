@@ -1,6 +1,6 @@
 //! User-facing output primitives for TVC.
 
-use crate::errors::{Classification, ErrorCode, classify, render_error_chain};
+use crate::errors::{Classification, ErrorCode, classify, hint, render_error_chain};
 use anstyle::{AnsiColor, Color, Style};
 use anyhow::Result;
 use clap::ValueEnum;
@@ -161,6 +161,11 @@ impl<W: Write, W2: Write> Human<'_, W, W2> {
             let style = self.0.style(AnsiColor::Red);
             let message = render_error_chain(error);
             writeln!(self.0.stderr, "{style}error{style:#}: {message}")?;
+
+            if let Some(hint) = hint(error) {
+                let style = self.0.style(AnsiColor::Cyan);
+                writeln!(self.0.stderr, "{style}hint{style:#}: {hint}")?;
+            }
         }
         Ok(())
     }

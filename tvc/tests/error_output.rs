@@ -292,3 +292,47 @@ fn human_and_json_runtime_errors_render_identical_message_text() {
         )
     );
 }
+
+const CLIENT_VERSION_TOO_OLD_BODY: &str = r#"{"code":3,"message":"tvc 0.12.0 is older than the minimum version this backend supports (0.12.2); upgrade tvc to the latest release","details":[],"turnkeyErrorCode":"TVC_CLIENT_VERSION_TOO_OLD"}"#;
+
+#[test]
+fn client_version_rejection_emits_dedicated_code() {
+    let (api_base_url, server) = spawn_json_server(
+        400,
+        CLIENT_VERSION_TOO_OLD_BODY.to_string(),
+        GET_DEPLOYMENT_PATH,
+    );
+    let output = command_output(deploy_status_command(&api_base_url, Some("json")), 1);
+    server.join().unwrap();
+
+    let message = single_json_message(&output);
+    assert_eq!(message["reason"], "command_error");
+    assert_eq!(message["code"], "client_version_too_old");
+    assert_eq!(message["httpStatus"], 400);
+}
+
+#[test]
+fn client_version_rejection_renders_human_hint() {
+    let (api_base_url, server) = spawn_json_server(
+        400,
+        CLIENT_VERSION_TOO_OLD_BODY.to_string(),
+        GET_DEPLOYMENT_PATH,
+    );
+    let output = command_output(deploy_status_command(&api_base_url, None), 1);
+    server.join().unwrap();
+
+    assert!(output.stdout.is_empty());
+    let stderr = String::from_utf8(output.stderr.clone()).unwrap();
+    assert!(
+        stderr.starts_with(&format!(
+            "error: failed to fetch deployment {DEPLOYMENT_ID}"
+        )),
+        "{stderr:?}"
+    );
+    assert!(
+        stderr.ends_with(
+            "hint: tvc 0.12.0 is older than the minimum version this backend supports (0.12.2); upgrade tvc to the latest release\n"
+        ),
+        "{stderr:?}"
+    );
+}
