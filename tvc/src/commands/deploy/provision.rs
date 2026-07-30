@@ -257,6 +257,7 @@ mod tests {
                     api_base_url: "https://api.turnkey.com".to_string(),
                     default_operator_kind: OperatorKind::Hosted,
                     operators: vec![record],
+                    default_alias: false,
                     extra: toml::Table::new(),
                 },
             )]),

@@ -25,6 +25,17 @@ fn org_dir(home: &Path, alias: &str) -> PathBuf {
 /// `(alias, org_id)` pair, using the default per-alias key-file layout and a
 /// dead-port API base URL.
 pub fn write_profiles_config(home: &Path, profiles: &[(&str, &str)], active_org: Option<&str>) {
+    write_profiles_config_with_defaults(home, profiles, active_org, &[]);
+}
+
+/// Like [`write_profiles_config`], additionally marking each alias listed in
+/// `default_aliases` with `default_alias = true`.
+pub fn write_profiles_config_with_defaults(
+    home: &Path,
+    profiles: &[(&str, &str)],
+    active_org: Option<&str>,
+    default_aliases: &[&str],
+) {
     let turnkey_dir = home.join(".config/turnkey");
     fs::create_dir_all(&turnkey_dir).unwrap();
 
@@ -40,6 +51,7 @@ pub fn write_profiles_config(home: &Path, profiles: &[(&str, &str)], active_org:
                     api_base_url: LOCAL_API_BASE_URL.to_string(),
                     default_operator_kind: OperatorKind::Local,
                     operators: vec![OperatorRecord::local(dir.join("operator.json"))],
+                    default_alias: default_aliases.contains(alias),
                     extra: toml::Table::new(),
                 },
             )
