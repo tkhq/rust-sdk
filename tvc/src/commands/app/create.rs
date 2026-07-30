@@ -32,10 +32,8 @@ pub struct Args {
     pub config_file: PathBuf,
 
     /// Create a new operator instead of reusing the most recently created one.
-    ///
-    /// By default `app create` reuses the operator from your last `app create`
-    /// (the same local operator key) rather than minting a new operator ID each
-    /// time. Pass this to force creating a new operator.
+    /// Reuse is the default and is preferred; only pass this if you know you
+    /// need a separate operator.
     #[arg(long, env = "TVC_NO_OPERATOR_REUSE")]
     pub no_operator_reuse: bool,
 
