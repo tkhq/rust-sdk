@@ -8,8 +8,9 @@
 
 #![cfg(unix)]
 
+mod common;
+
 use rexpect::session::PtySession;
-use std::collections::BTreeSet;
 use std::path::Path;
 use std::process::Command;
 
@@ -161,56 +162,65 @@ fn login_with_empty_org_id_bails() {
     session.exp_eof().unwrap();
 }
 
-/// TVC-159: when one organization ID is registered under multiple aliases,
-/// `login --org <org-id>` resolves to an arbitrary alias, because resolution
-/// falls back to `HashMap` iteration order, which is randomized per process.
-///
-/// The duplicate state is created through the CLI itself (two logins to the
-/// same organization under different aliases), then resolution runs in fresh
-/// processes until both aliases have been observed. With the bug present the
-/// expected number of attempts is 2-3; all 40 agreeing has probability 2⁻³⁹.
+/// TVC-159: `login --org <org-id>` with several profiles registered for that
+/// organization ID prompts for which profile to use instead of resolving to
+/// an arbitrary one. The duplicate state is created through the CLI itself,
+/// proving the fix handles profiles that predate it.
 #[test]
-fn login_with_duplicate_org_id_selects_alias_nondeterministically() {
+fn login_with_duplicate_org_id_prompts_for_profile() {
     let temp = tempfile::TempDir::new().unwrap();
     pty_create_profile(temp.path(), "org-dup-test", "alias-a", false);
     pty_create_profile(temp.path(), "org-dup-test", "alias-b", true);
 
-    let bin = env!("CARGO_BIN_EXE_tvc");
-    let mut seen = BTreeSet::new();
+    let mut session = spawn_with_home(temp.path(), &["login", "--org", "org-dup-test"]);
 
-    for _ in 0..40 {
-        let output = Command::new(bin)
-            .args(["login", "--org", "org-dup-test"])
-            .env("HOME", temp.path())
-            .env("TVC_NON_INTERACTIVE", "1")
-            .env_remove("TVC_ORG")
-            .env_remove("TVC_API_BASE_URL")
-            .output()
-            .unwrap();
+    session
+        .exp_string("Select profile for organization 'org-dup-test'")
+        .unwrap();
+    session.send_line("alias-a").unwrap();
 
-        // Selection happens (and the config is saved) before the whoami
-        // request, which fails against the dead-port base URL on the profile.
-        assert!(!output.status.success());
+    session
+        .exp_string("Selected org: alias-a (org-dup-test)")
+        .unwrap();
+    session.exp_string("Using existing API key.").unwrap();
+    session.exp_string("Verifying credentials...").unwrap();
+    session.exp_eof().unwrap();
+}
 
-        let stdout = String::from_utf8(output.stdout).unwrap();
-        let alias = stdout
-            .lines()
-            .find_map(|line| line.strip_prefix("Selected org: "))
-            .and_then(|rest| rest.strip_suffix(" (org-dup-test)"))
-            .unwrap_or_else(|| panic!("no selected-org line in output:\n{stdout}"));
-        seen.insert(alias.to_string());
-
-        if seen.len() == 2 {
-            break;
-        }
-    }
-
-    let expected: BTreeSet<_> = ["alias-a", "alias-b"]
-        .into_iter()
-        .map(String::from)
-        .collect();
-    assert_eq!(
-        seen, expected,
-        "resolution by org ID should be nondeterministic across processes (TVC-159)"
+/// `profile delete --org <org-id>` with several profiles registered for that
+/// organization ID prompts for which profile to delete instead of deleting an
+/// arbitrary one (TVC-159), and only the chosen profile is removed.
+#[test]
+fn profile_delete_with_duplicate_org_id_prompts_for_profile() {
+    let temp = tempfile::TempDir::new().unwrap();
+    common::write_profiles_config(
+        temp.path(),
+        &[("alias-a", "org-dup-test"), ("alias-b", "org-dup-test")],
+        Some("alias-a"),
     );
+    common::write_profile_key_files(temp.path(), "alias-a");
+    common::write_profile_key_files(temp.path(), "alias-b");
+
+    let mut session = spawn_with_home(temp.path(), &["profile", "delete", "--org", "org-dup-test"]);
+
+    session.exp_string("Select profile to delete").unwrap();
+    session.send_line("alias-b").unwrap();
+
+    session
+        .exp_string("Permanently delete profile 'alias-b' (org-dup-test)")
+        .unwrap();
+    session.send_line("y").unwrap();
+
+    session
+        .exp_string("Deleted login profile 'alias-b' (org-dup-test).")
+        .unwrap();
+    session.exp_eof().unwrap();
+
+    assert!(!temp.path().join(".config/turnkey/orgs/alias-b").exists());
+    assert!(temp.path().join(".config/turnkey/orgs/alias-a").exists());
+
+    let saved =
+        std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
+    assert!(!saved.contains("alias-b"));
+    assert!(saved.contains("alias-a"));
 }

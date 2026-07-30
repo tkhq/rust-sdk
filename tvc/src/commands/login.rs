@@ -1,14 +1,11 @@
 //! Login command for authenticating with Turnkey.
 
 use crate::client::build_turnkey_client;
-use crate::commands::keys::backup_operator_key::back_up;
 use crate::config::turnkey::{
-    API_BASE_URL_PROD, Config, KeyCurve, LocalOperatorRecord, OperatorKind, OperatorRecordKind,
-    OrgConfig, QosOperatorPublicKey, StoredApiKey, StoredQosOperatorKey, dashboard_base_url,
-    default_api_key_path, default_operator_key_path, default_org_dir,
+    API_BASE_URL_PROD, Config, KeyCurve, OperatorRecordKind, OrgConfig, StoredApiKey,
+    StoredQosOperatorKey, dashboard_base_url, default_api_key_path, default_operator_key_path,
+    default_org_dir,
 };
-use crate::local_operator_key::select_local_operator;
-use crate::operator::select_hosted_operator;
 use crate::outcome::Outcome;
 use crate::output::StdCtx;
 use crate::prompts::{self, error_required_in_non_interactive};
@@ -20,11 +17,9 @@ use serde::Serialize;
 use std::collections::BTreeSet;
 use std::fmt::{self, Display, Formatter};
 use std::io::BufRead;
-use std::path::PathBuf;
 use tracing::{debug, instrument};
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use turnkey_client::generated::GetWhoamiRequest;
-use uuid::Uuid;
 
 /// Authenticate with Turnkey and set up local credentials.
 #[derive(Debug, ClapArgs)]
@@ -54,8 +49,14 @@ pub struct DeleteArgs {
 }
 
 enum OrgPlan {
+    /// A resolved alias of a configured profile. The plan builders validate
+    /// the user's query (alias or organization ID) before constructing this,
+    /// so it is never a raw query.
     Existing(String),
-    New { id: String, alias: String },
+    New {
+        id: String,
+        alias: String,
+    },
 }
 
 enum ApiKeyPolicy {
@@ -81,7 +82,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     let config = Config::load().await?;
 
     let plan = if ctx.is_non_interactive() {
-        build_login_plan_non_interactive(args)?
+        build_login_plan_non_interactive(args, &config)?
     } else {
         build_login_plan_interactive(ctx, args, &config)?
     };
@@ -112,7 +113,7 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs) -> Result<Outcome> {
     }
 
     let mut config = Config::load().await?;
-    let alias = resolve_profile_alias(&config, args.org)?;
+    let alias = resolve_profile_alias(&config, args.org, is_non_interactive)?;
     let org_id = config
         .orgs
         .get(&alias)
@@ -236,17 +237,36 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs) -> Result<Outcome> {
 }
 
 /// Resolve the alias of a configured profile to delete. Prompts interactively
-/// with a picker when no query is given; a query that matches nothing is handled
-/// by `find_org` returning `None`.
-fn resolve_profile_alias(config: &Config, org: Option<String>) -> Result<String> {
+/// with a picker when no query is given, or when an org-ID query matches
+/// several profiles; non-interactive runs must name a single profile.
+fn resolve_profile_alias(
+    config: &Config,
+    org: Option<String>,
+    is_non_interactive: bool,
+) -> Result<String> {
     match org {
-        Some(query) => match find_org(config, &query) {
-            Some((alias, _)) => Ok(alias.clone()),
-            None => bail!(
-                "Login profile '{query}' not found. \
-                 Run `tvc login` to see configured profiles."
-            ),
-        },
+        Some(query) => {
+            let aliases = find_org_aliases(config, &query);
+
+            match aliases.as_slice() {
+                [] => bail!(
+                    "Login profile '{query}' not found. \
+                     Run `tvc login` to see configured profiles."
+                ),
+                [alias] => Ok(alias.clone()),
+                _ if is_non_interactive => bail!(
+                    "Organization '{query}' is configured under multiple profiles: {}. \
+                     Re-run with --org <alias> to select which profile to delete.",
+                    aliases.join(", ")
+                ),
+                _ => Ok(prompts::select(
+                    "Select profile to delete",
+                    duplicate_alias_choices(config, &aliases),
+                )?
+                .alias
+                .to_string()),
+            }
+        }
         None => {
             // Reached only in interactive mode; a non-interactive run without
             // --org is rejected up front in `run_delete` before we get here.
@@ -282,13 +302,52 @@ impl Display for ProfileChoice<'_> {
     }
 }
 
+/// Selection choices for aliases that share one organization ID, marking the
+/// active profile the way the no-query delete picker does.
+fn duplicate_alias_choices<'a>(
+    config: &'a Config,
+    aliases: &'a [String],
+) -> Vec<ProfileChoice<'a>> {
+    aliases
+        .iter()
+        .map(|alias| ProfileChoice {
+            alias: alias.as_str(),
+            org_id: config
+                .orgs
+                .get(alias)
+                .expect("alias was resolved from this config")
+                .id
+                .as_str(),
+            is_active: config.active_org.as_deref() == Some(alias.as_str()),
+        })
+        .collect()
+}
+
 fn build_login_plan_interactive(
     ctx: &mut StdCtx,
     args: Args,
     config: &Config,
 ) -> Result<LoginPlan> {
     let org = match args.org {
-        Some(query) => OrgPlan::Existing(query),
+        Some(query) => {
+            let aliases = find_org_aliases(config, &query);
+
+            let alias = match aliases.as_slice() {
+                [] => bail!(
+                    "Organization '{query}' not found. \
+                     Run `tvc login` without --org to set up a new organization."
+                ),
+                [alias] => alias.clone(),
+                _ => prompts::select(
+                    &format!("Select profile for organization '{query}'"),
+                    duplicate_alias_choices(config, &aliases),
+                )?
+                .alias
+                .to_string(),
+            };
+
+            OrgPlan::Existing(alias)
+        }
         None => prompt_for_org_plan(ctx, config, args.api_base_url.as_deref())?,
     };
     Ok(LoginPlan {
@@ -298,13 +357,28 @@ fn build_login_plan_interactive(
     })
 }
 
-fn build_login_plan_non_interactive(args: Args) -> Result<LoginPlan> {
+fn build_login_plan_non_interactive(args: Args, config: &Config) -> Result<LoginPlan> {
     let Some(org_query) = args.org else {
         return Err(error_required_in_non_interactive("--org"));
     };
 
+    let aliases = find_org_aliases(config, &org_query);
+
+    let alias = match aliases.as_slice() {
+        [] => bail!(
+            "Organization '{org_query}' not found. \
+             Run `tvc login` without --org to set up a new organization."
+        ),
+        [alias] => alias.clone(),
+        _ => bail!(
+            "Organization '{org_query}' is configured under multiple profiles: {}. \
+             Re-run with --org <alias> to select one.",
+            aliases.join(", ")
+        ),
+    };
+
     Ok(LoginPlan {
-        org: OrgPlan::Existing(org_query),
+        org: OrgPlan::Existing(alias),
         api_base_url_override: args.api_base_url,
         api_key_policy: ApiKeyPolicy::RequireExisting,
     })
@@ -312,20 +386,18 @@ fn build_login_plan_non_interactive(args: Args) -> Result<LoginPlan> {
 
 async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) -> Result<Outcome> {
     let (alias, org_config) = match plan.org {
-        OrgPlan::Existing(query) => {
-            let alias = match find_org(&config, &query) {
-                Some((alias, _)) => alias.clone(),
-                None => bail!(
-                    "Organization '{query}' not found. \
-                     Run `tvc login` without --org to set up a new organization."
-                ),
-            };
+        OrgPlan::Existing(alias) => {
             update_api_base_url_from_override(
                 &mut config,
                 &alias,
                 plan.api_base_url_override.as_deref(),
             );
-            let org_config = config.orgs.get(&alias).unwrap().clone();
+
+            let org_config = config
+                .orgs
+                .get(&alias)
+                .cloned()
+                .expect("plan alias was resolved against this config");
             (alias, org_config)
         }
         OrgPlan::New { id, alias } => {
@@ -363,42 +435,16 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
     shell_println!(ctx, "Verifying credentials...")?;
 
     let whoami = verify_credentials(&api_key, &org_config.id, &org_config.api_base_url).await?;
+    let operator_key = find_or_generate_operator_key(ctx, &alias, &org_config).await?;
 
-    // Login ensures the org's default backend is usable, and never crosses
-    // over: a local default finds or generates the registered key file; a
-    // hosted default requires the registered hosted operator and has no key
-    // material to generate.
-    let operator = match org_config.default_operator_kind {
-        OperatorKind::Local => {
-            let (_, local) =
-                select_local_operator(&org_config).with_context(|| format!("org '{alias}'"))?;
-            let operator_key = find_or_generate_operator_key(ctx, &alias, local).await?;
-
-            LoggedInOperator::Local {
-                operator_public_key: operator_key.public_key,
-                operator_key_path: local.key_path.display().to_string(),
-            }
-        }
-        OperatorKind::Hosted => {
-            let (record, hosted) =
-                select_hosted_operator(&org_config).with_context(|| format!("org '{alias}'"))?;
-            shell_println!(
-                ctx,
-                "Using hosted operator '{}' ({}).",
-                record.name,
-                hosted.operator_id
-            )?;
-
-            LoggedInOperator::Hosted {
-                operator_name: record.name.clone(),
-                operator_id: hosted.operator_id,
-                operator_public_key: format!(
-                    "{}{}",
-                    hosted.encrypt_public_key, hosted.sign_public_key
-                ),
-            }
-        }
-    };
+    // Operator key path now lives in the org's local operator record (the
+    // versioned registry), not on `OrgConfig` directly. Resolve it before the
+    // struct literal so `alias` is still available (the struct moves it).
+    let operator_key_path = org_config
+        .select_local_record(&alias)?
+        .key_path
+        .display()
+        .to_string();
 
     Ok(Outcome::LoggedIn(LoggedIn {
         organization_name: whoami.organization_name,
@@ -407,11 +453,12 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
         user_id: whoami.user_id,
         alias,
         api_public_key: api_key.public_key.clone(),
+        operator_public_key: operator_key.public_key.clone(),
         config_file_path: crate::config::turnkey::config_file_path()?
             .display()
             .to_string(),
         api_key_path: org_config.api_key_path.display().to_string(),
-        operator,
+        operator_key_path,
     }))
 }
 
@@ -491,18 +538,23 @@ impl Display for OrgChoice {
     }
 }
 
-pub(crate) fn find_org<'a>(config: &'a Config, org: &str) -> Option<(&'a String, &'a OrgConfig)> {
-    if let Some((alias, org_config)) = config.orgs.get_key_value(org) {
-        return Some((alias, org_config));
+/// Every configured alias matching an org query, for callers to dispose of
+/// per their mode. An exact alias match is unambiguous and wins outright;
+/// otherwise all aliases registered for the query as an organization ID are
+/// returned, sorted for stable output.
+fn find_org_aliases(config: &Config, query: &str) -> Vec<String> {
+    if config.orgs.contains_key(query) {
+        return vec![query.to_string()];
     }
 
-    for (alias, org_config) in &config.orgs {
-        if org_config.id == org {
-            return Some((alias, org_config));
-        }
-    }
-
-    None
+    let mut aliases: Vec<String> = config
+        .orgs
+        .iter()
+        .filter(|(_, org)| org.id == query)
+        .map(|(alias, _)| alias.clone())
+        .collect();
+    aliases.sort();
+    aliases
 }
 
 fn generate_org(
@@ -588,14 +640,14 @@ fn wait_for_dashboard_registration(ctx: &mut StdCtx) -> Result<()> {
 async fn find_or_generate_operator_key(
     ctx: &mut StdCtx,
     org_alias: &str,
-    local: &LocalOperatorRecord,
+    org_config: &OrgConfig,
 ) -> Result<StoredQosOperatorKey> {
+    let local = org_config.select_local_record(org_alias)?;
     debug!(operator_key_path = %local.key_path.display(), "resolving operator key");
 
     if let Some(operator_key) = StoredQosOperatorKey::load(&local.key_path).await? {
         debug!("using existing operator key");
         shell_println!(ctx, "Using existing operator key.")?;
-        shell_println!(ctx, "Tip: back it up with `tvc keys backup-operator-key`.")?;
         return Ok(operator_key);
     }
 
@@ -605,12 +657,12 @@ async fn find_or_generate_operator_key(
 
     let pair =
         P256Pair::generate().map_err(|e| anyhow!("failed to generate operator key: {e:?}"))?;
-    let public_key = QosOperatorPublicKey::try_from(pair.public_key().to_bytes().as_slice())
-        .context("generated operator public key")?;
+    let public_key = hex::encode(pair.public_key().to_bytes());
+    let private_key = hex::encode(pair.to_master_seed());
 
     let operator_key = StoredQosOperatorKey {
-        public_key,
-        private_key: hex::encode(pair.to_master_seed()),
+        public_key: public_key.clone(),
+        private_key,
     };
 
     operator_key.save(&local.key_path).await?;
@@ -628,57 +680,6 @@ async fn find_or_generate_operator_key(
         ctx,
         "Make sure to register this as an operator in your organization."
     )?;
-
-    // Onboarding nudge for the freshly generated key. JSON mode already
-    // forces non-interactive; the TTY check keeps piped runs from hanging on
-    // the prompt.
-    if !ctx.is_non_interactive() && prompts::stdin_can_prompt() {
-        shell_println!(ctx)?;
-        shell_println!(
-            ctx,
-            "This key exists only on this machine; if it's lost you cannot \
-             approve deployments with it."
-        )?;
-
-        let backed_up = if prompts::confirm("Back up your operator key now?", true)? {
-            let destination: PathBuf = prompts::text(
-                "Backup file path",
-                Some(&format!("operator-{org_alias}-backup.json")),
-            )?
-            .into();
-
-            // Declining the overwrite skips the backup rather than failing:
-            // login has already succeeded and must not die here.
-            let proceed = !destination.exists()
-                || prompts::confirm(&format!("Overwrite {}?", destination.display()), false)?;
-
-            if proceed {
-                match back_up(org_alias.to_string(), local.key_path.clone(), destination).await {
-                    Ok(report) => Some(report),
-                    Err(error) => {
-                        // Deliberately swallowed at this endpoint: the backup
-                        // is advisory and the login outcome must still land.
-                        shell_eprintln!(ctx, "WARNING: backup failed: {error:#}")?;
-                        None
-                    }
-                }
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        if let Some(report) = backed_up {
-            shell_println!(ctx)?;
-            shell_println!(ctx, "{report}")?;
-        } else {
-            shell_println!(
-                ctx,
-                "You can back up any time with `tvc keys backup-operator-key`."
-            )?;
-        }
-    }
 
     Ok(operator_key)
 }
@@ -730,42 +731,10 @@ pub struct LoggedIn {
     user_id: String,
     alias: String,
     api_public_key: String,
+    operator_public_key: String,
     config_file_path: String,
     api_key_path: String,
-    #[serde(flatten)]
-    operator: LoggedInOperator,
-}
-
-/// The operator backend the login landed on: a local login reports its key
-/// file, a hosted login reports the registered identity. Both carry the qos
-/// composite public key.
-#[derive(Serialize)]
-#[serde(
-    tag = "operatorKind",
-    rename_all = "snake_case",
-    rename_all_fields = "camelCase"
-)]
-enum LoggedInOperator {
-    Local {
-        operator_public_key: QosOperatorPublicKey,
-        operator_key_path: String,
-    },
-    Hosted {
-        operator_name: String,
-        operator_id: Uuid,
-        operator_public_key: String,
-    },
-}
-
-/// Local, like every org `login` itself creates; exists for [`LoggedIn`]'s
-/// `Default`, which the outcome payload-enumeration tests construct.
-impl Default for LoggedInOperator {
-    fn default() -> Self {
-        Self::Local {
-            operator_public_key: QosOperatorPublicKey::default(),
-            operator_key_path: String::new(),
-        }
-    }
+    operator_key_path: String,
 }
 
 #[derive(Default, Serialize)]
@@ -823,46 +792,24 @@ User: {} ({})
 Active Org: {}
 
 Credentials
-  API public key:        {}"#,
+  API public key:        {}
+  Operator public key:   {}
+
+Saved to
+  Config file:    {}
+  API key:        {}
+  Operator key:   {}"#,
             self.organization_name,
             self.organization_id,
             self.username,
             self.user_id,
             self.alias,
             self.api_public_key,
-        )?;
-
-        match &self.operator {
-            LoggedInOperator::Local {
-                operator_public_key,
-                operator_key_path,
-            } => write!(
-                f,
-                r#"
-  Operator public key:   {operator_public_key}
-
-Saved to
-  Config file:    {}
-  API key:        {}
-  Operator key:   {operator_key_path}"#,
-                self.config_file_path, self.api_key_path,
-            ),
-            LoggedInOperator::Hosted {
-                operator_name,
-                operator_id,
-                operator_public_key,
-            } => write!(
-                f,
-                r#"
-  Operator public key:   {operator_public_key}
-  Hosted operator:       {operator_name} ({operator_id})
-
-Saved to
-  Config file:    {}
-  API key:        {}"#,
-                self.config_file_path, self.api_key_path,
-            ),
-        }
+            self.operator_public_key,
+            self.config_file_path,
+            self.api_key_path,
+            self.operator_key_path
+        )
     }
 }
 
@@ -877,77 +824,6 @@ mod tests {
     use std::path::PathBuf;
 
     const OVERRIDE_URL: &str = "http://127.0.0.1:8081";
-
-    fn logged_in_with(operator: LoggedInOperator) -> LoggedIn {
-        LoggedIn {
-            organization_name: "Org".to_string(),
-            organization_id: "org-1".to_string(),
-            username: "user".to_string(),
-            user_id: "user-1".to_string(),
-            alias: "prod".to_string(),
-            api_public_key: "api-key".to_string(),
-            config_file_path: "/config/tvc.config.toml".to_string(),
-            api_key_path: "/keys/api_key.json".to_string(),
-            operator,
-        }
-    }
-
-    /// The local outcome keeps its pre-hosted JSON fields and gains only the
-    /// additive `operatorKind` tag — this is a compatibility contract.
-    #[test]
-    fn logged_in_local_json_reports_the_key_file() {
-        let composite = hex::encode(P256Pair::generate().unwrap().public_key().to_bytes());
-        let logged_in = logged_in_with(LoggedInOperator::Local {
-            operator_public_key: composite.parse().unwrap(),
-            operator_key_path: "/keys/operator.json".to_string(),
-        });
-
-        assert_eq!(
-            serde_json::to_value(&logged_in).unwrap(),
-            serde_json::json!({
-                "organizationName": "Org",
-                "organizationId": "org-1",
-                "username": "user",
-                "userId": "user-1",
-                "alias": "prod",
-                "apiPublicKey": "api-key",
-                "configFilePath": "/config/tvc.config.toml",
-                "apiKeyPath": "/keys/api_key.json",
-                "operatorKind": "local",
-                "operatorPublicKey": composite,
-                "operatorKeyPath": "/keys/operator.json",
-            })
-        );
-    }
-
-    /// The hosted outcome reports the registered identity and no key path.
-    #[test]
-    fn logged_in_hosted_json_reports_the_registered_identity() {
-        let composite = hex::encode(P256Pair::generate().unwrap().public_key().to_bytes());
-        let logged_in = logged_in_with(LoggedInOperator::Hosted {
-            operator_name: "hosted-op".to_string(),
-            operator_id: Uuid::from_u128(0x11),
-            operator_public_key: composite.clone(),
-        });
-
-        assert_eq!(
-            serde_json::to_value(&logged_in).unwrap(),
-            serde_json::json!({
-                "organizationName": "Org",
-                "organizationId": "org-1",
-                "username": "user",
-                "userId": "user-1",
-                "alias": "prod",
-                "apiPublicKey": "api-key",
-                "configFilePath": "/config/tvc.config.toml",
-                "apiKeyPath": "/keys/api_key.json",
-                "operatorKind": "hosted",
-                "operatorName": "hosted-op",
-                "operatorId": Uuid::from_u128(0x11).to_string(),
-                "operatorPublicKey": composite,
-            })
-        );
-    }
 
     #[test]
     fn new_org_api_base_url_defaults_to_prod() {
@@ -1000,6 +876,29 @@ mod tests {
         assert_eq!(config.orgs["default"].api_base_url, OVERRIDE_URL);
     }
 
+    #[test]
+    fn find_org_aliases_prefers_exact_alias_match() {
+        // The alias "org-x" collides with another profile's organization ID;
+        // the exact alias match must win outright.
+        let config = config_with_orgs(&[("org-x", "org-y"), ("a", "org-x")]);
+
+        assert_eq!(find_org_aliases(&config, "org-x"), ["org-x"]);
+    }
+
+    #[test]
+    fn find_org_aliases_returns_all_id_matches_sorted() {
+        let config = config_with_orgs(&[("c", "org-1"), ("a", "org-1"), ("b", "org-1")]);
+
+        assert_eq!(find_org_aliases(&config, "org-1"), ["a", "b", "c"]);
+    }
+
+    #[test]
+    fn find_org_aliases_returns_empty_for_unknown_query() {
+        let config = config_with_orgs(&[("a", "org-1")]);
+
+        assert!(find_org_aliases(&config, "org-unknown").is_empty());
+    }
+
     fn config_with_org(api_base_url: &str) -> Config {
         Config {
             active_org: Some("default".to_string()),
@@ -1014,6 +913,31 @@ mod tests {
                     extra: toml::Table::new(),
                 },
             )]),
+            last_created_app_id: HashMap::new(),
+            last_operator_ids: HashMap::new(),
+            extra: toml::Table::new(),
+        }
+    }
+
+    fn config_with_orgs(entries: &[(&str, &str)]) -> Config {
+        Config {
+            active_org: None,
+            orgs: entries
+                .iter()
+                .map(|(alias, org_id)| {
+                    (
+                        alias.to_string(),
+                        OrgConfig {
+                            id: org_id.to_string(),
+                            api_key_path: PathBuf::from("api_key.json"),
+                            api_base_url: API_BASE_URL_PROD.to_string(),
+                            default_operator_kind: OperatorKind::Local,
+                            operators: vec![OperatorRecord::local(PathBuf::from("operator.json"))],
+                            extra: toml::Table::new(),
+                        },
+                    )
+                })
+                .collect(),
             last_created_app_id: HashMap::new(),
             last_operator_ids: HashMap::new(),
             extra: toml::Table::new(),
