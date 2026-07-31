@@ -377,6 +377,37 @@ fn profile_delete_warns_and_keeps_custom_key_paths() {
     assert!(!saved_config(&temp).contains(ORG_TEST));
 }
 
+/// Non-interactive login never touches the filesystem layout: legacy
+/// alias-keyed directories and the paths pointing at them stay put.
+#[test]
+fn login_non_interactive_leaves_legacy_layout_alone() {
+    let temp = TempDir::new().unwrap();
+    common::write_profiles_config(temp.path(), &[("alias-a", ORG_SOLO)], Some("alias-a"), &[]);
+    common::write_profile_key_files(temp.path(), "alias-a");
+    let legacy_dir = temp.path().join(".config/turnkey/orgs/alias-a");
+
+    // Exits nonzero at the dead-port whoami; the layout must be untouched.
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env(NON_INTERACTIVE_ENV, "1")
+        .arg("login")
+        .arg("--org")
+        .arg("alias-a")
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("Moved key directory").not());
+
+    assert!(legacy_dir.join("api_key.json").exists());
+    assert!(
+        !temp
+            .path()
+            .join(".config/turnkey/orgs")
+            .join(ORG_SOLO)
+            .exists()
+    );
+    assert!(saved_config(&temp).contains("orgs/alias-a/api_key.json"));
+}
+
 #[test]
 fn login_help_shows_api_base_url_override() {
     cargo_bin_cmd!("tvc")
