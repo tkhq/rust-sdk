@@ -17,8 +17,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
-      releases: ${{ steps.release-plz.outputs.releases }}
-      releases_created: ${{ steps.release-plz.outputs.releases_created }}
       tvc_tag: ${{ steps.tvc-tag.outputs.tag }}
     # This environment releases crates on crates.io, requires approval
     environment: release
@@ -65,62 +63,18 @@ jobs:
                        | .tag // empty' <<< "${RELEASES}")
           echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
 
-  upload-tvc-binaries:
-    name: Upload tvc binary (${{ matrix.target }})
+  release-tvc-binaries:
+    name: Release tvc binaries
     needs: release-plz-release
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
     if: >
       github.repository_owner == 'tkhq' &&
       needs.release-plz-release.outputs.tvc_tag != ''
     permissions:
       contents: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: x86_64-unknown-linux-musl
-            os: ubuntu-latest
-            build-tool: cross
-            rustflags: -C target-feature=+crt-static
-          - target: aarch64-unknown-linux-musl
-            os: ubuntu-latest
-            build-tool: cross
-            rustflags: -C target-feature=+crt-static
-          - target: aarch64-apple-darwin
-            os: macos-14
-            build-tool: cargo
-            rustflags: ""
-          - target: x86_64-apple-darwin
-            os: macos-14
-            build-tool: cargo
-            rustflags: ""
-    env:
-      RUSTFLAGS: ${{ matrix.rustflags }}
-    steps:
-      - name: git checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - name: install Rust
-        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
-        with:
-          cache: false
-          target: ${{ matrix.target }}
-      - name: Install cross
-        uses: taiki-e/install-action@07b4745e0c39a41822af610387492e3e53aa222b # v2.83.4
-        with:
-          tool: cross
-        if: contains(matrix.target, '-musl')
-      - name: Upload tvc binary
-        uses: taiki-e/upload-rust-binary-action@f0d45ae91ee7b8ee928de7a9d04d893a08bcbec6 # v1.30.2
-        with:
-          bin: tvc
-          package: tvc
-          target: ${{ matrix.target }}
-          build-tool: ${{ matrix.build-tool }}
-          locked: true
-          tar: all
-          ref: refs/tags/${{ needs.release-plz-release.outputs.tvc_tag }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+    uses: ./.github/workflows/tvc-binaries-release.yml
+    with:
+      dry_run: false
+      release_tag: ${{ needs.release-plz-release.outputs.tvc_tag }}
 
   # Create a PR with the new versions and changelog, preparing the next release.
   release-plz-pr:
