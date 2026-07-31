@@ -26,8 +26,11 @@ fn org_dir(home: &Path, alias: &str) -> PathBuf {
 }
 
 /// Write a v1 `tvc.config.toml` under `home` with one profile per
-/// `(alias, org_id)` pair, using the default per-alias key-file layout and a
-/// dead-port API base URL. Profiles are written in slice order, which is
+/// `(alias, org_id)` pair, using the legacy alias-keyed key-file layout and a
+/// dead-port API base URL. The legacy layout is deliberate: these fixtures
+/// seed pre-existing user state (which interactive login migrates to the
+/// id-keyed layout); the current layout is exercised through the real CLI's
+/// new-profile flow. Profiles are written in slice order, which is
 /// meaningful: config loading marks the first profile of a duplicated
 /// organization as its default when none of them carries the marker. Aliases
 /// listed in `default_aliases` are written with `default_alias = true`.
