@@ -1,6 +1,7 @@
 mod common;
 
 use assert_cmd::cargo::cargo_bin_cmd;
+use indexmap::IndexMap;
 use predicates::prelude::*;
 use std::collections::HashMap;
 use std::fs;
@@ -8,6 +9,9 @@ use tempfile::TempDir;
 use tvc::config::turnkey::{Config, OperatorKind, OperatorRecord, OrgConfig};
 
 const NON_INTERACTIVE_ENV: &str = "TVC_NON_INTERACTIVE";
+const ORG_DUP: &str = "11111111-2222-4333-8444-555555555555";
+const ORG_SOLO: &str = "22222222-2222-4222-8222-222222222222";
+const ORG_TEST: &str = "33333333-3333-4333-8333-333333333333";
 
 fn write_login_config(
     home: &TempDir,
@@ -18,10 +22,10 @@ fn write_login_config(
     fs::create_dir_all(&turnkey_dir).unwrap();
     let config = Config {
         active_org: Some("test".to_string()),
-        orgs: HashMap::from([(
+        orgs: IndexMap::from([(
             "test".to_string(),
             OrgConfig {
-                id: "org-test".to_string(),
+                id: ORG_TEST.parse().unwrap(),
                 api_key_path,
                 api_base_url: "https://api.turnkey.com".to_string(),
                 default_operator_kind: OperatorKind::Local,
@@ -39,6 +43,25 @@ fn write_login_config(
         format!("version = 1\n{}", toml::to_string_pretty(&config).unwrap()),
     )
     .unwrap();
+}
+
+fn saved_config(home: &TempDir) -> String {
+    fs::read_to_string(home.path().join(".config/turnkey/tvc.config.toml")).unwrap()
+}
+
+/// `true` when the saved config marks exactly `alias` (and no sibling) with
+/// `default_alias = true`.
+fn is_sole_default(saved: &str, alias: &str) -> bool {
+    let table: toml::Table = toml::from_str(saved).unwrap();
+    let orgs = table["orgs"].as_table().unwrap();
+    orgs.iter().all(|(other, org)| {
+        let marked = org
+            .as_table()
+            .unwrap()
+            .get("default_alias")
+            .is_some_and(|value| value == &toml::Value::Boolean(true));
+        marked == (other == alias)
+    })
 }
 
 /// When `--org <alias>` points to an alias that is not present in the local
@@ -60,50 +83,20 @@ fn login_errors_when_provided_org_not_found() {
         ));
 }
 
-/// TVC-159: an org-ID query matching several profiles must not resolve to an
-/// arbitrary one; without a `default_alias` marker, non-interactive login
-/// fails fast naming the profiles and every exit.
+/// TVC-159: an org-ID query matching several unmarked profiles must not
+/// resolve to an arbitrary one. Config loading marks the first profile in
+/// file order as the default; login follows it, warns, and persists the
+/// marker when it saves.
 #[test]
-fn login_non_interactive_without_default_alias_names_every_exit() {
+fn login_non_interactive_unmarked_duplicates_use_first_profile() {
     let temp = TempDir::new().unwrap();
+    // "alias-b" is written first deliberately: file order decides, not name
+    // order.
     common::write_profiles_config(
         temp.path(),
-        &[("alias-a", "org-dup-test"), ("alias-b", "org-dup-test")],
+        &[("alias-b", ORG_DUP), ("alias-a", ORG_DUP)],
         Some("alias-a"),
-    );
-
-    cargo_bin_cmd!("tvc")
-        .env("HOME", temp.path())
-        .env(NON_INTERACTIVE_ENV, "1")
-        .arg("login")
-        .arg("--org")
-        .arg("org-dup-test")
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains(
-            "Multiple profiles are configured for organization 'org-dup-test': alias-a, alias-b",
-        ))
-        .stderr(predicate::str::contains(
-            "tvc profile set-default-alias --org <alias>",
-        ))
-        .stderr(predicate::str::contains(
-            "tvc profile delete --org <alias> --yes",
-        ))
-        .stderr(predicate::str::contains(
-            "run `tvc login` interactively to consolidate",
-        ));
-}
-
-/// With a `default_alias` marker, non-interactive login resolves an org-ID
-/// query to the marked profile and warns that duplicates remain.
-#[test]
-fn login_non_interactive_resolves_org_id_to_default_alias() {
-    let temp = TempDir::new().unwrap();
-    common::write_profiles_config_with_defaults(
-        temp.path(),
-        &[("alias-a", "org-dup-test"), ("alias-b", "org-dup-test")],
-        Some("alias-a"),
-        &["alias-b"],
+        &[],
     );
     common::write_profile_key_files(temp.path(), "alias-a");
     common::write_profile_key_files(temp.path(), "alias-b");
@@ -115,13 +108,77 @@ fn login_non_interactive_resolves_org_id_to_default_alias() {
         .env(NON_INTERACTIVE_ENV, "1")
         .arg("login")
         .arg("--org")
-        .arg("org-dup-test")
+        .arg(ORG_DUP)
         .assert()
         .failure()
-        .stdout(predicate::str::contains(
-            "Selected org: alias-b (org-dup-test)",
-        ))
+        .stdout(predicate::str::contains(format!(
+            "Selected org: alias-b ({ORG_DUP})"
+        )))
         .stderr(predicate::str::contains("Using default profile 'alias-b'"));
+
+    // Login saved the config, so the repaired marker is now on disk and every
+    // later resolution sticks with alias-b.
+    assert!(is_sole_default(&saved_config(&temp), "alias-b"));
+}
+
+/// With a `default_alias` marker on file, non-interactive login resolves an
+/// org-ID query to the marked profile (file order does not matter) and warns
+/// that duplicates remain.
+#[test]
+fn login_non_interactive_resolves_org_id_to_default_alias() {
+    let temp = TempDir::new().unwrap();
+    common::write_profiles_config(
+        temp.path(),
+        &[("alias-a", ORG_DUP), ("alias-b", ORG_DUP)],
+        Some("alias-a"),
+        &["alias-b"],
+    );
+    common::write_profile_key_files(temp.path(), "alias-a");
+    common::write_profile_key_files(temp.path(), "alias-b");
+
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env(NON_INTERACTIVE_ENV, "1")
+        .arg("login")
+        .arg("--org")
+        .arg(ORG_DUP)
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains(format!(
+            "Selected org: alias-b ({ORG_DUP})"
+        )))
+        .stderr(predicate::str::contains("Using default profile 'alias-b'"));
+}
+
+/// Several profiles marked `default_alias` for one organization (hand-edited
+/// config) is repaired at load time: the first marked profile in file order
+/// wins and the save normalizes the file.
+#[test]
+fn login_non_interactive_multiple_marked_defaults_keep_first_marked() {
+    let temp = TempDir::new().unwrap();
+    common::write_profiles_config(
+        temp.path(),
+        &[("alias-a", ORG_DUP), ("alias-b", ORG_DUP)],
+        Some("alias-a"),
+        &["alias-a", "alias-b"],
+    );
+    common::write_profile_key_files(temp.path(), "alias-a");
+    common::write_profile_key_files(temp.path(), "alias-b");
+
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env(NON_INTERACTIVE_ENV, "1")
+        .arg("login")
+        .arg("--org")
+        .arg(ORG_DUP)
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains(format!(
+            "Selected org: alias-a ({ORG_DUP})"
+        )))
+        .stderr(predicate::str::contains("Using default profile 'alias-a'"));
+
+    assert!(is_sole_default(&saved_config(&temp), "alias-a"));
 }
 
 /// Explicitly logging in with the marked default alias works, with the same
@@ -130,9 +187,9 @@ fn login_non_interactive_resolves_org_id_to_default_alias() {
 #[test]
 fn login_non_interactive_refuses_secondary_alias() {
     let temp = TempDir::new().unwrap();
-    common::write_profiles_config_with_defaults(
+    common::write_profiles_config(
         temp.path(),
-        &[("alias-a", "org-dup-test"), ("alias-b", "org-dup-test")],
+        &[("alias-a", ORG_DUP), ("alias-b", ORG_DUP)],
         Some("alias-a"),
         &["alias-b"],
     );
@@ -147,9 +204,9 @@ fn login_non_interactive_refuses_secondary_alias() {
         .arg("alias-b")
         .assert()
         .failure()
-        .stdout(predicate::str::contains(
-            "Selected org: alias-b (org-dup-test)",
-        ))
+        .stdout(predicate::str::contains(format!(
+            "Selected org: alias-b ({ORG_DUP})"
+        )))
         .stderr(predicate::str::contains("duplicate profiles"));
 
     cargo_bin_cmd!("tvc")
@@ -160,38 +217,12 @@ fn login_non_interactive_refuses_secondary_alias() {
         .arg("alias-a")
         .assert()
         .failure()
-        .stderr(predicate::str::contains(
+        .stderr(predicate::str::contains(format!(
             "Profile 'alias-a' is a duplicate: the default profile for organization \
-             'org-dup-test' is 'alias-b'.",
-        ))
+             '{ORG_DUP}' is 'alias-b'.",
+        )))
         .stderr(predicate::str::contains(
             "tvc profile set-default-alias --org alias-a",
-        ));
-}
-
-/// Several profiles marked `default_alias` for one organization (hand-edited
-/// config) is refused with the command that repairs it.
-#[test]
-fn login_non_interactive_refuses_multiple_marked_defaults() {
-    let temp = TempDir::new().unwrap();
-    common::write_profiles_config_with_defaults(
-        temp.path(),
-        &[("alias-a", "org-dup-test"), ("alias-b", "org-dup-test")],
-        Some("alias-a"),
-        &["alias-a", "alias-b"],
-    );
-
-    cargo_bin_cmd!("tvc")
-        .env("HOME", temp.path())
-        .env(NON_INTERACTIVE_ENV, "1")
-        .arg("login")
-        .arg("--org")
-        .arg("org-dup-test")
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains(
-            "Multiple profiles are marked default_alias for organization 'org-dup-test': \
-             alias-a, alias-b",
         ));
 }
 
@@ -200,9 +231,9 @@ fn login_non_interactive_refuses_multiple_marked_defaults() {
 #[test]
 fn profile_set_default_alias_marks_profile_and_clears_siblings() {
     let temp = TempDir::new().unwrap();
-    common::write_profiles_config_with_defaults(
+    common::write_profiles_config(
         temp.path(),
-        &[("alias-a", "org-dup-test"), ("alias-b", "org-dup-test")],
+        &[("alias-a", ORG_DUP), ("alias-b", ORG_DUP)],
         Some("alias-a"),
         &["alias-b"],
     );
@@ -216,20 +247,15 @@ fn profile_set_default_alias_marks_profile_and_clears_siblings() {
         .arg("alias-a")
         .assert()
         .success()
-        .stdout(predicate::str::contains(
-            "Marked 'alias-a' as the default alias for organization 'org-dup-test' \
+        .stdout(predicate::str::contains(format!(
+            "Marked 'alias-a' as the default alias for organization '{ORG_DUP}' \
              (duplicates: alias-b).",
-        ));
+        )));
 
-    let saved = fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
-    let table: toml::Table = toml::from_str(&saved).unwrap();
-    let orgs = table["orgs"].as_table().unwrap();
-    assert_eq!(orgs["alias-a"]["default_alias"], toml::Value::Boolean(true));
+    let saved = saved_config(&temp);
+    assert!(is_sole_default(&saved, "alias-a"));
     assert!(
-        !orgs["alias-b"]
-            .as_table()
-            .unwrap()
-            .contains_key("default_alias"),
+        !saved.contains("default_alias = false"),
         "cleared marker must not be serialized: {saved}"
     );
 }
@@ -239,7 +265,7 @@ fn profile_set_default_alias_marks_profile_and_clears_siblings() {
 #[test]
 fn profile_set_default_alias_errors_without_duplicates() {
     let temp = TempDir::new().unwrap();
-    common::write_profiles_config(temp.path(), &[("alias-a", "org-solo")], Some("alias-a"));
+    common::write_profiles_config(temp.path(), &[("alias-a", ORG_SOLO)], Some("alias-a"), &[]);
 
     cargo_bin_cmd!("tvc")
         .env("HOME", temp.path())
@@ -262,8 +288,9 @@ fn profile_set_default_alias_requires_alias_not_org_id() {
     let temp = TempDir::new().unwrap();
     common::write_profiles_config(
         temp.path(),
-        &[("alias-a", "org-dup-test"), ("alias-b", "org-dup-test")],
+        &[("alias-a", ORG_DUP), ("alias-b", ORG_DUP)],
         Some("alias-a"),
+        &[],
     );
 
     cargo_bin_cmd!("tvc")
@@ -272,24 +299,26 @@ fn profile_set_default_alias_requires_alias_not_org_id() {
         .arg("profile")
         .arg("set-default-alias")
         .arg("--org")
-        .arg("org-dup-test")
+        .arg(ORG_DUP)
         .assert()
         .failure()
-        .stderr(predicate::str::contains(
-            "'org-dup-test' is an organization ID; pass the profile alias to mark as its \
+        .stderr(predicate::str::contains(format!(
+            "'{ORG_DUP}' is an organization ID; pass the profile alias to mark as its \
              default (one of: alias-a, alias-b)",
-        ));
+        )));
 }
 
 /// TVC-159: same fence for `profile delete` — an ambiguous org-ID query must
-/// not delete an arbitrary profile.
+/// not delete an arbitrary profile, and the `default_alias` marker is ignored
+/// for destructive commands.
 #[test]
 fn profile_delete_non_interactive_with_duplicate_org_id_lists_profiles() {
     let temp = TempDir::new().unwrap();
     common::write_profiles_config(
         temp.path(),
-        &[("alias-a", "org-dup-test"), ("alias-b", "org-dup-test")],
+        &[("alias-a", ORG_DUP), ("alias-b", ORG_DUP)],
         Some("alias-a"),
+        &["alias-a"],
     );
     common::write_profile_key_files(temp.path(), "alias-a");
     common::write_profile_key_files(temp.path(), "alias-b");
@@ -300,13 +329,13 @@ fn profile_delete_non_interactive_with_duplicate_org_id_lists_profiles() {
         .arg("profile")
         .arg("delete")
         .arg("--org")
-        .arg("org-dup-test")
+        .arg(ORG_DUP)
         .arg("--yes")
         .assert()
         .failure()
-        .stderr(predicate::str::contains(
-            "Organization 'org-dup-test' is configured under multiple profiles: alias-a, alias-b",
-        ))
+        .stderr(predicate::str::contains(format!(
+            "Organization '{ORG_DUP}' is configured under multiple profiles: alias-a, alias-b",
+        )))
         .stderr(predicate::str::contains(
             "to select which profile to delete",
         ));
@@ -345,8 +374,7 @@ fn profile_delete_warns_and_keeps_custom_key_paths() {
     assert!(api_key_path.exists());
     assert!(operator_key_path.exists());
 
-    let saved = fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
-    assert!(!saved.contains("org-test"));
+    assert!(!saved_config(&temp).contains(ORG_TEST));
 }
 
 #[test]
@@ -384,9 +412,9 @@ fn login_delete_removes_default_registry_key_layout() {
         .stdout(predicate::str::contains("Removed key directory"));
 
     assert!(!org_dir.exists());
-    let saved = fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
+    let saved = saved_config(&temp);
     assert!(saved.contains("version = 1"));
-    assert!(!saved.contains("org-test"));
+    assert!(!saved.contains(ORG_TEST));
     assert!(!saved.contains("app-1"));
     assert!(!saved.contains("operator-1"));
 }

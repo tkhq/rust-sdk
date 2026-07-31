@@ -255,7 +255,7 @@ pub(super) fn find_hosted_operator(
     match (matches.next(), matches.next()) {
         (None, _) => Ok(None),
         (Some((record, hosted)), None) => Ok(Some(validated_hosted_operator(
-            org.id.clone(),
+            org.id.to_string(),
             &record.name,
             hosted,
         )?)),
@@ -365,7 +365,7 @@ mod tests {
     use super::*;
     use crate::config::turnkey::{LocalOperatorRecord, OperatorKind, OrgConfig};
     use qos_p256::P256Pair;
-    use std::collections::HashMap;
+    use indexmap::IndexMap;
     use std::path::PathBuf;
 
     const OPERATOR_ID: &str = "11111111-1111-4111-8111-111111111111";
@@ -392,10 +392,10 @@ mod tests {
     fn config_with_operators(operators: Vec<OperatorRecord>) -> Config {
         Config {
             active_org: Some("active".to_string()),
-            orgs: HashMap::from([(
+            orgs: IndexMap::from([(
                 "active".to_string(),
                 OrgConfig {
-                    id: "org-id".to_string(),
+                    id: Uuid::from_u128(0xA1),
                     api_key_path: PathBuf::from("api-key.json"),
                     api_base_url: "https://api.turnkey.com".to_string(),
                     default_operator_kind: OperatorKind::Local,
@@ -432,7 +432,7 @@ mod tests {
         let record = hosted_record();
         let operator_id = Uuid::parse_str(OPERATOR_ID).unwrap();
         let expected = ResolvedHostedOperator {
-            organization_id: "org-id".to_string(),
+            organization_id: Uuid::from_u128(0xA1).to_string(),
             name: "hosted".to_string(),
             operator_id,
             encrypt_public_key: record.encrypt_public_key.parse().unwrap(),
@@ -476,7 +476,7 @@ mod tests {
 
         let mut cross_org = config_with_operators(Vec::new());
         let mut inactive_org = cross_org.orgs["active"].clone();
-        inactive_org.id = "inactive-org-id".to_string();
+        inactive_org.id = Uuid::from_u128(0xA2);
         inactive_org.operators = vec![hosted_operator("hosted", hosted_record())];
         cross_org.orgs.insert("inactive".to_string(), inactive_org);
         assert_eq!(
@@ -562,11 +562,11 @@ mod tests {
         let operator_id = Uuid::parse_str(OPERATOR_ID).unwrap();
         let config = Config {
             active_org: Some("active".to_string()),
-            orgs: HashMap::from([
+            orgs: IndexMap::from([
                 (
                     "active".to_string(),
                     OrgConfig {
-                        id: "active-org".to_string(),
+                        id: Uuid::from_u128(0xA1),
                         api_key_path: "active-api.json".into(),
                         api_base_url: "https://api.turnkey.com".to_string(),
                         default_operator_kind: OperatorKind::Local,
@@ -578,7 +578,7 @@ mod tests {
                 (
                     "inactive".to_string(),
                     OrgConfig {
-                        id: "inactive-org".to_string(),
+                        id: Uuid::from_u128(0xA2),
                         api_key_path: "inactive-api.json".into(),
                         api_base_url: "https://api.turnkey.com".to_string(),
                         default_operator_kind: OperatorKind::Hosted,

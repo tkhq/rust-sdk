@@ -1,21 +1,18 @@
 //! Operator key backup command - copies a local operator key file to a
 //! user-chosen destination.
 
-use crate::{
-    commands::{Run, login::find_org},
-    config::turnkey::{Config, QosOperatorPublicKey, StoredQosOperatorKey},
-    local_operator_key::{SelectLocalOperatorError, select_local_operator},
-    outcome::Outcome,
-    output::StdCtx,
-    prompts::{self, error_required_in_non_interactive},
-};
+use crate::commands::Run;
+use crate::commands::login::resolve_org_query;
+use crate::config::turnkey::{Config, OrgQuery, StoredQosOperatorKey};
+use crate::outcome::Outcome;
+use crate::output::StdCtx;
+use crate::prompts::{self, error_required_in_non_interactive};
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Args as ClapArgs;
 use serde::Serialize;
-use std::{
-    fmt::{self, Display, Formatter},
-    path::PathBuf,
-};
+use std::fmt::{self, Display, Formatter};
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 /// Back up a local operator key by copying its key file to a chosen
 /// destination.
@@ -24,14 +21,14 @@ use std::{
 pub struct Args {
     /// Organization alias or ID whose operator key to back up.
     /// Defaults to the active organization.
-    #[arg(long, env = "TVC_ORG", value_name = "ORG")]
-    org: Option<String>,
+    #[arg(long, env = "TVC_ORG", value_name = "ORG", value_parser = OrgQuery::from_str)]
+    org: Option<OrgQuery>,
     /// Destination file for the backup copy.
     #[arg(short, long, value_name = "PATH", env = "TVC_OPERATOR_KEY_BACKUP_OUT")]
     output: Option<PathBuf>,
     /// Overwrite the destination if it already exists.
     #[arg(long)]
-    overwrite: bool,
+    force: bool,
 }
 
 impl Run for Args {
@@ -46,32 +43,18 @@ impl Run for Args {
 
         let config = Config::load().await?;
 
-        let (alias, org_config) = match &self.org {
-            Some(query) => find_org(&config, query).ok_or_else(|| {
-                anyhow!(
-                    "Login profile '{query}' not found. \
-                     Run `tvc login` to see configured profiles."
-                )
-            })?,
-            None => config
-                .active_org_config()
-                .ok_or_else(|| anyhow!("No active organization. Run `tvc login` first."))?,
-        };
+        let (alias, org_config) = self
+            .org
+            .as_ref()
+            .map(|query| resolve_org_query(ctx, &config, query))
+            .unwrap_or_else(|| {
+                config
+                    .active_org_config()
+                    .map(|(alias, org)| (alias.as_str(), org))
+                    .ok_or_else(|| anyhow!("No active organization. Run `tvc login` first."))
+            })?;
 
-        let (_, local) = select_local_operator(org_config).map_err(|error| match error {
-            // Nothing exportable exists for a hosted-only org; explain that
-            // instead of leaving a bare missing-operator error.
-            SelectLocalOperatorError::NoLocalOperator => {
-                anyhow::Error::new(error).context(format!(
-                    "org '{alias}' has no local operator key file to back up; hosted \
-                     operators' private keys are held by Turnkey and cannot be exported"
-                ))
-            }
-            SelectLocalOperatorError::MultipleLocalOperators => {
-                anyhow::Error::new(error).context(format!("org '{alias}'"))
-            }
-        })?;
-        let source = &local.key_path;
+        let source = &org_config.select_local_record(alias)?.key_path;
 
         let destination: PathBuf = self.output.map(Ok).unwrap_or_else(|| {
             prompts::text(
@@ -88,10 +71,10 @@ impl Run for Args {
             );
         }
 
-        if destination.exists() && !self.overwrite {
+        if destination.exists() && !self.force {
             if ctx.is_non_interactive() {
                 bail!(
-                    "destination {} already exists; pass --overwrite to replace it",
+                    "destination {} already exists; pass --force to overwrite",
                     destination.display()
                 );
             }
@@ -99,22 +82,25 @@ impl Run for Args {
             prompts::confirm_or_bail(&format!("Overwrite {}?", destination.display()), "backup")?;
         }
 
-        back_up(alias.to_string(), source.clone(), destination).await
+        let public_key = back_up(source, &destination).await?;
+
+        Ok(OperatorKeyBackedUp::new(
+            alias.to_string(),
+            public_key,
+            source,
+            &destination,
+        ))
     }
 }
 
 /// Copy the operator key at `source` to `destination` byte-for-byte and
-/// return the backup report.
+/// return its public key.
 ///
 /// The source is parsed to validate it and capture the public key, but the
 /// original bytes are written verbatim so any unknown fields survive the
-/// copy. This is the only place an [`OperatorKeyBackedUp`] is constructed.
-pub(crate) async fn back_up(
-    alias: String,
-    source: PathBuf,
-    destination: PathBuf,
-) -> Result<OperatorKeyBackedUp> {
-    let bytes = tokio::fs::read(&source).await.map_err(|e| match e.kind() {
+/// copy.
+pub(crate) async fn back_up(source: &Path, destination: &Path) -> Result<String> {
+    let bytes = tokio::fs::read(source).await.map_err(|e| match e.kind() {
         std::io::ErrorKind::NotFound => anyhow!(
             "No operator key found at {}. Run `tvc login` first.",
             source.display()
@@ -140,16 +126,11 @@ pub(crate) async fn back_up(
 
     // Written with default (umask) permissions, matching
     // `StoredQosOperatorKey::save`; tightening both is tracked by TVC-241.
-    tokio::fs::write(&destination, &bytes)
+    tokio::fs::write(destination, &bytes)
         .await
         .with_context(|| format!("failed to write backup: {}", destination.display()))?;
 
-    Ok(OperatorKeyBackedUp {
-        alias,
-        public_key: key.public_key,
-        source_path: source,
-        backup_path: destination,
-    })
+    Ok(key.public_key)
 }
 
 #[derive(Default, Serialize)]
@@ -157,9 +138,22 @@ pub(crate) async fn back_up(
 #[serde(rename_all = "camelCase")]
 pub struct OperatorKeyBackedUp {
     alias: String,
-    public_key: QosOperatorPublicKey,
-    source_path: PathBuf,
-    backup_path: PathBuf,
+    public_key: String,
+    source_path: String,
+    backup_path: String,
+}
+
+impl OperatorKeyBackedUp {
+    /// The paths are projected to display strings here: the payload is a
+    /// serialization shape, not a working set of paths.
+    pub(crate) fn new(alias: String, public_key: String, source: &Path, backup: &Path) -> Self {
+        Self {
+            alias,
+            public_key,
+            source_path: source.display().to_string(),
+            backup_path: backup.display().to_string(),
+        }
+    }
 }
 
 impl From<OperatorKeyBackedUp> for Outcome {
@@ -184,10 +178,7 @@ manager or an encrypted offline drive - never in source control or chat.
 
 To restore: copy the backup file back to the source path above, then run
 `tvc login`."#,
-            self.alias,
-            self.public_key,
-            self.source_path.display(),
-            self.backup_path.display()
+            self.alias, self.public_key, self.source_path, self.backup_path
         )
     }
 }
@@ -204,27 +195,17 @@ mod tests {
         let destination = temp.path().join("backups/operator-backup.json");
         // Unknown fields must survive the copy: the file is written verbatim,
         // not re-serialized.
-        let public_hex = hex::encode(
-            qos_p256::P256Pair::generate()
-                .unwrap()
-                .public_key()
-                .to_bytes(),
-        );
-        let content = format!(
-            r#"{{
-  "public_key": "{public_hex}",
+        let content = r#"{
+  "public_key": "pub-hex",
   "private_key": "priv-hex",
   "future_field": 42
-}}"#
-        );
-        std::fs::write(&source, &content).unwrap();
+}"#;
+        std::fs::write(&source, content).unwrap();
 
-        let report = back_up("default".to_string(), source.clone(), destination.clone())
-            .await
-            .unwrap();
+        let public_key = back_up(&source, &destination).await.unwrap();
 
         assert_eq!(std::fs::read_to_string(&destination).unwrap(), content);
-        assert_eq!(report.public_key.to_string(), public_hex);
+        assert_eq!(public_key, "pub-hex");
     }
 
     #[tokio::test]
@@ -232,13 +213,9 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let source = temp.path().join("operator.json");
 
-        let error = back_up(
-            "default".to_string(),
-            source.clone(),
-            temp.path().join("out.json"),
-        )
-        .await
-        .expect_err("missing source must fail");
+        let error = back_up(&source, &temp.path().join("out.json"))
+            .await
+            .expect_err("missing source must fail");
 
         assert_eq!(
             error.to_string(),
@@ -255,13 +232,9 @@ mod tests {
         let source = temp.path().join("operator.json");
         std::fs::write(&source, "not json").unwrap();
 
-        let error = back_up(
-            "default".to_string(),
-            source.clone(),
-            temp.path().join("out.json"),
-        )
-        .await
-        .expect_err("malformed source must fail");
+        let error = back_up(&source, &temp.path().join("out.json"))
+            .await
+            .expect_err("malformed source must fail");
 
         assert_eq!(
             error.to_string(),
@@ -274,20 +247,19 @@ mod tests {
 
     #[test]
     fn outcome_serializes_expected_json() {
-        let public_key = QosOperatorPublicKey::default();
-        let outcome = Outcome::from(OperatorKeyBackedUp {
-            alias: "default".to_string(),
-            public_key,
-            source_path: PathBuf::from("/keys/operator.json"),
-            backup_path: PathBuf::from("/backups/operator-backup.json"),
-        });
+        let outcome = Outcome::from(OperatorKeyBackedUp::new(
+            "default".to_string(),
+            "pub-hex".to_string(),
+            Path::new("/keys/operator.json"),
+            Path::new("/backups/operator-backup.json"),
+        ));
 
         assert_eq!(
             serde_json::to_value(&outcome).unwrap(),
             serde_json::json!({
                 "reason": "operator_key_backed_up",
                 "alias": "default",
-                "publicKey": public_key.to_string(),
+                "publicKey": "pub-hex",
                 "sourcePath": "/keys/operator.json",
                 "backupPath": "/backups/operator-backup.json",
             })

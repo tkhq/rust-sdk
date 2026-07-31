@@ -14,11 +14,13 @@ pub use api_key::{KeyCurve, StoredApiKey};
 pub use qos_operator_key::{QosOperatorPublicKey, StoredQosOperatorKey};
 
 use anyhow::{Context, Result, bail};
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
+use std::convert::Infallible;
 use std::fmt::{self, Display, Formatter};
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use tracing::debug;
 use uuid::Uuid;
 
@@ -41,9 +43,11 @@ pub struct Config {
     /// The currently active organization alias
     #[serde(default)]
     pub active_org: Option<String>,
-    /// Map of org alias -> org config
+    /// Map of org alias -> org config, in config-file order. The order is
+    /// preserved so saves don't churn the file and so "first profile in the
+    /// config" is well-defined for default-alias repair.
     #[serde(default)]
-    pub orgs: HashMap<String, OrgConfig>,
+    pub orgs: IndexMap<String, OrgConfig>,
     /// Map of org alias -> last created app ID (for convenience)
     #[serde(default)]
     pub last_created_app_id: HashMap<String, String>,
@@ -59,8 +63,8 @@ pub struct Config {
 mod disk {
     use super::{CONFIG_VERSION, Config, OperatorKind, OperatorRecord, OrgConfig};
     use anyhow::{Context, Result, bail};
+    use indexmap::IndexMap;
     use serde::Serialize;
-    use std::collections::HashMap;
     use std::path::PathBuf;
 
     /// Every supported shape of `tvc.config.toml`.
@@ -106,7 +110,10 @@ mod disk {
     }
 
     pub(super) fn from_toml(content: &str) -> Result<Config> {
-        DiskConfig::from_toml(content)?.into_current()
+        let mut config = DiskConfig::from_toml(content)?.into_current()?;
+        // Like the v0 migration, repairs are lazy: the next save persists them.
+        config.normalize_default_aliases();
+        Ok(config)
     }
 
     /// The version marker is removed before deserializing a schema payload so
@@ -151,7 +158,7 @@ mod disk {
             .orgs
             .into_iter()
             .map(|(alias, org)| migrate_v0_org(&alias, org).map(|org| (alias, org)))
-            .collect::<Result<HashMap<_, _>>>()?;
+            .collect::<Result<IndexMap<_, _>>>()?;
 
         Ok(Config {
             active_org: config.active_org,
@@ -302,11 +309,16 @@ pub struct HostedOperatorRecord {
 }
 
 /// Configuration for a single organization.
+///
+/// A profile's alias is the key it is registered under in [`Config::orgs`];
+/// it is deliberately not repeated here so the name cannot diverge from the
+/// registry. Lookups that need both return `(alias, config)` pairs — see
+/// [`Config::matching_profiles`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct OrgConfig {
     /// The Turnkey organization ID
-    pub id: String,
+    pub id: Uuid,
     /// Path to the API key file
     pub api_key_path: PathBuf,
     /// API base URL for this organization
@@ -346,6 +358,35 @@ impl OrgConfig {
 
 fn default_api_base_url() -> String {
     API_BASE_URL_PROD.to_string()
+}
+
+/// A user-supplied organization reference, as taken by `--org` flags.
+///
+/// Organization IDs are UUIDs, so anything that parses as one is an ID and
+/// everything else is a profile alias; parsing never fails.
+#[derive(Debug, Clone)]
+pub enum OrgQuery {
+    Id(Uuid),
+    Alias(String),
+}
+
+impl FromStr for OrgQuery {
+    type Err = Infallible;
+
+    fn from_str(query: &str) -> Result<Self, Infallible> {
+        Ok(Uuid::parse_str(query)
+            .map(Self::Id)
+            .unwrap_or_else(|_| Self::Alias(query.to_string())))
+    }
+}
+
+impl Display for OrgQuery {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Id(id) => id.fmt(f),
+            Self::Alias(alias) => alias.fmt(f),
+        }
+    }
 }
 
 /// Returns the base config directory: `~/.config/turnkey/`
@@ -447,27 +488,76 @@ impl Config {
         self.orgs.get(alias).map(|config| (alias, config))
     }
 
-    /// Organization IDs registered under more than one alias, with the
-    /// aliases that share them. Sorted by organization ID and by alias so
-    /// callers report and prompt in a stable order.
-    pub fn duplicated_org_ids(&self) -> Vec<(String, Vec<String>)> {
-        let mut groups: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
-
-        for (alias, org) in &self.orgs {
-            groups.entry(&org.id).or_default().push(alias);
+    /// Every configured profile matching an org query, in config order.
+    ///
+    /// An alias query names at most one profile; an organization-ID query
+    /// returns every profile registered for that organization.
+    pub fn matching_profiles(&self, query: &OrgQuery) -> Vec<(&str, &OrgConfig)> {
+        match query {
+            OrgQuery::Alias(alias) => self
+                .orgs
+                .get_key_value(alias)
+                .map(|(alias, org)| (alias.as_str(), org))
+                .into_iter()
+                .collect(),
+            OrgQuery::Id(id) => self
+                .orgs
+                .iter()
+                .filter(|(_, org)| org.id == *id)
+                .map(|(alias, org)| (alias.as_str(), org))
+                .collect(),
         }
+    }
 
-        groups
+    /// Organization IDs registered under more than one profile, with the
+    /// aliases that share them. Groups are sorted by organization ID; the
+    /// aliases within a group keep their config order.
+    pub fn duplicated_org_ids(&self) -> Vec<(Uuid, Vec<String>)> {
+        self.orgs
+            .iter()
+            .fold(
+                BTreeMap::<Uuid, Vec<&str>>::new(),
+                |mut groups, (alias, org)| {
+                    groups.entry(org.id).or_default().push(alias);
+                    groups
+                },
+            )
             .into_iter()
             .filter(|(_, aliases)| aliases.len() > 1)
-            .map(|(id, mut aliases)| {
-                aliases.sort_unstable();
-                (
-                    id.to_string(),
-                    aliases.into_iter().map(String::from).collect(),
-                )
-            })
+            .map(|(id, aliases)| (id, aliases.into_iter().map(String::from).collect()))
             .collect()
+    }
+
+    /// Make `winner` the only profile marked `default_alias` among those
+    /// registered for `org_id`.
+    pub(crate) fn mark_sole_default_alias(&mut self, org_id: Uuid, winner: &str) {
+        self.orgs
+            .iter_mut()
+            .filter(|(_, org)| org.id == org_id)
+            .for_each(|(alias, org)| org.default_alias = alias == winner);
+    }
+
+    /// Repair the `default_alias` markers so every duplicated organization ID
+    /// has exactly one: the first marked profile in config order wins, or the
+    /// first profile outright when none is marked. Runs on every load, so the
+    /// rest of the CLI can rely on the marker existing (and staying stable)
+    /// whenever duplicates do.
+    fn normalize_default_aliases(&mut self) {
+        let winners: Vec<(Uuid, String)> = self
+            .duplicated_org_ids()
+            .into_iter()
+            .filter_map(|(org_id, aliases)| {
+                let winner = aliases
+                    .iter()
+                    .find(|alias| self.orgs.get(*alias).is_some_and(|org| org.default_alias))
+                    .or(aliases.first())?;
+                Some((org_id, winner.clone()))
+            })
+            .collect();
+
+        winners
+            .into_iter()
+            .for_each(|(org_id, winner)| self.mark_sole_default_alias(org_id, &winner));
     }
 
     /// Add or update an organization with default key paths.
@@ -476,7 +566,7 @@ impl Config {
     /// not already registered under another profile; the login command
     /// enforces one profile per organization before constructing new-org
     /// inputs. An existing entry under the same alias is replaced wholesale.
-    pub fn add_org(&mut self, alias: &str, org_id: String, api_base_url: String) -> Result<()> {
+    pub fn add_org(&mut self, alias: &str, org_id: Uuid, api_base_url: String) -> Result<()> {
         debug!(org_alias = alias, %api_base_url, "adding organization config");
         let org_config = OrgConfig {
             id: org_id,
@@ -499,7 +589,7 @@ impl Config {
     /// was configured. This only touches the config registry; deleting the
     /// org's key files on disk is the caller's responsibility.
     pub fn remove_org(&mut self, alias: &str) -> Option<OrgConfig> {
-        let removed = self.orgs.remove(alias)?;
+        let removed = self.orgs.shift_remove(alias)?;
         debug!(org_alias = alias, "removing organization config");
         self.last_created_app_id.remove(alias);
         self.last_operator_ids.remove(alias);
@@ -584,7 +674,7 @@ active_org = "default"
 future_root = "keep-root"
 
 [orgs.default]
-id = "org-123"
+id = "11111111-1111-4111-8111-111111111111"
 api_key_path = "/keys/api.json"
 operator_key_path = "/keys/operator.json"
 future_org = 42
@@ -602,7 +692,7 @@ active_org = "default"
 future_root = "keep-root"
 
 [orgs.default]
-id = "org-123"
+id = "11111111-1111-4111-8111-111111111111"
 api_key_path = "/keys/api.json"
 api_base_url = "https://api.turnkey.com"
 default_operator_kind = "local"
@@ -656,20 +746,26 @@ default = ["operator-123"]
         );
     }
 
-    fn config_with_org_entries(entries: &[(&str, &str, bool)]) -> Config {
+    const ORG_1: Uuid = Uuid::from_u128(1);
+    const ORG_2: Uuid = Uuid::from_u128(2);
+    const ORG_3: Uuid = Uuid::from_u128(3);
+
+    fn config_with_org_entries<'a>(
+        entries: impl IntoIterator<Item = (&'a str, Uuid, bool)>,
+    ) -> Config {
         Config {
             orgs: entries
-                .iter()
+                .into_iter()
                 .map(|(alias, org_id, default_alias)| {
                     (
                         alias.to_string(),
                         OrgConfig {
-                            id: org_id.to_string(),
+                            id: org_id,
                             api_key_path: PathBuf::from("api_key.json"),
                             api_base_url: API_BASE_URL_PROD.to_string(),
                             default_operator_kind: OperatorKind::Local,
                             operators: Vec::new(),
-                            default_alias: *default_alias,
+                            default_alias,
                             extra: toml::Table::new(),
                         },
                     )
@@ -681,33 +777,123 @@ default = ["operator-123"]
 
     #[test]
     fn duplicated_org_ids_ignores_unique_ids() {
-        let config = config_with_org_entries(&[("a", "org-1", false), ("b", "org-2", false)]);
+        let config = config_with_org_entries([("a", ORG_1, false), ("b", ORG_2, false)]);
 
         assert_eq!(config.duplicated_org_ids(), Vec::new());
     }
 
     #[test]
-    fn duplicated_org_ids_groups_and_sorts() {
-        let config = config_with_org_entries(&[
-            ("c", "org-2", false),
-            ("b", "org-1", false),
-            ("a", "org-2", false),
-            ("e", "org-1", false),
-            ("d", "org-3", false),
+    fn duplicated_org_ids_groups_in_config_order() {
+        let config = config_with_org_entries([
+            ("c", ORG_2, false),
+            ("b", ORG_1, false),
+            ("a", ORG_2, false),
+            ("e", ORG_1, false),
+            ("d", ORG_3, false),
         ]);
 
         assert_eq!(
             config.duplicated_org_ids(),
             vec![
-                ("org-1".to_string(), vec!["b".to_string(), "e".to_string()]),
-                ("org-2".to_string(), vec!["a".to_string(), "c".to_string()]),
+                (ORG_1, vec!["b".to_string(), "e".to_string()]),
+                (ORG_2, vec!["c".to_string(), "a".to_string()]),
             ]
         );
     }
 
     #[test]
+    fn matching_profiles_prefers_alias_over_id_lookup() {
+        let config = config_with_org_entries([("a", ORG_1, false), ("b", ORG_1, false)]);
+
+        let by_alias = config.matching_profiles(&OrgQuery::Alias("b".to_string()));
+        assert_eq!(by_alias.len(), 1);
+        assert_eq!(by_alias[0].0, "b");
+
+        let by_id: Vec<&str> = config
+            .matching_profiles(&OrgQuery::Id(ORG_1))
+            .into_iter()
+            .map(|(alias, _)| alias)
+            .collect();
+        assert_eq!(by_id, ["a", "b"]);
+
+        assert!(
+            config
+                .matching_profiles(&OrgQuery::Alias("missing".to_string()))
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn normalize_marks_first_profile_when_none_is_marked() {
+        let config = load_normalized(
+            r#"
+version = 1
+
+[orgs.beta]
+id = "00000000-0000-0000-0000-000000000001"
+api_key_path = "/keys/api.json"
+
+[orgs.alpha]
+id = "00000000-0000-0000-0000-000000000001"
+api_key_path = "/keys/api.json"
+"#,
+        );
+
+        // "beta" wins because it comes first in document order, not "alpha"
+        // by name order.
+        assert!(config.orgs["beta"].default_alias);
+        assert!(!config.orgs["alpha"].default_alias);
+    }
+
+    #[test]
+    fn normalize_keeps_first_marked_profile_and_clears_the_rest() {
+        let config = load_normalized(
+            r#"
+version = 1
+
+[orgs.a]
+id = "00000000-0000-0000-0000-000000000001"
+api_key_path = "/keys/api.json"
+
+[orgs.b]
+id = "00000000-0000-0000-0000-000000000001"
+api_key_path = "/keys/api.json"
+default_alias = true
+
+[orgs.c]
+id = "00000000-0000-0000-0000-000000000001"
+api_key_path = "/keys/api.json"
+default_alias = true
+"#,
+        );
+
+        assert!(!config.orgs["a"].default_alias);
+        assert!(config.orgs["b"].default_alias);
+        assert!(!config.orgs["c"].default_alias);
+    }
+
+    #[test]
+    fn normalize_leaves_unique_org_ids_unmarked() {
+        let config = load_normalized(
+            r#"
+version = 1
+
+[orgs.solo]
+id = "00000000-0000-0000-0000-000000000001"
+api_key_path = "/keys/api.json"
+"#,
+        );
+
+        assert!(!config.orgs["solo"].default_alias);
+    }
+
+    fn load_normalized(content: &str) -> Config {
+        disk::from_toml(content).expect("fixture config must parse")
+    }
+
+    #[test]
     fn remove_org_clears_default_alias_on_sole_survivor() {
-        let mut config = config_with_org_entries(&[("a", "org-1", true), ("b", "org-1", false)]);
+        let mut config = config_with_org_entries([("a", ORG_1, true), ("b", ORG_1, false)]);
 
         config.remove_org("b").expect("b is configured");
 
@@ -716,11 +902,8 @@ default = ["operator-123"]
 
     #[test]
     fn remove_org_keeps_default_alias_while_duplicates_remain() {
-        let mut config = config_with_org_entries(&[
-            ("a", "org-1", true),
-            ("b", "org-1", false),
-            ("c", "org-1", false),
-        ]);
+        let mut config =
+            config_with_org_entries([("a", ORG_1, true), ("b", ORG_1, false), ("c", ORG_1, false)]);
 
         config.remove_org("c").expect("c is configured");
 
