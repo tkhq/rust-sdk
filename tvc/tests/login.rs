@@ -388,8 +388,11 @@ fn login_help_shows_api_base_url_override() {
         .stdout(predicate::str::contains("TVC_API_BASE_URL"));
 }
 
+/// Deleting a profile with the legacy alias-keyed directory layout still
+/// removes that directory (TVC-55 changed the default to id-keyed, but the
+/// legacy layout remains recognized).
 #[test]
-fn login_delete_removes_default_registry_key_layout() {
+fn login_delete_removes_legacy_alias_keyed_layout() {
     let temp = TempDir::new().unwrap();
     let org_dir = temp.path().join(".config/turnkey/orgs/test");
     let api_key_path = org_dir.join("api_key.json");
@@ -417,4 +420,91 @@ fn login_delete_removes_default_registry_key_layout() {
     assert!(!saved.contains(ORG_TEST));
     assert!(!saved.contains("app-1"));
     assert!(!saved.contains("operator-1"));
+}
+
+/// A hand-edited config can point several profiles into one id-keyed
+/// directory; deleting one profile must not take the survivor's keys with it.
+#[test]
+fn profile_delete_keeps_directory_shared_with_another_profile() {
+    let temp = TempDir::new().unwrap();
+    let turnkey_dir = temp.path().join(".config/turnkey");
+    let org_dir = turnkey_dir.join("orgs").join(ORG_DUP);
+    fs::create_dir_all(&org_dir).unwrap();
+    fs::write(org_dir.join("api_key.json"), "shared api key").unwrap();
+    fs::write(org_dir.join("operator.json"), "shared operator key").unwrap();
+
+    let shared_profile = || OrgConfig {
+        id: ORG_DUP.parse().unwrap(),
+        api_key_path: org_dir.join("api_key.json"),
+        api_base_url: "https://api.turnkey.com".to_string(),
+        default_operator_kind: OperatorKind::Local,
+        operators: vec![OperatorRecord::local(org_dir.join("operator.json"))],
+        default_alias: false,
+        extra: toml::Table::new(),
+    };
+    let config = Config {
+        active_org: Some("alias-b".to_string()),
+        orgs: IndexMap::from([
+            ("alias-a".to_string(), shared_profile()),
+            ("alias-b".to_string(), shared_profile()),
+        ]),
+        last_created_app_id: HashMap::new(),
+        last_operator_ids: HashMap::new(),
+        extra: toml::Table::new(),
+    };
+    fs::write(
+        turnkey_dir.join("tvc.config.toml"),
+        format!("version = 1\n{}", toml::to_string_pretty(&config).unwrap()),
+    )
+    .unwrap();
+
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env(NON_INTERACTIVE_ENV, "1")
+        .arg("profile")
+        .arg("delete")
+        .arg("--org")
+        .arg("alias-a")
+        .arg("--yes")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "is still used by another profile and was NOT deleted",
+        ));
+
+    assert!(org_dir.join("api_key.json").exists());
+    assert!(org_dir.join("operator.json").exists());
+
+    let saved = saved_config(&temp);
+    assert!(saved.contains("alias-b"));
+    assert!(!saved.contains("alias-a"));
+}
+
+/// Deleting a profile with the id-keyed directory layout (what login creates
+/// since TVC-55) removes that directory.
+#[test]
+fn login_delete_removes_id_keyed_layout() {
+    let temp = TempDir::new().unwrap();
+    let org_dir = temp.path().join(".config/turnkey/orgs").join(ORG_TEST);
+    let api_key_path = org_dir.join("api_key.json");
+    let operator_key_path = org_dir.join("operator.json");
+    fs::create_dir_all(&org_dir).unwrap();
+    fs::write(&api_key_path, "not needed for deletion").unwrap();
+    fs::write(&operator_key_path, "not needed for deletion").unwrap();
+    write_login_config(&temp, api_key_path, operator_key_path);
+
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env(NON_INTERACTIVE_ENV, "1")
+        .arg("profile")
+        .arg("delete")
+        .arg("--org")
+        .arg("test")
+        .arg("--yes")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Removed key directory"));
+
+    assert!(!org_dir.exists());
+    assert!(!saved_config(&temp).contains(ORG_TEST));
 }

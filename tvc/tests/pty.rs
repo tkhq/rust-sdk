@@ -393,8 +393,8 @@ fn profile_delete_with_duplicate_org_id_prompts_for_profile() {
 }
 
 /// The interactive new-org flow (the only way to create a profile) works end
-/// to end and persists the profile even though the final whoami request fails
-/// against the dead-port URL.
+/// to end, keys its directory by org ID (TVC-55), and persists the profile
+/// even though the final whoami request fails against the dead-port URL.
 #[test]
 fn login_creates_first_profile_and_persists_it() {
     let temp = tempfile::TempDir::new().unwrap();
@@ -404,6 +404,10 @@ fn login_creates_first_profile_and_persists_it() {
         std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
     assert!(saved.contains("[orgs.solo]"));
     assert!(saved.contains(&format!(r#"id = "{ORG_SOLO}""#)));
+
+    let org_dir = temp.path().join(".config/turnkey/orgs").join(ORG_SOLO);
+    assert!(org_dir.join("api_key.json").exists());
+    assert!(!temp.path().join(".config/turnkey/orgs/solo").exists());
 }
 
 /// Entering an organization ID that is already configured refuses to create a

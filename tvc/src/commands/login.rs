@@ -4,8 +4,7 @@ use crate::client::build_turnkey_client;
 use crate::commands::keys::backup_operator_key::{OperatorKeyBackedUp, back_up};
 use crate::config::turnkey::{
     API_BASE_URL_PROD, Config, KeyCurve, OperatorRecordKind, OrgConfig, OrgQuery, StoredApiKey,
-    StoredQosOperatorKey, dashboard_base_url, default_api_key_path, default_operator_key_path,
-    default_org_dir,
+    StoredQosOperatorKey, dashboard_base_url, default_org_dir, legacy_org_dir,
 };
 use crate::outcome::Outcome;
 use crate::output::StdCtx;
@@ -285,56 +284,76 @@ async fn delete_profile(
         .flatten()
         .map(|key| key.public_key);
 
-    // The default layout stores both key files in the per-org directory, so a
-    // default profile is removed by deleting that whole directory. Custom
-    // (hand-edited) key paths are left untouched with a warning, since the user
-    // placed them deliberately and they may live outside our config tree.
-    let default_api_key = default_api_key_path(&alias)?;
-    let default_operator_key = default_operator_key_path(&alias)?;
-    let local_key_paths: Vec<_> = removed
-        .operators
-        .iter()
-        .filter_map(|operator| match &operator.kind {
-            OperatorRecordKind::Local(local) => Some(&local.key_path),
-            _ => None,
-        })
-        .collect();
-    let uses_default_layout = removed.api_key_path == default_api_key
-        && local_key_paths
-            .iter()
-            .all(|path| *path == &default_operator_key);
+    // The default layout stores both key files in one per-org directory —
+    // id-keyed today, alias-keyed for profiles created before TVC-55 — so a
+    // default profile is removed by deleting that directory. Custom
+    // (hand-edited) key paths are left untouched with a warning, since the
+    // user placed them deliberately and they may live outside our config tree.
+    let owned_dir = [default_org_dir(removed.id)?, legacy_org_dir(&alias)?]
+        .into_iter()
+        .find(|dir| removed.has_default_layout_at(dir));
 
-    let removed_dir = if uses_default_layout {
-        let dir = default_org_dir(&alias)?;
-        match tokio::fs::remove_dir_all(&dir).await {
-            Ok(()) => Some(dir),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+    let removed_dir = match owned_dir {
+        Some(dir) => {
+            // A hand-edited config can point several profiles into one
+            // directory; deleting it would take the survivors' keys with it.
+            let still_used = config.orgs.values().any(|org| {
+                org.api_key_path.starts_with(&dir)
+                    || org.operators.iter().any(|operator| {
+                        matches!(&operator.kind, OperatorRecordKind::Local(local)
+                            if local.key_path.starts_with(&dir))
+                    })
+            });
+
+            if still_used {
                 shell_eprintln!(
                     ctx,
-                    "WARNING: key directory was not on disk: {}",
+                    "WARNING: key directory {} is still used by another profile and was NOT deleted.",
                     dir.display()
                 )?;
                 None
-            }
-            Err(e) => {
-                return Err(e)
-                    .with_context(|| format!("failed to delete key directory: {}", dir.display()));
+            } else {
+                match tokio::fs::remove_dir_all(&dir).await {
+                    Ok(()) => Some(dir),
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                        shell_eprintln!(
+                            ctx,
+                            "WARNING: key directory was not on disk: {}",
+                            dir.display()
+                        )?;
+                        None
+                    }
+                    Err(e) => {
+                        return Err(e).with_context(|| {
+                            format!("failed to delete key directory: {}", dir.display())
+                        });
+                    }
+                }
             }
         }
-    } else {
-        shell_eprintln!(
-            ctx,
-            "WARNING: custom key paths are configured and were NOT deleted."
-        )?;
-        shell_eprintln!(ctx, "Remove them manually if no longer needed:")?;
-        let custom_paths = local_key_paths
-            .into_iter()
-            .chain(Some(&removed.api_key_path))
-            .collect::<BTreeSet<_>>();
-        for path in custom_paths {
-            shell_eprintln!(ctx, "  {}", path.display())?;
+        None => {
+            shell_eprintln!(
+                ctx,
+                "WARNING: custom key paths are configured and were NOT deleted."
+            )?;
+            shell_eprintln!(ctx, "Remove them manually if no longer needed:")?;
+
+            let custom_paths: BTreeSet<_> = removed
+                .operators
+                .iter()
+                .filter_map(|operator| match &operator.kind {
+                    OperatorRecordKind::Local(local) => Some(&local.key_path),
+                    _ => None,
+                })
+                .chain(Some(&removed.api_key_path))
+                .collect();
+
+            for path in custom_paths {
+                shell_eprintln!(ctx, "  {}", path.display())?;
+            }
+
+            None
         }
-        None
     };
 
     config.save().await?;
