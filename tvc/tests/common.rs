@@ -1,13 +1,17 @@
 //! Fixtures shared across the tvc integration-test binaries.
 //!
-//! Every test binary that declares `mod common;` compiles its own copy and
-//! uses a subset of these helpers, so unused items are expected.
+//! Each test binary that declares `mod common;` compiles its own copy and
+//! uses a subset of these helpers, so unused items are expected in every
+//! build of this file; the crate-level allow keeps those builds quiet.
 
 #![allow(dead_code)]
 
-use std::collections::HashMap;
-use std::fs;
-use std::path::{Path, PathBuf};
+use indexmap::IndexMap;
+use std::{
+    collections::HashMap,
+    fs,
+    path::{Path, PathBuf},
+};
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use tvc::config::turnkey::{
     Config, KeyCurve, OperatorKind, OperatorRecord, OrgConfig, StoredApiKey, StoredQosOperatorKey,
@@ -23,14 +27,11 @@ fn org_dir(home: &Path, alias: &str) -> PathBuf {
 
 /// Write a v1 `tvc.config.toml` under `home` with one profile per
 /// `(alias, org_id)` pair, using the default per-alias key-file layout and a
-/// dead-port API base URL.
-pub fn write_profiles_config(home: &Path, profiles: &[(&str, &str)], active_org: Option<&str>) {
-    write_profiles_config_with_defaults(home, profiles, active_org, &[]);
-}
-
-/// Like [`write_profiles_config`], additionally marking each alias listed in
-/// `default_aliases` with `default_alias = true`.
-pub fn write_profiles_config_with_defaults(
+/// dead-port API base URL. Profiles are written in slice order, which is
+/// meaningful: config loading marks the first profile of a duplicated
+/// organization as its default when none of them carries the marker. Aliases
+/// listed in `default_aliases` are written with `default_alias = true`.
+pub fn write_profiles_config(
     home: &Path,
     profiles: &[(&str, &str)],
     active_org: Option<&str>,
@@ -39,14 +40,14 @@ pub fn write_profiles_config_with_defaults(
     let turnkey_dir = home.join(".config/turnkey");
     fs::create_dir_all(&turnkey_dir).unwrap();
 
-    let orgs: HashMap<_, _> = profiles
+    let orgs: IndexMap<_, _> = profiles
         .iter()
         .map(|(alias, org_id)| {
             let dir = org_dir(home, alias);
             (
                 alias.to_string(),
                 OrgConfig {
-                    id: org_id.to_string(),
+                    id: org_id.parse().expect("test org ids must be UUIDs"),
                     api_key_path: dir.join("api_key.json"),
                     api_base_url: LOCAL_API_BASE_URL.to_string(),
                     default_operator_kind: OperatorKind::Local,

@@ -258,7 +258,7 @@ impl Commands {
                     commands::login::run_delete(ctx, delete_args).await
                 }
                 ProfileCommands::SetDefaultAlias(args) => {
-                    commands::login::run_set_default_alias(ctx, args).await
+                    commands::login::run_set_default_alias(args).await
                 }
             },
             Commands::Version => commands::version::run(),

@@ -171,7 +171,7 @@ fn resolve_operator_ids(
     let (_, org) = config
         .active_org_config()
         .context("No active organization. Run `tvc login` first.")?;
-    let configured_org_id = org.id.clone();
+    let configured_org_id = org.id.to_string();
     let mut keys = Vec::with_capacity(operator_ids.len());
 
     for operator_id in operator_ids {
@@ -265,9 +265,10 @@ mod tests {
     use crate::config::turnkey::{
         HostedOperatorRecord, OperatorKind, OperatorRecord, OperatorRecordKind, OrgConfig,
     };
+    use indexmap::IndexMap;
     use qos_p256::P256Pair;
     use serde_json::Value;
-    use std::{collections::HashMap, path::PathBuf};
+    use std::path::PathBuf;
 
     const FIRST_OPERATOR_ID: &str = "11111111-1111-4111-8111-111111111111";
     const SECOND_OPERATOR_ID: &str = "22222222-2222-4222-8222-222222222222";
@@ -307,10 +308,10 @@ mod tests {
     fn config_with_operators(operators: Vec<OperatorRecord>) -> Config {
         Config {
             active_org: Some("active".to_string()),
-            orgs: HashMap::from([(
+            orgs: IndexMap::from([(
                 "active".to_string(),
                 OrgConfig {
-                    id: "org-id".to_string(),
+                    id: Uuid::from_u128(0xA1),
                     api_key_path: PathBuf::from("api-key.json"),
                     api_base_url: "https://api.turnkey.com".to_string(),
                     default_operator_kind: OperatorKind::Local,

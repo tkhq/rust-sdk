@@ -479,7 +479,7 @@ pub(crate) async fn resolve_operator(
     Ok(ResolvedOperator {
         name: Some(operator.name.clone()),
         operator_id: resolved_operator_id,
-        organization_id: Some(org.id.clone()),
+        organization_id: Some(org.id.to_string()),
         kind: ResolvedOperatorKind::Local(
             resolve_registered_local_operator(local.key_path.clone()).await?,
         ),
@@ -507,7 +507,7 @@ fn find_hosted_operator(
     match matches.as_slice() {
         [] => Ok(None),
         [(name, record)] => Ok(Some((
-            org.id.clone(),
+            org.id.to_string(),
             (*name).to_string(),
             validate_hosted_record(name, (**record).clone())?,
         ))),
@@ -613,8 +613,8 @@ pub(crate) fn timestamp_ms() -> Result<u128> {
 mod tests {
     use super::*;
     use crate::config::turnkey::{LocalOperatorRecord, OrgConfig};
+    use indexmap::IndexMap;
     use qos_p256::P256Pair;
-    use std::collections::HashMap;
     use std::path::PathBuf;
 
     const OPERATOR_ID: &str = "11111111-1111-4111-8111-111111111111";
@@ -641,10 +641,10 @@ mod tests {
     fn config_with_operators(operators: Vec<OperatorRecord>) -> Config {
         Config {
             active_org: Some("active".to_string()),
-            orgs: HashMap::from([(
+            orgs: IndexMap::from([(
                 "active".to_string(),
                 OrgConfig {
-                    id: "org-id".to_string(),
+                    id: Uuid::from_u128(0xA1),
                     api_key_path: PathBuf::from("api-key.json"),
                     api_base_url: "https://api.turnkey.com".to_string(),
                     default_operator_kind: OperatorKind::Local,
@@ -719,7 +719,7 @@ mod tests {
         let record = hosted_record();
         let operator_id = Uuid::parse_str(OPERATOR_ID).unwrap();
         let expected = ResolvedHostedOperator {
-            organization_id: "org-id".to_string(),
+            organization_id: Uuid::from_u128(0xA1).to_string(),
             name: "hosted".to_string(),
             operator_id,
             encrypt_public_key: record.encrypt_public_key.parse().unwrap(),
@@ -763,7 +763,7 @@ mod tests {
 
         let mut cross_org = config_with_operators(Vec::new());
         let mut inactive_org = cross_org.orgs["active"].clone();
-        inactive_org.id = "inactive-org-id".to_string();
+        inactive_org.id = Uuid::from_u128(0xA2);
         inactive_org.operators = vec![hosted_operator("hosted", hosted_record())];
         cross_org.orgs.insert("inactive".to_string(), inactive_org);
         assert_eq!(
@@ -816,7 +816,7 @@ mod tests {
         let operator = ResolvedOperator {
             name: Some("operator".to_string()),
             operator_id: Some(record.operator_id),
-            organization_id: Some("org-id".to_string()),
+            organization_id: Some(Uuid::from_u128(0xA1).to_string()),
             kind: ResolvedOperatorKind::Hosted(record.clone()),
         };
 
@@ -837,11 +837,11 @@ mod tests {
         let operator_id = Uuid::parse_str(OPERATOR_ID).unwrap();
         let config = Config {
             active_org: Some("active".to_string()),
-            orgs: std::collections::HashMap::from([
+            orgs: indexmap::IndexMap::from([
                 (
                     "active".to_string(),
                     crate::config::turnkey::OrgConfig {
-                        id: "active-org".to_string(),
+                        id: Uuid::from_u128(0xA1),
                         api_key_path: "active-api.json".into(),
                         api_base_url: "https://api.turnkey.com".to_string(),
                         default_operator_kind: OperatorKind::Local,
@@ -853,7 +853,7 @@ mod tests {
                 (
                     "inactive".to_string(),
                     crate::config::turnkey::OrgConfig {
-                        id: "inactive-org".to_string(),
+                        id: Uuid::from_u128(0xA2),
                         api_key_path: "inactive-api.json".into(),
                         api_base_url: "https://api.turnkey.com".to_string(),
                         default_operator_kind: OperatorKind::Hosted,

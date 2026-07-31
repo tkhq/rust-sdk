@@ -1,4 +1,5 @@
 use assert_cmd::cargo::cargo_bin_cmd;
+use indexmap::IndexMap;
 use predicates::prelude::*;
 use qos_p256::P256Pair;
 use std::collections::HashMap;
@@ -38,10 +39,10 @@ fn write_hosted_config(home: &TempDir) {
     let public = P256Pair::generate().unwrap().public_key().to_bytes();
     let config = Config {
         active_org: Some("test".to_string()),
-        orgs: HashMap::from([(
+        orgs: IndexMap::from([(
             "test".to_string(),
             OrgConfig {
-                id: "org-test".to_string(),
+                id: "10000000-0000-4000-8000-000000000001".parse().unwrap(),
                 api_key_path: home.path().join("api-key.json"),
                 api_base_url: "https://api.turnkey.com".to_string(),
                 default_operator_kind: OperatorKind::Hosted,
@@ -187,10 +188,10 @@ fn malformed_saved_operator_id_is_reported() {
     let temp = TempDir::new().unwrap();
     let config = Config {
         active_org: Some("test".to_string()),
-        orgs: HashMap::from([(
+        orgs: IndexMap::from([(
             "test".to_string(),
             OrgConfig {
-                id: "org-test".to_string(),
+                id: "10000000-0000-4000-8000-000000000001".parse().unwrap(),
                 api_key_path: temp.path().join("api-key.json"),
                 api_base_url: "https://api.turnkey.com".to_string(),
                 default_operator_kind: OperatorKind::Local,
@@ -225,10 +226,10 @@ fn malformed_registered_local_operator_id_is_reported() {
     let temp = TempDir::new().unwrap();
     let config = Config {
         active_org: Some("test".to_string()),
-        orgs: HashMap::from([(
+        orgs: IndexMap::from([(
             "test".to_string(),
             OrgConfig {
-                id: "org-test".to_string(),
+                id: "10000000-0000-4000-8000-000000000001".parse().unwrap(),
                 api_key_path: temp.path().join("api-key.json"),
                 api_base_url: "https://api.turnkey.com".to_string(),
                 default_operator_kind: OperatorKind::Local,
@@ -279,10 +280,10 @@ fn auto_selected_hosted_id_controls_signer_resolution_in_mixed_registry() {
     .unwrap();
     let config = Config {
         active_org: Some("test".to_string()),
-        orgs: HashMap::from([(
+        orgs: IndexMap::from([(
             "test".to_string(),
             OrgConfig {
-                id: "org-test".to_string(),
+                id: "10000000-0000-4000-8000-000000000001".parse().unwrap(),
                 api_key_path: temp.path().join("api-key.json"),
                 api_base_url: "https://api.turnkey.com".to_string(),
                 default_operator_kind: OperatorKind::Local,
