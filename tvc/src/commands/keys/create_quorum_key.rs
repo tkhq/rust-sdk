@@ -18,6 +18,7 @@ use std::{
     fmt::{self, Display, Formatter},
     time::{SystemTime, UNIX_EPOCH},
 };
+use tracing::instrument;
 use turnkey_client::generated::{CreateTvcQuorumKeyIntent, CreateTvcQuorumKeyResult};
 use uuid::Uuid;
 
@@ -104,6 +105,7 @@ impl OperatorSource {
 }
 
 /// Run the hosted quorum-key creation command.
+#[instrument(skip_all)]
 pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     let Args {
         threshold,

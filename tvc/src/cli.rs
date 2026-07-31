@@ -117,6 +117,11 @@ impl Cli {
                 ExitCode::SUCCESS
             }
             Err(error) => {
+                // Log the full cause chain (including any raw HTTP body the
+                // human line collapses) before rendering, so `RUST_LOG=tvc=debug`
+                // recovers it in both output modes.
+                debug!(error = ?error, "command failed");
+
                 let shell = ctx.shell();
                 let emit_result = if shell.message_format().is_json() {
                     shell.emit(&ErrorMessage::from_error(&error))

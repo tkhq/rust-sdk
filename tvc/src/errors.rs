@@ -10,6 +10,7 @@
 
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use turnkey_client::TurnkeyClientError;
 
 /// Cap on rendered error messages. Large enough for any real API error body
@@ -108,16 +109,28 @@ pub fn classify(error: &anyhow::Error) -> Classification {
 /// not have to dig it out of the raw response body in the chain.
 pub fn hint(error: &anyhow::Error) -> Option<String> {
     error.chain().find_map(|cause| {
-        let envelope = client_version_rejection(cause.downcast_ref::<TurnkeyClientError>()?)?;
+        let _envelope = client_version_rejection(cause.downcast_ref::<TurnkeyClientError>()?)?;
+        let name = binary_name();
 
-        Some(if envelope.message.is_empty() {
-            "this tvc release is older than the minimum version the backend supports; \
-             upgrade tvc to the latest release"
-                .to_string()
-        } else {
-            envelope.message
-        })
+        format!(
+            "`{name}` is older than the minimum version the backend supports; \
+             upgrade `{name}` to the latest release"
+        )
+        .into()
     })
+}
+
+/// The invoked binary's name for user-facing version messaging: argv[0]'s file
+/// stem (so `/usr/local/bin/tvc` and `./tvc` both read as `tvc`), falling back
+/// to `tvc` when argv is empty.
+pub(crate) fn binary_name() -> String {
+    let arg0 = std::env::args().next();
+
+    arg0.as_deref()
+        .map(Path::new)
+        .and_then(Path::file_stem)
+        .map(|stem| stem.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "tvc".to_string())
 }
 
 /// Render an error's complete cause chain like anyhow's alternate
@@ -159,6 +172,8 @@ fn truncate_message(message: String) -> String {
 /// older than the minimum version it supports (the client-version gate).
 /// Must match the `TurnkeyErrorCode` enum value name in Turnkey's public
 /// error proto.
+// TODO(TVC-269): generate `TurnkeyErrorCode` from the synced errors.proto and
+// match on the enum variant instead of this string.
 const TVC_CLIENT_VERSION_TOO_OLD: &str = "TVC_CLIENT_VERSION_TOO_OLD";
 
 /// The subset of the Turnkey public API error envelope (grpc-gateway's JSON
@@ -166,8 +181,12 @@ const TVC_CLIENT_VERSION_TOO_OLD: &str = "TVC_CLIENT_VERSION_TOO_OLD";
 /// classification reads.
 #[derive(Deserialize)]
 struct ApiErrorEnvelope {
+    // The server's human-readable message. Not consumed today — `hint` templates
+    // its own text off the binary name — but kept parsed so we can surface the
+    // backend's wording (e.g. the concrete running/minimum versions) once we
+    // decide to.
     #[serde(default)]
-    message: String,
+    _message: String,
     #[serde(default, rename = "turnkeyErrorCode")]
     turnkey_error_code: String,
 }
@@ -353,11 +372,9 @@ mod tests {
         .context("failed to create TVC deployment");
 
         assert_eq!(
-            hint(&error).as_deref(),
-            Some(
-                "tvc 0.12.0 is older than the minimum version this backend supports (0.12.2); \
-                 upgrade tvc to the latest release"
-            )
+            hint(&error).as_deref().map(|message| message
+                .contains("is older than the minimum version the backend supports")),
+            Some(true)
         );
     }
 
@@ -369,11 +386,10 @@ mod tests {
         ));
 
         assert_eq!(
-            hint(&error).as_deref(),
-            Some(
-                "this tvc release is older than the minimum version the backend supports; \
-                 upgrade tvc to the latest release"
-            )
+            hint(&error)
+                .as_deref()
+                .map(|msg| msg.contains("is older than the minimum version the backend supports")),
+            Some(true)
         );
     }
 

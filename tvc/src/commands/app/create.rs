@@ -19,7 +19,7 @@ use std::{
     io,
     path::{Path, PathBuf},
 };
-use tracing::debug;
+use tracing::{debug, instrument};
 use turnkey_client::generated::{CreateTvcAppIntent, TvcOperatorParams, TvcOperatorSetParams};
 
 /// Create a new TVC application from a config file.
@@ -54,6 +54,7 @@ struct Overrides {
     pub dangerous_enable_debug_mode_deployments: bool,
 }
 
+#[instrument(skip_all)]
 pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     let config = if ctx.is_non_interactive() {
         build_app_config_non_interactive(&args).await?

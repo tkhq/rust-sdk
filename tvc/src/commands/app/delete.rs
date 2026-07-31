@@ -8,6 +8,7 @@ use clap::Args as ClapArgs;
 use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tracing::instrument;
 use turnkey_client::generated::{ActivityStatus, DeleteTvcAppAndDeploymentsIntent};
 use uuid::Uuid;
 
@@ -21,6 +22,7 @@ pub struct Args {
 }
 
 /// Run the app delete command.
+#[instrument(skip_all)]
 pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     let auth = build_client().await?;
 

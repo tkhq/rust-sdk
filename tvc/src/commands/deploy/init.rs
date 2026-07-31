@@ -14,6 +14,7 @@ use clap::Args as ClapArgs;
 use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
 use std::path::PathBuf;
+use tracing::instrument;
 
 pub(crate) const LONG_ABOUT: &str = r#"
 Generate a deployment config file to edit, then pass to `tvc deploy create`.
@@ -47,6 +48,7 @@ pub struct Args {
 }
 
 /// Run the deploy init command.
+#[instrument(skip_all)]
 pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     if args.interactive {
         if ctx.is_non_interactive() {

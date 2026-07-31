@@ -14,6 +14,7 @@ use anyhow::{Context, Result, anyhow};
 use clap::{ArgGroup, Args as ClapArgs, builder::NonEmptyStringValueParser};
 use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
+use tracing::instrument;
 use uuid::Uuid;
 
 const DEFAULT_OPERATOR_NAME: &str = "tvc-operator";
@@ -96,6 +97,7 @@ Saved: true"#,
     }
 }
 
+#[instrument(skip_all)]
 pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     let mut config = Config::load().await?;
     let (alias, configured_org_id) = config

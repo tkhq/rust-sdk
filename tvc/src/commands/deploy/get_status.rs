@@ -4,6 +4,7 @@ use anyhow::{Context, anyhow};
 use clap::Args as ClapArgs;
 use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
+use tracing::instrument;
 use turnkey_client::generated::{
     GetAppStatusRequest,
     external::data::v1::{AppStatus, DeploymentStatus},
@@ -28,6 +29,7 @@ pub struct Args {
 }
 
 /// Run the deploy get-status command.
+#[instrument(skip_all)]
 pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
     let deployment_id = args.deploy_id.to_string();
 

@@ -9,6 +9,8 @@ use turnkey_client::generated::{ActivityStatus, RestoreTvcDeploymentIntent};
 use uuid::Uuid;
 
 use crate::outcome::Outcome;
+use tracing::instrument;
+
 use crate::output::StdCtx;
 
 /// Restore a deleted deployment.
@@ -21,6 +23,7 @@ pub struct Args {
 }
 
 /// Run the deploy restore command.
+#[instrument(skip_all)]
 pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
     let auth = crate::client::build_client().await?;
 

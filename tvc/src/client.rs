@@ -4,7 +4,7 @@ use crate::config::turnkey::{Config, StoredApiKey};
 use crate::errors::MissingResource;
 use anyhow::{Context, Result, anyhow, bail};
 use reqwest::header::{HeaderMap, HeaderValue};
-use tracing::debug;
+use tracing::{debug, instrument};
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use turnkey_client::{
     TurnkeyClient,
@@ -43,6 +43,7 @@ pub struct AuthenticatedClient {
 ///
 /// If only some of the three required env vars are set, errors with the list of
 /// missing names — no merged resolve between env and disk vars.
+#[instrument(skip_all)]
 pub async fn build_client() -> Result<AuthenticatedClient> {
     debug!("building authenticated Turnkey client");
 
@@ -61,6 +62,7 @@ pub async fn build_client() -> Result<AuthenticatedClient> {
     build_authed_client(&org_id, &api_base_url, &api_key_public, &api_key_private)
 }
 
+#[instrument(skip_all)]
 pub async fn fetch_tvc_app(auth: &AuthenticatedClient, app_id: &str) -> Result<TvcApp> {
     let response = auth
         .client
@@ -76,6 +78,7 @@ pub async fn fetch_tvc_app(auth: &AuthenticatedClient, app_id: &str) -> Result<T
         .ok_or_else(|| MissingResource::new("app", app_id).into())
 }
 
+#[instrument(skip_all)]
 pub async fn fetch_tvc_deployment(
     auth: &AuthenticatedClient,
     organization_id: String,
@@ -95,6 +98,7 @@ pub async fn fetch_tvc_deployment(
         .ok_or_else(|| MissingResource::new("deployment", deployment_id).into())
 }
 
+#[instrument(skip_all)]
 async fn load_credentials_from_config() -> Result<(String, String, String, String)> {
     let config = Config::load().await?;
 
@@ -131,6 +135,7 @@ const TVC_CLIENT_VERSION_HEADER: &str = "X-TVC-CLIENT-VERSION";
 /// Every tvc client must be constructed here: this is the single place that
 /// stamps [`TVC_CLIENT_VERSION_HEADER`] with this crate's release version, and
 /// the backend's version gate relies on it riding every request.
+#[instrument(skip_all)]
 pub(crate) fn build_turnkey_client(
     stamper: TurnkeyP256ApiKey,
     api_base_url: &str,
@@ -149,6 +154,7 @@ pub(crate) fn build_turnkey_client(
         .context("failed to build Turnkey client")
 }
 
+#[instrument(skip_all)]
 fn build_authed_client(
     org_id: &str,
     api_base_url: &str,
@@ -183,6 +189,7 @@ fn read_env_var(name: &str) -> Option<String> {
 /// - `Ok(Some((org_id, api_base_url, api_key_public, api_key_private)))`: all three
 ///   required vars set; `api_base_url` falls back to the default if unset.
 /// - `Err`: only some of the required vars are set; the error names which.
+#[instrument(skip_all)]
 fn load_credentials_from_env_vars() -> Result<Option<(String, String, String, String)>> {
     let org_id = read_env_var(ENV_ORG_ID);
     let api_key_public = read_env_var(ENV_API_KEY_PUBLIC);

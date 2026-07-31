@@ -112,6 +112,7 @@ pub struct Args {
 impl Run for Args {
     type Outcome = ApproveOutcome;
 
+    #[instrument(skip_all)]
     async fn run(self, ctx: &mut StdCtx) -> anyhow::Result<Self::Outcome> {
         let args = ArgsWithResolvedOperatorSeedSource::try_from(self)?;
 
