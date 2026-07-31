@@ -17,11 +17,12 @@ on:
         default: ""
   workflow_call:
     inputs:
-      dry_run:
-        description: Build and package binaries without uploading release assets
+      publish_release_assets:
+        # Keep publishing opt-in
+        description: Upload the generated archives and checksums to release_tag
         required: false
         type: boolean
-        default: true
+        default: false
       release_tag:
         description: Existing tvc GitHub release tag to build and upload
         required: false
@@ -47,9 +48,9 @@ jobs:
     if: >
       github.repository_owner == 'tkhq' &&
       (
+        inputs.publish_release_assets == true ||
         inputs.release_tag != '' ||
-        inputs.dry_run == true ||
-        github.event_name == 'workflow_dispatch' ||
+        github.event_name != 'pull_request' ||
         (
           github.event_name == 'pull_request' &&
           github.event.action != 'closed'
@@ -64,12 +65,12 @@ jobs:
       contents: read
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
-      publish: ${{ steps.matrix.outputs.publish }}
+      publish_release_assets: ${{ steps.matrix.outputs.publish_release_assets }}
     steps:
       - name: Select build targets
         id: matrix
         env:
-          DRY_RUN: ${{ inputs.dry_run }}
+          PUBLISH_RELEASE_ASSETS: ${{ inputs.publish_release_assets }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           REQUESTED_TARGETS: ${{ inputs.targets }}
         run: |
@@ -130,17 +131,23 @@ jobs:
           done
           matrix=$(IFS=,; echo "{\"include\":[${rows[*]}]}")
 
-          # Uploading requires both an explicit non-dry-run call and a release
-          # tag. Manual UI runs and post-merge validation runs therefore cannot
-          # publish assets.
-          publish=false
-          if [[ "${DRY_RUN}" == "false" && -n "${RELEASE_TAG}" ]]; then
-            publish=true
+          # Publishing is the only behavior this flag controls. With its
+          # default of false, post-merge and manual validation runs still build,
+          # package, and checksum every selected target without changing a
+          # GitHub Release. The protected release workflow opts in and must also
+          # provide the release tag that receives the assets.
+          publish_release_assets=false
+          if [[ "${PUBLISH_RELEASE_ASSETS}" == "true" ]]; then
+            if [[ -z "${RELEASE_TAG}" ]]; then
+              echo "publish_release_assets requires release_tag" >&2
+              exit 1
+            fi
+            publish_release_assets=true
           fi
 
           # Expose the selected matrix and upload decision to the build jobs.
           echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}"
-          echo "publish=${publish}" >> "${GITHUB_OUTPUT}"
+          echo "publish_release_assets=${publish_release_assets}" >> "${GITHUB_OUTPUT}"
 
   build:
     name: Build tvc binary (${{ matrix.target }})
@@ -228,7 +235,7 @@ jobs:
           compression-level: 0
 
       - name: Upload tvc release assets
-        if: needs.prepare.outputs.publish == 'true'
+        if: needs.prepare.outputs.publish_release_assets == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}

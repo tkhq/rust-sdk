@@ -73,7 +73,7 @@ jobs:
       contents: write
     uses: ./.github/workflows/tvc-binaries-release.yml
     with:
-      dry_run: false
+      publish_release_assets: true
       release_tag: ${{ needs.release-plz-release.outputs.tvc_tag }}
 
   # Create a PR with the new versions and changelog, preparing the next release.
