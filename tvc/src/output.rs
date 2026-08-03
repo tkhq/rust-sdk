@@ -371,7 +371,6 @@ mod tests {
     }
 
     #[derive(Serialize)]
-    #[serde(tag = "reason", rename = "test_message")]
     struct TestMessage {
         value: &'static str,
     }
@@ -383,14 +382,14 @@ mod tests {
     }
 
     #[test]
-    fn shell_emit_json_writes_one_self_tagged_line() {
+    fn shell_emit_json_writes_one_line() {
         let mut shell = TestShell::with_json_formatter();
 
         shell.emit(&TestMessage { value: "ok" }).unwrap();
 
         assert_eq!(
             shell.into_stdout(),
-            concat!(r#"{"reason":"test_message","value":"ok"}"#, "\n").as_bytes()
+            concat!(r#"{"value":"ok"}"#, "\n").as_bytes()
         );
     }
 
