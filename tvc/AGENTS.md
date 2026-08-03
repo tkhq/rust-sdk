@@ -79,9 +79,16 @@ Default guidance for coding-agent runs in this repository.
   forward-compatible identifiers as strings or dedicated domain wrappers.
   Compare typed values internally and convert them to strings only when an
   external wire type requires it.
-- Validate or resolve inputs once, then pass a narrow validated type into
-  creation or transformation code. Prefer an infallible transformation after
-  validation over a helper that repeats validation deeper in the call stack.
+- Parse, don't validate: run the fallible check once, at the boundary, and
+  return a narrow domain type that carries the proof. Downstream code takes
+  that type and transforms it infallibly instead of repeating the check deeper
+  in the call stack. Watch for validation disguised as parsing: before writing
+  a function named `is_*`/`check_*`/`verify_*`/`validate_*`, or one that
+  inspects data and returns `bool` or `Result<(), E>`, ask where the proof
+  goes — if callers continue with the same type they passed in, that is
+  validation; return the parsed type instead. `Result<(), E>` is the usual
+  disguise: it reads as parsing because it is fallible, but the unit return
+  discards the evidence.
 - Prefer infallible constructors. A constructor assembles an already-valid
   value; it does not acquire what it needs. Do fallible acquisition — loading
   config, resolving addresses, opening handles, fetching credentials — before
