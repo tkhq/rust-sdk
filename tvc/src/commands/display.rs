@@ -1,7 +1,21 @@
 //! Shared display helpers for CLI output.
 
+use std::fmt::{self, Display, Formatter};
+
 pub fn yes_no(value: bool) -> &'static str {
     if value { "yes" } else { "no" }
+}
+
+/// Renders the value, or `<unknown>` when it's absent.
+pub struct OrUnknown<T>(pub Option<T>);
+
+impl<T: Display> Display for OrUnknown<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match &self.0 {
+            Some(value) => value.fmt(f),
+            None => f.write_str("<unknown>"),
+        }
+    }
 }
 
 pub fn format_egress_enabled(enable_egress: bool) -> String {

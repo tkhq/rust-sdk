@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::approvals::{ApprovalValidationWithMeta, OperatorApproval, ValidatedManifest};
 use crate::client::fetch_tvc_app;
 use crate::commands::app_status::TimestampPayload;
-use crate::commands::display::{format_egress_enabled, yes_no};
+use crate::commands::display::{OrUnknown, format_egress_enabled, yes_no};
 use crate::errors::MissingResource;
 use crate::outcome::Outcome;
 use crate::output::StdCtx;
@@ -185,17 +185,28 @@ Pivot Container:
             write!(f, "\nUpdated: {}.{:09}s", updated.seconds, updated.nanos)?;
         }
 
-        if let Some(ApprovalValidationWithMeta { validation, meta }) = &self.manifest_approvals {
-            write!(
-                f,
-                "\n\nManifest Approvals: {}/{} valid",
-                meta.valid_count, validation.threshold
-            )?;
-            for validated in &validation.approvals {
-                write!(f, "\n  {}: {}", validated.approval, validated.verdict)?;
-            }
-            write!(f, "\nQuorum reached: {}", yes_no(meta.quorum_reached))?;
+        let (approvals, threshold, meta) =
+            if let Some(validation_with_meta) = &self.manifest_approvals {
+                (
+                    validation_with_meta.validation.approvals.as_slice(),
+                    validation_with_meta.validation.threshold.into(),
+                    (&validation_with_meta.meta).into(),
+                )
+            } else {
+                ([].as_slice(), None, None)
+            };
+
+        let threshold = OrUnknown(threshold);
+        let valid_count = OrUnknown(meta.map(|meta| meta.valid_count));
+        let quorum_reached = OrUnknown(meta.map(|meta| yes_no(meta.quorum_reached)));
+
+        write!(f, "\n\nManifest Approvals: {valid_count}/{threshold} valid")?;
+
+        for validated in approvals {
+            write!(f, "\n  {}: {}", validated.approval, validated.verdict)?;
         }
+
+        write!(f, "\nQuorum reached: {quorum_reached}")?;
 
         Ok(())
     }
