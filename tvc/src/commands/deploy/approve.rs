@@ -202,7 +202,7 @@ impl From<ApproveOutcome> for Outcome {
 /// stdout, the file path when `--approval-out` wrote it.
 #[derive(Display, Serialize)]
 #[serde(rename_all = "camelCase")]
-enum ApprovalOrPath {
+enum ApprovalOutput {
     /// Approval written to: {0}
     WrittenTo(PathBuf),
     /// {0}
@@ -233,7 +233,7 @@ impl<T> From<T> for JsonPretty<T> {
     }
 }
 
-impl ApprovalOrPath {
+impl ApprovalOutput {
     fn new(approval: Approval, approval_out: Option<PathBuf>) -> Self {
         match approval_out {
             Some(path) => Self::WrittenTo(path),
@@ -245,7 +245,7 @@ impl ApprovalOrPath {
 // `#[default]` only applies to unit variants, so the registry-fixture Default
 // is a manual, test-only impl.
 #[cfg(test)]
-impl Default for ApprovalOrPath {
+impl Default for ApprovalOutput {
     fn default() -> Self {
         Self::WrittenTo(Default::default())
     }
@@ -256,7 +256,7 @@ impl Default for ApprovalOrPath {
 #[serde(rename_all = "camelCase")]
 pub struct ApprovalPosted {
     #[serde(flatten)]
-    approval_or_path: ApprovalOrPath,
+    approval_or_path: ApprovalOutput,
     manifest_id: String,
     operator_id: String,
     approval_ids: Vec<String>,
@@ -295,7 +295,7 @@ Operator ID: {}"#,
 #[derive(Display, Serialize)]
 #[cfg_attr(test, derive(Default))]
 /// {0}
-pub struct ApprovalGenerated(ApprovalOrPath);
+pub struct ApprovalGenerated(ApprovalOutput);
 
 #[derive(Display, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -479,7 +479,7 @@ async fn run_with_resolved_inputs(
         .filter(|validated| validated.verdict != ApprovalVerdict::Valid)
         .for_each(|validated| {
             let message = format!(
-                "existing approval from {} is {}; QOS will reject it at enclave boot",
+                "existing approval from {} is {}; enclave will reject this approval and fail to start",
                 validated.approval, validated.verdict
             );
 
@@ -535,7 +535,7 @@ async fn run_with_resolved_inputs(
             let posted = post_approval_to_api(ctx, plan, &approval, &inputs.manifest).await?;
 
             Ok(ApproveOutcome::Posted(ApprovalPosted {
-                approval_or_path: ApprovalOrPath::new(approval, inputs.approval_out),
+                approval_or_path: ApprovalOutput::new(approval, inputs.approval_out),
                 manifest_id: target.manifest_id.to_string(),
                 operator_id: operator_id.to_string(),
                 approval_ids: posted.approval_ids,
@@ -543,7 +543,7 @@ async fn run_with_resolved_inputs(
             }))
         }
         None => Ok(ApproveOutcome::NotPosted(ApprovalGenerated(
-            ApprovalOrPath::new(approval, inputs.approval_out),
+            ApprovalOutput::new(approval, inputs.approval_out),
         ))),
     }
 }
@@ -880,7 +880,7 @@ mod tests {
 
     fn posted_to_file() -> ApprovalPosted {
         ApprovalPosted {
-            approval_or_path: ApprovalOrPath::WrittenTo("approval.json".into()),
+            approval_or_path: ApprovalOutput::WrittenTo("approval.json".into()),
             manifest_id: "manifest-123".to_string(),
             operator_id: "operator-456".to_string(),
             approval_ids: vec!["approval-1".to_string()],
@@ -908,7 +908,7 @@ mod tests {
 
     #[test]
     fn approval_generated_serializes_expected_json() {
-        let generated = ApprovalGenerated(ApprovalOrPath::Approval(
+        let generated = ApprovalGenerated(ApprovalOutput::Approval(
             Approval {
                 signature: vec![0xde, 0xad],
                 member: QuorumMember {
