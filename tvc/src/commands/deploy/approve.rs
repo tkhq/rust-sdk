@@ -15,7 +15,7 @@ use crate::{
     shell_print, shell_println,
     util::{read_file_to_string, write_file},
 };
-use anyhow::{Context, anyhow, bail};
+use anyhow::{Context, bail};
 use clap::{ArgGroup, Args as ClapArgs};
 use displaydoc::Display;
 use qos_core::protocol::services::boot::{
@@ -128,17 +128,10 @@ impl Run for Args {
             interactive_approve(ctx, &manifest)?;
         }
 
-        let non_interactive = ctx.is_non_interactive();
         let (post_target, operator_id) = build_post_target(
             BuildPostTargetArgs::from(&args),
             fetched.as_ref().map(|(id, _)| *id),
-            |saved_ids| {
-                if non_interactive || !stdin_can_prompt() {
-                    Ok(None)
-                } else {
-                    prompts::select("Select approving operator", saved_ids).map(Some)
-                }
-            },
+            ctx.is_non_interactive(),
         )
         .await?;
 
@@ -410,12 +403,12 @@ impl TryFrom<Args> for ArgsWithResolvedOperatorSeedSource {
 }
 
 /// Resolve where to post and which operator approves. No post target is
-/// built for `--dry-run` or `--skip-post`; `select` chooses among multiple
-/// saved operator IDs when `--operator-id` was not given.
+/// built for `--dry-run` or `--skip-post`; without `--operator-id`, a lone
+/// saved operator ID is used and multiple prompt for a choice when possible.
 async fn build_post_target(
     args: BuildPostTargetArgs,
     fetched_manifest_id: Option<Uuid>,
-    select: impl FnOnce(Vec<Uuid>) -> anyhow::Result<Option<Uuid>>,
+    non_interactive: bool,
 ) -> anyhow::Result<(Option<PostTarget>, Option<Uuid>)> {
     if args.dry_run || args.skip_post {
         return Ok((None, args.operator_id));
@@ -441,18 +434,17 @@ async fn build_post_target(
             .collect::<anyhow::Result<Vec<_>>>()?;
 
         match saved_ids.len() {
-                0 => bail!(
-                    "--operator-id is required to post approval to API. \
-             No saved operator IDs found. \
-             Use --skip-post to only generate the approval locally."
-                ),
-                1 => saved_ids[0],
-                _ => select(saved_ids)?.ok_or_else(|| {
-                    anyhow!(
-                        "--operator-id is required to post approval to API when multiple saved operator IDs are available"
-                    )
-                })?,
-            }
+            0 => bail!(
+                "--operator-id is required to post approval to API. \
+                 No saved operator IDs found. \
+                 Use --skip-post to only generate the approval locally."
+            ),
+            1 => saved_ids[0],
+            _ if non_interactive || !stdin_can_prompt() => bail!(
+                "--operator-id is required to post approval to API when multiple saved operator IDs are available"
+            ),
+            _ => prompts::select("Select approving operator", saved_ids)?,
+        }
     };
 
     let post_target = PostTarget {
