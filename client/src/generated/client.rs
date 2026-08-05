@@ -960,7 +960,7 @@ impl<S: Stamp> TurnkeyClient<S> {
     }
     /// Create users
     ///
-    /// Create users in an existing organization.
+    /// Create users in an existing organization. Each user must have at least one valid credential: an API key, an authenticator, an OAuth provider, or an email or phone number with a login method enabled on the organization (email, email OTP, or SMS).
     pub async fn create_users(
         &self,
         organization_id: String,
@@ -1826,7 +1826,7 @@ impl<S: Stamp> TurnkeyClient<S> {
     }
     /// Create sub-organization
     ///
-    /// Create a new sub-organization.
+    /// Create a new sub-organization. Each root user must have at least one valid credential: an API key, an authenticator, an OAuth provider, or an email or phone number with a login method enabled on the sub-organization (email, email OTP, or SMS).
     pub async fn create_sub_organization(
         &self,
         organization_id: String,
@@ -3532,16 +3532,16 @@ impl<S: Stamp> TurnkeyClient<S> {
     }
     /// Broadcast SVM transaction
     ///
-    /// Submit a transaction intent describing an SVM transaction you would like to broadcast.
+    /// Submit a transaction intent describing an SVM transaction you would like to broadcast. Supports single- and multi-signer intents via activity type versioning.
     pub async fn sol_send_transaction(
         &self,
         organization_id: String,
         timestamp_ms: u128,
-        params: immutable_activity::SolSendTransactionIntent,
-    ) -> Result<ActivityResult<immutable_activity::SolSendTransactionResult>, TurnkeyClientError>
+        params: immutable_activity::SolSendTransactionIntentV2,
+    ) -> Result<ActivityResult<immutable_activity::SolSendTransactionResultV2>, TurnkeyClientError>
     {
         let request = external_activity::SolSendTransactionRequest {
-            r#type: "ACTIVITY_TYPE_SOL_SEND_TRANSACTION".to_string(),
+            r#type: "ACTIVITY_TYPE_SOL_SEND_TRANSACTION_V2".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
@@ -3559,7 +3559,384 @@ impl<S: Stamp> TurnkeyClient<S> {
             .inner
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         let result = match inner {
-            immutable_activity::result::Inner::SolSendTransactionResult(res) => res,
+            immutable_activity::result::Inner::SolSendTransactionResultV2(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Deploy Earn wrapper
+    ///
+    /// Enable a yield vault for an organization by deploying its fee wrapper. Must be called before any deposits into the vault.
+    pub async fn earn_deploy_wrapper(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::EarnDeployWrapperIntent,
+    ) -> Result<ActivityResult<immutable_activity::EarnDeployWrapperResult>, TurnkeyClientError>
+    {
+        let request = external_activity::EarnDeployWrapperRequest {
+            r#type: "ACTIVITY_TYPE_EARN_DEPLOY_WRAPPER".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/earn_deploy_wrapper".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::EarnDeployWrapperResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Deposit into Earn vault
+    ///
+    /// Deposit assets from a wallet into an enabled yield vault.
+    pub async fn earn_deposit(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::EarnDepositIntent,
+    ) -> Result<ActivityResult<immutable_activity::EarnDepositResult>, TurnkeyClientError> {
+        let request = external_activity::EarnDepositRequest {
+            r#type: "ACTIVITY_TYPE_EARN_DEPOSIT".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(&request, "/public/v1/submit/earn_deposit".to_string())
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::EarnDepositResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Withdraw from Earn vault
+    ///
+    /// Withdraw assets or redeem shares from an enabled yield vault.
+    pub async fn earn_withdraw(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::EarnWithdrawIntent,
+    ) -> Result<ActivityResult<immutable_activity::EarnWithdrawResult>, TurnkeyClientError> {
+        let request = external_activity::EarnWithdrawRequest {
+            r#type: "ACTIVITY_TYPE_EARN_WITHDRAW".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(&request, "/public/v1/submit/earn_withdraw".to_string())
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::EarnWithdrawResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Set Earn wrapper state
+    ///
+    /// Enable or disable deposits to a deployed Earn wrapper. Withdrawals are always allowed.
+    pub async fn earn_set_wrapper_state(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::EarnSetWrapperStateIntent,
+    ) -> Result<ActivityResult<immutable_activity::EarnSetWrapperStateResult>, TurnkeyClientError>
+    {
+        let request = external_activity::EarnSetWrapperStateRequest {
+            r#type: "ACTIVITY_TYPE_EARN_SET_WRAPPER_STATE".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/earn_set_wrapper_state".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::EarnSetWrapperStateResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Claim earn fees
+    ///
+    /// Claim earn fees through the activity pipeline.
+    pub async fn claim_earn_fees(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::ClaimEarnFeesIntent,
+    ) -> Result<ActivityResult<immutable_activity::ClaimEarnFeesResult>, TurnkeyClientError> {
+        let request = external_activity::ClaimEarnFeesRequest {
+            r#type: "ACTIVITY_TYPE_CLAIM_EARN_FEES".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(&request, "/public/v1/submit/claim_earn_fees".to_string())
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::ClaimEarnFeesResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Get Earn vault catalog
+    ///
+    /// Get the catalog of all wrappable yield vaults across supported chains, enriched with live TVL and APY. Annotates which vaults the organization has already enabled.
+    pub async fn list_earn_vaults(
+        &self,
+        request: coordinator::ListEarnVaultsRequest,
+    ) -> Result<coordinator::ListEarnVaultsResponse, TurnkeyClientError> {
+        self.process_request(&request, "/public/v1/query/list_earn_vaults".to_string())
+            .await
+    }
+    /// Get Earn enabled vaults
+    ///
+    /// Get the organization's deployed wrappers with on-chain total deposited and live APY. The management view, distinct from per-wallet positions.
+    pub async fn list_earn_enabled_vaults(
+        &self,
+        request: coordinator::ListEarnEnabledVaultsRequest,
+    ) -> Result<coordinator::ListEarnEnabledVaultsResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/list_earn_enabled_vaults".to_string(),
+        )
+        .await
+    }
+    /// Get Earn positions
+    ///
+    /// Get the active Earn positions for a specific wallet, including current value, cost basis, yield, and projected fees.
+    pub async fn list_earn_positions(
+        &self,
+        request: coordinator::ListEarnPositionsRequest,
+    ) -> Result<coordinator::ListEarnPositionsResponse, TurnkeyClientError> {
+        self.process_request(&request, "/public/v1/query/list_earn_positions".to_string())
+            .await
+    }
+    /// Get Earn withdraw status
+    ///
+    /// Poll the status of a withdrawal by its withdraw_request_id.
+    pub async fn get_earn_withdraw_status(
+        &self,
+        request: coordinator::GetEarnWithdrawStatusRequest,
+    ) -> Result<coordinator::GetEarnWithdrawStatusResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/get_earn_withdraw_status".to_string(),
+        )
+        .await
+    }
+    /// Get Earn deposit status
+    ///
+    /// Poll the status of a deposit by its deposit_request_id (for the async/sponsored deposit path).
+    pub async fn get_earn_deposit_status(
+        &self,
+        request: coordinator::GetEarnDepositStatusRequest,
+    ) -> Result<coordinator::GetEarnDepositStatusResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/get_earn_deposit_status".to_string(),
+        )
+        .await
+    }
+    /// Get Earn claim fees status
+    ///
+    /// Poll the status of a fee claim by its claim_request_id.
+    pub async fn get_claim_earn_fees_status(
+        &self,
+        request: coordinator::GetClaimEarnFeesStatusRequest,
+    ) -> Result<coordinator::GetClaimEarnFeesStatusResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/get_claim_earn_fees_status".to_string(),
+        )
+        .await
+    }
+    /// Get Earn deploy status
+    ///
+    /// Poll the status of a wrapper deployment by its deploy_request_id.
+    pub async fn get_earn_deploy_status(
+        &self,
+        request: coordinator::GetEarnDeployStatusRequest,
+    ) -> Result<coordinator::GetEarnDeployStatusResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/get_earn_deploy_status".to_string(),
+        )
+        .await
+    }
+    /// Get swap status
+    ///
+    /// Poll the status of a swap by its swap_request_id. Covers same-chain and cross-chain swaps.
+    pub async fn get_swap_status(
+        &self,
+        request: coordinator::GetSwapStatusRequest,
+    ) -> Result<coordinator::GetSwapStatusResponse, TurnkeyClientError> {
+        self.process_request(&request, "/public/v1/query/get_swap_status".to_string())
+            .await
+    }
+    /// Claim swap fees
+    ///
+    /// Claim swap fees through the activity pipeline.
+    pub async fn claim_swap_fees(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::ClaimSwapFeesIntent,
+    ) -> Result<ActivityResult<immutable_activity::ClaimSwapFeesResult>, TurnkeyClientError> {
+        let request = external_activity::ClaimSwapFeesRequest {
+            r#type: "ACTIVITY_TYPE_CLAIM_SWAP_FEES".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(&request, "/public/v1/submit/claim_swap_fees".to_string())
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::ClaimSwapFeesResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Upsert swap config
+    ///
+    /// Enable or disable swap configuration for an organization.
+    pub async fn upsert_swap_config(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::UpsertSwapConfigIntent,
+    ) -> Result<ActivityResult<immutable_activity::UpsertSwapConfigResult>, TurnkeyClientError>
+    {
+        let request = external_activity::UpsertSwapConfigRequest {
+            r#type: "ACTIVITY_TYPE_UPSERT_SWAP_CONFIG".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(&request, "/public/v1/submit/upsert_swap_config".to_string())
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::UpsertSwapConfigResult(res) => res,
             other => {
                 return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
                     serde_json::to_string(&other)?,
@@ -4263,6 +4640,44 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
+    /// Import secrets
+    ///
+    /// Import secrets encrypted to target keys returned from InitImportSecrets.
+    pub async fn import_secrets(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::ImportSecretsIntent,
+    ) -> Result<ActivityResult<immutable_activity::ImportSecretsResult>, TurnkeyClientError> {
+        let request = external_activity::ImportSecretsRequest {
+            r#type: "ACTIVITY_TYPE_IMPORT_SECRETS".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(&request, "/public/v1/submit/import_secrets".to_string())
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::ImportSecretsResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
     /// Get IP Allowlist
     ///
     /// Get IP allowlist and rules for an organization.
@@ -4657,5 +5072,74 @@ impl<S: Stamp> TurnkeyClient<S> {
     ) -> Result<coordinator::ListEmailEventsResponse, TurnkeyClientError> {
         self.process_request(&request, "/public/v1/query/list_email_events".to_string())
             .await
+    }
+    /// List Eth transaction history
+    ///
+    /// List Ethereum transaction history for a wallet address on the specified network.
+    pub async fn list_eth_transaction_history(
+        &self,
+        request: coordinator::ListEthTransactionHistoryRequest,
+    ) -> Result<coordinator::ListEthTransactionHistoryResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/list_eth_transaction_history".to_string(),
+        )
+        .await
+    }
+    /// List Sol transaction history
+    ///
+    /// List Solana transaction history for a wallet address on the specified network.
+    pub async fn list_sol_transaction_history(
+        &self,
+        request: coordinator::ListSolTransactionHistoryRequest,
+    ) -> Result<coordinator::ListSolTransactionHistoryResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/list_sol_transaction_history".to_string(),
+        )
+        .await
+    }
+    /// Undelegate an EVM account
+    ///
+    /// Submit an EIP-7702 undelegation transaction.
+    pub async fn eth_undelegate7702(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::EthUndelegate7702Intent,
+    ) -> Result<ActivityResult<immutable_activity::EthUndelegate7702Result>, TurnkeyClientError>
+    {
+        let request = external_activity::EthUndelegate7702Request {
+            r#type: "ACTIVITY_TYPE_ETH_UNDELEGATE_7702".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/eth_undelegate_7702".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::EthUndelegate7702Result(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
     }
 }

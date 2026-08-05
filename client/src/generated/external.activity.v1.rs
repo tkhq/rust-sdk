@@ -1193,6 +1193,21 @@ pub struct UpdateWalletRequest {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct UpdateWalletAccountNameRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::UpdateWalletAccountNameIntent,
+    >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct CreateOauth2CredentialRequest {
     pub r#type: ::prost::alloc::string::String,
     pub timestamp_ms: ::prost::alloc::string::String,
@@ -1386,7 +1401,7 @@ pub struct SolSendTransactionRequest {
     pub organization_id: ::prost::alloc::string::String,
     #[serde(default)]
     pub parameters: ::core::option::Option<
-        super::super::super::immutable::activity::v1::SolSendTransactionIntent,
+        super::super::super::immutable::activity::v1::SolSendTransactionIntentV2,
     >,
     #[serde(default)]
     pub generate_app_proofs: ::core::option::Option<bool>,
@@ -1401,7 +1416,37 @@ pub struct ExecuteSwapRequest {
     pub organization_id: ::prost::alloc::string::String,
     #[serde(default)]
     pub parameters: ::core::option::Option<
-        super::super::super::immutable::activity::v1::ExecuteSwapIntent,
+        super::super::super::immutable::activity::v1::ExecuteSwapIntentV2,
+    >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateSwapQuoteRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::CreateSwapQuoteIntent,
+    >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct ClaimSwapFeesRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::ClaimSwapFeesIntent,
     >,
     #[serde(default)]
     pub generate_app_proofs: ::core::option::Option<bool>,
@@ -1685,6 +1730,32 @@ pub struct SparkSignFrostRequest {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct InitImportSecretsRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::InitImportSecretsIntent,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct ImportSecretsRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::ImportSecretsIntent,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct SparkPrepareTransferRequest {
     pub r#type: ::prost::alloc::string::String,
     pub timestamp_ms: ::prost::alloc::string::String,
@@ -1821,12 +1892,78 @@ pub struct EarnWithdrawRequest {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
-pub struct UpsertEarnClientFeeConfigRequest {
+pub struct EarnSetWrapperStateRequest {
     pub r#type: ::prost::alloc::string::String,
     pub timestamp_ms: ::prost::alloc::string::String,
     pub organization_id: ::prost::alloc::string::String,
     #[serde(default)]
     pub parameters: ::core::option::Option<
-        super::super::super::immutable::activity::v1::UpsertEarnClientFeeConfigIntent,
+        super::super::super::immutable::activity::v1::EarnSetWrapperStateIntent,
     >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct ClaimEarnFeesRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::ClaimEarnFeesIntent,
+    >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct ActivityFilter {
+    #[serde(default)]
+    pub statuses: Vec<super::super::super::immutable::activity::v1::ActivityStatus>,
+    #[serde(default)]
+    pub types: Vec<super::super::super::immutable::activity::v1::ActivityType>,
+    #[serde(default)]
+    pub created_after: ::core::option::Option<::pbjson_types::Timestamp>,
+    #[serde(default)]
+    pub created_until: ::core::option::Option<::pbjson_types::Timestamp>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct ActivityCursor {
+    #[serde(default)]
+    pub version: u32,
+    #[serde(default)]
+    pub created_at: ::core::option::Option<::pbjson_types::Timestamp>,
+    pub id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct ActivityPagination {
+    pub limit: ::prost::alloc::string::String,
+    pub before: ::prost::alloc::string::String,
+    pub after: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct EthUndelegate7702Request {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::EthUndelegate7702Intent,
+    >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
 }

@@ -257,6 +257,109 @@ pub struct PolicyEvaluationMetrics {
     pub max_elapsed_time_ms: u32,
 }
 #[derive(Debug)]
+#[serde_with::serde_as]
+/// Secret signing payload. This is immutable and gets signed by the signers
+/// quorum key to prove authenticity.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SecretPayloadV1 {
+    /// UUID for this secret
+    pub secret_id: ::prost::alloc::string::String,
+    /// UUID for the organization this secret belongs to
+    pub organization_id: ::prost::alloc::string::String,
+    /// Human readable name - helpful for things like displaying the secret in the
+    /// Turnkey dashboard.
+    #[serde(default)]
+    pub name: ::core::option::Option<::prost::alloc::string::String>,
+    /// Ciphertext produced by at-rest encryption inside the signer enclave.
+    #[serde(default)]
+    pub ciphertext: ::prost::alloc::vec::Vec<u8>,
+    /// Policy visible static properties bound to the secret at creation time.
+    #[serde(default)]
+    pub static_properties: ::prost::alloc::vec::Vec<KeyValue>,
+    /// 12 byte random nonce used for at-rest AES-256-GCM encryption.
+    /// Must be securely generated in the enclave.
+    #[serde(default)]
+    pub nonce: ::prost::alloc::vec::Vec<u8>,
+    /// 32 byte random value bound into HKDF info during key derivation for the AES-256-GCM cipher key.
+    /// Must be securely generated in the enclave.
+    #[serde(default)]
+    pub derivation_salt: ::prost::alloc::vec::Vec<u8>,
+    /// At-rest encryption suite used for the ciphertext. This is persisted with the
+    /// immutable payload and is included in HKDF info and AAD to force suite migration is modeled as secret rotation rather than
+    /// runtime cipher agility.
+    pub at_rest_encryption_suite: AtRestEncryptionSuite,
+    /// Unix timestamp for when this key was created. In case we ever want to add TTL.
+    #[serde(default)]
+    #[serde_as(as = "serde_with::DisplayFromStr")]
+    pub created_at_unix_ms: u64,
+}
+#[derive(Debug)]
+#[serde_with::serde_as]
+/// An Ingress Target Key is a type created in the signer enclave and the reason
+/// it is referred to as a payload is because the signer signs over this exact type.
+/// It is intended to be the encryption target for transport encryption protocols
+/// that facilitate ingress into our signer enclave. As an encryption target key,
+/// it is meant to be only used once; in other terms this can be referred to as
+/// an "ephemeral key layer" - ensuring that transport ciphertexts are each
+/// encrypted to unique keys and that a compromise of a single key has a blast
+/// radius limited to just one cipher text.
+///
+/// The type has been initially developed for use with the import secrets API,
+/// but the intention is that this may be used in other APIs that require an
+/// "ephemeral key layer" for ingress encryption.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct IngressTargetKeyPayloadV1 {
+    /// UUID for this key
+    pub ingress_target_key_id: ::prost::alloc::string::String,
+    /// UUID organization this belongs to
+    pub organization_id: ::prost::alloc::string::String,
+    /// Server target message specific to transport encryption suite.
+    /// This is what gets returned to the user by InitImportSecretsResult.
+    /// For TRANSPORT_ENCRYPTION_SUITE_ENCLAVE_ENCRYPT_V1 this is a JSON-encoded
+    /// enclave_encrypt ServerTargetMsgV1.
+    pub enclave_target_message: ::prost::alloc::string::String,
+    /// Ciphertext of the target key
+    #[serde(default)]
+    pub ciphertext: ::prost::alloc::vec::Vec<u8>,
+    /// Transport encryption suite the key is meant to be used with. This determines
+    /// the target message format, target public key encoding, and import ciphertext
+    /// envelope expected from the caller.
+    pub encryption_suite: TransportEncryptionSuite,
+    /// At-rest encryption suite used for the ciphertext that stores the target key.
+    pub at_rest_encryption_suite: AtRestEncryptionSuite,
+    /// Unix timestamp of when this was created at. This may be useful in the future if we want to make these expire after a certain point.
+    /// Since this is signed over by the signer this can be used to enforce an expiration in the enclave.
+    #[serde(default)]
+    #[serde_as(as = "serde_with::DisplayFromStr")]
+    pub created_at_unix_ms: u64,
+    /// 32 byte random value bound into HKDF info during key derivation for the AES-256-GCM cipher key.
+    #[serde(default)]
+    pub derivation_salt: ::prost::alloc::vec::Vec<u8>,
+    /// 12 byte random nonce used for at-rest AES-256-GCM encryption.
+    #[serde(default)]
+    pub nonce: ::prost::alloc::vec::Vec<u8>,
+    /// Encoded transport target public key, broken out from `target_public_key_data` so it can
+    /// be indexed and looked up directly by the coordinator when consuming the key during import.
+    /// Encoding is dictated by `encryption_suite`. For TRANSPORT_ENCRYPTION_SUITE_ENCLAVE_ENCRYPT_V1
+    /// this is a hex-encoded uncompressed P-256 public key.
+    pub target_public_key: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+/// Type to represent arbitrary key-value pairs evaluated in the policy engine.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct KeyValue {
+    /// Policy visible property name.
+    pub key: ::prost::alloc::string::String,
+    /// Policy visible property value.
+    pub value: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -338,6 +441,131 @@ impl SignatureScheme {
                 Some(Self::TkApiSecp256k1Eip191)
             }
             "SIGNATURE_SCHEME_TK_ATTESTED_P256" => Some(Self::TkAttestedP256),
+            _ => None,
+        }
+    }
+}
+/// At-rest encryption suite for internal ciphertexts.
+///
+/// IMPORTANT: Each variant identifies the full encryption contract for persisted encrypted
+/// resources: cipher, key derivation, nonce handling, AAD, HKDF inputs, etc. Changes
+/// to any of those claims should introduce a new variant here so stored payloads can be
+/// decoded and verified unambiguously; reducing chances of confused deputy attacks.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum AtRestEncryptionSuite {
+    #[serde(rename = "AT_REST_ENCRYPTION_SUITE_UNSPECIFIED")]
+    Unspecified = 0,
+    /// AES-256-GCM using a per-resource HKDF-SHA256 derived key.
+    ///
+    /// The derived key is bound to the persisted resource type, organization, and
+    /// resource identifiers through HKDF info. The ciphertext is authenticated with
+    /// AAD containing the same context as the HKDF info.
+    #[serde(rename = "AT_REST_ENCRYPTION_SUITE_AES256_GCM_HKDF_SHA256_V1")]
+    Aes256GcmHkdfSha256V1 = 1,
+}
+impl AtRestEncryptionSuite {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "AT_REST_ENCRYPTION_SUITE_UNSPECIFIED",
+            Self::Aes256GcmHkdfSha256V1 => {
+                "AT_REST_ENCRYPTION_SUITE_AES_256_GCM_HKDF_SHA256_V1"
+            }
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "AT_REST_ENCRYPTION_SUITE_UNSPECIFIED" => Some(Self::Unspecified),
+            "AT_REST_ENCRYPTION_SUITE_AES_256_GCM_HKDF_SHA256_V1" => {
+                Some(Self::Aes256GcmHkdfSha256V1)
+            }
+            _ => None,
+        }
+    }
+}
+/// Stable internal resource type labels used when deriving and authenticating
+/// at-rest ciphertexts.
+///
+/// If any resource type is updated, it should result in a new resource type
+/// and thus a new variant in this enum
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum AtRestResourceType {
+    #[serde(rename = "AT_REST_RESOURCE_TYPE_UNSPECIFIED")]
+    Unspecified = 0,
+    #[serde(rename = "AT_REST_RESOURCE_TYPE_INGRESS_TARGET_KEY_PAYLOAD_V1")]
+    IngressTargetKeyPayloadV1 = 1,
+    #[serde(rename = "AT_REST_RESOURCE_TYPE_SECRET_PAYLOAD_V1")]
+    SecretPayloadV1 = 2,
+}
+impl AtRestResourceType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "AT_REST_RESOURCE_TYPE_UNSPECIFIED",
+            Self::IngressTargetKeyPayloadV1 => {
+                "AT_REST_RESOURCE_TYPE_INGRESS_TARGET_KEY_PAYLOAD_V1"
+            }
+            Self::SecretPayloadV1 => "AT_REST_RESOURCE_TYPE_SECRET_PAYLOAD_V1",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "AT_REST_RESOURCE_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+            "AT_REST_RESOURCE_TYPE_INGRESS_TARGET_KEY_PAYLOAD_V1" => {
+                Some(Self::IngressTargetKeyPayloadV1)
+            }
+            "AT_REST_RESOURCE_TYPE_SECRET_PAYLOAD_V1" => Some(Self::SecretPayloadV1),
+            _ => None,
+        }
+    }
+}
+/// Transport encryption suite for enclave ingress and egress.
+///
+/// IMPORTANT: Each value identifies the full protocol contract for moving encrypted material
+/// across the enclave boundary, including key agreement, public key encoding,
+/// target message format, ciphertext envelope shape, and authenticated context.
+/// If any aspect changes a new variant should be introduced here so we can eliminate all
+/// ambiguity when interpreting
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum TransportEncryptionSuite {
+    #[serde(rename = "TRANSPORT_ENCRYPTION_SUITE_UNSPECIFIED")]
+    Unspecified = 0,
+    /// HPKE suite from by Turnkey's enclave_encrypt crate.
+    ///
+    /// The target public key is a hex-encoded uncompressed P-256 public key, and the
+    /// target message is a JSON-encoded enclave_encrypt ServerTargetMsgV1.
+    #[serde(rename = "TRANSPORT_ENCRYPTION_SUITE_ENCLAVE_ENCRYPT_V1")]
+    EnclaveEncryptV1 = 1,
+}
+impl TransportEncryptionSuite {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "TRANSPORT_ENCRYPTION_SUITE_UNSPECIFIED",
+            Self::EnclaveEncryptV1 => "TRANSPORT_ENCRYPTION_SUITE_ENCLAVE_ENCRYPT_V1",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "TRANSPORT_ENCRYPTION_SUITE_UNSPECIFIED" => Some(Self::Unspecified),
+            "TRANSPORT_ENCRYPTION_SUITE_ENCLAVE_ENCRYPT_V1" => {
+                Some(Self::EnclaveEncryptV1)
+            }
             _ => None,
         }
     }

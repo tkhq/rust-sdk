@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package external.data.v1;
+
+import "immutable/data/v1/earn.proto";
+import "vendor/protoc-gen-openapiv2/options/annotations.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/external/data/v1";
+
+// EarnValueDisplay holds normalized, display-only representations of an on-chain
+// amount. Values are for presentation only — do not do arithmetic with them;
+// use the corresponding raw atomic field instead.
+message EarnValueDisplay {
+  string usd = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "USD value, for display only."}];
+  string crypto = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Normalized amount in the asset's own units, for display only."}];
+}
+
+message EarnVault {
+  string vault_address = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address of the underlying yield vault."}];
+  immutable.data.v1.EarnProvider provider = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Yield provider for the vault."}];
+  string caip19 = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-19 asset ID of the vault's underlying asset (e.g. 'eip155:8453/erc20:0x833589...'); the chain is encoded in the identifier."}];
+  string tvl = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Total value locked in the vault, in raw on-chain units of the underlying asset. The catalog is sorted by the USD value of this."}];
+  string apy_pct = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Current annual percentage yield, expressed as a decimal fraction (e.g., '0.0812' for 8.12%)."}];
+  bool enabled = 6 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether the organization has enabled this vault."}];
+  EarnValueDisplay display = 7 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Normalized TVL values for display purposes only (usd + crypto). Do not do arithmetic with these; use tvl instead."}];
+  string name = 8 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable vault name from the provider (e.g. 'Steakhouse Prime USDC' for Morpho; the reserve symbol for Aave)."}];
+  string curator = 9 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Vault curator name(s), comma-separated when a vault has multiple. Empty for providers without curators (e.g. Aave)."}];
+}
+
+message EarnEnabledVault {
+  string vault_address = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address of the underlying yield vault."}];
+  string wrapper_address = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address of the deployed fee wrapper (the deposit target)."}];
+  immutable.data.v1.EarnProvider provider = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Yield provider for the vault."}];
+  string caip19 = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-19 asset ID of the vault's underlying asset (e.g. 'eip155:8453/erc20:0x833589...'); the chain is encoded in the identifier."}];
+  string apy_pct = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Gross annual percentage yield, expressed as a decimal fraction (before fees)."}];
+  string total_deposited = 6 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Total deposited through this wrapper (wrapper TVL), in raw on-chain units of the underlying asset."}];
+  EarnValueDisplay display = 7 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Normalized total-deposited values for display only (usd + crypto). Do not do arithmetic with these; use total_deposited instead."}];
+  string net_apy_pct = 8 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Annual percentage yield net of fees, expressed as a decimal fraction."}];
+  string client_fee_bps = 9 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Client fee taken on yield, in basis points."}];
+  bool deposits_disabled = 10 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "When true, deposits to this wrapper are rejected; withdrawals are unaffected. Toggled via EarnSetWrapperState."}];
+  string name = 11 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable vault name from the provider (e.g. 'Steakhouse Prime USDC' for Morpho; the reserve symbol for Aave)."}];
+  string curator = 12 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Vault curator name(s), comma-separated when a vault has multiple. Empty for providers without curators (e.g. Aave)."}];
+  optional string claimable_client_fee = 13 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The client's claimable fee (releasable now), in raw on-chain units of the underlying asset (the caip19 asset). Turnkey's fee is excluded. Only returned to the parent org; unset when a sub-org queries."}];
+  EarnValueDisplay claimable_client_fee_display = 14 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Normalized claimable_client_fee for display only (usd + crypto). Do not do arithmetic with these; use claimable_client_fee. Unset when a sub-org queries."}];
+  optional string client_fee_wallet = 15 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The wallet address that receives the client's fee payouts on-chain. Unset when a sub-org queries."}];
+}
+
+message AssetMetadata {
+  string caip19 = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The caip-19 asset identifier"}];
+  string symbol = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The asset symbol"}];
+  int32 decimals = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The number of decimals this asset uses"}];
+  string logo_url = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The url of the asset logo"}];
+  string name = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The asset name"}];
+  bool stable = 6 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether this asset is on Turnkey's stablecoin list (used for stablepair swap fee pricing)."}];
+}

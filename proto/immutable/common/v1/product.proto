@@ -1,0 +1,27 @@
+// Product tier enums shared by dashboard, operator agent, notarizer, and
+// coordinator. Declared in immutable.common so enclaves can consume them
+// without depending on services.coordinator.dashboard.
+
+syntax = "proto3";
+
+package immutable.common.v1;
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/immutable/common/v1";
+
+enum ProductType {
+  PRODUCT_TYPE_UNSPECIFIED = 0;
+  PRODUCT_TYPE_FREE = 1;
+  PRODUCT_TYPE_ENTERPRISE = 2;
+  PRODUCT_TYPE_PAY_AS_YOU_GO = 3;
+  PRODUCT_TYPE_PRO = 4;
+}
+
+enum ProductSubType {
+  PRODUCT_SUB_TYPE_UNSPECIFIED = 0;
+  PRODUCT_SUB_TYPE_ENTERPRISE_SCALE = 1;
+  PRODUCT_SUB_TYPE_ENTERPRISE_GROWTH = 2;
+  PRODUCT_SUB_TYPE_ENTERPRISE_STRATEGIC = 3;
+  PRODUCT_SUB_TYPE_PRO_LEGACY = 4;
+  PRODUCT_SUB_TYPE_ENTERPRISE_PRO_PLUS = 5;
+  PRODUCT_SUB_TYPE_ENTERPRISE_LARGE = 6;
+}

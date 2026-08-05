@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package immutable.data.v1;
 
+import "immutable/models/v1/models.proto";
+
 option go_package = "github.com/tkhq/mono/src/go/gen/pkg/immutable/data/v1";
 
 // The org's Earn configuration, stored in Org Data (enclave-signed) as a
@@ -14,15 +16,6 @@ message EarnConfig {
   uint32 version = 1;
   // One entry per vault the org has enabled via DeployEarnWrapper.
   repeated EarnWrapper wrappers = 2;
-  // The client's performance-fee cut of gross yield, in basis points (e.g. "2000" for 20%).
-  string client_fee_bps = 3;
-  // The wallet address that receives the client's fee payouts on-chain.
-  string client_fee_wallet = 4;
-  // Turnkey's performance-fee cut of gross yield, in basis points. Seeded from a
-  // hardcoded V1 default; stored per-org so enterprise orgs can carry a custom rate.
-  string turnkey_fee_bps = 5;
-  // The wallet address that receives Turnkey's fee payouts on-chain.
-  string turnkey_fee_wallet = 6;
 }
 
 // A single deployed Earn wrapper stack for one (vault, chain) the org enabled.
@@ -38,6 +31,41 @@ message EarnWrapper {
   string splitter_address = 4;
   // The provider that owns this wrapper.
   EarnProvider provider = 5;
+  // Deployment nonce, incremented on each wrapper deployment to the same vault+chain.
+  string deploy_nonce = 6;
+  // The client's fee cut of gross yield, in basis points (e.g. "2000" for 20%).
+  string client_fee_bps = 7;
+  // The wallet address that receives the client's fee payouts on-chain.
+  string client_fee_wallet = 8;
+  // Turnkey's fee cut of gross yield, in basis points.
+  string turnkey_fee_bps = 9;
+  // The wallet address that receives Turnkey's fee payouts on-chain.
+  string turnkey_fee_wallet = 10;
+  // The vault's underlying ERC-20 asset (the deposit approve target), pinned at
+  // deploy time from the TLS-Fetcher-verified vault.
+  string underlying_asset = 11;
+  // When true, deposits to this wrapper are rejected; withdrawals are unaffected.
+  // Toggled via EarnSetWrapperState (e.g. incident brake for a compromised vault).
+  bool deposits_disabled = 12;
+}
+
+// The signer-signed payload authorizing a wrapper's insertion into an org's EarnConfig.
+// The signer derives the wrapper/splitter addresses from a secret salt the coordinator
+// cannot reproduce, so the notarizer trusts these addresses via the signature; it binds
+// organization_id + the wrapper's vault/chain to the authorizing ruling before inserting.
+message EarnWrapperPayload {
+  // The org this wrapper belongs to.
+  string organization_id = 1;
+  // The wrapper entry to insert into the org's EarnConfig.
+  EarnWrapper wrapper = 2;
+}
+
+// EarnWrapperPayload signed by the signer's quorum key. The notarizer verifies the
+// signature against its pinned signer public key.
+message SignedEarnWrapper {
+  EarnWrapperPayload payload = 1;
+  // Signer signature over hash(payload).
+  immutable.models.v1.Signature signature = 2;
 }
 
 // The yield protocol backing an Earn wrapper.

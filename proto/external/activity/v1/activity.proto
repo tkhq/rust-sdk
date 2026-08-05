@@ -5,6 +5,7 @@ package external.activity.v1;
 import "external/data/v1/common.proto";
 import "external/data/v1/organization_data.proto";
 import "external/data/v1/proofs.proto";
+import "google/protobuf/timestamp.proto";
 import "immutable/activity/billing/activate_billing_tier.proto";
 import "immutable/activity/billing/delete_payment_method.proto";
 import "immutable/activity/billing/set_payment_method.proto";
@@ -1547,6 +1548,25 @@ message UpdateWalletRequest {
   optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
 }
 
+message UpdateWalletAccountNameRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_UPDATE_WALLET_ACCOUNT_NAME"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.UpdateWalletAccountNameIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
+}
+
 message CreateOauth2CredentialRequest {
   string type = 1 [
     (google.api.field_behavior) = REQUIRED,
@@ -1795,7 +1815,7 @@ message SolSendTransactionRequest {
   string type = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      enum: ["ACTIVITY_TYPE_SOL_SEND_TRANSACTION"]
+      enum: ["ACTIVITY_TYPE_SOL_SEND_TRANSACTION_V2"]
     }
   ];
   string timestamp_ms = 2 [
@@ -1806,7 +1826,7 @@ message SolSendTransactionRequest {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
-  immutable.activity.v1.SolSendTransactionIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  immutable.activity.v1.SolSendTransactionIntentV2 parameters = 4 [(google.api.field_behavior) = REQUIRED];
   optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
 }
 
@@ -1814,7 +1834,7 @@ message ExecuteSwapRequest {
   string type = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      enum: ["ACTIVITY_TYPE_EXECUTE_SWAP"]
+      enum: ["ACTIVITY_TYPE_EXECUTE_SWAP_V2"]
     }
   ];
   string timestamp_ms = 2 [
@@ -1825,7 +1845,45 @@ message ExecuteSwapRequest {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
-  immutable.activity.v1.ExecuteSwapIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  immutable.activity.v1.ExecuteSwapIntentV2 parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
+}
+
+message CreateSwapQuoteRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_CREATE_SWAP_QUOTE"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.CreateSwapQuoteIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
+}
+
+message ClaimSwapFeesRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_CLAIM_SWAP_FEES"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.ClaimSwapFeesIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
   optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
 }
 
@@ -2185,6 +2243,42 @@ message SparkSignFrostRequest {
   immutable.activity.v1.SparkSignFrostIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
 }
 
+message InitImportSecretsRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_INIT_IMPORT_SECRETS"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.InitImportSecretsIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+}
+
+message ImportSecretsRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_IMPORT_SECRETS"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.ImportSecretsIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+}
+
 message SparkPrepareTransferRequest {
   string type = 1 [
     (google.api.field_behavior) = REQUIRED,
@@ -2368,11 +2462,11 @@ message EarnWithdrawRequest {
   optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
 }
 
-message UpsertEarnClientFeeConfigRequest {
+message EarnSetWrapperStateRequest {
   string type = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      enum: ["ACTIVITY_TYPE_UPSERT_EARN_CLIENT_FEE_CONFIG"]
+      enum: ["ACTIVITY_TYPE_EARN_SET_WRAPPER_STATE"]
     }
   ];
   string timestamp_ms = 2 [
@@ -2383,5 +2477,78 @@ message UpsertEarnClientFeeConfigRequest {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
-  immutable.activity.v1.UpsertEarnClientFeeConfigIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  immutable.activity.v1.EarnSetWrapperStateIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
+}
+
+message ClaimEarnFeesRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_CLAIM_EARN_FEES"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.ClaimEarnFeesIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
+}
+
+message ActivityFilter {
+  repeated immutable.activity.v1.ActivityStatus statuses = 1 [(google.api.field_behavior) = OPTIONAL];
+  repeated immutable.activity.v1.ActivityType types = 2 [(google.api.field_behavior) = OPTIONAL];
+  google.protobuf.Timestamp created_after = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Only include activities created at or after this time."}
+  ];
+  google.protobuf.Timestamp created_until = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Only include activities created before this time."}
+  ];
+}
+
+message ActivityCursor {
+  uint32 version = 1;
+  google.protobuf.Timestamp created_at = 2;
+  string id = 3;
+}
+
+message ActivityPagination {
+  string limit = 1 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The maximum number of objects to return."}
+  ];
+  string before = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "An opaque activity cursor that enables you to fetch all activities before this cursor."}
+  ];
+  string after = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "An opaque activity cursor that enables you to fetch all activities after this cursor."}
+  ];
+}
+
+message EthUndelegate7702Request {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_ETH_UNDELEGATE_7702"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.EthUndelegate7702Intent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
 }

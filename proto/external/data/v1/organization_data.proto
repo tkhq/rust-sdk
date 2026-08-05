@@ -203,6 +203,10 @@ message Policy {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A condition expression that evalutes to true or false."}
   ];
+  optional string time = 10 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A time expression that evalutes to true or false."}
+  ];
 }
 
 message PrivateKey {

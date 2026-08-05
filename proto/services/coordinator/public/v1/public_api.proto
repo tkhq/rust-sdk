@@ -3,6 +3,7 @@ syntax = "proto3";
 package services.coordinator.public.v1;
 
 import "external/activity/v1/activity.proto";
+import "external/data/v1/earn.proto";
 import "external/data/v1/mfa_status.proto";
 import "external/data/v1/organization_data.proto";
 import "external/data/v1/proofs.proto";
@@ -13,6 +14,7 @@ import "external/data/v1/wallet_account.proto";
 import "external/options/v1/options.proto";
 import "external/webauthn/v1/webauthn.proto";
 import "immutable/activity/v1/activity.proto";
+import "immutable/data/v1/earn.proto";
 import "immutable/sdk_models/v1/models.proto";
 import "vendor/google/api/annotations.proto";
 import "vendor/google/api/field_behavior.proto";
@@ -775,7 +777,7 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Create users in an existing organization."
+      description: "Create users in an existing organization. Each user must have at least one valid credential: an API key, an authenticator, an OAuth provider, or an email or phone number with a login method enabled on the organization (email, email OTP, or SMS)."
       summary: "Create users"
       tags: "Users"
     };
@@ -1112,7 +1114,7 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Create a new sub-organization."
+      description: "Create a new sub-organization. Each root user must have at least one valid credential: an API key, an authenticator, an OAuth provider, or an email or phone number with a login method enabled on the sub-organization (email, email OTP, or SMS)."
       summary: "Create sub-organization"
       tags: "Organizations"
     };
@@ -1688,14 +1690,13 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Submit a transaction intent describing an SVM transaction you would like to broadcast."
+      description: "Submit a transaction intent describing an SVM transaction you would like to broadcast. Supports single- and multi-signer intents via activity type versioning."
       summary: "Broadcast SVM transaction"
       tags: "Broadcasting"
     };
   }
 
   rpc EarnDeployWrapper(external.activity.v1.EarnDeployWrapperRequest) returns (ActivityResponse) {
-    option (google.api.method_visibility).restriction = "INTERNAL";
     option (google.api.http) = {
       post: "/public/v1/submit/earn_deploy_wrapper"
       body: "*"
@@ -1708,7 +1709,6 @@ service PublicApiService {
   }
 
   rpc EarnDeposit(external.activity.v1.EarnDepositRequest) returns (ActivityResponse) {
-    option (google.api.method_visibility).restriction = "INTERNAL";
     option (google.api.http) = {
       post: "/public/v1/submit/earn_deposit"
       body: "*"
@@ -1721,7 +1721,6 @@ service PublicApiService {
   }
 
   rpc EarnWithdraw(external.activity.v1.EarnWithdrawRequest) returns (ActivityResponse) {
-    option (google.api.method_visibility).restriction = "INTERNAL";
     option (google.api.http) = {
       post: "/public/v1/submit/earn_withdraw"
       body: "*"
@@ -1733,23 +1732,33 @@ service PublicApiService {
     };
   }
 
-  rpc UpsertEarnClientFeeConfig(external.activity.v1.UpsertEarnClientFeeConfigRequest) returns (ActivityResponse) {
-    option (google.api.method_visibility).restriction = "INTERNAL";
+  rpc EarnSetWrapperState(external.activity.v1.EarnSetWrapperStateRequest) returns (ActivityResponse) {
     option (google.api.http) = {
-      post: "/public/v1/submit/upsert_earn_client_fee_config"
+      post: "/public/v1/submit/earn_set_wrapper_state"
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Set the client's Earn fee rate and payout wallet for the organization."
-      summary: "Upsert Earn client fee config"
+      description: "Enable or disable deposits to a deployed Earn wrapper. Withdrawals are always allowed."
+      summary: "Set Earn wrapper state"
       tags: "Earn"
     };
   }
 
-  rpc EarnVaults(EarnVaultsRequest) returns (EarnVaultsResponse) {
-    option (google.api.method_visibility).restriction = "INTERNAL";
+  rpc ClaimEarnFees(external.activity.v1.ClaimEarnFeesRequest) returns (ActivityResponse) {
     option (google.api.http) = {
-      post: "/public/v1/query/earn_vaults"
+      post: "/public/v1/submit/claim_earn_fees"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Claim earn fees through the activity pipeline."
+      summary: "Claim earn fees"
+      tags: "Earn"
+    };
+  }
+
+  rpc ListEarnVaults(ListEarnVaultsRequest) returns (ListEarnVaultsResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/list_earn_vaults"
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
@@ -1759,10 +1768,9 @@ service PublicApiService {
     };
   }
 
-  rpc EarnEnabledVaults(EarnEnabledVaultsRequest) returns (EarnEnabledVaultsResponse) {
-    option (google.api.method_visibility).restriction = "INTERNAL";
+  rpc ListEarnEnabledVaults(ListEarnEnabledVaultsRequest) returns (ListEarnEnabledVaultsResponse) {
     option (google.api.http) = {
-      post: "/public/v1/query/earn_enabled_vaults"
+      post: "/public/v1/query/list_earn_enabled_vaults"
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
@@ -1772,10 +1780,9 @@ service PublicApiService {
     };
   }
 
-  rpc EarnPositions(EarnPositionsRequest) returns (EarnPositionsResponse) {
-    option (google.api.method_visibility).restriction = "INTERNAL";
+  rpc ListEarnPositions(ListEarnPositionsRequest) returns (ListEarnPositionsResponse) {
     option (google.api.http) = {
-      post: "/public/v1/query/earn_positions"
+      post: "/public/v1/query/list_earn_positions"
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
@@ -1785,10 +1792,9 @@ service PublicApiService {
     };
   }
 
-  rpc EarnWithdrawStatus(EarnWithdrawStatusRequest) returns (EarnWithdrawStatusResponse) {
-    option (google.api.method_visibility).restriction = "INTERNAL";
+  rpc GetEarnWithdrawStatus(GetEarnWithdrawStatusRequest) returns (GetEarnWithdrawStatusResponse) {
     option (google.api.http) = {
-      post: "/public/v1/query/earn_withdraw_status"
+      post: "/public/v1/query/get_earn_withdraw_status"
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
@@ -1798,10 +1804,9 @@ service PublicApiService {
     };
   }
 
-  rpc EarnDepositStatus(EarnDepositStatusRequest) returns (EarnDepositStatusResponse) {
-    option (google.api.method_visibility).restriction = "INTERNAL";
+  rpc GetEarnDepositStatus(GetEarnDepositStatusRequest) returns (GetEarnDepositStatusResponse) {
     option (google.api.http) = {
-      post: "/public/v1/query/earn_deposit_status"
+      post: "/public/v1/query/get_earn_deposit_status"
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
@@ -1811,10 +1816,34 @@ service PublicApiService {
     };
   }
 
-  rpc GetSwapQuote(GetSwapQuoteRequest) returns (GetSwapQuoteResponse) {
+  rpc GetClaimEarnFeesStatus(GetClaimEarnFeesStatusRequest) returns (GetClaimEarnFeesStatusResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_claim_earn_fees_status"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Poll the status of a fee claim by its claim_request_id."
+      summary: "Get Earn claim fees status"
+      tags: "Earn"
+    };
+  }
+
+  rpc GetEarnDeployStatus(GetEarnDeployStatusRequest) returns (GetEarnDeployStatusResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_earn_deploy_status"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Poll the status of a wrapper deployment by its deploy_request_id."
+      summary: "Get Earn deploy status"
+      tags: "Earn"
+    };
+  }
+
+  rpc CreateSwapQuote(external.activity.v1.CreateSwapQuoteRequest) returns (ActivityResponse) {
     option (google.api.method_visibility).restriction = "INTERNAL";
     option (google.api.http) = {
-      post: "/public/v1/query/get_swap_quote"
+      post: "/public/v1/submit/create_swap_quote"
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
@@ -1825,13 +1854,12 @@ service PublicApiService {
   }
 
   rpc GetSwapStatus(GetSwapStatusRequest) returns (GetSwapStatusResponse) {
-    option (google.api.method_visibility).restriction = "INTERNAL";
     option (google.api.http) = {
       post: "/public/v1/query/get_swap_status"
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Get the status of a swap by the send_transaction_status_id returned from execute_swap. Covers same-chain and cross-chain swaps."
+      description: "Poll the status of a swap by its swap_request_id. Covers same-chain and cross-chain swaps."
       summary: "Get swap status"
       tags: "Swaps"
     };
@@ -1844,14 +1872,25 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Execute a quoted swap through the activity pipeline and Turnkey broadcasting."
+      description: "Execute the exact provider quote identified by quote_id through the activity pipeline and Turnkey broadcasting. Requests must use ACTIVITY_TYPE_EXECUTE_SWAP_V2."
       summary: "Execute swap"
       tags: "Swaps"
     };
   }
 
+  rpc ClaimSwapFees(external.activity.v1.ClaimSwapFeesRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/claim_swap_fees"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Claim swap fees through the activity pipeline."
+      summary: "Claim swap fees"
+      tags: "Swaps"
+    };
+  }
+
   rpc UpsertSwapConfig(external.activity.v1.UpsertSwapConfigRequest) returns (ActivityResponse) {
-    option (google.api.method_visibility).restriction = "INTERNAL";
     option (google.api.http) = {
       post: "/public/v1/submit/upsert_swap_config"
       body: "*"
@@ -2170,6 +2209,31 @@ service PublicApiService {
     };
   }
 
+  rpc InitImportSecrets(external.activity.v1.InitImportSecretsRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/init_import_secrets"
+      body: "*"
+    };
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Initialize secret imports by generating Ingress Encryption Target Keys."
+      summary: "Init import secrets"
+      tags: "Secrets"
+    };
+  }
+
+  rpc ImportSecrets(external.activity.v1.ImportSecretsRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/import_secrets"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Import secrets encrypted to target keys returned from InitImportSecrets."
+      summary: "Import secrets"
+      tags: "Secrets"
+    };
+  }
+
   rpc GetIpAllowlist(GetIpAllowlistRequest) returns (GetIpAllowlistResponse) {
     option (google.api.http) = {
       post: "/public/v1/query/get_ip_allowlist"
@@ -2347,6 +2411,42 @@ service PublicApiService {
       description: "List email events for the organization."
       summary: "List email events"
       tags: "Email"
+    };
+  }
+
+  rpc ListEthTransactionHistory(ListEthTransactionHistoryRequest) returns (ListEthTransactionHistoryResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/list_eth_transaction_history"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "List Ethereum transaction history for a wallet address on the specified network."
+      summary: "List Eth transaction history"
+      tags: "Wallets"
+    };
+  }
+
+  rpc ListSolTransactionHistory(ListSolTransactionHistoryRequest) returns (ListSolTransactionHistoryResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/list_sol_transaction_history"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "List Solana transaction history for a wallet address on the specified network."
+      summary: "List Sol transaction history"
+      tags: "Wallets"
+    };
+  }
+
+  rpc EthUndelegate7702(external.activity.v1.EthUndelegate7702Request) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/eth_undelegate_7702"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Submit an EIP-7702 undelegation transaction."
+      summary: "Undelegate an EVM account"
+      tags: "Broadcasting"
     };
   }
 
@@ -2993,9 +3093,11 @@ message GetLatestBootProofRequest {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
+  // This should really be app_uuid but we are not planning on renaming right now just to avoid overhead of a breaking
+  // change to the REST API.
   string app_name = 2 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Name of enclave app."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier (UUID) of the enclave app."}
   ];
 }
 
@@ -3029,56 +3131,44 @@ message ListFiatOnRampCredentialsResponse {
   repeated external.data.v1.FiatOnRampCredential fiat_on_ramp_credentials = 1 [(google.api.field_behavior) = REQUIRED];
 }
 
-message GetSwapQuoteRequest {
-  string organization_id = 1 [
-    (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
-  ];
-  string input_token = 2 [
-    (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-19 asset ID for the input asset. The chain is derived from this value."}
-  ];
-  string output_token = 3 [
-    (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-19 asset ID for the output asset."}
-  ];
-  string input_amount = 4 [
-    (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Base-unit amount of the input asset."}
-  ];
-  optional string slippage = 5 [
-    (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Maximum allowed slippage in basis points."}
-  ];
-}
-
-message GetSwapQuoteResponse {
-  string input_token = 1 [
-    (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-19 asset ID for the input asset."}
-  ];
-  string output_token = 2 [
-    (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-19 asset ID for the output asset."}
-  ];
-  string input_amount = 3 [
-    (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Base-unit amount of the input asset."}
-  ];
-  repeated SwapQuoteOption quotes = 4 [
-    (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "One quote per available swap provider."}
-  ];
-}
-
 message GetSwapStatusRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
-  string send_transaction_status_id = 2 [
+  string swap_request_id = 2 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Identifier returned in the execute_swap activity result."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The swap_request_id returned by ExecuteSwap."}
+  ];
+}
+
+message SwapRefund {
+  string asset = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-19 asset returned to the user after a failed swap."}
+  ];
+  string amount = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Base-unit amount of the refunded asset."}
+  ];
+  optional string tx_hash = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Transaction that delivered the refunded funds, when applicable."}
+  ];
+}
+
+message SwapError {
+  string reason = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Stable machine-readable failure reason. One of ORIGIN_TRANSACTION_FAILED or PROVIDER_FILL_FAILED."}
+  ];
+  string message = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable description of the swap failure."}
+  ];
+  optional TxError origin_tx_error = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Origin-chain transaction failure details, present when reason is ORIGIN_TRANSACTION_FAILED and details are available."}
   ];
 }
 
@@ -3091,8 +3181,8 @@ message GetSwapStatusResponse {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "SAME_CHAIN or CROSS_CHAIN."}
   ];
-  optional string provider = 3 [
-    (google.api.field_behavior) = OPTIONAL,
+  string provider = 3 [
+    (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Swap provider that executed the swap."}
   ];
   string input_token = 4 [
@@ -3111,52 +3201,26 @@ message GetSwapStatusResponse {
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Final included origin-chain transaction hash, when known."}
   ];
-  optional string destination_tx_hash = 8 [
+  repeated string destination_tx_hashes = 8 [
     (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Destination-chain fill transaction hash; cross-chain COMPLETED only."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Provider-reported destination-chain transaction hashes; cross-chain COMPLETED only."}
   ];
   optional string output_amount = 9 [
     (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Actual base-unit output amount on COMPLETED, when known."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Actual base-unit output amount on COMPLETED, when known. Unset on FAILED."}
   ];
-  optional string settled_asset = 10 [
+  optional SwapRefund refund = 10 [
     (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-19 of the asset the user holds after a FAILED swap, when recoverable."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Asset and amount returned to the user after a failed swap, when recoverable. Present only on FAILED."}
   ];
-  optional string settled_amount = 11 [
-    (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Base-unit amount of settled_asset."}
-  ];
-  optional string settlement_tx_hash = 12 [
-    (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Transaction that delivered the settled funds, when applicable."}
-  ];
-  optional string provider_status = 13 [
-    (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Non-normative raw provider status passthrough; cross-chain only."}
-  ];
+  reserved 11, 12, 13;
   string updated_at = 14 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp of the last swap status change, as millisecond epoch string."}
   ];
-}
-
-message SwapQuoteOption {
-  string quote_id = 1 [
-    (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Identifier for this provider quote."}
-  ];
-  string provider = 2 [
-    (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Swap provider that produced this quote. Pass this value to execute_swap to force a specific provider."}
-  ];
-  string output_amount = 3 [
-    (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Estimated base-unit amount of the output asset."}
-  ];
-  optional string min_output_amount = 4 [
+  optional SwapError error = 15 [
     (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Minimum acceptable base-unit amount of the output asset after slippage."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Normalized failure details, present whenever status is FAILED."}
   ];
 }
 
@@ -3182,51 +3246,47 @@ message GetGasUsageResponse {
   ];
 }
 
-message EarnVaultsRequest {
+message ListEarnVaultsRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization. Annotates which vaults the organization has already enabled."}
   ];
+  immutable.data.v1.EarnProvider provider = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional filter: only return vaults from this provider. Leave EARN_PROVIDER_UNSPECIFIED to return all providers."}];
+  string caip19 = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-19 asset ID (e.g. 'eip155:8453/erc20:0x833589...') to return vaults for. Only vaults whose underlying asset matches are returned; the chain is taken from the CAIP-19 identifier."}
+  ];
+  external.options.v1.Pagination pagination_options = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Pagination over the TVL-sorted catalog. before/after cursors are a vault_address from a prior page."}];
 }
 
-message EarnVault {
-  string vault_address = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address of the underlying yield vault."}];
-  string chain_caip2 = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-2 chain ID the vault lives on."}];
-  string provider = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Yield provider for the vault ('morpho' or 'aave')."}];
-  string asset = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Symbol of the vault's underlying asset (e.g., 'USDC')."}];
-  string asset_address = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Token address of the vault's underlying asset."}];
-  string tvl = 6 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Total value locked in the vault, in raw on-chain units of the underlying asset."}];
-  string apy_pct = 7 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Current annual percentage yield, expressed as a decimal fraction (e.g., '0.0812' for 8.12%)."}];
-  bool enabled = 8 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether the organization has enabled this vault."}];
+message ListEarnVaultsResponse {
+  repeated external.data.v1.EarnVault vaults = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The catalog of wrappable vaults, sorted by TVL (USD) descending. To page, pass page_info.end_cursor as the pagination after cursor."}];
+  external.options.v1.PageInfo page_info = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Pagination metadata for the returned page. Pass end_cursor as the next request's after cursor (or start_cursor as the before cursor) to page through the catalog. Cursors are opaque; do not parse them."}];
 }
 
-message EarnVaultsResponse {
-  repeated EarnVault vaults = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The catalog of wrappable vaults, sorted by TVL descending."}];
+// Opaque, versioned payload behind a list_earn_vaults pagination cursor:
+// a vault's position in the TVL-ranked catalog, base64-encoded server-side.
+message EarnVaultCursor {
+  uint32 version = 1;
+  // Catalog sort key, descending: (tvl_usd, vault_address).
+  double tvl_usd = 2;
+  string vault_address = 3;
 }
 
-message EarnEnabledVaultsRequest {
+message ListEarnEnabledVaultsRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
+  immutable.data.v1.EarnProvider provider = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional filter: only return enabled vaults from this provider. Leave EARN_PROVIDER_UNSPECIFIED to return all providers."}];
+  optional string caip19 = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional filter: only return enabled vaults whose underlying asset matches this CAIP-19 asset ID (e.g. 'eip155:8453/erc20:0x833589...'). The chain is taken from the CAIP-19 identifier."}];
 }
 
-message EarnEnabledVault {
-  string vault_address = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address of the underlying yield vault."}];
-  string wrapper_address = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address of the deployed fee wrapper (the deposit target)."}];
-  string splitter_address = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address of the deployed fee splitter."}];
-  string chain_caip2 = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-2 chain ID the vault lives on."}];
-  string provider = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Yield provider for the vault ('morpho' or 'aave')."}];
-  string asset = 6 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Symbol of the vault's underlying asset (e.g., 'USDC')."}];
-  string apy_pct = 7 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Current annual percentage yield, expressed as a decimal fraction."}];
-  string total_deposited = 8 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Total deposited through this wrapper (wrapper TVL), in raw on-chain units of the underlying asset."}];
+message ListEarnEnabledVaultsResponse {
+  repeated external.data.v1.EarnEnabledVault enabled_vaults = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The organization's deployed wrappers."}];
 }
 
-message EarnEnabledVaultsResponse {
-  repeated EarnEnabledVault enabled_vaults = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The organization's deployed wrappers."}];
-}
-
-message EarnPositionsRequest {
+message ListEarnPositionsRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
@@ -3240,22 +3300,32 @@ message EarnPositionsRequest {
 message EarnPosition {
   string vault_address = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address of the underlying yield vault."}];
   string wrapper_address = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address of the fee wrapper holding the position."}];
-  string chain_caip2 = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-2 chain ID the vault lives on."}];
-  string provider = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Yield provider for the vault ('morpho' or 'aave')."}];
-  string asset = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Symbol of the vault's underlying asset (e.g., 'USDC')."}];
-  string shares = 6 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Number of wrapper shares held, in raw on-chain units."}];
-  string current_value = 7 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Current value of the position in the underlying asset, in raw on-chain units (already net of the wrapper fee)."}];
-  string cost_basis = 8 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Net amount deposited, in raw on-chain units."}];
-  string gross_yield = 9 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Yield grossed up for display, in raw on-chain units."}];
-  string projected_fee = 10 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Combined Turnkey + client fee on the yield, in raw on-chain units."}];
-  string yield_less_fees = 11 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Yield net of fees, in raw on-chain units."}];
+  immutable.data.v1.EarnProvider provider = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Yield provider for the vault."}];
+  string caip19 = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-19 asset ID of the vault's underlying asset (e.g. 'eip155:8453/erc20:0x833589...'); the chain is encoded in the identifier."}];
+  string current_value = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Current value of the position in the underlying asset, in raw on-chain units (already net of the wrapper fee)."}];
+  string total_deposited = 6 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Lifetime total deposited into this position, in raw on-chain units."}];
+  string total_withdrawn = 7 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Lifetime total withdrawn from this position, in raw on-chain units."}];
+  EarnPositionDisplay display = 8 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "USD + crypto renderings for display only. Do not do arithmetic with these."}];
+  bool deposits_disabled = 9 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "When true, deposits to this wrapper are rejected; withdrawals are unaffected. Toggled via EarnSetWrapperState."}];
 }
 
-message EarnPositionsResponse {
+// EarnPositionDisplay renders a position's current value, total deposited, and
+// total withdrawn for display only, in both USD and the asset's own units.
+// Values are for presentation; do not do arithmetic with them.
+message EarnPositionDisplay {
+  string current_value_usd = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Current value in USD, for display only."}];
+  string total_deposited_usd = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Total deposited in USD, for display only."}];
+  string total_withdrawn_usd = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Total withdrawn in USD, for display only."}];
+  string current_value_crypto = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Current value in the asset's own units, for display only."}];
+  string total_deposited_crypto = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Total deposited in the asset's own units, for display only."}];
+  string total_withdrawn_crypto = 6 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Total withdrawn in the asset's own units, for display only."}];
+}
+
+message ListEarnPositionsResponse {
   repeated EarnPosition positions = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The wallet's active Earn positions."}];
 }
 
-message EarnWithdrawStatusRequest {
+message GetEarnWithdrawStatusRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
@@ -3266,22 +3336,50 @@ message EarnWithdrawStatusRequest {
   ];
 }
 
-message EarnWithdrawStatusResponse {
+message GetEarnWithdrawStatusResponse {
   string status = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
       description: "Status of the withdrawal."
       enum: [
         "PENDING",
-        "COMPLETE",
+        "COMPLETED",
         "FAILED"
       ]
     }
   ];
   optional string withdraw_tx_hash = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Transaction hash of the withdrawal, once available."}];
+  optional string error = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Reason the withdrawal transaction failed, when status is FAILED."}];
 }
 
-message EarnDepositStatusRequest {
+message GetClaimEarnFeesStatusRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string claim_request_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The claim_request_id returned by ClaimEarnFees."}
+  ];
+}
+
+message GetClaimEarnFeesStatusResponse {
+  string status = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Status of the fee claim."
+      enum: [
+        "PENDING",
+        "COMPLETED",
+        "FAILED"
+      ]
+    }
+  ];
+  optional string claim_tx_hash = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Transaction hash of the fee claim, once available."}];
+  optional string error = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Reason the fee claim transaction failed, when status is FAILED."}];
+}
+
+message GetEarnDepositStatusRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
@@ -3292,19 +3390,47 @@ message EarnDepositStatusRequest {
   ];
 }
 
-message EarnDepositStatusResponse {
+message GetEarnDepositStatusResponse {
   string status = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
       description: "Status of the deposit."
       enum: [
         "PENDING",
-        "COMPLETE",
+        "COMPLETED",
         "FAILED"
       ]
     }
   ];
   optional string deposit_tx_hash = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Transaction hash of the deposit, once available."}];
+  optional string error = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Reason the deposit transaction failed, when status is FAILED."}];
+}
+
+message GetEarnDeployStatusRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string deploy_request_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The deploy_request_id returned by EarnDeployWrapper."}
+  ];
+}
+
+message GetEarnDeployStatusResponse {
+  string status = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Status of the wrapper deployment."
+      enum: [
+        "PENDING",
+        "COMPLETED",
+        "FAILED"
+      ]
+    }
+  ];
+  optional string deploy_tx_hash = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Transaction hash of the deployment, once available."}];
+  optional string error = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Reason the deployment transaction failed, when status is FAILED."}];
 }
 
 message GetNoncesRequest {
@@ -3328,7 +3454,15 @@ message GetNoncesRequest {
         "eip155:137",
         "eip155:80002",
         "eip155:56",
-        "eip155:97"
+        "eip155:97",
+        "eip155:10",
+        "eip155:11155420",
+        "eip155:143",
+        "eip155:10143",
+        "eip155:42161",
+        "eip155:4217",
+        "eip155:42431",
+        "eip155:421614"
       ]
     }
   ];
@@ -3572,12 +3706,16 @@ message GetWalletAddressBalancesRequest {
         "eip155:84532",
         "eip155:137",
         "eip155:80002",
+        "eip155:56",
+        "eip155:97",
+        "eip155:10",
+        "eip155:11155420",
+        "eip155:143",
+        "eip155:10143",
         "eip155:42161",
         "eip155:4217",
         "eip155:42431",
         "eip155:421614",
-        "eip155:56",
-        "eip155:97",
         "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
         "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1"
       ]
@@ -3619,12 +3757,16 @@ message ListSupportedAssetsRequest {
         "eip155:84532",
         "eip155:137",
         "eip155:80002",
+        "eip155:56",
+        "eip155:97",
+        "eip155:10",
+        "eip155:11155420",
+        "eip155:143",
+        "eip155:10143",
         "eip155:42161",
         "eip155:4217",
         "eip155:42431",
         "eip155:421614",
-        "eip155:56",
-        "eip155:97",
         "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
         "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1"
       ]
@@ -3633,15 +3775,7 @@ message ListSupportedAssetsRequest {
 }
 
 message ListSupportedAssetsResponse {
-  repeated AssetMetadata assets = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "List of asset metadata"}];
-}
-
-message AssetMetadata {
-  string caip19 = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The caip-19 asset identifier"}];
-  string symbol = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The asset symbol"}];
-  int32 decimals = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The number of decimals this asset uses"}];
-  string logo_url = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The url of the asset logo"}];
-  string name = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The asset name"}];
+  repeated external.data.v1.AssetMetadata assets = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "List of asset metadata"}];
 }
 
 message GetIpAllowlistRequest {
@@ -3867,5 +4001,288 @@ message EmailEventDetails {
   string delivery_delay_type = 6 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Delay type for DeliveryDelay events"}
+  ];
+  string complaint_feedback_type = 7 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Feedback type for Complaint events"}
+  ];
+}
+
+message ListEthTransactionHistoryRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+  ];
+  string address = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address corresponding to a wallet account. Private key addresses are not supported."}
+  ];
+  string caip2 = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "EVM CAIP-2 chain ID (e.g., 'eip155:1' for Ethereum mainnet)."
+      enum: [
+        "eip155:1",
+        "eip155:11155111",
+        "eip155:8453",
+        "eip155:84532",
+        "eip155:137",
+        "eip155:80002",
+        "eip155:42161",
+        "eip155:4217",
+        "eip155:42431",
+        "eip155:421614",
+        "eip155:56",
+        "eip155:97"
+      ]
+    }
+  ];
+  external.options.v1.Pagination pagination_options = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Cursor-based pagination options. Cursors are opaque and valid only for the same address and CAIP-2 query."}
+  ];
+}
+
+message ListSolTransactionHistoryRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+  ];
+  string address = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address corresponding to a wallet account. Private key addresses are not supported."}
+  ];
+  string caip2 = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Solana CAIP-2 chain ID (e.g., 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp' for Solana mainnet). Human-readable Solana aliases ('solana:mainnet', 'solana:devnet') are also accepted and normalized to canonical CAIP-2 values."
+      enum: [
+        "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+        "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
+        "solana:mainnet",
+        "solana:devnet"
+      ]
+    }
+  ];
+  external.options.v1.Pagination pagination_options = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Cursor-based pagination options. Cursors are opaque and valid only for the same address and CAIP-2 query."}
+  ];
+}
+
+message ListEthTransactionHistoryResponse {
+  repeated EthTransactionHistoryItem transactions = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "EVM transactions for the requested address, ordered by most recent first."}
+  ];
+  external.options.v1.PageInfo page_info = 2 [(google.api.field_behavior) = OPTIONAL];
+}
+
+message ListSolTransactionHistoryResponse {
+  repeated SolTransactionHistoryItem transactions = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Solana transactions for the requested address, ordered by most recent first."}
+  ];
+  external.options.v1.PageInfo page_info = 2 [(google.api.field_behavior) = OPTIONAL];
+}
+
+message EthTransactionHistoryItem {
+  string transaction_hash = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "EVM transaction hash."}
+  ];
+  TransactionHistoryBlock block = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Block metadata for the transaction."}
+  ];
+  string status = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Transaction confirmation status."
+      enum: [
+        "CONFIRMED",
+        "FINALIZED"
+      ]
+    }
+  ];
+  string origin = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Origin of the transaction. Examples include TURNKEY."}
+  ];
+  string from = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "EVM sender address for the transaction."}
+  ];
+  optional string to = 6 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "EVM transaction destination address, such as the called contract or EVM tx.to. Omitted for contract-creation transactions with no destination. Recipients and payers of value transfers are reflected in transfers[].counterparty."}
+  ];
+  TransactionHistoryFee fee = 7 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Transaction fee information."}
+  ];
+  repeated TransactionHistoryTransfer transfers = 8 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Asset transfers associated with the transaction."}
+  ];
+  TransactionHistoryTurnkey turnkey = 9 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Turnkey-specific metadata for transactions originated by Turnkey."}
+  ];
+}
+
+message SolTransactionHistoryItem {
+  string signature = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Solana transaction signature."}
+  ];
+  TransactionHistoryBlock block = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Block metadata for the transaction."}
+  ];
+  string status = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Transaction confirmation status."
+      enum: [
+        "CONFIRMED",
+        "FINALIZED"
+      ]
+    }
+  ];
+  string origin = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Origin of the transaction. Examples include TURNKEY."}
+  ];
+  string fee_payer = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address that paid the Solana transaction fee. This is the first signer in the transaction message."}
+  ];
+  repeated SolTransactionHistorySigner signers = 6 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Addresses that signed the Solana transaction, in message order."}
+  ];
+  TransactionHistoryFee fee = 7 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Transaction fee information."}
+  ];
+  repeated TransactionHistoryTransfer transfers = 8 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Asset transfers associated with the transaction."}
+  ];
+  TransactionHistoryTurnkey turnkey = 9 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Turnkey-specific metadata for transactions originated by Turnkey."}
+  ];
+}
+
+message SolTransactionHistorySigner {
+  string address = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address of the Solana transaction signer."}
+  ];
+  bool writable = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether the signer account was writable in the Solana transaction message."}
+  ];
+}
+
+message TransactionHistoryBlock {
+  int64 number = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Block number containing the transaction."}
+  ];
+  string hash = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Block hash containing the transaction."}
+  ];
+  string timestamp = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Block timestamp in RFC 3339 format."}
+  ];
+}
+
+message TransactionHistoryFee {
+  string amount = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Fee amount in atomic units."}
+  ];
+  string caip19 = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The CAIP-19 asset identifier."}
+  ];
+}
+
+message TransactionHistoryTransfer {
+  string direction = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Transfer direction relative to the queried address."
+      enum: [
+        "IN",
+        "OUT"
+      ]
+    }
+  ];
+  TransactionHistoryAsset asset = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Asset metadata for the transfer. Omitted when the asset cannot be determined."}
+  ];
+  string amount = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Transfer amount in atomic units."}
+  ];
+  string counterparty = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Counterparty address for the transfer."}
+  ];
+  TransactionHistoryDisplay display = 5 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Normalized transfer values for display purposes only. Do not do any arithmetic or calculations with these, as the results could be imprecise. Use the amount field instead."}
+  ];
+}
+
+message TransactionHistoryAsset {
+  string caip19 = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The CAIP-19 asset identifier."}
+  ];
+  string symbol = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The asset symbol."}
+  ];
+  string name = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The asset name."}
+  ];
+  int32 decimals = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The number of decimals this asset uses."}
+  ];
+}
+
+message TransactionHistoryDisplay {
+  string crypto = 1 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Normalized crypto value for display purposes only. Do not do any arithmetic or calculations with these, as the results could be imprecise."}
+  ];
+  string usd = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "USD value for display purposes only. Do not do any arithmetic or calculations with these, as the results could be imprecise."}
+  ];
+}
+
+message TransactionHistoryTurnkey {
+  bool sponsored = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether the transaction fee was sponsored by Turnkey."}
+  ];
+  string activity_fingerprint = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Fingerprint of the Turnkey activity that submitted the transaction."}
+  ];
+  string submitted_at = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp when Turnkey submitted the transaction, in RFC 3339 format."}
   ];
 }

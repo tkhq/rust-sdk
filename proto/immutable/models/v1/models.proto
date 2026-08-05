@@ -187,6 +187,146 @@ message PolicyEvaluationMetrics {
   uint32 max_elapsed_time_ms = 3;
 }
 
+// At-rest encryption suite for internal ciphertexts.
+//
+// IMPORTANT: Each variant identifies the full encryption contract for persisted encrypted
+// resources: cipher, key derivation, nonce handling, AAD, HKDF inputs, etc. Changes
+// to any of those claims should introduce a new variant here so stored payloads can be
+// decoded and verified unambiguously; reducing chances of confused deputy attacks.
+enum AtRestEncryptionSuite {
+  AT_REST_ENCRYPTION_SUITE_UNSPECIFIED = 0;
+  // AES-256-GCM using a per-resource HKDF-SHA256 derived key.
+  //
+  // The derived key is bound to the persisted resource type, organization, and
+  // resource identifiers through HKDF info. The ciphertext is authenticated with
+  // AAD containing the same context as the HKDF info.
+  AT_REST_ENCRYPTION_SUITE_AES_256_GCM_HKDF_SHA256_V1 = 1;
+}
+
+// Stable internal resource type labels used when deriving and authenticating
+// at-rest ciphertexts.
+//
+// If any resource type is updated, it should result in a new resource type
+// and thus a new variant in this enum
+enum AtRestResourceType {
+  AT_REST_RESOURCE_TYPE_UNSPECIFIED = 0;
+  AT_REST_RESOURCE_TYPE_INGRESS_TARGET_KEY_PAYLOAD_V1 = 1;
+  AT_REST_RESOURCE_TYPE_SECRET_PAYLOAD_V1 = 2;
+}
+
+// Secret signing payload. This is immutable and gets signed by the signers
+// quorum key to prove authenticity.
+message SecretPayloadV1 {
+  // UUID for this secret
+  string secret_id = 1;
+
+  // UUID for the organization this secret belongs to
+  string organization_id = 2;
+
+  // Human readable name - helpful for things like displaying the secret in the
+  // Turnkey dashboard.
+  optional string name = 3;
+
+  // Ciphertext produced by at-rest encryption inside the signer enclave.
+  bytes ciphertext = 4;
+
+  // Policy visible static properties bound to the secret at creation time.
+  repeated KeyValue static_properties = 5;
+
+  // 12 byte random nonce used for at-rest AES-256-GCM encryption.
+  // Must be securely generated in the enclave.
+  bytes nonce = 6;
+
+  // 32 byte random value bound into HKDF info during key derivation for the AES-256-GCM cipher key.
+  // Must be securely generated in the enclave.
+  bytes derivation_salt = 7;
+
+  // At-rest encryption suite used for the ciphertext. This is persisted with the
+  // immutable payload and is included in HKDF info and AAD to force suite migration is modeled as secret rotation rather than
+  // runtime cipher agility.
+  AtRestEncryptionSuite at_rest_encryption_suite = 8;
+
+  // Unix timestamp for when this key was created. In case we ever want to add TTL.
+  uint64 created_at_unix_ms = 9;
+}
+
+// An Ingress Target Key is a type created in the signer enclave and the reason
+// it is referred to as a payload is because the signer signs over this exact type.
+// It is intended to be the encryption target for transport encryption protocols
+// that facilitate ingress into our signer enclave. As an encryption target key,
+// it is meant to be only used once; in other terms this can be referred to as
+// an "ephemeral key layer" - ensuring that transport ciphertexts are each
+// encrypted to unique keys and that a compromise of a single key has a blast
+// radius limited to just one cipher text.
+//
+// The type has been initially developed for use with the import secrets API,
+// but the intention is that this may be used in other APIs that require an
+// "ephemeral key layer" for ingress encryption.
+message IngressTargetKeyPayloadV1 {
+  // UUID for this key
+  string ingress_target_key_id = 1;
+
+  // UUID organization this belongs to
+  string organization_id = 2;
+
+  // Server target message specific to transport encryption suite.
+  // This is what gets returned to the user by InitImportSecretsResult.
+  // For TRANSPORT_ENCRYPTION_SUITE_ENCLAVE_ENCRYPT_V1 this is a JSON-encoded
+  // enclave_encrypt ServerTargetMsgV1.
+  string enclave_target_message = 3;
+
+  // Ciphertext of the target key
+  bytes ciphertext = 4;
+
+  // Transport encryption suite the key is meant to be used with. This determines
+  // the target message format, target public key encoding, and import ciphertext
+  // envelope expected from the caller.
+  TransportEncryptionSuite encryption_suite = 5;
+
+  // At-rest encryption suite used for the ciphertext that stores the target key.
+  AtRestEncryptionSuite at_rest_encryption_suite = 6;
+
+  // Unix timestamp of when this was created at. This may be useful in the future if we want to make these expire after a certain point.
+  // Since this is signed over by the signer this can be used to enforce an expiration in the enclave.
+  uint64 created_at_unix_ms = 7;
+
+  // 32 byte random value bound into HKDF info during key derivation for the AES-256-GCM cipher key.
+  bytes derivation_salt = 8;
+
+  // 12 byte random nonce used for at-rest AES-256-GCM encryption.
+  bytes nonce = 9;
+
+  // Encoded transport target public key, broken out from `target_public_key_data` so it can
+  // be indexed and looked up directly by the coordinator when consuming the key during import.
+  // Encoding is dictated by `encryption_suite`. For TRANSPORT_ENCRYPTION_SUITE_ENCLAVE_ENCRYPT_V1
+  // this is a hex-encoded uncompressed P-256 public key.
+  string target_public_key = 10;
+}
+
+// Transport encryption suite for enclave ingress and egress.
+//
+// IMPORTANT: Each value identifies the full protocol contract for moving encrypted material
+// across the enclave boundary, including key agreement, public key encoding,
+// target message format, ciphertext envelope shape, and authenticated context.
+// If any aspect changes a new variant should be introduced here so we can eliminate all
+// ambiguity when interpreting
+enum TransportEncryptionSuite {
+  TRANSPORT_ENCRYPTION_SUITE_UNSPECIFIED = 0;
+  // HPKE suite from by Turnkey's enclave_encrypt crate.
+  //
+  // The target public key is a hex-encoded uncompressed P-256 public key, and the
+  // target message is a JSON-encoded enclave_encrypt ServerTargetMsgV1.
+  TRANSPORT_ENCRYPTION_SUITE_ENCLAVE_ENCRYPT_V1 = 1;
+}
+
+// Type to represent arbitrary key-value pairs evaluated in the policy engine.
+message KeyValue {
+  // Policy visible property name.
+  string key = 1;
+  // Policy visible property value.
+  string value = 2;
+}
+
 message SessionProfilePayload {
   string id = 1;
   string name = 2;
