@@ -19,11 +19,13 @@ pub use qos_operator_key::{QosOperatorPublicKey, StoredQosOperatorKey};
 use anyhow::{Context, Result, bail};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap};
-use std::convert::Infallible;
-use std::fmt::{self, Display, Formatter};
-use std::path::{Path, PathBuf};
-use std::str::FromStr;
+use std::{
+    collections::{BTreeMap, HashMap},
+    convert::Infallible,
+    fmt::{self, Display, Formatter},
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 use tracing::debug;
 use uuid::Uuid;
 

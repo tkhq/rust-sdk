@@ -1,25 +1,29 @@
 //! Login command for authenticating with Turnkey.
 
-use crate::client::build_turnkey_client;
-use crate::commands::keys::backup_operator_key::{OperatorKeyBackedUp, back_up};
-use crate::config::turnkey::{
-    API_BASE_URL_PROD, Config, KeyCurve, OperatorRecordKind, OrgConfig, OrgQuery, StoredApiKey,
-    StoredQosOperatorKey, dashboard_base_url, default_api_key_path, default_operator_key_path,
-    default_org_dir, legacy_org_dir,
+use crate::{
+    client::build_turnkey_client,
+    commands::keys::backup_operator_key::{OperatorKeyBackedUp, back_up},
+    config::turnkey::{
+        API_BASE_URL_PROD, Config, KeyCurve, OperatorRecordKind, OrgConfig, OrgQuery, StoredApiKey,
+        StoredQosOperatorKey, dashboard_base_url, default_api_key_path, default_operator_key_path,
+        default_org_dir, legacy_org_dir,
+    },
+    outcome::Outcome,
+    output::StdCtx,
+    prompts::{self, error_required_in_non_interactive},
+    shell_eprintln, shell_print, shell_println,
 };
-use crate::outcome::Outcome;
-use crate::output::StdCtx;
-use crate::prompts::{self, error_required_in_non_interactive};
-use crate::{shell_eprintln, shell_print, shell_println};
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Args as ClapArgs;
 use qos_p256::P256Pair;
 use serde::Serialize;
-use std::collections::BTreeSet;
-use std::fmt::{self, Display, Formatter};
-use std::io::BufRead;
-use std::path::PathBuf;
-use std::str::FromStr;
+use std::{
+    collections::BTreeSet,
+    fmt::{self, Display, Formatter},
+    io::BufRead,
+    path::PathBuf,
+    str::FromStr,
+};
 use thiserror::Error;
 use tracing::{debug, instrument};
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
