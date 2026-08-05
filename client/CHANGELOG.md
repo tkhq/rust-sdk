@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.14.0](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.13.1...turnkey_client-v0.14.0) - 2026-08-05
+
+### Other
+
+- Vendor a serde-capable google.protobuf.Timestamp instead of depending on pbjson-types
+- Sync protos from mono and map google.protobuf.Timestamp to pbjson-types for serde support
+
 ## [0.10.0](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.9.0...turnkey_client-v0.10.0) - 2026-07-07
 
 ### Other
