@@ -2,7 +2,7 @@
 
 use crate::{
     client::build_turnkey_client,
-    commands::keys::backup_operator_key::{OperatorKeyBackedUp, back_up},
+    commands::keys::backup_operator_key::back_up,
     config::turnkey::{
         API_BASE_URL_PROD, Config, KeyCurve, OperatorRecordKind, OrgConfig, OrgQuery,
         QosOperatorPublicKey, StoredApiKey, StoredQosOperatorKey, dashboard_base_url,
@@ -1034,9 +1034,7 @@ async fn find_or_generate_operator_key(
              approve deployments with it."
         )?;
 
-        let mut backed_up = false;
-
-        if prompts::confirm("Back up your operator key now?", true)? {
+        let backed_up = if prompts::confirm("Back up your operator key now?", true)? {
             let destination: PathBuf = prompts::text(
                 "Backup file path",
                 Some(&format!("operator-{org_alias}-backup.json")),
@@ -1049,28 +1047,26 @@ async fn find_or_generate_operator_key(
                 || prompts::confirm(&format!("Overwrite {}?", destination.display()), false)?;
 
             if proceed {
-                match back_up(&local.key_path, &destination).await {
-                    Ok(public_key) => {
-                        let report = OperatorKeyBackedUp::new(
-                            org_alias.to_string(),
-                            public_key,
-                            local.key_path.clone(),
-                            destination,
-                        );
-                        shell_println!(ctx)?;
-                        shell_println!(ctx, "{report}")?;
-                        backed_up = true;
-                    }
+                match back_up(org_alias.to_string(), local.key_path.clone(), destination).await {
+                    Ok(report) => Some(report),
                     Err(error) => {
                         // Deliberately swallowed at this endpoint: the backup
                         // is advisory and the login outcome must still land.
                         shell_eprintln!(ctx, "WARNING: backup failed: {error:#}")?;
+                        None
                     }
                 }
+            } else {
+                None
             }
-        }
+        } else {
+            None
+        };
 
-        if !backed_up {
+        if let Some(report) = backed_up {
+            shell_println!(ctx)?;
+            shell_println!(ctx, "{report}")?;
+        } else {
             shell_println!(
                 ctx,
                 "You can back up any time with `tvc keys backup-operator-key`."

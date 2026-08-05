@@ -13,7 +13,7 @@ use clap::Args as ClapArgs;
 use serde::Serialize;
 use std::{
     fmt::{self, Display, Formatter},
-    path::{Path, PathBuf},
+    path::PathBuf,
     str::FromStr,
 };
 
@@ -85,25 +85,22 @@ impl Run for Args {
             prompts::confirm_or_bail(&format!("Overwrite {}?", destination.display()), "backup")?;
         }
 
-        let public_key = back_up(source, &destination).await?;
-
-        Ok(OperatorKeyBackedUp::new(
-            alias.to_string(),
-            public_key,
-            source.clone(),
-            destination,
-        ))
+        back_up(alias.to_string(), source.clone(), destination).await
     }
 }
 
 /// Copy the operator key at `source` to `destination` byte-for-byte and
-/// return its public key.
+/// return the backup report.
 ///
 /// The source is parsed to validate it and capture the public key, but the
 /// original bytes are written verbatim so any unknown fields survive the
-/// copy.
-pub(crate) async fn back_up(source: &Path, destination: &Path) -> Result<QosOperatorPublicKey> {
-    let bytes = tokio::fs::read(source).await.map_err(|e| match e.kind() {
+/// copy. This is the only place an [`OperatorKeyBackedUp`] is constructed.
+pub(crate) async fn back_up(
+    alias: String,
+    source: PathBuf,
+    destination: PathBuf,
+) -> Result<OperatorKeyBackedUp> {
+    let bytes = tokio::fs::read(&source).await.map_err(|e| match e.kind() {
         std::io::ErrorKind::NotFound => anyhow!(
             "No operator key found at {}. Run `tvc login` first.",
             source.display()
@@ -129,11 +126,16 @@ pub(crate) async fn back_up(source: &Path, destination: &Path) -> Result<QosOper
 
     // Written with default (umask) permissions, matching
     // `StoredQosOperatorKey::save`; tightening both is tracked by TVC-241.
-    tokio::fs::write(destination, &bytes)
+    tokio::fs::write(&destination, &bytes)
         .await
         .with_context(|| format!("failed to write backup: {}", destination.display()))?;
 
-    Ok(key.public_key)
+    Ok(OperatorKeyBackedUp {
+        alias,
+        public_key: key.public_key,
+        source_path: source,
+        backup_path: destination,
+    })
 }
 
 #[derive(Default, Serialize)]
@@ -144,22 +146,6 @@ pub struct OperatorKeyBackedUp {
     public_key: QosOperatorPublicKey,
     source_path: PathBuf,
     backup_path: PathBuf,
-}
-
-impl OperatorKeyBackedUp {
-    pub(crate) fn new(
-        alias: String,
-        public_key: QosOperatorPublicKey,
-        source_path: PathBuf,
-        backup_path: PathBuf,
-    ) -> Self {
-        Self {
-            alias,
-            public_key,
-            source_path,
-            backup_path,
-        }
-    }
 }
 
 impl From<OperatorKeyBackedUp> for Outcome {
@@ -219,10 +205,12 @@ mod tests {
         );
         std::fs::write(&source, &content).unwrap();
 
-        let public_key = back_up(&source, &destination).await.unwrap();
+        let report = back_up("default".to_string(), source.clone(), destination.clone())
+            .await
+            .unwrap();
 
         assert_eq!(std::fs::read_to_string(&destination).unwrap(), content);
-        assert_eq!(public_key.to_string(), public_hex);
+        assert_eq!(report.public_key.to_string(), public_hex);
     }
 
     #[tokio::test]
@@ -230,9 +218,13 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let source = temp.path().join("operator.json");
 
-        let error = back_up(&source, &temp.path().join("out.json"))
-            .await
-            .expect_err("missing source must fail");
+        let error = back_up(
+            "default".to_string(),
+            source.clone(),
+            temp.path().join("out.json"),
+        )
+        .await
+        .expect_err("missing source must fail");
 
         assert_eq!(
             error.to_string(),
@@ -249,9 +241,13 @@ mod tests {
         let source = temp.path().join("operator.json");
         std::fs::write(&source, "not json").unwrap();
 
-        let error = back_up(&source, &temp.path().join("out.json"))
-            .await
-            .expect_err("malformed source must fail");
+        let error = back_up(
+            "default".to_string(),
+            source.clone(),
+            temp.path().join("out.json"),
+        )
+        .await
+        .expect_err("malformed source must fail");
 
         assert_eq!(
             error.to_string(),
@@ -265,12 +261,12 @@ mod tests {
     #[test]
     fn outcome_serializes_expected_json() {
         let public_key = QosOperatorPublicKey::default();
-        let outcome = Outcome::from(OperatorKeyBackedUp::new(
-            "default".to_string(),
+        let outcome = Outcome::from(OperatorKeyBackedUp {
+            alias: "default".to_string(),
             public_key,
-            PathBuf::from("/keys/operator.json"),
-            PathBuf::from("/backups/operator-backup.json"),
-        ));
+            source_path: PathBuf::from("/keys/operator.json"),
+            backup_path: PathBuf::from("/backups/operator-backup.json"),
+        });
 
         assert_eq!(
             serde_json::to_value(&outcome).unwrap(),
