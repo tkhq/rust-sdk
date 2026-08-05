@@ -362,6 +362,8 @@ fn build_create_intent(
         health_check_type: deploy_config.health_check_type,
         health_check_port: deploy_config.health_check_port as u32,
         public_ingress_port: deploy_config.public_ingress_port as u32,
+        // Not yet configurable via the CLI; the server applies its default.
+        replicas: None,
     }
 }
 

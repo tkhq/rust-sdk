@@ -144,6 +144,10 @@
       "intentType": "CreateWalletAccountsIntent",
       "resultType": "CreateWalletAccountsResult"
     },
+    "ACTIVITY_TYPE_UPDATE_WALLET_ACCOUNT_NAME": {
+      "intentType": "UpdateWalletAccountNameIntent",
+      "resultType": "UpdateWalletAccountNameResult"
+    },
     "ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V8": {
       "intentType": "CreateSubOrganizationIntentV8",
       "resultType": "CreateSubOrganizationResultV8"
@@ -199,6 +203,14 @@
     "ACTIVITY_TYPE_IMPORT_PRIVATE_KEY": {
       "intentType": "ImportPrivateKeyIntent",
       "resultType": "ImportPrivateKeyResult"
+    },
+    "ACTIVITY_TYPE_INIT_IMPORT_SECRETS": {
+      "intentType": "InitImportSecretsIntent",
+      "resultType": "InitImportSecretsResult"
+    },
+    "ACTIVITY_TYPE_IMPORT_SECRETS": {
+      "intentType": "ImportSecretsIntent",
+      "resultType": "ImportSecretsResult"
     },
     "ACTIVITY_TYPE_OAUTH": {
       "intentType": "OauthIntent",
@@ -308,9 +320,21 @@
       "intentType": "EthSendTransactionIntentV2",
       "resultType": "EthSendTransactionResultV2"
     },
+    "ACTIVITY_TYPE_ETH_UNDELEGATE_7702": {
+      "intentType": "EthUndelegate7702Intent",
+      "resultType": "EthUndelegate7702Result"
+    },
     "ACTIVITY_TYPE_SOL_SEND_TRANSACTION": {
       "intentType": "SolSendTransactionIntent",
       "resultType": "SolSendTransactionResult"
+    },
+    "ACTIVITY_TYPE_SOL_SEND_TRANSACTION_V2": {
+      "intentType": "SolSendTransactionIntentV2",
+      "resultType": "SolSendTransactionResultV2"
+    },
+    "ACTIVITY_TYPE_CLAIM_EARN_FEES": {
+      "intentType": "ClaimEarnFeesIntent",
+      "resultType": "ClaimEarnFeesResult"
     },
     "ACTIVITY_TYPE_EARN_DEPLOY_WRAPPER": {
       "intentType": "EarnDeployWrapperIntent",
@@ -324,17 +348,29 @@
       "intentType": "EarnWithdrawIntent",
       "resultType": "EarnWithdrawResult"
     },
-    "ACTIVITY_TYPE_UPSERT_EARN_CLIENT_FEE_CONFIG": {
-      "intentType": "UpsertEarnClientFeeConfigIntent",
-      "resultType": "UpsertEarnClientFeeConfigResult"
+    "ACTIVITY_TYPE_EARN_SET_WRAPPER_STATE": {
+      "intentType": "EarnSetWrapperStateIntent",
+      "resultType": "EarnSetWrapperStateResult"
     },
     "ACTIVITY_TYPE_EXECUTE_SWAP": {
       "intentType": "ExecuteSwapIntent",
       "resultType": "ExecuteSwapResult"
     },
+    "ACTIVITY_TYPE_EXECUTE_SWAP_V2": {
+      "intentType": "ExecuteSwapIntentV2",
+      "resultType": "ExecuteSwapResult"
+    },
+    "ACTIVITY_TYPE_CREATE_SWAP_QUOTE": {
+      "intentType": "CreateSwapQuoteIntent",
+      "resultType": "CreateSwapQuoteResult"
+    },
     "ACTIVITY_TYPE_UPSERT_SWAP_CONFIG": {
       "intentType": "UpsertSwapConfigIntent",
       "resultType": "UpsertSwapConfigResult"
+    },
+    "ACTIVITY_TYPE_CLAIM_SWAP_FEES": {
+      "intentType": "ClaimSwapFeesIntent",
+      "resultType": "ClaimSwapFeesResult"
     },
     "ACTIVITY_TYPE_CREATE_TVC_APP": {
       "intentType": "CreateTvcAppIntent",

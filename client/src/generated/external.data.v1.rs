@@ -151,6 +151,8 @@ pub struct Policy {
     pub consensus: ::core::option::Option<::prost::alloc::string::String>,
     #[serde(default)]
     pub condition: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub time: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -536,6 +538,74 @@ impl AppProofType {
             _ => None,
         }
     }
+}
+#[derive(Debug)]
+/// EarnValueDisplay holds normalized, display-only representations of an on-chain
+/// amount. Values are for presentation only — do not do arithmetic with them;
+/// use the corresponding raw atomic field instead.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct EarnValueDisplay {
+    pub usd: ::prost::alloc::string::String,
+    pub crypto: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct EarnVault {
+    pub vault_address: ::prost::alloc::string::String,
+    pub provider: super::super::super::immutable::data::v1::EarnProvider,
+    pub caip19: ::prost::alloc::string::String,
+    pub tvl: ::prost::alloc::string::String,
+    pub apy_pct: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub display: ::core::option::Option<EarnValueDisplay>,
+    pub name: ::prost::alloc::string::String,
+    pub curator: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct EarnEnabledVault {
+    pub vault_address: ::prost::alloc::string::String,
+    pub wrapper_address: ::prost::alloc::string::String,
+    pub provider: super::super::super::immutable::data::v1::EarnProvider,
+    pub caip19: ::prost::alloc::string::String,
+    pub apy_pct: ::prost::alloc::string::String,
+    pub total_deposited: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub display: ::core::option::Option<EarnValueDisplay>,
+    pub net_apy_pct: ::prost::alloc::string::String,
+    pub client_fee_bps: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub deposits_disabled: bool,
+    pub name: ::prost::alloc::string::String,
+    pub curator: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub claimable_client_fee: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub claimable_client_fee_display: ::core::option::Option<EarnValueDisplay>,
+    #[serde(default)]
+    pub client_fee_wallet: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct AssetMetadata {
+    pub caip19: ::prost::alloc::string::String,
+    pub symbol: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub decimals: i32,
+    pub logo_url: ::prost::alloc::string::String,
+    pub name: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub stable: bool,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]

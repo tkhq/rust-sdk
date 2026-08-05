@@ -70,6 +70,9 @@ fn main() {
         .type_attribute(".google.rpc", SERDE_DERIVE)
         .field_attribute("google.rpc.Status.details", "#[serde(skip)]")
         .type_attribute("google.rpc", SERDE_CAMEL_CASE)
+        // prost_types::Timestamp has no serde support; our vendored Timestamp
+        // (de)serializes as an RFC 3339 string per the proto3 JSON mapping.
+        .extern_path(".google.protobuf.Timestamp", "crate::well_known::Timestamp")
         .compile_protos(&[PUBLIC_API_PROTO_PATH], &[INCLUDE_PROTO_PATH])
         .unwrap();
 

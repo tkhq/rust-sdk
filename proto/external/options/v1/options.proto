@@ -21,3 +21,10 @@ message Pagination {
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A pagination cursor. This is an object ID that enables you to fetch all objects after this ID."}
   ];
 }
+
+message PageInfo {
+  bool has_next_page = 1;
+  bool has_previous_page = 2;
+  optional string start_cursor = 3;
+  optional string end_cursor = 4;
+}

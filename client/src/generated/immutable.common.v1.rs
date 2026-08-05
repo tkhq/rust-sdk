@@ -1209,6 +1209,9 @@ pub enum Outcome {
     Error = 6,
     #[serde(rename = "OUTCOME_REQUIRES_AUTHENTICATORS")]
     RequiresAuthenticators = 7,
+    /// policy would apply (condition + consensus met) but its time window is inactive at the trusted instant
+    #[serde(rename = "OUTCOME_TIME_INACTIVE")]
+    TimeInactive = 8,
 }
 impl Outcome {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -1225,6 +1228,7 @@ impl Outcome {
             Self::Rejected => "OUTCOME_REJECTED",
             Self::Error => "OUTCOME_ERROR",
             Self::RequiresAuthenticators => "OUTCOME_REQUIRES_AUTHENTICATORS",
+            Self::TimeInactive => "OUTCOME_TIME_INACTIVE",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -1238,6 +1242,7 @@ impl Outcome {
             "OUTCOME_REJECTED" => Some(Self::Rejected),
             "OUTCOME_ERROR" => Some(Self::Error),
             "OUTCOME_REQUIRES_AUTHENTICATORS" => Some(Self::RequiresAuthenticators),
+            "OUTCOME_TIME_INACTIVE" => Some(Self::TimeInactive),
             _ => None,
         }
     }

@@ -66,6 +66,7 @@ pub use turnkey_api_key_stamper::{TurnkeyP256ApiKey, TurnkeySecp256k1ApiKey};
 pub mod generated;
 
 pub mod retry;
+pub mod well_known;
 pub use retry::RetryConfig;
 
 const TURNKEY_RUST_SDK_USER_AGENT: &str =

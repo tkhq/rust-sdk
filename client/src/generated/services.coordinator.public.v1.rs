@@ -673,6 +673,8 @@ pub struct GetBootProofRequest {
 #[derive(Clone, PartialEq)]
 pub struct GetLatestBootProofRequest {
     pub organization_id: ::prost::alloc::string::String,
+    /// This should really be app_uuid but we are not planning on renaming right now just to avoid overhead of a breaking
+    /// change to the REST API.
     pub app_name: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
@@ -724,32 +726,29 @@ pub struct ListFiatOnRampCredentialsResponse {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
-pub struct GetSwapQuoteRequest {
-    pub organization_id: ::prost::alloc::string::String,
-    pub input_token: ::prost::alloc::string::String,
-    pub output_token: ::prost::alloc::string::String,
-    pub input_amount: ::prost::alloc::string::String,
-    #[serde(default)]
-    pub slippage: ::core::option::Option<::prost::alloc::string::String>,
-}
-#[derive(Debug)]
-#[derive(::serde::Serialize, ::serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[derive(Clone, PartialEq)]
-pub struct GetSwapQuoteResponse {
-    pub input_token: ::prost::alloc::string::String,
-    pub output_token: ::prost::alloc::string::String,
-    pub input_amount: ::prost::alloc::string::String,
-    #[serde(default)]
-    pub quotes: ::prost::alloc::vec::Vec<SwapQuoteOption>,
-}
-#[derive(Debug)]
-#[derive(::serde::Serialize, ::serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[derive(Clone, PartialEq)]
 pub struct GetSwapStatusRequest {
     pub organization_id: ::prost::alloc::string::String,
-    pub send_transaction_status_id: ::prost::alloc::string::String,
+    pub swap_request_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SwapRefund {
+    pub asset: ::prost::alloc::string::String,
+    pub amount: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub tx_hash: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SwapError {
+    pub reason: ::prost::alloc::string::String,
+    pub message: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub origin_tx_error: ::core::option::Option<TxError>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -758,37 +757,21 @@ pub struct GetSwapStatusRequest {
 pub struct GetSwapStatusResponse {
     pub status: ::prost::alloc::string::String,
     pub swap_kind: ::prost::alloc::string::String,
-    #[serde(default)]
-    pub provider: ::core::option::Option<::prost::alloc::string::String>,
+    pub provider: ::prost::alloc::string::String,
     pub input_token: ::prost::alloc::string::String,
     pub output_token: ::prost::alloc::string::String,
     pub input_amount: ::prost::alloc::string::String,
     #[serde(default)]
     pub origin_tx_hash: ::core::option::Option<::prost::alloc::string::String>,
     #[serde(default)]
-    pub destination_tx_hash: ::core::option::Option<::prost::alloc::string::String>,
+    pub destination_tx_hashes: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[serde(default)]
     pub output_amount: ::core::option::Option<::prost::alloc::string::String>,
     #[serde(default)]
-    pub settled_asset: ::core::option::Option<::prost::alloc::string::String>,
-    #[serde(default)]
-    pub settled_amount: ::core::option::Option<::prost::alloc::string::String>,
-    #[serde(default)]
-    pub settlement_tx_hash: ::core::option::Option<::prost::alloc::string::String>,
-    #[serde(default)]
-    pub provider_status: ::core::option::Option<::prost::alloc::string::String>,
+    pub refund: ::core::option::Option<SwapRefund>,
     pub updated_at: ::prost::alloc::string::String,
-}
-#[derive(Debug)]
-#[derive(::serde::Serialize, ::serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[derive(Clone, PartialEq)]
-pub struct SwapQuoteOption {
-    pub quote_id: ::prost::alloc::string::String,
-    pub provider: ::prost::alloc::string::String,
-    pub output_amount: ::prost::alloc::string::String,
     #[serde(default)]
-    pub min_output_amount: ::core::option::Option<::prost::alloc::string::String>,
+    pub error: ::core::option::Option<SwapError>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -811,66 +794,67 @@ pub struct GetGasUsageResponse {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
-pub struct EarnVaultsRequest {
+pub struct ListEarnVaultsRequest {
     pub organization_id: ::prost::alloc::string::String,
+    pub provider: super::super::super::super::immutable::data::v1::EarnProvider,
+    pub caip19: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub pagination_options: ::core::option::Option<
+        super::super::super::super::external::options::v1::Pagination,
+    >,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
-pub struct EarnVault {
+pub struct ListEarnVaultsResponse {
+    #[serde(default)]
+    pub vaults: ::prost::alloc::vec::Vec<
+        super::super::super::super::external::data::v1::EarnVault,
+    >,
+    #[serde(default)]
+    pub page_info: ::core::option::Option<
+        super::super::super::super::external::options::v1::PageInfo,
+    >,
+}
+#[derive(Debug)]
+/// Opaque, versioned payload behind a list_earn_vaults pagination cursor:
+/// a vault's position in the TVL-ranked catalog, base64-encoded server-side.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct EarnVaultCursor {
+    #[serde(default)]
+    pub version: u32,
+    /// Catalog sort key, descending: (tvl_usd, vault_address).
+    pub tvl_usd: f64,
     pub vault_address: ::prost::alloc::string::String,
-    pub chain_caip2: ::prost::alloc::string::String,
-    pub provider: ::prost::alloc::string::String,
-    pub asset: ::prost::alloc::string::String,
-    pub asset_address: ::prost::alloc::string::String,
-    pub tvl: ::prost::alloc::string::String,
-    pub apy_pct: ::prost::alloc::string::String,
-    #[serde(default)]
-    pub enabled: bool,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
-pub struct EarnVaultsResponse {
-    #[serde(default)]
-    pub vaults: ::prost::alloc::vec::Vec<EarnVault>,
-}
-#[derive(Debug)]
-#[derive(::serde::Serialize, ::serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[derive(Clone, PartialEq)]
-pub struct EarnEnabledVaultsRequest {
+pub struct ListEarnEnabledVaultsRequest {
     pub organization_id: ::prost::alloc::string::String,
-}
-#[derive(Debug)]
-#[derive(::serde::Serialize, ::serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[derive(Clone, PartialEq)]
-pub struct EarnEnabledVault {
-    pub vault_address: ::prost::alloc::string::String,
-    pub wrapper_address: ::prost::alloc::string::String,
-    pub splitter_address: ::prost::alloc::string::String,
-    pub chain_caip2: ::prost::alloc::string::String,
-    pub provider: ::prost::alloc::string::String,
-    pub asset: ::prost::alloc::string::String,
-    pub apy_pct: ::prost::alloc::string::String,
-    pub total_deposited: ::prost::alloc::string::String,
-}
-#[derive(Debug)]
-#[derive(::serde::Serialize, ::serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[derive(Clone, PartialEq)]
-pub struct EarnEnabledVaultsResponse {
+    pub provider: super::super::super::super::immutable::data::v1::EarnProvider,
     #[serde(default)]
-    pub enabled_vaults: ::prost::alloc::vec::Vec<EarnEnabledVault>,
+    pub caip19: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
-pub struct EarnPositionsRequest {
+pub struct ListEarnEnabledVaultsResponse {
+    #[serde(default)]
+    pub enabled_vaults: ::prost::alloc::vec::Vec<
+        super::super::super::super::external::data::v1::EarnEnabledVault,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct ListEarnPositionsRequest {
     pub organization_id: ::prost::alloc::string::String,
     pub wallet_address: ::prost::alloc::string::String,
 }
@@ -881,21 +865,36 @@ pub struct EarnPositionsRequest {
 pub struct EarnPosition {
     pub vault_address: ::prost::alloc::string::String,
     pub wrapper_address: ::prost::alloc::string::String,
-    pub chain_caip2: ::prost::alloc::string::String,
-    pub provider: ::prost::alloc::string::String,
-    pub asset: ::prost::alloc::string::String,
-    pub shares: ::prost::alloc::string::String,
+    pub provider: super::super::super::super::immutable::data::v1::EarnProvider,
+    pub caip19: ::prost::alloc::string::String,
     pub current_value: ::prost::alloc::string::String,
-    pub cost_basis: ::prost::alloc::string::String,
-    pub gross_yield: ::prost::alloc::string::String,
-    pub projected_fee: ::prost::alloc::string::String,
-    pub yield_less_fees: ::prost::alloc::string::String,
+    pub total_deposited: ::prost::alloc::string::String,
+    pub total_withdrawn: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub display: ::core::option::Option<EarnPositionDisplay>,
+    #[serde(default)]
+    pub deposits_disabled: bool,
+}
+#[derive(Debug)]
+/// EarnPositionDisplay renders a position's current value, total deposited, and
+/// total withdrawn for display only, in both USD and the asset's own units.
+/// Values are for presentation; do not do arithmetic with them.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct EarnPositionDisplay {
+    pub current_value_usd: ::prost::alloc::string::String,
+    pub total_deposited_usd: ::prost::alloc::string::String,
+    pub total_withdrawn_usd: ::prost::alloc::string::String,
+    pub current_value_crypto: ::prost::alloc::string::String,
+    pub total_deposited_crypto: ::prost::alloc::string::String,
+    pub total_withdrawn_crypto: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
-pub struct EarnPositionsResponse {
+pub struct ListEarnPositionsResponse {
     #[serde(default)]
     pub positions: ::prost::alloc::vec::Vec<EarnPosition>,
 }
@@ -903,7 +902,7 @@ pub struct EarnPositionsResponse {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
-pub struct EarnWithdrawStatusRequest {
+pub struct GetEarnWithdrawStatusRequest {
     pub organization_id: ::prost::alloc::string::String,
     pub withdraw_request_id: ::prost::alloc::string::String,
 }
@@ -911,16 +910,37 @@ pub struct EarnWithdrawStatusRequest {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
-pub struct EarnWithdrawStatusResponse {
+pub struct GetEarnWithdrawStatusResponse {
     pub status: ::prost::alloc::string::String,
     #[serde(default)]
     pub withdraw_tx_hash: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub error: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
-pub struct EarnDepositStatusRequest {
+pub struct GetClaimEarnFeesStatusRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub claim_request_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetClaimEarnFeesStatusResponse {
+    pub status: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub claim_tx_hash: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub error: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetEarnDepositStatusRequest {
     pub organization_id: ::prost::alloc::string::String,
     pub deposit_request_id: ::prost::alloc::string::String,
 }
@@ -928,10 +948,31 @@ pub struct EarnDepositStatusRequest {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
-pub struct EarnDepositStatusResponse {
+pub struct GetEarnDepositStatusResponse {
     pub status: ::prost::alloc::string::String,
     #[serde(default)]
     pub deposit_tx_hash: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub error: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetEarnDeployStatusRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub deploy_request_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetEarnDeployStatusResponse {
+    pub status: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub deploy_tx_hash: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub error: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -1285,19 +1326,9 @@ pub struct ListSupportedAssetsRequest {
 #[derive(Clone, PartialEq)]
 pub struct ListSupportedAssetsResponse {
     #[serde(default)]
-    pub assets: ::prost::alloc::vec::Vec<AssetMetadata>,
-}
-#[derive(Debug)]
-#[derive(::serde::Serialize, ::serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[derive(Clone, PartialEq)]
-pub struct AssetMetadata {
-    pub caip19: ::prost::alloc::string::String,
-    pub symbol: ::prost::alloc::string::String,
-    #[serde(default)]
-    pub decimals: i32,
-    pub logo_url: ::prost::alloc::string::String,
-    pub name: ::prost::alloc::string::String,
+    pub assets: ::prost::alloc::vec::Vec<
+        super::super::super::super::external::data::v1::AssetMetadata,
+    >,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -1486,4 +1517,166 @@ pub struct EmailEventDetails {
     #[serde_as(as = "serde_with::DisplayFromStr")]
     pub delivery_processing_time_millis: u64,
     pub delivery_delay_type: ::prost::alloc::string::String,
+    pub complaint_feedback_type: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct ListEthTransactionHistoryRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub address: ::prost::alloc::string::String,
+    pub caip2: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub pagination_options: ::core::option::Option<
+        super::super::super::super::external::options::v1::Pagination,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct ListSolTransactionHistoryRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub address: ::prost::alloc::string::String,
+    pub caip2: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub pagination_options: ::core::option::Option<
+        super::super::super::super::external::options::v1::Pagination,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct ListEthTransactionHistoryResponse {
+    #[serde(default)]
+    pub transactions: ::prost::alloc::vec::Vec<EthTransactionHistoryItem>,
+    #[serde(default)]
+    pub page_info: ::core::option::Option<
+        super::super::super::super::external::options::v1::PageInfo,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct ListSolTransactionHistoryResponse {
+    #[serde(default)]
+    pub transactions: ::prost::alloc::vec::Vec<SolTransactionHistoryItem>,
+    #[serde(default)]
+    pub page_info: ::core::option::Option<
+        super::super::super::super::external::options::v1::PageInfo,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct EthTransactionHistoryItem {
+    pub transaction_hash: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub block: ::core::option::Option<TransactionHistoryBlock>,
+    pub status: ::prost::alloc::string::String,
+    pub origin: ::prost::alloc::string::String,
+    pub from: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub to: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub fee: ::core::option::Option<TransactionHistoryFee>,
+    #[serde(default)]
+    pub transfers: ::prost::alloc::vec::Vec<TransactionHistoryTransfer>,
+    #[serde(default)]
+    pub turnkey: ::core::option::Option<TransactionHistoryTurnkey>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SolTransactionHistoryItem {
+    pub signature: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub block: ::core::option::Option<TransactionHistoryBlock>,
+    pub status: ::prost::alloc::string::String,
+    pub origin: ::prost::alloc::string::String,
+    pub fee_payer: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub signers: ::prost::alloc::vec::Vec<SolTransactionHistorySigner>,
+    #[serde(default)]
+    pub fee: ::core::option::Option<TransactionHistoryFee>,
+    #[serde(default)]
+    pub transfers: ::prost::alloc::vec::Vec<TransactionHistoryTransfer>,
+    #[serde(default)]
+    pub turnkey: ::core::option::Option<TransactionHistoryTurnkey>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SolTransactionHistorySigner {
+    pub address: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub writable: bool,
+}
+#[derive(Debug)]
+#[serde_with::serde_as]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct TransactionHistoryBlock {
+    #[serde(default)]
+    #[serde_as(as = "serde_with::DisplayFromStr")]
+    pub number: i64,
+    pub hash: ::prost::alloc::string::String,
+    pub timestamp: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct TransactionHistoryFee {
+    pub amount: ::prost::alloc::string::String,
+    pub caip19: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct TransactionHistoryTransfer {
+    pub direction: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub asset: ::core::option::Option<TransactionHistoryAsset>,
+    pub amount: ::prost::alloc::string::String,
+    pub counterparty: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub display: ::core::option::Option<TransactionHistoryDisplay>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct TransactionHistoryAsset {
+    pub caip19: ::prost::alloc::string::String,
+    pub symbol: ::prost::alloc::string::String,
+    pub name: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub decimals: i32,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct TransactionHistoryDisplay {
+    pub crypto: ::prost::alloc::string::String,
+    pub usd: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct TransactionHistoryTurnkey {
+    #[serde(default)]
+    pub sponsored: bool,
+    pub activity_fingerprint: ::prost::alloc::string::String,
+    pub submitted_at: ::prost::alloc::string::String,
 }
