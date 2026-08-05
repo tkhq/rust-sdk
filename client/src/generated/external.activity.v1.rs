@@ -1928,9 +1928,9 @@ pub struct ActivityFilter {
     #[serde(default)]
     pub types: Vec<super::super::super::immutable::activity::v1::ActivityType>,
     #[serde(default)]
-    pub created_after: ::core::option::Option<::pbjson_types::Timestamp>,
+    pub created_after: ::core::option::Option<crate::well_known::Timestamp>,
     #[serde(default)]
-    pub created_until: ::core::option::Option<::pbjson_types::Timestamp>,
+    pub created_until: ::core::option::Option<crate::well_known::Timestamp>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -1940,7 +1940,7 @@ pub struct ActivityCursor {
     #[serde(default)]
     pub version: u32,
     #[serde(default)]
-    pub created_at: ::core::option::Option<::pbjson_types::Timestamp>,
+    pub created_at: ::core::option::Option<crate::well_known::Timestamp>,
     pub id: ::prost::alloc::string::String,
 }
 #[derive(Debug)]

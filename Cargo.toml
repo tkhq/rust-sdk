@@ -61,8 +61,6 @@ tokio = { version = "1.47.1", default-features = false }
 prost = { version = "0.12", default-features = false, features = ["std"] }
 prost-types = { version = "0.12", default-features = false }
 prost-build = { version = "0.12.6", default-features = false }
-# Serde-capable well-known types (google.protobuf.Timestamp etc.), proto3 JSON mapping
-pbjson-types = { version = "0.6", default-features = false }
 
 # AWS Nitro enclaves
 attestation-doc-validation = { version = "0.8.0", default-features = false }
