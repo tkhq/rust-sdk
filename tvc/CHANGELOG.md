@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.14.0](https://github.com/tkhq/rust-sdk/compare/tvc-v0.13.1...tvc-v0.14.0) - 2026-08-05
+
+### Added
+
+- *(tvc)* cryptographically validate manifest approvals
+- *(tvc)* add version subcommand
+- *(tvc)* stamp X-TVC-CLIENT-VERSION on every API request
+
+### Other
+
+- Sync protos from mono and map google.protobuf.Timestamp to pbjson-types for serde support
+- Merge pull request #230 from tkhq/richard/eng-4274-cryptographically-validate-manifest-approvals-before-writing
+- Merge pull request #229 from tkhq/richard/parse-dont-validate
+- *(tvc)* followups from PR 188
+- *(tvc)* followups from PR 188
+- *(tvc)* Fix docs
+- *(tvc)* serde-tagged outcome vocabulary and Run trait pilot
+
 ## [0.13.1](https://github.com/tkhq/rust-sdk/compare/tvc-v0.13.0...tvc-v0.13.1) - 2026-07-29
 
 ### Other
