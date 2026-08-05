@@ -31,7 +31,7 @@ pub struct Args {
     output: Option<PathBuf>,
     /// Overwrite the destination if it already exists.
     #[arg(long)]
-    force: bool,
+    overwrite: bool,
 }
 
 impl Run for Args {
@@ -74,10 +74,10 @@ impl Run for Args {
             );
         }
 
-        if destination.exists() && !self.force {
+        if destination.exists() && !self.overwrite {
             if ctx.is_non_interactive() {
                 bail!(
-                    "destination {} already exists; pass --force to overwrite",
+                    "destination {} already exists; pass --overwrite to replace it",
                     destination.display()
                 );
             }

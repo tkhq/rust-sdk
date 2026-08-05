@@ -110,7 +110,7 @@ fn defaults_to_active_org() {
 }
 
 #[test]
-fn existing_destination_requires_force() {
+fn existing_destination_requires_overwrite() {
     let temp = TempDir::new().unwrap();
     common::write_profiles_config(
         temp.path(),
@@ -131,7 +131,7 @@ fn existing_destination_requires_force() {
         .arg(&destination)
         .assert()
         .failure()
-        .stderr(predicate::str::contains("pass --force to overwrite"));
+        .stderr(predicate::str::contains("pass --overwrite to replace it"));
 
     assert_eq!(fs::read_to_string(&destination).unwrap(), "previous backup");
 
@@ -142,7 +142,7 @@ fn existing_destination_requires_force() {
         .arg("backup-operator-key")
         .arg("--output")
         .arg(&destination)
-        .arg("--force")
+        .arg("--overwrite")
         .assert()
         .success();
 
