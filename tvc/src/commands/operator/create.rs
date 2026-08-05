@@ -2,6 +2,7 @@
 
 use crate::{
     client::build_client,
+    commands::Run,
     config::turnkey::{Config, OperatorRecord, OperatorRecordKind},
     operator::{
         DEFAULT_HOSTED_OPERATOR_BASE_PATH, HostedOperatorSpec, HostedOperatorWallet,
@@ -9,8 +10,9 @@ use crate::{
     },
     outcome::Outcome,
     output::StdCtx,
+    prompts,
 };
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result, anyhow, bail};
 use clap::{ArgGroup, Args as ClapArgs, builder::NonEmptyStringValueParser};
 use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
@@ -74,6 +76,12 @@ pub struct OperatorCreated {
     saved: bool,
 }
 
+impl From<OperatorCreated> for Outcome {
+    fn from(outcome: OperatorCreated) -> Self {
+        Outcome::OperatorCreated(outcome)
+    }
+}
+
 impl Display for OperatorCreated {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
@@ -96,45 +104,97 @@ Saved: true"#,
     }
 }
 
-pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
-    let mut config = Config::load().await?;
-    let (alias, configured_org_id) = config
-        .active_org_config()
-        .map(|(alias, org)| (alias.clone(), org.id.as_str()))
-        .context("No active organization. Run `tvc login` first.")?;
+impl Run for Args {
+    type Outcome = OperatorCreated;
 
-    let auth = build_client().await?;
-    ensure_authenticated_org(&auth.org_id, configured_org_id)?;
+    async fn run(self, ctx: &mut StdCtx) -> Result<OperatorCreated> {
+        let mut config = Config::load().await?;
+        let (alias, org) = config
+            .active_org_config()
+            .context("No active organization. Run `tvc login` first.")?;
+        // Review answer (delete me): the clone is needed because `alias` names
+        // the org-map slot we re-borrow mutably at `config.orgs.get_mut(&alias)`
+        // after the network call; keeping the `&String` borrow of `config` alive
+        // that long conflicts with the `&mut`. It's inherent to the data flow
+        // (we keep the key), not induced by a helper boundary.
+        let alias = alias.clone();
 
-    let record = create_hosted_operator(&auth, hosted_operator_spec(args)).await?;
-    let output = output_from_record(record.clone())?;
+        // Only an existing wallet can collide: --wallet-name mints a fresh
+        // wallet (fresh seed), so its derived keys cannot match any saved
+        // record. Hosted operator keys are derived server-side from the wallet
+        // and base derivation path, so an existing record with the same wallet
+        // + path (textual comparison) implies identical keys under a different
+        // operator ID.
+        if let Some(wallet_id) = self.wallet_id {
+            let existing: Vec<String> = org
+                .operators
+                .iter()
+                .filter_map(|record| match &record.kind {
+                    OperatorRecordKind::Hosted(hosted)
+                        if hosted.wallet_id == wallet_id
+                            && hosted.path.trim() == self.account_path.trim() =>
+                    {
+                        Some(format!("'{}' ({})", record.name, hosted.operator_id))
+                    }
+                    OperatorRecordKind::Hosted(_) | OperatorRecordKind::Local(_) => None,
+                })
+                .collect();
 
-    config
-        .orgs
-        .get_mut(&alias)
-        .with_context(|| format!("active organization '{alias}' disappeared from config"))?
-        .operators
-        .push(record);
+            if !existing.is_empty() {
+                let existing = existing.join(", ");
 
-    if let Err(save_error) = config.save().await {
-        let record = config
+                if ctx.is_non_interactive() {
+                    bail!(
+                        r#"wallet {wallet_id} at path {path} already backs hosted operator(s) {existing}.
+Hosted operator keys are derived from the wallet and account path, so the new operator's keys would be identical under a different operator ID.
+Use a different --account-path or --wallet-id, or rerun interactively to confirm creating an operator with duplicate keys."#,
+                        path = self.account_path
+                    );
+                }
+
+                prompts::confirm_or_bail(
+                    &format!(
+                        "Operator(s) {existing} are already backed by wallet {wallet_id} at path {}; the new operator's keys will be identical. Create anyway?",
+                        self.account_path
+                    ),
+                    "hosted operator creation",
+                )?;
+            }
+        }
+
+        let auth = build_client().await?;
+        ensure_authenticated_org(&auth.org_id, &org.id)?;
+
+        let record = create_hosted_operator(&auth, hosted_operator_spec(self)).await?;
+        let output = output_from_record(record.clone())?;
+
+        config
             .orgs
-            .get(&alias)
-            .and_then(|org| org.operators.last())
-            .with_context(|| {
-                format!("hosted operator disappeared from active organization '{alias}'")
-            })?;
-        let recovery = recovery_toml(&alias, record)?;
-        return Err(anyhow!(
-            r#"hosted operator {} was created remotely, but saving the local config failed: {save_error}
+            .get_mut(&alias)
+            .with_context(|| format!("active organization '{alias}' disappeared from config"))?
+            .operators
+            .push(record);
+
+        if let Err(save_error) = config.save().await {
+            let record = config
+                .orgs
+                .get(&alias)
+                .and_then(|org| org.operators.last())
+                .with_context(|| {
+                    format!("hosted operator disappeared from active organization '{alias}'")
+                })?;
+            let recovery = recovery_toml(&alias, record)?;
+            return Err(anyhow!(
+                r#"hosted operator {} was created remotely, but saving the local config failed: {save_error}
 Do not retry creation blindly; doing so would create another remote operator. Restore this record under the active organization in tvc.config.toml:
 
 {recovery}"#,
-            output.operator_id
-        ));
-    }
+                output.operator_id
+            ));
+        }
 
-    Ok(Outcome::OperatorCreated(output))
+        Ok(output)
+    }
 }
 
 fn hosted_operator_spec(args: Args) -> HostedOperatorSpec {

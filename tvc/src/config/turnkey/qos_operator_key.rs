@@ -8,7 +8,14 @@ use tracing::debug;
 /// Operator key stored in operator.json
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoredQosOperatorKey {
-    /// Hex-encoded compressed public key
+    // Review answer (delete me): re "?" — verified against qos_p256 v0.12.1.
+    // login writes `hex::encode(P256Pair::public_key().to_bytes())`, and
+    // `P256Public::to_bytes` is documented "Serialize each public key as a
+    // SEC1 encoded point, not compressed. Encodes as
+    // `encrypt_public||sign_public`" (qos_p256 src/lib.rs:365-366), i.e.
+    // 65 + 65 bytes. The previous "compressed" wording was wrong.
+    /// Hex-encoded `qos_p256` composite public key: two uncompressed SEC1
+    /// points (encrypt then sign), 130 bytes total.
     pub public_key: String,
     /// Hex-encoded private key
     pub private_key: String,

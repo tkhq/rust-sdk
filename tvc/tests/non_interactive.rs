@@ -77,6 +77,37 @@ fn write_api_key(path: &std::path::Path) {
     .unwrap();
 }
 
+fn write_operator_key(path: &std::path::Path, public_key: &str) {
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(
+        path,
+        serde_json::json!({ "public_key": public_key, "private_key": "00" }).to_string(),
+    )
+    .unwrap();
+}
+
+fn write_app_config(path: &std::path::Path, manifest_operators: &[(&str, &str)]) {
+    let new_operators: Vec<_> = manifest_operators
+        .iter()
+        .map(|(name, key)| serde_json::json!({ "name": name, "publicKey": key }))
+        .collect();
+
+    fs::write(
+        path,
+        serde_json::json!({
+            "name": "demo",
+            "quorumPublicKey": "not-a-real-key",
+            "manifestSetParams": {
+                "name": "manifest-set",
+                "threshold": 1,
+                "newOperators": new_operators,
+            },
+        })
+        .to_string(),
+    )
+    .unwrap();
+}
+
 #[test]
 fn login_without_org_errors_when_non_interactive_forced() {
     let temp = TempDir::new().unwrap();
@@ -392,4 +423,65 @@ fn deploy_init_template_does_not_require_readable_existing_config() {
         ));
 
     assert!(output.exists(), "deploy init should write the template");
+}
+
+/// A manifest newOperators entry reusing the saved local operator key (modulo
+/// case/whitespace) while saved operator IDs exist would mint another operator
+/// ID with identical keys; non-interactive mode errors instead of prompting.
+#[test]
+fn app_create_errors_when_new_operator_reuses_saved_key() {
+    let temp = TempDir::new().unwrap();
+    let org_dir = temp.path().join(".config/turnkey/orgs/test");
+    let operator_key_path = org_dir.join("operator.json");
+    write_config(
+        &temp,
+        org_dir.join("api_key.json"),
+        operator_key_path.clone(),
+        vec!["33333333-3333-4333-8333-333333333333".to_string()],
+    );
+    write_operator_key(&operator_key_path, "04abcdef");
+    let app_config = temp.path().join("app.json");
+    write_app_config(&app_config, &[("op-a", " 04ABCDEF ")]);
+
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env(NON_INTERACTIVE_ENV, "1")
+        .args(["app", "create", "--no-operator-reuse", "-c"])
+        .arg(&app_config)
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "manifestSetParams.newOperators entries [op-a] use the saved local operator key",
+        ))
+        .stderr(predicate::str::contains(
+            "33333333-3333-4333-8333-333333333333",
+        ));
+}
+
+/// Two manifest newOperators entries sharing one public key would mint two
+/// operator IDs backed by identical keys; non-interactive mode errors instead
+/// of prompting.
+#[test]
+fn app_create_errors_on_duplicate_new_operator_keys() {
+    let temp = TempDir::new().unwrap();
+    let org_dir = temp.path().join(".config/turnkey/orgs/test");
+    write_config(
+        &temp,
+        org_dir.join("api_key.json"),
+        org_dir.join("operator.json"),
+        vec![],
+    );
+    let app_config = temp.path().join("app.json");
+    write_app_config(&app_config, &[("op-a", "04aa"), ("op-b", "04aa")]);
+
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env(NON_INTERACTIVE_ENV, "1")
+        .args(["app", "create", "-c"])
+        .arg(&app_config)
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "manifestSetParams.newOperators entries [op-a, op-b] share the same public key",
+        ));
 }

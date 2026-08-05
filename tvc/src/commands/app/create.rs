@@ -13,6 +13,7 @@ use crate::{
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Args as ClapArgs;
 use serde::Serialize;
+use std::collections::HashMap;
 use std::fmt::{self, Display, Formatter};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
@@ -21,6 +22,11 @@ use std::{
 };
 use tracing::debug;
 use turnkey_client::generated::{CreateTvcAppIntent, TvcOperatorParams, TvcOperatorSetParams};
+use uuid::Uuid;
+
+/// App-config field names, as they appear in the JSON users edit.
+const MANIFEST_SET_PARAMS: &str = "manifestSetParams";
+const SHARE_SET_PARAMS: &str = "shareSetParams";
 
 /// Create a new TVC application from a config file.
 #[derive(Debug, ClapArgs)]
@@ -67,7 +73,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     // runs don't mint a fresh operator ID for the same local key. The decision
     // itself is pure (`decide_operator_reuse`); this endpoint does the I/O
     // (loading saved IDs) and adapts multi-candidate handling to the mode.
-    let saved_ids = load_saved_operator_ids().await;
+    let saved_ids = load_saved_operator_ids().await?;
     match decide_operator_reuse(
         args.no_operator_reuse,
         app_config.manifest_set_params.as_ref(),
@@ -79,13 +85,83 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
             if ctx.is_non_interactive() {
                 bail!(
                     "multiple saved operator IDs for the active org; \
-                     set manifestSetParams.existingOperatorIds in your config to reuse one, \
+                     set {MANIFEST_SET_PARAMS}.existingOperatorIds in your config to reuse one, \
                      or pass --no-operator-reuse to create a new operator"
                 );
             }
             let id = prompts::select("Select operator to reuse", ids)?;
             apply_operator_reuse(ctx, &mut app_config, id)?;
         }
+    }
+
+    // Key-collision guards run after reuse resolution (which may have cleared
+    // new_operators): a duplicated key mints a distinct operator ID backed by
+    // identical keys, which is almost always a mistake.
+    let saved_key = load_saved_operator_public_key()
+        .await
+        .map(|key| CanonicalOperatorKey::from(key.as_str()));
+
+    // Manifest-set newOperators entries reusing the saved local operator key
+    // while saved operator IDs backed by that key already exist.
+    let colliding_names: Vec<&str> = match (app_config.manifest_set_params.as_ref(), &saved_key) {
+        (Some(params), Some(saved_key)) if !saved_ids.is_empty() => params
+            .new_operators
+            .iter()
+            .filter(|operator| {
+                CanonicalOperatorKey::from(operator.public_key.as_str()) == *saved_key
+            })
+            .map(|operator| operator.name.as_str())
+            .collect(),
+        _ => Vec::new(),
+    };
+
+    if !colliding_names.is_empty() {
+        let names = colliding_names.join(", ");
+
+        if ctx.is_non_interactive() {
+            let ids = saved_ids
+                .iter()
+                .map(Uuid::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
+            bail!(
+                r#"{MANIFEST_SET_PARAMS}.newOperators entries [{names}] use the saved local operator key, which already backs operator ID(s) [{ids}].
+Creating the app would mint another operator ID with identical keys.
+Set {MANIFEST_SET_PARAMS}.existingOperatorIds to reuse an existing operator, use a distinct newOperators publicKey to create a new one, or rerun interactively to choose."#
+            );
+        }
+
+        shell_println!(
+            ctx,
+            "Operator(s) [{names}] in {MANIFEST_SET_PARAMS} use the saved local operator key, which already backs existing operator(s)."
+        )?;
+
+        let options: Vec<SavedKeyResolution> = saved_ids
+            .iter()
+            .copied()
+            .map(SavedKeyResolution::Reuse)
+            .chain([SavedKeyResolution::CreateAnyway, SavedKeyResolution::Cancel])
+            .collect();
+
+        match prompts::select(
+            "A newOperators key already backs existing operator(s). How do you want to proceed?",
+            options,
+        )? {
+            SavedKeyResolution::Reuse(id) => apply_operator_reuse(ctx, &mut app_config, id)?,
+            SavedKeyResolution::CreateAnyway => {}
+            SavedKeyResolution::Cancel => bail!("operation cancelled by user: app creation"),
+        }
+    }
+
+    // Within-set duplicates, checked second (a Reuse choice above clears the
+    // manifest set's new_operators). Only sets the user wrote are checked; the
+    // built-in default share set is guarded by a unit test instead.
+    if let Some(params) = app_config.manifest_set_params.as_ref() {
+        resolve_duplicate_new_operator_keys(ctx, MANIFEST_SET_PARAMS, params)?;
+    }
+
+    if let Some(params) = app_config.share_set_params.as_ref() {
+        resolve_duplicate_new_operator_keys(ctx, SHARE_SET_PARAMS, params)?;
     }
 
     run_with_config(ctx, args, app_config).await
@@ -97,9 +173,9 @@ enum OperatorReuse {
     /// Leave the config as-is: create new operators, or honor an explicit config.
     KeepConfig,
     /// Reuse exactly this saved operator ID.
-    Reuse(String),
+    Reuse(Uuid),
     /// Several saved operator IDs are candidates; the caller picks one.
-    MultipleCandidates(Vec<String>),
+    MultipleCandidates(Vec<Uuid>),
 }
 
 /// Decide whether to reuse a previously-created operator for the manifest set.
@@ -110,7 +186,7 @@ enum OperatorReuse {
 fn decide_operator_reuse(
     no_reuse: bool,
     manifest_set_params: Option<&OperatorSetParams>,
-    saved_ids: &[String],
+    saved_ids: &[Uuid],
 ) -> OperatorReuse {
     // Opt-out: the user explicitly wants a fresh operator.
     if no_reuse {
@@ -127,7 +203,7 @@ fn decide_operator_reuse(
     }
     match saved_ids {
         [] => OperatorReuse::KeepConfig,
-        [id] => OperatorReuse::Reuse(id.clone()),
+        [id] => OperatorReuse::Reuse(*id),
         _ => OperatorReuse::MultipleCandidates(saved_ids.to_vec()),
     }
 }
@@ -136,14 +212,14 @@ fn decide_operator_reuse(
 fn apply_operator_reuse<Out: io::Write, Err: io::Write>(
     ctx: &mut Ctx<Out, Err>,
     config: &mut AppConfig,
-    operator_id: String,
+    operator_id: Uuid,
 ) -> anyhow::Result<()> {
     if let Some(params) = config.manifest_set_params.as_mut() {
         params.new_operators.clear();
-        params.existing_operator_ids = vec![operator_id.clone()];
+        params.existing_operator_ids = vec![operator_id.to_string()];
     }
 
-    debug!(operator_id = %operator_id, "reusing existing operator");
+    debug!(%operator_id, "reusing existing operator");
 
     shell_println!(
         ctx,
@@ -151,14 +227,95 @@ fn apply_operator_reuse<Out: io::Write, Err: io::Write>(
     )
 }
 
+// Review answer (delete me): yes, these are UUIDs — TVC operator IDs are
+// server-minted UUIDs (`operator create` already UUID-parses the same entity),
+// so this flow now holds them as `Uuid` end-to-end and converts back to
+// `String` only at serde/wire boundaries (config `existingOperatorIds`, the
+// create intent).
 /// Best-effort load of the active org's most recently created operator IDs.
-/// Reuse is a convenience, so config-load failures fall back to no reuse; the
-/// real error surfaces later when `run_with_config` reloads the config.
-async fn load_saved_operator_ids() -> Vec<String> {
-    match turnkey::Config::load().await {
-        Ok(config) => config.get_last_operator_ids().unwrap_or_default(),
-        Err(_) => Vec::new(),
+/// Reuse is a convenience, so config-load failures fall back to no reuse (the
+/// real error surfaces later when `run_with_config` reloads the config), but a
+/// malformed saved ID is a bad write of our own and surfaces immediately.
+async fn load_saved_operator_ids() -> Result<Vec<Uuid>> {
+    let Ok(config) = turnkey::Config::load().await else {
+        return Ok(Vec::new());
+    };
+
+    config
+        .get_last_operator_ids()
+        .unwrap_or_default()
+        .iter()
+        .map(|id| {
+            Uuid::parse_str(id).with_context(|| format!("saved operator ID {id} must be a UUID"))
+        })
+        .collect()
+}
+
+/// Operator public key in canonical comparison form: trimmed, ASCII-lowercase.
+///
+/// Comparison-only parse — app-config keys carry no format guarantee (validity
+/// is the server's call), so canonicalization cannot fail; a non-key string
+/// simply never matches a real key.
+#[derive(PartialEq, Eq, Hash)]
+struct CanonicalOperatorKey(String);
+
+impl From<&str> for CanonicalOperatorKey {
+    fn from(key: &str) -> Self {
+        Self(key.trim().to_ascii_lowercase())
     }
+}
+
+/// How the user chose to resolve a saved-key collision.
+#[derive(displaydoc::Display)]
+enum SavedKeyResolution {
+    /// Reuse existing operator {0} (do not create a new one)
+    Reuse(Uuid),
+    /// Create a new operator ID backed by the same key
+    CreateAnyway,
+    /// Cancel app creation
+    Cancel,
+}
+
+/// Flag `set`.newOperators entries that share a public key: each duplicate
+/// group would mint a separate operator ID backed by identical keys. Confirms
+/// per group in interactive mode; errors with remediation otherwise.
+fn resolve_duplicate_new_operator_keys<Out: io::Write, Err: io::Write>(
+    ctx: &mut Ctx<Out, Err>,
+    set: &str,
+    params: &OperatorSetParams,
+) -> Result<()> {
+    let groups =
+        params
+            .new_operators
+            .iter()
+            .fold(HashMap::<_, Vec<&str>>::new(), |mut groups, operator| {
+                groups
+                    .entry(CanonicalOperatorKey::from(operator.public_key.as_str()))
+                    .or_default()
+                    .push(operator.name.as_str());
+                groups
+            });
+
+    for names in groups.into_values().filter(|names| names.len() > 1) {
+        let names = names.join(", ");
+
+        if ctx.is_non_interactive() {
+            bail!(
+                r#"{set}.newOperators entries [{names}] share the same public key.
+Each entry would become a separate operator ID backed by identical keys.
+Give each {set}.newOperators entry a distinct publicKey, or replace duplicates with {set}.existingOperatorIds."#
+            );
+        }
+
+        prompts::confirm_or_bail(
+            &format!(
+                "{set}.newOperators entries [{names}] share the same public key; each will become a separate operator with identical keys. Create anyway?"
+            ),
+            "app creation",
+        )?;
+    }
+
+    Ok(())
 }
 
 async fn build_app_config_interactive(ctx: &mut StdCtx, args: &Args) -> Result<AppConfig> {
@@ -363,6 +520,24 @@ mod tests {
         output::{Ctx, EmptyShell},
     };
 
+    const OP_1: Uuid = Uuid::from_u128(1);
+    const OP_2: Uuid = Uuid::from_u128(2);
+
+    fn params_with_operator_keys(operators: &[(&str, &str)]) -> OperatorSetParams {
+        OperatorSetParams {
+            name: "manifest-set".to_string(),
+            threshold: 1,
+            new_operators: operators
+                .iter()
+                .map(|(name, key)| OperatorParams {
+                    name: name.to_string(),
+                    public_key: key.to_string(),
+                })
+                .collect(),
+            existing_operator_ids: vec![],
+        }
+    }
+
     fn valid_config() -> AppConfig {
         AppConfig {
             name: "test-app".to_string(),
@@ -543,9 +718,8 @@ mod tests {
     #[test]
     fn decide_reuse_keeps_config_when_flag_set() {
         let params = manifest_params_with_new_operator();
-        let saved = vec!["op-1".to_string()];
         assert_eq!(
-            decide_operator_reuse(true, Some(&params), &saved),
+            decide_operator_reuse(true, Some(&params), &[OP_1]),
             OperatorReuse::KeepConfig
         );
     }
@@ -565,9 +739,8 @@ mod tests {
     fn decide_reuse_keeps_config_when_config_pins_existing_ids() {
         let mut params = manifest_params_with_new_operator();
         params.existing_operator_ids = vec!["explicit-op".to_string()];
-        let saved = vec!["op-1".to_string(), "op-2".to_string()];
         assert_eq!(
-            decide_operator_reuse(false, Some(&params), &saved),
+            decide_operator_reuse(false, Some(&params), &[OP_1, OP_2]),
             OperatorReuse::KeepConfig
         );
     }
@@ -575,9 +748,8 @@ mod tests {
     /// No manifest_set_params (e.g. reusing a whole set via manifestSetId) -> nothing to do.
     #[test]
     fn decide_reuse_keeps_config_without_manifest_params() {
-        let saved = vec!["op-1".to_string()];
         assert_eq!(
-            decide_operator_reuse(false, None, &saved),
+            decide_operator_reuse(false, None, &[OP_1]),
             OperatorReuse::KeepConfig
         );
     }
@@ -586,10 +758,9 @@ mod tests {
     #[test]
     fn decide_reuse_reuses_single_saved_id() {
         let params = manifest_params_with_new_operator();
-        let saved = vec!["op-1".to_string()];
         assert_eq!(
-            decide_operator_reuse(false, Some(&params), &saved),
-            OperatorReuse::Reuse("op-1".to_string())
+            decide_operator_reuse(false, Some(&params), &[OP_1]),
+            OperatorReuse::Reuse(OP_1)
         );
     }
 
@@ -597,10 +768,9 @@ mod tests {
     #[test]
     fn decide_reuse_returns_candidates_for_multiple_saved_ids() {
         let params = manifest_params_with_new_operator();
-        let saved = vec!["op-1".to_string(), "op-2".to_string()];
         assert_eq!(
-            decide_operator_reuse(false, Some(&params), &saved),
-            OperatorReuse::MultipleCandidates(saved.clone())
+            decide_operator_reuse(false, Some(&params), &[OP_1, OP_2]),
+            OperatorReuse::MultipleCandidates(vec![OP_1, OP_2])
         );
     }
 
@@ -609,10 +779,49 @@ mod tests {
     fn apply_operator_reuse_swaps_new_operators_for_existing_id() {
         let mut ctx = Ctx::new(EmptyShell::default(), true);
         let mut config = valid_config();
-        apply_operator_reuse(&mut ctx, &mut config, "op-1".to_string()).unwrap();
+        apply_operator_reuse(&mut ctx, &mut config, OP_1).unwrap();
 
         let params = config.manifest_set_params.unwrap();
         assert!(params.new_operators.is_empty());
-        assert_eq!(params.existing_operator_ids, vec!["op-1".to_string()]);
+        assert_eq!(params.existing_operator_ids, vec![OP_1.to_string()]);
+    }
+
+    /// Duplicate keys within a set error non-interactively, naming the set,
+    /// every entry in the group, and the remediation field. Key comparison
+    /// canonicalizes hex case and surrounding whitespace.
+    #[test]
+    fn duplicate_new_operator_keys_error_non_interactively() {
+        let mut ctx = Ctx::new(EmptyShell::default(), true);
+        let params = params_with_operator_keys(&[("a", "04aa"), ("b", " 04AA "), ("c", "04bb")]);
+
+        let error = resolve_duplicate_new_operator_keys(&mut ctx, MANIFEST_SET_PARAMS, &params)
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("manifestSetParams.newOperators entries [a, b]"));
+        assert!(error.contains("existingOperatorIds"));
+    }
+
+    /// Distinct keys pass without prompting or erroring.
+    #[test]
+    fn distinct_new_operator_keys_pass() {
+        let mut ctx = Ctx::new(EmptyShell::default(), true);
+        let params = params_with_operator_keys(&[("a", "04aa"), ("b", "04bb")]);
+
+        resolve_duplicate_new_operator_keys(&mut ctx, SHARE_SET_PARAMS, &params).unwrap();
+    }
+
+    /// The built-in dev share set must never trip the duplicate guard; this
+    /// protects the default happy path if KNOWN_SHARE_SET_KEYS ever change.
+    #[test]
+    fn default_dev_share_set_has_no_duplicate_keys() {
+        let mut ctx = Ctx::new(EmptyShell::default(), true);
+
+        resolve_duplicate_new_operator_keys(
+            &mut ctx,
+            SHARE_SET_PARAMS,
+            &AppConfig::share_set_params(),
+        )
+        .unwrap();
     }
 }
