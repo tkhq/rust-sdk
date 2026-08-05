@@ -1,18 +1,21 @@
 //! Operator key backup command - copies a local operator key file to a
 //! user-chosen destination.
 
-use crate::commands::Run;
-use crate::commands::login::resolve_org_query;
-use crate::config::turnkey::{Config, OrgQuery, StoredQosOperatorKey};
-use crate::outcome::Outcome;
-use crate::output::StdCtx;
-use crate::prompts::{self, error_required_in_non_interactive};
+use crate::{
+    commands::{Run, login::resolve_org_query},
+    config::turnkey::{Config, OrgQuery, StoredQosOperatorKey},
+    outcome::Outcome,
+    output::StdCtx,
+    prompts::{self, error_required_in_non_interactive},
+};
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Args as ClapArgs;
 use serde::Serialize;
-use std::fmt::{self, Display, Formatter};
-use std::path::{Path, PathBuf};
-use std::str::FromStr;
+use std::{
+    fmt::{self, Display, Formatter},
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
 /// Back up a local operator key by copying its key file to a chosen
 /// destination.
