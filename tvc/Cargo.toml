@@ -34,7 +34,9 @@ reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-toml = { workspace = true }
+# preserve_order keeps `tvc.config.toml` in document order across load/save;
+# it's a tvc requirement, so the feature is enabled here, not workspace-wide.
+toml = { workspace = true, features = ["preserve_order"] }
 tokio = { workspace = true, features = ["fs"] }
 uuid = { workspace = true }
 zeroize = { workspace = true }
