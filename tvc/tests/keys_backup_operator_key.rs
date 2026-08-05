@@ -25,7 +25,7 @@ fn backs_up_with_org_and_output() {
         Some("alias-a"),
         &[],
     );
-    common::write_profile_key_files(temp.path(), "alias-a");
+    let operator_public_key = common::write_profile_key_files(temp.path(), "alias-a");
     let destination = temp.path().join("backups/operator-backup.json");
 
     cargo_bin_cmd!("tvc")
@@ -40,7 +40,7 @@ fn backs_up_with_org_and_output() {
         .assert()
         .success()
         .stdout(predicate::str::contains("Operator key backed up!"))
-        .stdout(predicate::str::contains("operator-pub-alias-a"));
+        .stdout(predicate::str::contains(operator_public_key.to_string()));
 
     assert_eq!(
         fs::read(&destination).unwrap(),
@@ -60,7 +60,7 @@ fn resolves_duplicated_org_id_to_default_alias() {
         &["alias-b"],
     );
     common::write_profile_key_files(temp.path(), "alias-a");
-    common::write_profile_key_files(temp.path(), "alias-b");
+    let default_public_key = common::write_profile_key_files(temp.path(), "alias-b");
     let destination = temp.path().join("operator-backup.json");
 
     cargo_bin_cmd!("tvc")
@@ -74,7 +74,7 @@ fn resolves_duplicated_org_id_to_default_alias() {
         .arg(&destination)
         .assert()
         .success()
-        .stdout(predicate::str::contains("operator-pub-alias-b"))
+        .stdout(predicate::str::contains(default_public_key.to_string()))
         .stderr(predicate::str::contains("Using default profile 'alias-b'"));
 
     assert_eq!(

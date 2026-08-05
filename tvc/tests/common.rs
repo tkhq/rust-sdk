@@ -14,7 +14,8 @@ use std::{
 };
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use tvc::config::turnkey::{
-    Config, KeyCurve, OperatorKind, OperatorRecord, OrgConfig, StoredApiKey, StoredQosOperatorKey,
+    Config, KeyCurve, OperatorKind, OperatorRecord, OrgConfig, QosOperatorPublicKey, StoredApiKey,
+    StoredQosOperatorKey,
 };
 
 /// Dead port: connection attempts fail immediately, so commands stop at their
@@ -78,9 +79,10 @@ pub fn write_profiles_config(
 }
 
 /// Create the default-layout key files for `alias`: a valid generated
-/// `StoredApiKey` (login loads it before its first network step) and a
-/// parseable operator key with per-alias placeholder key material.
-pub fn write_profile_key_files(home: &Path, alias: &str) {
+/// `StoredApiKey` (login loads it before its first network step) and a real
+/// generated operator key. Returns the operator public key so tests can
+/// assert on rendered output.
+pub fn write_profile_key_files(home: &Path, alias: &str) -> QosOperatorPublicKey {
     let dir = org_dir(home, alias);
     fs::create_dir_all(&dir).unwrap();
 
@@ -97,13 +99,17 @@ pub fn write_profile_key_files(home: &Path, alias: &str) {
     )
     .unwrap();
 
+    let pair = qos_p256::P256Pair::generate().unwrap();
     let operator_key = StoredQosOperatorKey {
-        public_key: format!("operator-pub-{alias}"),
-        private_key: format!("operator-priv-{alias}"),
+        public_key: QosOperatorPublicKey::try_from(pair.public_key().to_bytes().as_slice())
+            .unwrap(),
+        private_key: hex::encode(pair.to_master_seed()),
     };
     fs::write(
         dir.join("operator.json"),
         serde_json::to_string_pretty(&operator_key).unwrap(),
     )
     .unwrap();
+
+    operator_key.public_key
 }
