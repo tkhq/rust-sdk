@@ -7,9 +7,7 @@
 //! Commands join this fence as they gain prompting behavior.
 
 use assert_cmd::cargo::cargo_bin_cmd;
-use indexmap::IndexMap;
 use predicates::prelude::*;
-use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use tempfile::{NamedTempFile, TempDir};
@@ -17,6 +15,7 @@ use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use tvc::config::turnkey::{
     Config, KeyCurve, OperatorKind, OperatorRecord, OrgConfig, StoredApiKey,
 };
+use uuid::Uuid;
 
 const NON_INTERACTIVE_ENV: &str = "TVC_NON_INTERACTIVE";
 const LOCAL_API_BASE_URL: &str = "http://127.0.0.1:1";
@@ -38,28 +37,25 @@ fn write_config(
     let turnkey_dir = home.path().join(".config").join("turnkey");
     fs::create_dir_all(&turnkey_dir).unwrap();
 
-    let config = Config {
-        active_org: Some("test".to_string()),
-        orgs: IndexMap::from([(
-            "test".to_string(),
-            OrgConfig {
-                id: "10000000-0000-4000-8000-000000000001".parse().unwrap(),
-                api_key_path,
-                api_base_url: LOCAL_API_BASE_URL.to_string(),
-                default_operator_kind: OperatorKind::Local,
-                operators: vec![OperatorRecord::local(operator_key_path)],
-                default_alias: false,
-                extra: toml::Table::new(),
-            },
-        )]),
-        last_created_app_id: HashMap::new(),
-        last_operator_ids: HashMap::from([("test".to_string(), last_operator_ids)]),
-        extra: toml::Table::new(),
-    };
+    let org_id: Uuid = "10000000-0000-4000-8000-000000000001".parse().unwrap();
+    let mut config = Config::default();
+    config.orgs.insert(
+        org_id,
+        OrgConfig {
+            api_key_path,
+            api_base_url: LOCAL_API_BASE_URL.to_string(),
+            default_operator_kind: OperatorKind::Local,
+            operators: vec![OperatorRecord::local(operator_key_path)],
+            extra: toml::Table::new(),
+        },
+    );
+    config.aliases.bind("test".to_string(), org_id);
+    config.set_active_org(org_id).unwrap();
+    config.last_operator_ids.insert(org_id, last_operator_ids);
 
     fs::write(
         turnkey_dir.join("tvc.config.toml"),
-        format!("version = 1\n{}", toml::to_string_pretty(&config).unwrap()),
+        format!("version = 2\n{}", toml::to_string_pretty(&config).unwrap()),
     )
     .unwrap();
 }

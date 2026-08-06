@@ -46,23 +46,24 @@ impl Run for Args {
 
         let config = Config::load().await?;
 
-        let (alias, org_config) = self
+        let (resolved, org_config) = self
             .org
             .as_ref()
-            .map(|query| resolve_org_query(ctx, &config, query))
+            .map(|query| resolve_org_query(&config, query))
             .unwrap_or_else(|| {
                 config
-                    .active_org_config()
-                    .map(|(alias, org)| (alias.as_str(), org))
+                    .resolve_active()
                     .ok_or_else(|| anyhow!("No active organization. Run `tvc login` first."))
             })?;
 
-        let source = &org_config.select_local_record(alias)?.key_path;
+        let source = &org_config
+            .select_local_record(&resolved.to_string())?
+            .key_path;
 
         let destination: PathBuf = self.output.map(Ok).unwrap_or_else(|| {
             prompts::text(
                 "Backup file path",
-                Some(&format!("operator-{alias}-backup.json")),
+                Some(&format!("operator-{resolved}-backup.json")),
             )
             .map(Into::into)
         })?;
@@ -85,7 +86,7 @@ impl Run for Args {
             prompts::confirm_or_bail(&format!("Overwrite {}?", destination.display()), "backup")?;
         }
 
-        back_up(alias.to_string(), source.clone(), destination).await
+        back_up(resolved.to_string(), source.clone(), destination).await
     }
 }
 

@@ -257,9 +257,6 @@ impl Commands {
                 ProfileCommands::Delete(delete_args) => {
                     commands::login::run_delete(ctx, delete_args).await
                 }
-                ProfileCommands::SetDefaultAlias(args) => {
-                    commands::login::run_set_default_alias(args).await
-                }
             },
             Commands::Version => commands::version::run(),
         }
@@ -308,7 +305,6 @@ impl Commands {
             },
             Commands::Profile { command } => match command {
                 ProfileCommands::Delete(_) => "profile delete",
-                ProfileCommands::SetDefaultAlias(_) => "profile set-default-alias",
             },
             Commands::Deploy { command } => command.name(),
             Commands::App { command } => command.name(),
@@ -328,8 +324,6 @@ enum OperatorCommands {
 enum ProfileCommands {
     /// Permanently delete a saved login profile and its key files.
     Delete(commands::login::DeleteArgs),
-    /// Mark a profile as the default alias for its duplicated organization ID.
-    SetDefaultAlias(commands::login::SetDefaultAliasArgs),
 }
 
 #[derive(Debug, Subcommand)]

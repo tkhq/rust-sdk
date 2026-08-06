@@ -5,9 +5,7 @@
 // unused items here; without this, each `cargo test` target warns.
 #![allow(dead_code)]
 
-use indexmap::IndexMap;
 use std::{
-    collections::HashMap,
     fs,
     path::{Path, PathBuf},
 };
@@ -16,6 +14,7 @@ use tvc::config::turnkey::{
     Config, KeyCurve, OperatorKind, OperatorRecord, OrgConfig, QosOperatorPublicKey, StoredApiKey,
     StoredQosOperatorKey,
 };
+use uuid::Uuid;
 
 /// Dead port: connection attempts fail immediately, so commands stop at their
 /// first network step without hanging.
@@ -25,59 +24,52 @@ fn org_dir(home: &Path, alias: &str) -> PathBuf {
     home.join(".config/turnkey/orgs").join(alias)
 }
 
-/// Write a v1 `tvc.config.toml` under `home` with one profile per
+/// Write a v2 `tvc.config.toml` under `home` with one organization per
 /// `(alias, org_id)` pair, using the legacy alias-keyed key-file layout and a
 /// dead-port API base URL. The legacy layout is deliberate: these fixtures
 /// seed pre-existing user state (which interactive login migrates to the
 /// id-keyed layout); the current layout is exercised through the real CLI's
-/// new-profile flow. Profiles are written in slice order, which is
-/// meaningful: config loading marks the first profile of a duplicated
-/// organization as its default when none of them carries the marker. Aliases
-/// listed in `default_aliases` are written with `default_alias = true`.
-pub fn write_profiles_config(
-    home: &Path,
-    profiles: &[(&str, &str)],
-    active_org: Option<&str>,
-    default_aliases: &[&str],
-) {
+/// new-org flow.
+pub fn write_profiles_config(home: &Path, profiles: &[(&str, &str)], active_org: Option<&str>) {
     let turnkey_dir = home.join(".config/turnkey");
     fs::create_dir_all(&turnkey_dir).unwrap();
 
-    let orgs: IndexMap<_, _> = profiles
-        .iter()
-        .map(|(alias, org_id)| {
-            let dir = org_dir(home, alias);
-            (
-                alias.to_string(),
-                OrgConfig {
-                    id: org_id.parse().expect("test org ids must be UUIDs"),
-                    api_key_path: dir.join("api_key.json"),
-                    api_base_url: LOCAL_API_BASE_URL.to_string(),
-                    default_operator_kind: OperatorKind::Local,
-                    operators: vec![OperatorRecord::local(dir.join("operator.json"))],
-                    default_alias: default_aliases.contains(alias),
-                    extra: toml::Table::new(),
-                },
-            )
-        })
-        .collect();
+    let mut config = Config::default();
 
-    let config = Config {
-        active_org: active_org.map(String::from),
-        orgs,
-        last_created_app_id: HashMap::new(),
-        last_operator_ids: HashMap::new(),
-        extra: toml::Table::new(),
-    };
+    for (alias, org_id) in profiles {
+        let id: Uuid = org_id.parse().expect("test org ids must be UUIDs");
+        let dir = org_dir(home, alias);
+
+        config.orgs.insert(
+            id,
+            OrgConfig {
+                api_key_path: dir.join("api_key.json"),
+                api_base_url: LOCAL_API_BASE_URL.to_string(),
+                default_operator_kind: OperatorKind::Local,
+                operators: vec![OperatorRecord::local(dir.join("operator.json"))],
+                extra: toml::Table::new(),
+            },
+        );
+        config.aliases.bind(alias.to_string(), id);
+    }
+
+    if let Some(active) = active_org {
+        let id = config
+            .aliases
+            .resolve(active)
+            .expect("active_org must name a fixture profile")
+            .id();
+        config.set_active_org(id).unwrap();
+    }
 
     fs::write(
         turnkey_dir.join("tvc.config.toml"),
-        format!("version = 1\n{}", toml::to_string_pretty(&config).unwrap()),
+        format!("version = 2\n{}", toml::to_string_pretty(&config).unwrap()),
     )
     .unwrap();
 }
 
-/// Create the default-layout key files for `alias`: a valid generated
+/// Create the legacy-layout key files for `alias`: a valid generated
 /// `StoredApiKey` (login loads it before its first network step) and a real
 /// generated operator key. Returns the operator public key so tests can
 /// assert on rendered output.
