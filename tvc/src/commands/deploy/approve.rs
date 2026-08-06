@@ -806,17 +806,17 @@ fn render_pivot(manifest: &VersionedManifest) -> String {
 
 fn render_bridge(bridge: &BridgeConfig) -> String {
     match bridge {
-        BridgeConfig::Server { port, host } => format!(
-            "Server bridge: configured host={host}, port={port}; effective host-side listener=127.0.0.1:{port} (configured host ignored)"
-        ),
+        BridgeConfig::Server { port, host } => {
+            format!("Server bridge: host bind={host}:{port}; enclave pivot target=127.0.0.1:{port}")
+        }
         BridgeConfig::Client {
             port,
             host: Some(host),
         } => format!(
-            "Client bridge: configured host={host}, port={port}; effective: transparent egress for all destinations and ports (configured host and port ignored)"
+            "Client bridge: requests transparent egress (requires egress-enabled qos_core image; boot fails otherwise); configured host={host}, port={port} ignored"
         ),
         BridgeConfig::Client { port, host: None } => format!(
-            "Client bridge: configured host=(none), port={port}; effective: transparent egress for all destinations and ports (configured host and port ignored)"
+            "Client bridge: requests transparent egress (requires egress-enabled qos_core image; boot fails otherwise); configured host=(none), port={port} ignored"
         ),
     }
 }
@@ -1027,7 +1027,7 @@ mod tests {
         assert!(rendered.contains("Restart Policy: Never"));
         assert!(rendered.contains("Bridge Config:"));
         assert!(rendered.contains(
-            "Server bridge: configured host=0.0.0.0, port=3000; effective host-side listener=127.0.0.1:3000 (configured host ignored)"
+            "Server bridge: host bind=0.0.0.0:3000; enclave pivot target=127.0.0.1:3000"
         ));
         assert!(rendered.contains("Debug Mode: disabled"));
     }
@@ -1042,10 +1042,10 @@ mod tests {
         value["pivot"]["debugMode"] = true.into();
         let rendered = render_pivot(&manifest_from_value(value));
         assert!(rendered.contains(
-            "Client bridge: configured host=api.example.com, port=4000; effective: transparent egress for all destinations and ports (configured host and port ignored)"
+            "Client bridge: requests transparent egress (requires egress-enabled qos_core image; boot fails otherwise); configured host=api.example.com, port=4000 ignored"
         ));
         assert!(rendered.contains(
-            "Client bridge: configured host=(none), port=4001; effective: transparent egress for all destinations and ports (configured host and port ignored)"
+            "Client bridge: requests transparent egress (requires egress-enabled qos_core image; boot fails otherwise); configured host=(none), port=4001 ignored"
         ));
         assert!(rendered.contains("Debug Mode: ENABLED"));
     }
