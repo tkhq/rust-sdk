@@ -10,6 +10,7 @@ use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tracing::instrument;
 use turnkey_client::generated::{PostTvcQuorumKeyShareIntent, QuorumKeyShareApprovalBundle};
 use uuid::Uuid;
 
@@ -27,6 +28,7 @@ pub struct Args {
 }
 
 /// Run the deploy post-share command.
+#[instrument(skip_all)]
 pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
     let re_encrypted_share: ReEncryptedShareOutput =
         read_json_file(&args.re_encrypted_share, "re-encrypted share output").await?;

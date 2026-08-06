@@ -9,7 +9,8 @@
 //! before they cross the CLI output boundary.
 
 use reqwest::StatusCode;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use std::path::Path;
 use turnkey_client::TurnkeyClientError;
 
 /// Cap on rendered error messages. Large enough for any real API error body
@@ -59,6 +60,9 @@ pub enum ErrorCode {
     NotFound,
     /// Any other non-success HTTP status, or a failed/unexpected activity.
     ApiError,
+    /// The backend rejected this tvc release as older than the minimum
+    /// version it supports. Remediation: upgrade tvc.
+    ClientVersionTooOld,
     /// An activity needs more approvals.
     ApprovalRequired,
     /// A connect/timeout/DNS failure — the request never reached the server.
@@ -98,6 +102,37 @@ pub fn classify(error: &anyhow::Error) -> Classification {
     Classification::new(ErrorCode::CommandError, None)
 }
 
+/// A remediation hint for recognized error causes, rendered by the human
+/// output layer beneath the error line. Today only the backend's
+/// client-version rejection produces one: the hint is the server's own
+/// message (it names the running and minimum versions), so the reader does
+/// not have to dig it out of the raw response body in the chain.
+pub fn hint(error: &anyhow::Error) -> Option<String> {
+    error.chain().find_map(|cause| {
+        let _envelope = client_version_rejection(cause.downcast_ref::<TurnkeyClientError>()?)?;
+        let name = binary_name();
+
+        format!(
+            "`{name}` is older than the minimum version the backend supports; \
+             upgrade `{name}` to the latest release"
+        )
+        .into()
+    })
+}
+
+/// The invoked binary's name for user-facing version messaging: argv[0]'s file
+/// stem (so `/usr/local/bin/tvc` and `./tvc` both read as `tvc`), falling back
+/// to `tvc` when argv is empty.
+pub(crate) fn binary_name() -> String {
+    let arg0 = std::env::args().next();
+
+    arg0.as_deref()
+        .map(Path::new)
+        .and_then(Path::file_stem)
+        .map(|stem| stem.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "tvc".to_string())
+}
+
 /// Render an error's complete cause chain like anyhow's alternate
 /// `{error:#}` display (links joined with `": "`), then truncate the result to
 /// [`MAX_ERROR_MESSAGE_CHARS`].
@@ -133,6 +168,43 @@ fn truncate_message(message: String) -> String {
     )
 }
 
+/// The `turnkeyErrorCode` the backend attaches when it rejects a tvc release
+/// older than the minimum version it supports (the client-version gate).
+/// Must match the `TurnkeyErrorCode` enum value name in Turnkey's public
+/// error proto.
+// TODO(TVC-269): generate `TurnkeyErrorCode` from the synced errors.proto and
+// match on the enum variant instead of this string.
+const TVC_CLIENT_VERSION_TOO_OLD: &str = "TVC_CLIENT_VERSION_TOO_OLD";
+
+/// The subset of the Turnkey public API error envelope (grpc-gateway's JSON
+/// rendering of a gRPC status, plus Turnkey's machine-readable code) that
+/// classification reads.
+#[derive(Deserialize)]
+struct ApiErrorEnvelope {
+    // The server's human-readable message. Not consumed today — `hint` templates
+    // its own text off the binary name — but kept parsed so we can surface the
+    // backend's wording (e.g. the concrete running/minimum versions) once we
+    // decide to.
+    #[serde(default)]
+    _message: String,
+    #[serde(default, rename = "turnkeyErrorCode")]
+    turnkey_error_code: String,
+}
+
+/// Parse the backend's client-version rejection out of a client error, if
+/// that is what it is: an HTTP failure whose body is a Turnkey error envelope
+/// carrying [`TVC_CLIENT_VERSION_TOO_OLD`]. Shared by [`classify`] and
+/// [`hint`] so they cannot disagree on what counts as one.
+fn client_version_rejection(error: &TurnkeyClientError) -> Option<ApiErrorEnvelope> {
+    let TurnkeyClientError::UnexpectedHttpStatus(_, body) = error else {
+        return None;
+    };
+
+    serde_json::from_str::<ApiErrorEnvelope>(body)
+        .ok()
+        .filter(|envelope| envelope.turnkey_error_code == TVC_CLIENT_VERSION_TOO_OLD)
+}
+
 /// Map a [`TurnkeyClientError`] to its taxonomy code and optional HTTP status.
 ///
 /// NOTE: this may fail to compile when new errors are introduced in upstream Turnkey code, which is good.
@@ -140,11 +212,16 @@ fn truncate_message(message: String) -> String {
 fn classify_turnkey_client_error(error: &TurnkeyClientError) -> Classification {
     match error {
         TurnkeyClientError::UnexpectedHttpStatus(status, _) => {
-            let code = match StatusCode::from_u16(*status) {
-                Ok(StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN) => ErrorCode::Unauthorized,
-                Ok(StatusCode::NOT_FOUND) => ErrorCode::NotFound,
-                _ => ErrorCode::ApiError,
+            let code = if client_version_rejection(error).is_some() {
+                ErrorCode::ClientVersionTooOld
+            } else {
+                match StatusCode::from_u16(*status) {
+                    Ok(StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN) => ErrorCode::Unauthorized,
+                    Ok(StatusCode::NOT_FOUND) => ErrorCode::NotFound,
+                    _ => ErrorCode::ApiError,
+                }
             };
+
             Classification::new(code, Some(*status))
         }
         // A connect/timeout/DNS failure means the request never reached the
@@ -268,6 +345,74 @@ mod tests {
                 Classification::new(ErrorCode::Unauthorized, Some(status)),
                 "status {status}"
             );
+        }
+    }
+
+    const TOO_OLD_BODY: &str = r#"{"code":3,"message":"tvc 0.12.0 is older than the minimum version this backend supports (0.12.2); upgrade tvc to the latest release","details":[],"turnkeyErrorCode":"TVC_CLIENT_VERSION_TOO_OLD"}"#;
+
+    #[test]
+    fn client_version_rejection_maps_to_client_version_too_old() {
+        let error = client_error(TurnkeyClientError::UnexpectedHttpStatus(
+            400,
+            TOO_OLD_BODY.to_string(),
+        ));
+
+        assert_eq!(
+            classify(&error),
+            Classification::new(ErrorCode::ClientVersionTooOld, Some(400))
+        );
+    }
+
+    #[test]
+    fn client_version_rejection_hint_is_the_server_message() {
+        let error = client_error(TurnkeyClientError::UnexpectedHttpStatus(
+            400,
+            TOO_OLD_BODY.to_string(),
+        ))
+        .context("failed to create TVC deployment");
+
+        assert_eq!(
+            hint(&error).as_deref().map(|message| message
+                .contains("is older than the minimum version the backend supports")),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn client_version_rejection_without_server_message_still_hints() {
+        let error = client_error(TurnkeyClientError::UnexpectedHttpStatus(
+            400,
+            r#"{"turnkeyErrorCode":"TVC_CLIENT_VERSION_TOO_OLD"}"#.to_string(),
+        ));
+
+        assert_eq!(
+            hint(&error)
+                .as_deref()
+                .map(|msg| msg.contains("is older than the minimum version the backend supports")),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn other_api_errors_do_not_hint_or_reclassify() {
+        let bodies = [
+            r#"{"code":3,"message":"bad request","details":[],"turnkeyErrorCode":""}"#,
+            r#"{"code":3,"message":"bad request","details":[],"turnkeyErrorCode":"REQUEST_INVALID"}"#,
+            "not json at all",
+        ];
+
+        for body in bodies {
+            let error = client_error(TurnkeyClientError::UnexpectedHttpStatus(
+                400,
+                body.to_string(),
+            ));
+
+            assert_eq!(
+                classify(&error),
+                Classification::new(ErrorCode::ApiError, Some(400)),
+                "body {body:?}"
+            );
+            assert_eq!(hint(&error), None, "body {body:?}");
         }
     }
 

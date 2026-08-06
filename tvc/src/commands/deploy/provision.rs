@@ -20,6 +20,7 @@ use clap::Args as ClapArgs;
 use qos_core::protocol::services::boot::VersionedManifest;
 use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
+use tracing::instrument;
 use turnkey_client::generated::{
     ReEncryptTvcQuorumKeyShareIntent, ReEncryptTvcQuorumKeyShareResult,
     external::data::v1::TvcManifest,
@@ -61,6 +62,7 @@ impl Display for ProvisioningShareCreated {
 }
 
 /// Run the hosted deploy provision command.
+#[instrument(skip_all)]
 pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     let Args {
         deploy_id,

@@ -12,6 +12,7 @@ use std::collections::{HashSet, VecDeque};
 use std::fmt::{self, Display, Formatter};
 use std::io::Write;
 use std::time::Duration;
+use tracing::instrument;
 use turnkey_client::TurnkeyP256ApiKey;
 use turnkey_client::generated::external::data::v1::{LogLine, Timestamp};
 use turnkey_client::generated::{
@@ -124,6 +125,7 @@ pub struct Args {
 }
 
 /// Run the `deploy debug-logs` command.
+#[instrument(skip_all)]
 pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
     let auth = crate::client::build_client().await?;
 

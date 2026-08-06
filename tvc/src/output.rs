@@ -1,6 +1,6 @@
 //! User-facing output primitives for TVC.
 
-use crate::errors::{Classification, ErrorCode, classify, render_error_chain};
+use crate::errors::{Classification, ErrorCode, binary_name, classify, hint, render_error_chain};
 use anstyle::{AnsiColor, Color, Style};
 use anyhow::Result;
 use clap::ValueEnum;
@@ -159,8 +159,22 @@ impl<W: Write, W2: Write> Human<'_, W, W2> {
     pub fn error(&mut self, error: &anyhow::Error) -> Result<()> {
         if matches!(self.0.message_format, MessageFormat::Human) {
             let style = self.0.style(AnsiColor::Red);
-            let message = render_error_chain(error);
+
+            // The backend's client-version rejection collapses to a terse line;
+            // its raw HTTP detail rides the `debug!` log at the CLI boundary and
+            // the JSON `message`. The remediation `hint:` below carries the
+            // actionable text. Everything else renders the full cause chain.
+            let message = match classify(error).code {
+                ErrorCode::ClientVersionTooOld => format!("`{}` version too old", binary_name()),
+                _ => render_error_chain(error),
+            };
+
             writeln!(self.0.stderr, "{style}error{style:#}: {message}")?;
+
+            if let Some(hint) = hint(error) {
+                let style = self.0.style(AnsiColor::Cyan);
+                writeln!(self.0.stderr, "{style}hint{style:#}: {hint}")?;
+            }
         }
         Ok(())
     }

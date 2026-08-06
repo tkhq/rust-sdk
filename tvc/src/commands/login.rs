@@ -17,7 +17,7 @@ use serde::Serialize;
 use std::collections::BTreeSet;
 use std::fmt::{self, Display, Formatter};
 use std::io::BufRead;
-use tracing::debug;
+use tracing::{debug, instrument};
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use turnkey_client::generated::GetWhoamiRequest;
 
@@ -64,6 +64,7 @@ struct LoginPlan {
     api_key_policy: ApiKeyPolicy,
 }
 
+#[instrument(skip_all)]
 pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     debug!(
         non_interactive = ctx.is_non_interactive(),

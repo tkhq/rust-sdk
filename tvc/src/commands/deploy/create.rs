@@ -16,6 +16,7 @@ use std::fmt::{self, Display, Formatter};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::try_join;
+use tracing::instrument;
 use turnkey_client::generated::{CreateTvcDeploymentIntent, ValidateTvcImageRequest};
 
 pub(crate) const LONG_ABOUT: &str = r#"
@@ -149,6 +150,7 @@ struct ResolvedDeployInputs {
     pivot_pull_secret: Option<String>,
 }
 
+#[instrument(skip_all)]
 pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     let inputs = if ctx.is_non_interactive() {
         build_inputs_non_interactive(args).await?

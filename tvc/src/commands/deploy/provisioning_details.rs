@@ -15,6 +15,7 @@ use serde::Serialize;
 use std::fmt::Write;
 use std::fmt::{self, Display, Formatter};
 use std::path::{Path, PathBuf};
+use tracing::instrument;
 use uuid::Uuid;
 
 /// Get provisioning details for a deployment.
@@ -59,6 +60,7 @@ struct AttestationSummary {
 const SUMMARY_PCR_MAX_INDEX: usize = 17;
 
 /// Run the deploy provisioning-details command.
+#[instrument(skip_all)]
 pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
     let auth = crate::client::build_client().await?;
     let details = fetch_provisioning_details(&auth, &args.deploy_id).await?;

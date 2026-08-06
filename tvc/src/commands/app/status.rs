@@ -14,6 +14,8 @@ use crate::commands::app_status::{
 };
 use crate::commands::display::format_egress_enabled;
 use crate::outcome::Outcome;
+use tracing::instrument;
+
 use crate::output::StdCtx;
 
 /// Get the live status of an app from the cluster.
@@ -26,6 +28,7 @@ pub struct Args {
 }
 
 /// Run the app status command.
+#[instrument(skip_all)]
 pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
     let auth = crate::client::build_client().await?;
 

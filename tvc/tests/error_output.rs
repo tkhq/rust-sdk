@@ -292,3 +292,41 @@ fn human_and_json_runtime_errors_render_identical_message_text() {
         )
     );
 }
+
+const CLIENT_VERSION_TOO_OLD_BODY: &str = r#"{"code":3,"message":"tvc 0.12.0 is older than the minimum version this backend supports (0.12.2); upgrade tvc to the latest release","details":[],"turnkeyErrorCode":"TVC_CLIENT_VERSION_TOO_OLD"}"#;
+
+#[test]
+fn client_version_rejection_emits_dedicated_code() {
+    let (api_base_url, server) = spawn_json_server(
+        400,
+        CLIENT_VERSION_TOO_OLD_BODY.to_string(),
+        GET_DEPLOYMENT_PATH,
+    );
+    let output = command_output(deploy_status_command(&api_base_url, Some("json")), 1);
+    server.join().unwrap();
+
+    let message = single_json_message(&output);
+    assert_eq!(message["reason"], "command_error");
+    assert_eq!(message["code"], "client_version_too_old");
+    assert_eq!(message["httpStatus"], 400);
+}
+
+#[test]
+fn client_version_rejection_renders_human_hint() {
+    let (api_base_url, server) = spawn_json_server(
+        400,
+        CLIENT_VERSION_TOO_OLD_BODY.to_string(),
+        GET_DEPLOYMENT_PATH,
+    );
+    let output = command_output(deploy_status_command(&api_base_url, None), 1);
+    server.join().unwrap();
+
+    assert!(output.stdout.is_empty());
+    // The client-version rejection collapses the error line to a terse message;
+    // the server's own text rides the unchanged `hint:` line.
+    assert!(
+        String::from_utf8(output.stderr)
+            .unwrap()
+            .contains("is older than the minimum version the backend supports"),
+    );
+}

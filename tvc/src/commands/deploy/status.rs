@@ -16,6 +16,8 @@ use crate::commands::app_status::TimestampPayload;
 use crate::commands::display::{OrUnknown, format_egress_enabled, yes_no};
 use crate::errors::MissingResource;
 use crate::outcome::Outcome;
+use tracing::instrument;
+
 use crate::output::StdCtx;
 
 /// Get the status of a deployment.
@@ -28,6 +30,7 @@ pub struct Args {
 }
 
 /// Run the deploy status command.
+#[instrument(skip_all)]
 pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
     let auth = crate::client::build_client().await?;
     let deploy_id = args.deploy_id.to_string();
