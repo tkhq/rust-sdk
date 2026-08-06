@@ -39,7 +39,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
 
     let result = auth
         .client
-        .update_tvc_app_live_deployment(auth.org_id, timestamp_ms, intent)
+        .update_tvc_app_live_deployment(auth.org_id.to_string(), timestamp_ms, intent)
         .await
         .context("failed to set TVC app live deployment")?;
 

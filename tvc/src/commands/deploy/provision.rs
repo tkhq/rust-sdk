@@ -80,11 +80,11 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     let config = Config::load().await?;
     let operator = resolve_hosted_operator(&config, &operator_id)?;
     let auth = build_client().await?;
-    ensure_authenticated_org(&auth.org_id, operator.organization_id())?;
+    ensure_authenticated_org(auth.org_id, operator.organization_id())?;
 
     let details = fetch_provisioning_details(&auth, &deploy_id).await?;
     let deployment =
-        fetch_tvc_deployment(&auth, auth.org_id.clone(), deploy_id.to_string()).await?;
+        fetch_tvc_deployment(&auth, auth.org_id.to_string(), deploy_id.to_string()).await?;
     let TvcManifest {
         id: _,
         manifest: deployment_manifest,
@@ -106,7 +106,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     )?;
     let result = auth
         .client
-        .re_encrypt_tvc_quorum_key_share(auth.org_id, timestamp_ms()?, intent)
+        .re_encrypt_tvc_quorum_key_share(auth.org_id.to_string(), timestamp_ms()?, intent)
         .await
         .map_err(|error| hosted_activity_error("re-encrypt hosted TVC quorum-key share", error))?;
     let output = validate_result(result.result)?;

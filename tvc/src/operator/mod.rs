@@ -147,8 +147,8 @@ fn manifest_member(
 }
 
 pub(crate) fn ensure_authenticated_org(
-    authenticated_org_id: &str,
-    configured_org_id: &str,
+    authenticated_org_id: Uuid,
+    configured_org_id: Uuid,
 ) -> Result<()> {
     ensure!(
         authenticated_org_id == configured_org_id,
@@ -221,7 +221,7 @@ pub(crate) async fn resolve_operator(
         }
 
         let auth = build_client().await?;
-        ensure_authenticated_org(&auth.org_id, hosted.organization_id())?;
+        ensure_authenticated_org(auth.org_id, hosted.organization_id())?;
 
         return Ok(ResolvedOperator {
             name: Some(hosted.name().to_string()),
@@ -251,7 +251,7 @@ pub(crate) async fn resolve_operator(
                     select_hosted_operator(org).with_context(|| format!("org '{alias}'"))?;
                 let hosted = validated_hosted_operator(org.id.clone(), &record.name, hosted)?;
                 let auth = build_client().await?;
-                ensure_authenticated_org(&auth.org_id, hosted.organization_id())?;
+                ensure_authenticated_org(auth.org_id, hosted.organization_id())?;
 
                 return Ok(ResolvedOperator {
                     name: Some(hosted.name().to_string()),
@@ -530,11 +530,17 @@ mod tests {
 
     #[test]
     fn authenticated_org_must_match_configured_org() {
+        let authenticated = Uuid::from_u128(0xA1);
+        let configured = Uuid::from_u128(0xA2);
+
         assert_eq!(
-            ensure_authenticated_org("authenticated", "configured")
+            ensure_authenticated_org(authenticated, configured)
                 .unwrap_err()
                 .to_string(),
-            "authenticated organization (authenticated) does not match configured organization (configured)"
+            format!(
+                "authenticated organization ({authenticated}) does not match \
+                 configured organization ({configured})"
+            )
         );
     }
 }

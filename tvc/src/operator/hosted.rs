@@ -76,7 +76,7 @@ pub(crate) async fn create_hosted_operator(
     };
     let result = auth
         .client
-        .create_tvc_operator(auth.org_id.clone(), timestamp_ms()?, intent)
+        .create_tvc_operator(auth.org_id.to_string(), timestamp_ms()?, intent)
         .await
         .map_err(|error| hosted_activity_error("create hosted TVC operator", error))?;
 
@@ -136,7 +136,7 @@ fn normalize_public_key(value: &str, field: &str) -> Result<String> {
 /// Its keys are parsed exactly once, at resolution.
 #[cfg_attr(test, derive(Debug, PartialEq, Eq))]
 pub(crate) struct ResolvedHostedOperator {
-    organization_id: String,
+    organization_id: Uuid,
     name: String,
     operator_id: Uuid,
     encrypt_public_key: OperatorPublicKey,
@@ -144,8 +144,8 @@ pub(crate) struct ResolvedHostedOperator {
 }
 
 impl ResolvedHostedOperator {
-    pub(crate) fn organization_id(&self) -> &str {
-        &self.organization_id
+    pub(crate) fn organization_id(&self) -> Uuid {
+        self.organization_id
     }
 
     pub(crate) fn name(&self) -> &str {
@@ -174,7 +174,7 @@ impl ResolvedHostedOperator {
 
 /// Parse and validate a hosted registry record into a resolved operator.
 pub(super) fn validated_hosted_operator(
-    organization_id: String,
+    organization_id: Uuid,
     name: &str,
     record: &HostedOperatorRecord,
 ) -> Result<ResolvedHostedOperator> {
@@ -255,7 +255,7 @@ pub(super) fn find_hosted_operator(
     match (matches.next(), matches.next()) {
         (None, _) => Ok(None),
         (Some((record, hosted)), None) => Ok(Some(validated_hosted_operator(
-            org.id.to_string(),
+            org.id,
             &record.name,
             hosted,
         )?)),
@@ -317,7 +317,7 @@ impl Signer for HostedSigner {
             let result = self
                 .auth
                 .client
-                .sign_raw_payload(self.auth.org_id.clone(), timestamp_ms()?, intent)
+                .sign_raw_payload(self.auth.org_id.to_string(), timestamp_ms()?, intent)
                 .await
                 .map_err(|error| {
                     hosted_activity_error("sign manifest with hosted operator", error)
@@ -432,7 +432,7 @@ mod tests {
         let record = hosted_record();
         let operator_id = Uuid::parse_str(OPERATOR_ID).unwrap();
         let expected = ResolvedHostedOperator {
-            organization_id: Uuid::from_u128(0xA1).to_string(),
+            organization_id: Uuid::from_u128(0xA1),
             name: "hosted".to_string(),
             operator_id,
             encrypt_public_key: record.encrypt_public_key.parse().unwrap(),

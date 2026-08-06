@@ -605,14 +605,14 @@ async fn post_approval_to_api(
 
     let result = auth
         .client
-        .create_tvc_manifest_approvals(auth.org_id.clone(), timestamp_ms, intent)
+        .create_tvc_manifest_approvals(auth.org_id.to_string(), timestamp_ms, intent)
         .await
         .context("failed to post manifest approval")?;
 
     let quorum_reached = match plan.deploy_id {
         Some(deploy_id) => {
             let request = GetTvcDeploymentRequest {
-                organization_id: auth.org_id.clone(),
+                organization_id: auth.org_id.to_string(),
                 deployment_id: deploy_id.to_string(),
             };
 
@@ -783,7 +783,7 @@ async fn fetch_manifest_from_deploy(
     let auth = build_client().await?;
 
     let request = GetTvcDeploymentRequest {
-        organization_id: auth.org_id.clone(),
+        organization_id: auth.org_id.to_string(),
         deployment_id: deploy_id.to_string(),
     };
 
