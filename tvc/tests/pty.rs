@@ -21,7 +21,7 @@ fn spawn(args: &str) -> PtySession {
         .unwrap_or_else(|e| panic!("spawn failed: {e}\n  cmd: {cmd}"))
 }
 
-/// `tvc deploy approve` walks all five section confirmations in order and
+/// `tvc deploy approve` walks all six section confirmations in order and
 /// emits the signed approval JSON when the user accepts every section.
 ///
 /// Replaces the deleted `tests/deploy_approve.rs::approve_interactive_prompts`
@@ -36,6 +36,13 @@ fn approve_walks_all_sections_with_yeses() {
     );
 
     session.exp_string("MANIFEST APPROVAL").unwrap();
+    session.exp_string("MANIFEST SCHEMA").unwrap();
+    session.exp_string("Version: v1").unwrap();
+    session
+        .exp_string("Approve manifest schema and DNS configuration?")
+        .unwrap();
+    session.send_line("y").unwrap();
+
     session.exp_string("NAMESPACE").unwrap();
     session.exp_string("turnkey-prod").unwrap();
     session.exp_string("Approve namespace?").unwrap();
@@ -48,6 +55,8 @@ fn approve_walks_all_sections_with_yeses() {
     session.send_line("y").unwrap();
 
     session.exp_string("PIVOT BINARY").unwrap();
+    session.exp_string("Restart Policy: Never").unwrap();
+    session.exp_string("Debug Mode: disabled").unwrap();
     session.exp_string("Approve pivot binary?").unwrap();
     session.send_line("y").unwrap();
 
@@ -65,7 +74,7 @@ fn approve_walks_all_sections_with_yeses() {
     session.exp_eof().unwrap();
 }
 
-/// Rejecting at the third section (pivot) bails immediately with the exact
+/// Rejecting at the fourth section (pivot) bails immediately with the exact
 /// "operation cancelled by user: approval" string and never reaches the
 /// manifest-set section.
 #[test]
@@ -77,6 +86,10 @@ fn approve_bails_when_user_rejects_pivot() {
          --skip-post",
     );
 
+    session
+        .exp_string("Approve manifest schema and DNS configuration?")
+        .unwrap();
+    session.send_line("y").unwrap();
     session.exp_string("Approve namespace?").unwrap();
     session.send_line("y").unwrap();
     session
