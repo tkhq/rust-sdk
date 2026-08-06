@@ -244,7 +244,7 @@ pub(super) fn find_hosted_operator(
     config: &Config,
     operator_id: &Uuid,
 ) -> Result<Option<ResolvedHostedOperator>> {
-    let Some((_, org)) = config.active_org_config() else {
+    let Some((org_id, org)) = config.active_org_config() else {
         return Ok(None);
     };
 
@@ -255,7 +255,7 @@ pub(super) fn find_hosted_operator(
     match (matches.next(), matches.next()) {
         (None, _) => Ok(None),
         (Some((record, hosted)), None) => Ok(Some(validated_hosted_operator(
-            org.id,
+            org_id,
             &record.name,
             hosted,
         )?)),
@@ -268,12 +268,16 @@ pub(crate) fn resolve_hosted_operator(
     config: &Config,
     operator_id: &Uuid,
 ) -> Result<ResolvedHostedOperator> {
-    let (alias, _) = config
+    let (active_org_id, _) = config
         .active_org_config()
         .context("No active organization. Run `tvc login` first.")?;
 
-    find_hosted_operator(config, operator_id)?
-        .ok_or_else(|| anyhow!("hosted operator ID '{operator_id}' was not found in org '{alias}'"))
+    find_hosted_operator(config, operator_id)?.ok_or_else(|| {
+        anyhow!(
+            "hosted operator ID '{operator_id}' was not found in org '{}'",
+            config.display_name(active_org_id)
+        )
+    })
 }
 
 /// Resolve a hosted operator's encryption public key from the active organization.
@@ -365,7 +369,6 @@ mod tests {
     use super::*;
     use crate::config::turnkey::{LocalOperatorRecord, OperatorKind, OrgConfig};
     use qos_p256::P256Pair;
-    use indexmap::IndexMap;
     use std::path::PathBuf;
 
     const OPERATOR_ID: &str = "11111111-1111-4111-8111-111111111111";
@@ -390,22 +393,22 @@ mod tests {
     }
 
     fn config_with_operators(operators: Vec<OperatorRecord>) -> Config {
-        Config {
-            active_org: Some("active".to_string()),
-            orgs: IndexMap::from([(
-                "active".to_string(),
-                OrgConfig {
-                    id: Uuid::from_u128(0xA1),
-                    api_key_path: PathBuf::from("api-key.json"),
-                    api_base_url: "https://api.turnkey.com".to_string(),
-                    default_operator_kind: OperatorKind::Local,
-                    operators,
-                    default_alias: false,
-                    extra: toml::Table::new(),
-                },
-            )]),
-            ..Config::default()
-        }
+        let mut config = Config::default();
+        config.orgs.insert(
+            Uuid::from_u128(0xA1),
+            OrgConfig {
+                api_key_path: PathBuf::from("api-key.json"),
+                api_base_url: "https://api.turnkey.com".to_string(),
+                default_operator_kind: OperatorKind::Local,
+                operators,
+                extra: toml::Table::new(),
+            },
+        );
+        config
+            .aliases
+            .bind("active".to_string(), Uuid::from_u128(0xA1));
+        config.set_active_org(Uuid::from_u128(0xA1)).unwrap();
+        config
     }
 
     fn hosted_operator(name: &str, record: HostedOperatorRecord) -> OperatorRecord {
@@ -475,10 +478,12 @@ mod tests {
         );
 
         let mut cross_org = config_with_operators(Vec::new());
-        let mut inactive_org = cross_org.orgs["active"].clone();
-        inactive_org.id = Uuid::from_u128(0xA2);
+        let mut inactive_org = cross_org.orgs[&Uuid::from_u128(0xA1)].clone();
         inactive_org.operators = vec![hosted_operator("hosted", hosted_record())];
-        cross_org.orgs.insert("inactive".to_string(), inactive_org);
+        cross_org.orgs.insert(Uuid::from_u128(0xA2), inactive_org);
+        cross_org
+            .aliases
+            .bind("inactive".to_string(), Uuid::from_u128(0xA2));
         assert_eq!(
             resolve_hosted_operator_encrypt_key(&cross_org, &operator_id)
                 .unwrap_err()
@@ -524,7 +529,7 @@ mod tests {
             }),
         };
         let config = config_with_operators(vec![local, hosted_operator("hosted", hosted_record())]);
-        let org = &config.orgs["active"];
+        let org = &config.orgs[&Uuid::from_u128(0xA1)];
 
         let (operator, hosted) = select_hosted_operator(org).unwrap();
 
@@ -535,7 +540,7 @@ mod tests {
     #[test]
     fn selecting_a_hosted_operator_requires_one_to_exist() {
         let config = config_with_operators(Vec::new());
-        let org = &config.orgs["active"];
+        let org = &config.orgs[&Uuid::from_u128(0xA1)];
 
         assert!(matches!(
             select_hosted_operator(org),
@@ -549,7 +554,7 @@ mod tests {
             hosted_operator("first", hosted_record()),
             hosted_operator("second", hosted_record()),
         ]);
-        let org = &config.orgs["active"];
+        let org = &config.orgs[&Uuid::from_u128(0xA1)];
 
         assert!(matches!(
             select_hosted_operator(org),
@@ -560,39 +565,31 @@ mod tests {
     #[test]
     fn hosted_operator_lookup_is_scoped_to_active_organization() {
         let operator_id = Uuid::parse_str(OPERATOR_ID).unwrap();
-        let config = Config {
-            active_org: Some("active".to_string()),
-            orgs: IndexMap::from([
-                (
-                    "active".to_string(),
-                    OrgConfig {
-                        id: Uuid::from_u128(0xA1),
-                        api_key_path: "active-api.json".into(),
-                        api_base_url: "https://api.turnkey.com".to_string(),
-                        default_operator_kind: OperatorKind::Local,
-                        operators: Vec::new(),
-                        default_alias: false,
-                        extra: toml::Table::new(),
-                    },
-                ),
-                (
-                    "inactive".to_string(),
-                    OrgConfig {
-                        id: Uuid::from_u128(0xA2),
-                        api_key_path: "inactive-api.json".into(),
-                        api_base_url: "https://api.turnkey.com".to_string(),
-                        default_operator_kind: OperatorKind::Hosted,
-                        operators: vec![OperatorRecord {
-                            name: "hosted".to_string(),
-                            kind: OperatorRecordKind::Hosted(hosted_record()),
-                        }],
-                        default_alias: false,
-                        extra: toml::Table::new(),
-                    },
-                ),
-            ]),
-            ..Config::default()
-        };
+        let mut config = Config::default();
+        config.orgs.insert(
+            Uuid::from_u128(0xA1),
+            OrgConfig {
+                api_key_path: "active-api.json".into(),
+                api_base_url: "https://api.turnkey.com".to_string(),
+                default_operator_kind: OperatorKind::Local,
+                operators: Vec::new(),
+                extra: toml::Table::new(),
+            },
+        );
+        config.orgs.insert(
+            Uuid::from_u128(0xA2),
+            OrgConfig {
+                api_key_path: "inactive-api.json".into(),
+                api_base_url: "https://api.turnkey.com".to_string(),
+                default_operator_kind: OperatorKind::Hosted,
+                operators: vec![OperatorRecord {
+                    name: "hosted".to_string(),
+                    kind: OperatorRecordKind::Hosted(hosted_record()),
+                }],
+                extra: toml::Table::new(),
+            },
+        );
+        config.set_active_org(Uuid::from_u128(0xA1)).unwrap();
 
         assert!(
             find_hosted_operator(&config, &operator_id)

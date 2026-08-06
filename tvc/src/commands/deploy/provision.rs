@@ -184,7 +184,6 @@ mod tests {
     use crate::config::turnkey::{
         HostedOperatorRecord, OperatorKind, OperatorRecord, OperatorRecordKind, OrgConfig,
     };
-    use indexmap::IndexMap;
     use qos_core::protocol::services::boot::VersionedManifestEnvelope;
     use serde::Deserialize;
     use std::path::PathBuf;
@@ -248,22 +247,22 @@ mod tests {
             }),
         };
 
-        Config {
-            active_org: Some("active".to_string()),
-            orgs: IndexMap::from([(
-                "active".to_string(),
-                OrgConfig {
-                    id: Uuid::from_u128(0xA1),
-                    api_key_path: PathBuf::from("api-key.json"),
-                    api_base_url: "https://api.turnkey.com".to_string(),
-                    default_operator_kind: OperatorKind::Hosted,
-                    operators: vec![record],
-                    default_alias: false,
-                    extra: toml::Table::new(),
-                },
-            )]),
-            ..Config::default()
-        }
+        let mut config = Config::default();
+        config.orgs.insert(
+            Uuid::from_u128(0xA1),
+            OrgConfig {
+                api_key_path: PathBuf::from("api-key.json"),
+                api_base_url: "https://api.turnkey.com".to_string(),
+                default_operator_kind: OperatorKind::Hosted,
+                operators: vec![record],
+                extra: toml::Table::new(),
+            },
+        );
+        config
+            .aliases
+            .bind("active".to_string(), Uuid::from_u128(0xA1));
+        config.set_active_org(Uuid::from_u128(0xA1)).unwrap();
+        config
     }
 
     fn resolved_member(fixture: &ValidProvisioningDetailsFixture) -> ResolvedHostedOperator {

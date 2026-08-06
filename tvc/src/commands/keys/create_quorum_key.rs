@@ -168,10 +168,9 @@ fn resolve_operator_ids(
     config: &Config,
     operator_ids: &[Uuid],
 ) -> Result<(Vec<OperatorPublicKey>, Option<Uuid>)> {
-    let (_, org) = config
+    let (configured_org_id, _) = config
         .active_org_config()
         .context("No active organization. Run `tvc login` first.")?;
-    let configured_org_id = org.id;
     let mut keys = Vec::with_capacity(operator_ids.len());
 
     for operator_id in operator_ids {
@@ -265,7 +264,6 @@ mod tests {
     use crate::config::turnkey::{
         HostedOperatorRecord, OperatorKind, OperatorRecord, OperatorRecordKind, OrgConfig,
     };
-    use indexmap::IndexMap;
     use qos_p256::P256Pair;
     use serde_json::Value;
     use std::path::PathBuf;
@@ -306,22 +304,22 @@ mod tests {
     }
 
     fn config_with_operators(operators: Vec<OperatorRecord>) -> Config {
-        Config {
-            active_org: Some("active".to_string()),
-            orgs: IndexMap::from([(
-                "active".to_string(),
-                OrgConfig {
-                    id: Uuid::from_u128(0xA1),
-                    api_key_path: PathBuf::from("api-key.json"),
-                    api_base_url: "https://api.turnkey.com".to_string(),
-                    default_operator_kind: OperatorKind::Local,
-                    operators,
-                    default_alias: false,
-                    extra: toml::Table::new(),
-                },
-            )]),
-            ..Config::default()
-        }
+        let mut config = Config::default();
+        config.orgs.insert(
+            Uuid::from_u128(0xA1),
+            OrgConfig {
+                api_key_path: PathBuf::from("api-key.json"),
+                api_base_url: "https://api.turnkey.com".to_string(),
+                default_operator_kind: OperatorKind::Local,
+                operators,
+                extra: toml::Table::new(),
+            },
+        );
+        config
+            .aliases
+            .bind("active".to_string(), Uuid::from_u128(0xA1));
+        config.set_active_org(Uuid::from_u128(0xA1)).unwrap();
+        config
     }
 
     #[test]
