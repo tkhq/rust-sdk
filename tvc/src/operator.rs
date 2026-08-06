@@ -129,7 +129,7 @@ pub(crate) async fn create_hosted_operator(
     };
     let result = auth
         .client
-        .create_tvc_operator(auth.org_id.clone(), timestamp_ms()?, intent)
+        .create_tvc_operator(auth.org_id.to_string(), timestamp_ms()?, intent)
         .await
         .map_err(|error| hosted_activity_error("create hosted TVC operator", error))?;
 
@@ -258,7 +258,7 @@ pub(crate) struct ResolvedOperator {
     /// Always present for hosted operators and optional for local operators.
     operator_id: Option<Uuid>,
     /// Organization from which a registered operator was resolved.
-    organization_id: Option<String>,
+    organization_id: Option<Uuid>,
     pub(crate) kind: ResolvedOperatorKind,
 }
 
@@ -282,7 +282,7 @@ struct ValidatedHostedOperatorRecord {
 /// One validated hosted operator resolved from the active organization.
 #[cfg_attr(test, derive(Debug, PartialEq, Eq))]
 pub(crate) struct ResolvedHostedOperator {
-    organization_id: String,
+    organization_id: Uuid,
     name: String,
     operator_id: Uuid,
     encrypt_public_key: OperatorPublicKey,
@@ -290,8 +290,8 @@ pub(crate) struct ResolvedHostedOperator {
 }
 
 impl ResolvedHostedOperator {
-    pub(crate) fn organization_id(&self) -> &str {
-        &self.organization_id
+    pub(crate) fn organization_id(&self) -> Uuid {
+        self.organization_id
     }
 
     pub(crate) fn name(&self) -> &str {
@@ -355,9 +355,8 @@ impl ResolvedOperator {
                     .context("authenticated client required for hosted operator approval")?;
                 let organization_id = self
                     .organization_id
-                    .as_deref()
                     .context("configured organization required for hosted operator approval")?;
-                ensure_authenticated_org(&auth.org_id, organization_id)?;
+                ensure_authenticated_org(auth.org_id, organization_id)?;
                 sign_hosted_manifest(auth, record, manifest).await?
             }
         };
@@ -396,8 +395,8 @@ fn manifest_member(
 }
 
 pub(crate) fn ensure_authenticated_org(
-    authenticated_org_id: &str,
-    configured_org_id: &str,
+    authenticated_org_id: Uuid,
+    configured_org_id: Uuid,
 ) -> Result<()> {
     ensure!(
         authenticated_org_id == configured_org_id,
@@ -479,7 +478,7 @@ pub(crate) async fn resolve_operator(
     Ok(ResolvedOperator {
         name: Some(operator.name.clone()),
         operator_id: resolved_operator_id,
-        organization_id: Some(org.id.to_string()),
+        organization_id: Some(org.id),
         kind: ResolvedOperatorKind::Local(
             resolve_registered_local_operator(local.key_path.clone()).await?,
         ),
@@ -489,7 +488,7 @@ pub(crate) async fn resolve_operator(
 fn find_hosted_operator(
     config: &Config,
     operator_id: &Uuid,
-) -> Result<Option<(String, String, ValidatedHostedOperatorRecord)>> {
+) -> Result<Option<(Uuid, String, ValidatedHostedOperatorRecord)>> {
     let Some((_, org)) = config.active_org_config() else {
         return Ok(None);
     };
@@ -507,7 +506,7 @@ fn find_hosted_operator(
     match matches.as_slice() {
         [] => Ok(None),
         [(name, record)] => Ok(Some((
-            org.id.to_string(),
+            org.id,
             (*name).to_string(),
             validate_hosted_record(name, (**record).clone())?,
         ))),
@@ -558,7 +557,7 @@ async fn sign_hosted_manifest(
     let intent = hosted_signing_intent(record.sign_public_key.clone(), &manifest.manifest_hash());
     let result = auth
         .client
-        .sign_raw_payload(auth.org_id.clone(), timestamp_ms()?, intent)
+        .sign_raw_payload(auth.org_id.to_string(), timestamp_ms()?, intent)
         .await
         .map_err(|error| hosted_activity_error("sign manifest with hosted operator", error))?;
 
@@ -719,7 +718,7 @@ mod tests {
         let record = hosted_record();
         let operator_id = Uuid::parse_str(OPERATOR_ID).unwrap();
         let expected = ResolvedHostedOperator {
-            organization_id: Uuid::from_u128(0xA1).to_string(),
+            organization_id: Uuid::from_u128(0xA1),
             name: "hosted".to_string(),
             operator_id,
             encrypt_public_key: record.encrypt_public_key.parse().unwrap(),
@@ -802,11 +801,17 @@ mod tests {
 
     #[test]
     fn authenticated_org_must_match_configured_org() {
+        let authenticated = Uuid::from_u128(0xA1);
+        let configured = Uuid::from_u128(0xA2);
+
         assert_eq!(
-            ensure_authenticated_org("authenticated", "configured")
+            ensure_authenticated_org(authenticated, configured)
                 .unwrap_err()
                 .to_string(),
-            "authenticated organization (authenticated) does not match configured organization (configured)"
+            format!(
+                "authenticated organization ({authenticated}) does not match \
+                 configured organization ({configured})"
+            )
         );
     }
 
@@ -816,7 +821,7 @@ mod tests {
         let operator = ResolvedOperator {
             name: Some("operator".to_string()),
             operator_id: Some(record.operator_id),
-            organization_id: Some(Uuid::from_u128(0xA1).to_string()),
+            organization_id: Some(Uuid::from_u128(0xA1)),
             kind: ResolvedOperatorKind::Hosted(record.clone()),
         };
 

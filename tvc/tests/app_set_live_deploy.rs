@@ -41,7 +41,7 @@ fn set_live_deploy_reaches_auth_setup() {
     set_live_deploy_cmd()
         .arg("--deploy-id")
         .arg("5376f492-d014-4e01-a6bb-20fc97448e25")
-        .env("TVC_ORG_ID", "org_env")
+        .env("TVC_ORG_ID", "99999999-9999-4999-8999-999999999999")
         .assert()
         .failure()
         .stderr(predicate::str::contains("partial env var auth"));

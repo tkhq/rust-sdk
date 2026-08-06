@@ -102,11 +102,11 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     let mut config = Config::load().await?;
     let (alias, configured_org_id) = config
         .active_org_config()
-        .map(|(alias, org)| (alias.clone(), org.id.to_string()))
+        .map(|(alias, org)| (alias.clone(), org.id))
         .context("No active organization. Run `tvc login` first.")?;
 
     let auth = build_client().await?;
-    ensure_authenticated_org(&auth.org_id, &configured_org_id)?;
+    ensure_authenticated_org(auth.org_id, configured_org_id)?;
 
     let record = create_hosted_operator(&auth, hosted_operator_spec(args)).await?;
     let output = output_from_record(record.clone())?;

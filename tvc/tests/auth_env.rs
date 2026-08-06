@@ -13,6 +13,7 @@ const ENV_ORG_ID: &str = "TVC_ORG_ID";
 const ENV_API_KEY_PUBLIC: &str = "TVC_API_KEY_PUBLIC";
 const ENV_API_KEY_PRIVATE: &str = "TVC_API_KEY_PRIVATE";
 const LOCAL_API_BASE_URL: &str = "http://127.0.0.1:1";
+const ORG_ENV: &str = "99999999-9999-4999-8999-999999999999";
 
 fn app_status_cmd() -> assert_cmd::Command {
     let mut cmd = cargo_bin_cmd!("tvc");
@@ -37,7 +38,7 @@ fn env_auth_accepts_all_three_required_vars() {
     let (public_key, private_key) = generated_api_key();
 
     app_status_cmd()
-        .env(ENV_ORG_ID, "org-env")
+        .env(ENV_ORG_ID, ORG_ENV)
         .env(ENV_API_KEY_PUBLIC, public_key)
         .env(ENV_API_KEY_PRIVATE, private_key)
         .assert()
@@ -47,12 +48,27 @@ fn env_auth_accepts_all_three_required_vars() {
         .stderr(predicate::str::contains("failed to load API key").not());
 }
 
+/// The env edge parses the organization ID; garbage fails at auth setup
+/// with the variable named instead of riding to the API.
+#[test]
+fn env_auth_rejects_non_uuid_org_id() {
+    let (public_key, private_key) = generated_api_key();
+
+    app_status_cmd()
+        .env(ENV_ORG_ID, "not-a-uuid")
+        .env(ENV_API_KEY_PUBLIC, public_key)
+        .env(ENV_API_KEY_PRIVATE, private_key)
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("TVC_ORG_ID must be a UUID"));
+}
+
 #[test]
 fn env_auth_rejects_two_required_vars() {
     let (public_key, _) = generated_api_key();
 
     app_status_cmd()
-        .env(ENV_ORG_ID, "org-env")
+        .env(ENV_ORG_ID, ORG_ENV)
         .env(ENV_API_KEY_PUBLIC, public_key)
         .assert()
         .failure()
@@ -63,7 +79,7 @@ fn env_auth_rejects_two_required_vars() {
 #[test]
 fn env_auth_rejects_one_required_var() {
     app_status_cmd()
-        .env(ENV_ORG_ID, "org-env")
+        .env(ENV_ORG_ID, ORG_ENV)
         .assert()
         .failure()
         .stderr(predicate::str::contains("partial env var auth"))
