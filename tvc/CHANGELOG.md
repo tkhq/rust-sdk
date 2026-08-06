@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.14.1](https://github.com/tkhq/rust-sdk/compare/tvc-v0.14.0...tvc-v0.14.1) - 2026-08-06
+
+### Added
+
+- *(tvc)* collapse client-version-too-old error and instrument the CLI callstack
+- *(tvc)* classify backend client-version rejection and render upgrade hint
+
+### Other
+
+- Merge pull request #228 from tkhq/richard/eng-4082-ensure-tvc-cli-is-on-a-recent-enough-version
+
 ## [0.14.0](https://github.com/tkhq/rust-sdk/compare/tvc-v0.13.1...tvc-v0.14.0) - 2026-08-05
 
 ### Added
