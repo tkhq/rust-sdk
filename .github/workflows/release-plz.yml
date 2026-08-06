@@ -16,8 +16,10 @@ jobs:
     name: Release-plz release
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      tvc_tag: ${{ steps.tvc-tag.outputs.tag }}
     # This environment releases crates on crates.io, requires approval
-    environment: release 
+    environment: release
     # only trigger this job if the push to main is from a merged PR with a "release" label
     if: >
       github.repository_owner == 'tkhq' &&
@@ -40,11 +42,39 @@ jobs:
           toolchain: stable
           components: clippy,rustfmt
       - name: Run release-plz
+        id: release-plz
         uses: release-plz/action@f708778669256143d984cce4b23592637532e040 # v0.5.127
         with:
           command: release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Determine tvc release tag
+        id: tvc-tag
+        if: steps.release-plz.outputs.releases_created == 'true'
+        env:
+          RELEASES: ${{ steps.release-plz.outputs.releases }}
+        run: |
+          set -euo pipefail
+          # Robustly extract the single tvc tag: normalize to an array, select the
+          # tvc package, take the first match, and emit empty (not "null") if absent.
+          tag=$(jq -r 'if type == "array" then . else [.] end
+                       | map(select(.package_name == "tvc"))
+                       | first
+                       | .tag // empty' <<< "${RELEASES}")
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+
+  release-tvc-binaries:
+    name: Release tvc binaries
+    needs: release-plz-release
+    if: >
+      github.repository_owner == 'tkhq' &&
+      needs.release-plz-release.outputs.tvc_tag != ''
+    permissions:
+      contents: write
+    uses: ./.github/workflows/tvc-binaries-release.yml
+    with:
+      publish_release_assets: true
+      release_tag: ${{ needs.release-plz-release.outputs.tvc_tag }}
 
   # Create a PR with the new versions and changelog, preparing the next release.
   release-plz-pr:
