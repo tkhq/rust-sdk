@@ -680,26 +680,32 @@ fn render_schema(manifest: &VersionedManifest) -> String {
     let _ = writeln!(s, "  Version: {version}");
     match manifest {
         VersionedManifest::V2(_) => match manifest.dns_config() {
-            Some(dns) if !dns.resolvers.is_empty() => {
+            Some(dns) if dns.resolvers.is_empty() => {
+                let _ = writeln!(
+                    s,
+                    "  DNS Resolvers: configured empty (/etc/resolv.conf overwritten with an empty file)"
+                );
+            }
+            Some(dns) => {
                 let _ = writeln!(s, "  DNS Resolvers:");
                 for resolver in &dns.resolvers {
                     let _ = writeln!(s, "   {resolver}");
                 }
             }
-            _ => {
-                let _ = writeln!(s, "  DNS Resolvers: (none configured)");
+            None => {
+                let _ = writeln!(s, "  DNS Resolvers: absent (/etc/resolv.conf unchanged)");
             }
         },
         VersionedManifest::V1(_) => {
             let _ = writeln!(
                 s,
-                "  DNS Resolvers: (not in v1 schema; effective: none configured)"
+                "  DNS Resolvers: not in v1 schema (/etc/resolv.conf unchanged)"
             );
         }
         VersionedManifest::V0(_) => {
             let _ = writeln!(
                 s,
-                "  DNS Resolvers: (not in v0 schema; effective: none configured)"
+                "  DNS Resolvers: not in v0 schema (/etc/resolv.conf unchanged)"
             );
         }
     }
@@ -800,14 +806,18 @@ fn render_pivot(manifest: &VersionedManifest) -> String {
 
 fn render_bridge(bridge: &BridgeConfig) -> String {
     match bridge {
-        BridgeConfig::Server { port, host } => format!("Server (ingress): {host}:{port}"),
+        BridgeConfig::Server { port, host } => format!(
+            "Server bridge: configured host={host}, port={port}; effective host-side listener=127.0.0.1:{port} (configured host ignored)"
+        ),
         BridgeConfig::Client {
             port,
             host: Some(host),
-        } => format!("Client (egress): port {port} -> {host}"),
-        BridgeConfig::Client { port, host: None } => {
-            format!("Client (egress): port {port} -> (transparent protocol)")
-        }
+        } => format!(
+            "Client bridge: configured host={host}, port={port}; effective: transparent egress for all destinations and ports (configured host and port ignored)"
+        ),
+        BridgeConfig::Client { port, host: None } => format!(
+            "Client bridge: configured host=(none), port={port}; effective: transparent egress for all destinations and ports (configured host and port ignored)"
+        ),
     }
 }
 
@@ -858,9 +868,23 @@ fn review_share_set(ctx: &mut StdCtx, set: &ShareSet) -> anyhow::Result<()> {
 
 async fn read_manifest_from_path(path: &Path) -> anyhow::Result<VersionedManifest> {
     let content = read_file_to_string(path).await?;
-    let manifest = VersionedManifest::try_from_slice_compat(content.as_bytes())
+    let manifest = parse_manifest(content.as_bytes())
         .with_context(|| format!("failed to parse manifest JSON from: {}", path.display()))?;
     Ok(manifest)
+}
+
+fn parse_manifest(buf: &[u8]) -> anyhow::Result<VersionedManifest> {
+    if let Ok(serde_json::Value::Object(manifest)) = serde_json::from_slice(buf)
+        && let Some(version) = manifest.get("version")
+        && version.as_str() != Some("v2")
+    {
+        let version = version
+            .as_str()
+            .map_or_else(|| version.to_string(), str::to_owned);
+        bail!("unsupported manifest version: {version}");
+    }
+
+    Ok(VersionedManifest::try_from_slice_compat(buf)?)
 }
 
 /// Fetch manifest from Turnkey using GetTvcDeployment API.
@@ -894,7 +918,7 @@ async fn fetch_manifest_from_deploy(
         .as_ref()
         .ok_or_else(|| MissingResource::new("manifest", format!("deployment {deploy_id}")))?;
 
-    let manifest = VersionedManifest::try_from_slice_compat(&tvc_manifest.manifest)
+    let manifest = parse_manifest(&tvc_manifest.manifest)
         .context("failed to parse manifest from deployment")?;
 
     let manifest_id = tvc_manifest
@@ -930,6 +954,16 @@ mod tests {
     fn manifest_from_value(value: serde_json::Value) -> VersionedManifest {
         VersionedManifest::try_from_slice_compat(&serde_json::to_vec(&value).unwrap())
             .expect("mutated fixture manifest should parse")
+    }
+
+    #[test]
+    fn parse_manifest_rejects_unsupported_explicit_version() {
+        let mut value = fixture_json();
+        value["version"] = "v3".into();
+
+        let error = parse_manifest(&serde_json::to_vec(&value).unwrap()).unwrap_err();
+
+        assert_eq!(error.to_string(), "unsupported manifest version: v3");
     }
 
     /// The fixture with the v1-only pivot fields removed, so it decodes as v0.
@@ -992,7 +1026,9 @@ mod tests {
         let rendered = render_pivot(&fixture_manifest());
         assert!(rendered.contains("Restart Policy: Never"));
         assert!(rendered.contains("Bridge Config:"));
-        assert!(rendered.contains("Server (ingress): 0.0.0.0:3000"));
+        assert!(rendered.contains(
+            "Server bridge: configured host=0.0.0.0, port=3000; effective host-side listener=127.0.0.1:3000 (configured host ignored)"
+        ));
         assert!(rendered.contains("Debug Mode: disabled"));
     }
 
@@ -1005,8 +1041,12 @@ mod tests {
         ]);
         value["pivot"]["debugMode"] = true.into();
         let rendered = render_pivot(&manifest_from_value(value));
-        assert!(rendered.contains("Client (egress): port 4000 -> api.example.com"));
-        assert!(rendered.contains("Client (egress): port 4001 -> (transparent protocol)"));
+        assert!(rendered.contains(
+            "Client bridge: configured host=api.example.com, port=4000; effective: transparent egress for all destinations and ports (configured host and port ignored)"
+        ));
+        assert!(rendered.contains(
+            "Client bridge: configured host=(none), port=4001; effective: transparent egress for all destinations and ports (configured host and port ignored)"
+        ));
         assert!(rendered.contains("Debug Mode: ENABLED"));
     }
 
@@ -1042,18 +1082,26 @@ mod tests {
     fn render_schema_v2_without_dns_is_explicit() {
         let rendered = render_schema(&fixture_manifest_v2(None));
         assert!(rendered.contains("Version: v2"));
-        assert!(rendered.contains("DNS Resolvers: (none configured)"));
+        assert!(rendered.contains("DNS Resolvers: absent (/etc/resolv.conf unchanged)"));
+    }
+
+    #[test]
+    fn render_schema_v2_empty_dns_list_reports_resolv_conf_is_emptied() {
+        let rendered = render_schema(&fixture_manifest_v2(Some(vec![])));
+        assert!(rendered.contains(
+            "DNS Resolvers: configured empty (/etc/resolv.conf overwritten with an empty file)"
+        ));
     }
 
     #[test]
     fn render_schema_v1_and_v0_mark_dns_unsupported() {
         let rendered = render_schema(&fixture_manifest());
         assert!(rendered.contains("Version: v1 (legacy, pre-versioning)"));
-        assert!(rendered.contains("DNS Resolvers: (not in v1 schema; effective: none configured)"));
+        assert!(rendered.contains("DNS Resolvers: not in v1 schema (/etc/resolv.conf unchanged)"));
 
         let rendered = render_schema(&fixture_manifest_v0());
         assert!(rendered.contains("Version: v0 (legacy, pre-versioning)"));
-        assert!(rendered.contains("DNS Resolvers: (not in v0 schema; effective: none configured)"));
+        assert!(rendered.contains("DNS Resolvers: not in v0 schema (/etc/resolv.conf unchanged)"));
     }
 
     #[test]
