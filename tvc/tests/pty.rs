@@ -21,7 +21,13 @@ fn spawn(args: &str) -> PtySession {
         .unwrap_or_else(|e| panic!("spawn failed: {e}\n  cmd: {cmd}"))
 }
 
-/// `tvc deploy approve` walks all five section confirmations in order and
+fn answer_confirmation(session: &mut PtySession, question: &str, answer: &str) {
+    session.exp_string(question).unwrap();
+    session.exp_string("(y/N)").unwrap();
+    session.send_line(answer).unwrap();
+}
+
+/// `tvc deploy approve` walks all six section confirmations in order and
 /// emits the signed approval JSON when the user accepts every section.
 ///
 /// Replaces the deleted `tests/deploy_approve.rs::approve_interactive_prompts`
@@ -36,36 +42,39 @@ fn approve_walks_all_sections_with_yeses() {
     );
 
     session.exp_string("MANIFEST APPROVAL").unwrap();
+    session.exp_string("MANIFEST SCHEMA").unwrap();
+    session.exp_string("Version: v1").unwrap();
+    answer_confirmation(
+        &mut session,
+        "Approve manifest schema and DNS configuration?",
+        "y",
+    );
+
     session.exp_string("NAMESPACE").unwrap();
     session.exp_string("turnkey-prod").unwrap();
-    session.exp_string("Approve namespace?").unwrap();
-    session.send_line("y").unwrap();
+    answer_confirmation(&mut session, "Approve namespace?", "y");
 
     session.exp_string("ENCLAVE (AWS Nitro)").unwrap();
-    session
-        .exp_string("Approve enclave configuration?")
-        .unwrap();
-    session.send_line("y").unwrap();
+    answer_confirmation(&mut session, "Approve enclave configuration?", "y");
 
     session.exp_string("PIVOT BINARY").unwrap();
-    session.exp_string("Approve pivot binary?").unwrap();
-    session.send_line("y").unwrap();
+    session.exp_string("Restart Policy: Never").unwrap();
+    session.exp_string("Debug Mode: disabled").unwrap();
+    answer_confirmation(&mut session, "Approve pivot binary?", "y");
 
     session.exp_string("MANIFEST SET").unwrap();
     session.exp_string("operator-alice").unwrap();
-    session.exp_string("Approve manifest set?").unwrap();
-    session.send_line("y").unwrap();
+    answer_confirmation(&mut session, "Approve manifest set?", "y");
 
     session.exp_string("SHARE SET").unwrap();
-    session.exp_string("Approve share set?").unwrap();
-    session.send_line("y").unwrap();
+    answer_confirmation(&mut session, "Approve share set?", "y");
 
     session.exp_string("ALL SECTIONS APPROVED").unwrap();
     session.exp_string(r#""signature""#).unwrap();
     session.exp_eof().unwrap();
 }
 
-/// Rejecting at the third section (pivot) bails immediately with the exact
+/// Rejecting at the fourth section (pivot) bails immediately with the exact
 /// "operation cancelled by user: approval" string and never reaches the
 /// manifest-set section.
 #[test]
@@ -77,14 +86,14 @@ fn approve_bails_when_user_rejects_pivot() {
          --skip-post",
     );
 
-    session.exp_string("Approve namespace?").unwrap();
-    session.send_line("y").unwrap();
-    session
-        .exp_string("Approve enclave configuration?")
-        .unwrap();
-    session.send_line("y").unwrap();
-    session.exp_string("Approve pivot binary?").unwrap();
-    session.send_line("n").unwrap();
+    answer_confirmation(
+        &mut session,
+        "Approve manifest schema and DNS configuration?",
+        "y",
+    );
+    answer_confirmation(&mut session, "Approve namespace?", "y");
+    answer_confirmation(&mut session, "Approve enclave configuration?", "y");
+    answer_confirmation(&mut session, "Approve pivot binary?", "n");
 
     session
         .exp_string("operation cancelled by user: approval")
