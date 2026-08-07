@@ -4,11 +4,13 @@ use crate::{
     client::build_turnkey_client,
     commands::keys::backup_operator_key::back_up,
     config::turnkey::{
-        API_BASE_URL_PROD, Config, KeyCurve, OperatorRecordKind, OrgConfig, OrgQuery,
-        QosOperatorPublicKey, Resolved, StoredApiKey, StoredQosOperatorKey, dashboard_base_url,
-        default_api_key_path, default_operator_key_path, default_org_dir, legacy_org_dir,
+        API_BASE_URL_PROD, Config, KeyCurve, LocalOperatorRecord, OperatorKind, OperatorRecordKind,
+        OrgConfig, OrgQuery, QosOperatorPublicKey, Resolved, StoredApiKey, StoredQosOperatorKey,
+        dashboard_base_url, default_api_key_path, default_operator_key_path, default_org_dir,
+        legacy_org_dir,
     },
     local_operator_key::select_local_operator,
+    operator::select_hosted_operator,
     outcome::Outcome,
     output::StdCtx,
     prompts::{self, error_required_in_non_interactive},
@@ -541,11 +543,42 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
     shell_println!(ctx, "Verifying credentials...")?;
 
     let whoami = verify_credentials(&api_key, org_id, &org_config.api_base_url).await?;
-    let operator_key = find_or_generate_operator_key(ctx, &org_display, org_config).await?;
 
-    let (_, local) =
-        select_local_operator(org_config).with_context(|| format!("org '{org_display}'"))?;
-    let operator_key_path = local.key_path.display().to_string();
+    // Login ensures the org's default backend is usable, and never crosses
+    // over: a local default finds or generates the registered key file; a
+    // hosted default requires the registered hosted operator and has no key
+    // material to generate.
+    let operator = match org_config.default_operator_kind {
+        OperatorKind::Local => {
+            let (_, local) = select_local_operator(org_config)
+                .with_context(|| format!("org '{org_display}'"))?;
+            let operator_key = find_or_generate_operator_key(ctx, &org_display, local).await?;
+
+            LoggedInOperator::Local {
+                operator_public_key: operator_key.public_key,
+                operator_key_path: local.key_path.display().to_string(),
+            }
+        }
+        OperatorKind::Hosted => {
+            let (record, hosted) = select_hosted_operator(org_config)
+                .with_context(|| format!("org '{org_display}'"))?;
+            shell_println!(
+                ctx,
+                "Using hosted operator '{}' ({}).",
+                record.name,
+                hosted.operator_id
+            )?;
+
+            LoggedInOperator::Hosted {
+                operator_name: record.name.clone(),
+                operator_id: hosted.operator_id,
+                operator_public_key: format!(
+                    "{}{}",
+                    hosted.encrypt_public_key, hosted.sign_public_key
+                ),
+            }
+        }
+    };
 
     Ok(Outcome::LoggedIn(LoggedIn {
         organization_name: whoami.organization_name,
@@ -554,12 +587,11 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
         user_id: whoami.user_id,
         alias: org_name,
         api_public_key: api_key.public_key.clone(),
-        operator_public_key: operator_key.public_key,
         config_file_path: crate::config::turnkey::config_file_path()?
             .display()
             .to_string(),
         api_key_path: org_config.api_key_path.display().to_string(),
-        operator_key_path,
+        operator,
     }))
 }
 
@@ -727,10 +759,8 @@ fn wait_for_dashboard_registration(ctx: &mut StdCtx) -> Result<()> {
 async fn find_or_generate_operator_key(
     ctx: &mut StdCtx,
     org_display: &str,
-    org_config: &OrgConfig,
+    local: &LocalOperatorRecord,
 ) -> Result<StoredQosOperatorKey> {
-    let (_, local) =
-        select_local_operator(org_config).with_context(|| format!("org '{org_display}'"))?;
     debug!(operator_key_path = %local.key_path.display(), "resolving operator key");
 
     if let Some(operator_key) = StoredQosOperatorKey::load(&local.key_path).await? {
@@ -872,10 +902,42 @@ pub struct LoggedIn {
     /// The alias the user logged in with, when they used one.
     alias: Option<String>,
     api_public_key: String,
-    operator_public_key: QosOperatorPublicKey,
     config_file_path: String,
     api_key_path: String,
-    operator_key_path: String,
+    #[serde(flatten)]
+    operator: LoggedInOperator,
+}
+
+/// The operator backend the login landed on: a local login reports its key
+/// file, a hosted login reports the registered identity. Both carry the qos
+/// composite public key.
+#[derive(Serialize)]
+#[serde(
+    tag = "operatorKind",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
+enum LoggedInOperator {
+    Local {
+        operator_public_key: QosOperatorPublicKey,
+        operator_key_path: String,
+    },
+    Hosted {
+        operator_name: String,
+        operator_id: Uuid,
+        operator_public_key: String,
+    },
+}
+
+/// Local, like every org `login` itself creates; exists for [`LoggedIn`]'s
+/// `Default`, which the outcome payload-enumeration tests construct.
+impl Default for LoggedInOperator {
+    fn default() -> Self {
+        Self::Local {
+            operator_public_key: QosOperatorPublicKey::default(),
+            operator_key_path: String::new(),
+        }
+    }
 }
 
 #[derive(Default, Serialize)]
@@ -939,24 +1001,46 @@ User: {} ({})
 Active Org: {}
 
 Credentials
-  API public key:        {}
-  Operator public key:   {}
-
-Saved to
-  Config file:    {}
-  API key:        {}
-  Operator key:   {}"#,
+  API public key:        {}"#,
             self.organization_name,
             self.organization_id,
             self.username,
             self.user_id,
             self.alias.as_deref().unwrap_or(&self.organization_id),
             self.api_public_key,
-            self.operator_public_key,
-            self.config_file_path,
-            self.api_key_path,
-            self.operator_key_path
-        )
+        )?;
+
+        match &self.operator {
+            LoggedInOperator::Local {
+                operator_public_key,
+                operator_key_path,
+            } => write!(
+                f,
+                r#"
+  Operator public key:   {operator_public_key}
+
+Saved to
+  Config file:    {}
+  API key:        {}
+  Operator key:   {operator_key_path}"#,
+                self.config_file_path, self.api_key_path,
+            ),
+            LoggedInOperator::Hosted {
+                operator_name,
+                operator_id,
+                operator_public_key,
+            } => write!(
+                f,
+                r#"
+  Operator public key:   {operator_public_key}
+  Hosted operator:       {operator_name} ({operator_id})
+
+Saved to
+  Config file:    {}
+  API key:        {}"#,
+                self.config_file_path, self.api_key_path,
+            ),
+        }
     }
 }
 
@@ -970,6 +1054,77 @@ mod tests {
 
     const OVERRIDE_URL: &str = "http://127.0.0.1:8081";
     const ORG: Uuid = Uuid::from_u128(1);
+
+    fn logged_in_with(operator: LoggedInOperator) -> LoggedIn {
+        LoggedIn {
+            organization_name: "Org".to_string(),
+            organization_id: "org-1".to_string(),
+            username: "user".to_string(),
+            user_id: "user-1".to_string(),
+            alias: Some("prod".to_string()),
+            api_public_key: "api-key".to_string(),
+            config_file_path: "/config/tvc.config.toml".to_string(),
+            api_key_path: "/keys/api_key.json".to_string(),
+            operator,
+        }
+    }
+
+    /// The local outcome keeps its pre-hosted JSON fields and gains only the
+    /// additive `operatorKind` tag — this is a compatibility contract.
+    #[test]
+    fn logged_in_local_json_reports_the_key_file() {
+        let composite = hex::encode(P256Pair::generate().unwrap().public_key().to_bytes());
+        let logged_in = logged_in_with(LoggedInOperator::Local {
+            operator_public_key: composite.parse().unwrap(),
+            operator_key_path: "/keys/operator.json".to_string(),
+        });
+
+        assert_eq!(
+            serde_json::to_value(&logged_in).unwrap(),
+            serde_json::json!({
+                "organizationName": "Org",
+                "organizationId": "org-1",
+                "username": "user",
+                "userId": "user-1",
+                "alias": "prod",
+                "apiPublicKey": "api-key",
+                "configFilePath": "/config/tvc.config.toml",
+                "apiKeyPath": "/keys/api_key.json",
+                "operatorKind": "local",
+                "operatorPublicKey": composite,
+                "operatorKeyPath": "/keys/operator.json",
+            })
+        );
+    }
+
+    /// The hosted outcome reports the registered identity and no key path.
+    #[test]
+    fn logged_in_hosted_json_reports_the_registered_identity() {
+        let composite = hex::encode(P256Pair::generate().unwrap().public_key().to_bytes());
+        let logged_in = logged_in_with(LoggedInOperator::Hosted {
+            operator_name: "hosted-op".to_string(),
+            operator_id: Uuid::from_u128(0x11),
+            operator_public_key: composite.clone(),
+        });
+
+        assert_eq!(
+            serde_json::to_value(&logged_in).unwrap(),
+            serde_json::json!({
+                "organizationName": "Org",
+                "organizationId": "org-1",
+                "username": "user",
+                "userId": "user-1",
+                "alias": "prod",
+                "apiPublicKey": "api-key",
+                "configFilePath": "/config/tvc.config.toml",
+                "apiKeyPath": "/keys/api_key.json",
+                "operatorKind": "hosted",
+                "operatorName": "hosted-op",
+                "operatorId": Uuid::from_u128(0x11).to_string(),
+                "operatorPublicKey": composite,
+            })
+        );
+    }
 
     #[test]
     fn new_org_api_base_url_defaults_to_prod() {
