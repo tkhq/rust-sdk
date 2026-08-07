@@ -3,7 +3,7 @@
 use crate::local_operator_key::{LocalOperatorSeedSource, resolve_local_operator};
 use crate::outcome::Outcome;
 use crate::output::StdCtx;
-use crate::pair::{HexSeed, Pair};
+use crate::pair::{HexSeed, LocalPair, Signer};
 use crate::provisioning::ProvisionBundle;
 use crate::quorum_key_metadata::QuorumKeyMetadata;
 use crate::shell_eprintln;
@@ -129,7 +129,9 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
 async fn build_re_encrypted_share_output(
     quorum_key_metadata: &QuorumKeyMetadata,
     provision_bundle: &ProvisionBundle,
-    operator_pair: &dyn Pair,
+    // Concretely local: re-encryption decrypts the share, and decryption
+    // needs local key material.
+    operator_pair: &LocalPair,
     dangerous_skip_verification: bool,
 ) -> anyhow::Result<ReEncryptedShareOutput> {
     ensure_quorum_key_matches_manifest(quorum_key_metadata, provision_bundle)?;

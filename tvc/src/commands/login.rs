@@ -8,6 +8,7 @@ use crate::{
         QosOperatorPublicKey, Resolved, StoredApiKey, StoredQosOperatorKey, dashboard_base_url,
         default_api_key_path, default_operator_key_path, default_org_dir, legacy_org_dir,
     },
+    local_operator_key::select_local_operator,
     outcome::Outcome,
     output::StdCtx,
     prompts::{self, error_required_in_non_interactive},
@@ -542,11 +543,9 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
     let whoami = verify_credentials(&api_key, org_id, &org_config.api_base_url).await?;
     let operator_key = find_or_generate_operator_key(ctx, &org_display, org_config).await?;
 
-    let operator_key_path = org_config
-        .select_local_record(&org_display)?
-        .key_path
-        .display()
-        .to_string();
+    let (_, local) =
+        select_local_operator(org_config).with_context(|| format!("org '{org_display}'"))?;
+    let operator_key_path = local.key_path.display().to_string();
 
     Ok(Outcome::LoggedIn(LoggedIn {
         organization_name: whoami.organization_name,
@@ -730,7 +729,8 @@ async fn find_or_generate_operator_key(
     org_display: &str,
     org_config: &OrgConfig,
 ) -> Result<StoredQosOperatorKey> {
-    let local = org_config.select_local_record(org_display)?;
+    let (_, local) =
+        select_local_operator(org_config).with_context(|| format!("org '{org_display}'"))?;
     debug!(operator_key_path = %local.key_path.display(), "resolving operator key");
 
     if let Some(operator_key) = StoredQosOperatorKey::load(&local.key_path).await? {

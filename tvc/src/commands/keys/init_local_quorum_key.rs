@@ -2,6 +2,7 @@
 
 use crate::config::quorum_key::{MAX_SHARES, MIN_THRESHOLD, QuorumKeyConfig};
 use crate::config::turnkey::{Config, StoredQosOperatorKey};
+use crate::local_operator_key::select_local_operator;
 use crate::outcome::Outcome;
 use crate::output::StdCtx;
 use anyhow::{Context, Result};
@@ -70,10 +71,8 @@ Edit the file to fill in your values, then run:
 /// Load the operator public key from the active org's config.
 async fn load_operator_public_key() -> Option<String> {
     let config = Config::load().await.ok()?;
-    let (org_id, org_config) = config.active_org_config()?;
-    let local = org_config
-        .select_local_record(&config.display_name(org_id))
-        .ok()?;
+    let (_, org_config) = config.active_org_config()?;
+    let (_, local) = select_local_operator(org_config).ok()?;
     let operator_key = StoredQosOperatorKey::load(&local.key_path).await.ok()??;
     Some(operator_key.public_key.to_string())
 }

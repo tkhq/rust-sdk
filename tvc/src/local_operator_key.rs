@@ -1,9 +1,44 @@
 //! Resolve local operator credentials from CLI args or the active org registry.
 
-use crate::config::turnkey::{Config, StoredQosOperatorKey};
+use crate::config::turnkey::{
+    Config, LocalOperatorRecord, OperatorRecord, OperatorRecordKind, OrgConfig,
+    StoredQosOperatorKey,
+};
 use crate::pair::{HexSeed, LocalPair};
 use anyhow::{Context, anyhow, bail};
 use std::path::PathBuf;
+use thiserror::Error;
+
+/// Failure modes of selecting the sole local operator of an organization.
+/// Which organization it was is the caller's context to add.
+#[derive(Debug, Error)]
+pub enum SelectLocalOperatorError {
+    #[error("no local operator is configured")]
+    NoLocalOperator,
+    #[error("multiple local operators are configured")]
+    MultipleLocalOperators,
+}
+
+/// Select the sole local operator registry entry of an organization, with
+/// its kind-specific record. Purely a registry query: whether local is the
+/// organization's default backend is resolution policy, decided elsewhere.
+pub(crate) fn select_local_operator(
+    org: &OrgConfig,
+) -> Result<(&OperatorRecord, &LocalOperatorRecord), SelectLocalOperatorError> {
+    let mut locals = org
+        .operators
+        .iter()
+        .filter_map(|operator| match &operator.kind {
+            OperatorRecordKind::Local(local) => Some((operator, local)),
+            OperatorRecordKind::Hosted(_) => None,
+        });
+
+    match (locals.next(), locals.next()) {
+        (Some(sole), None) => Ok(sole),
+        (None, _) => Err(SelectLocalOperatorError::NoLocalOperator),
+        (Some(_), Some(_)) => Err(SelectLocalOperatorError::MultipleLocalOperators),
+    }
+}
 
 /// An explicit operator master seed given on the command line.
 #[derive(Debug)]
@@ -57,7 +92,8 @@ pub async fn resolve_local_operator(
                      --operator-seed or --operator-seed-path."
                 )
             })?;
-            let local = org_config.select_local_record(&config.display_name(org_id))?;
+            let (_, local) = select_local_operator(org_config)
+                .with_context(|| format!("org '{}'", config.display_name(org_id)))?;
             return resolve_registered_local_operator(local.key_path.clone()).await;
         }
     };
@@ -102,7 +138,7 @@ async fn resolve_local_credential(source: LocalCredentialSource) -> anyhow::Resu
 mod tests {
     use super::*;
     use crate::config::turnkey::{QosOperatorPublicKey, StoredQosOperatorKey};
-    use crate::pair::Pair;
+    use crate::pair::Signer;
     use std::fs;
     use tempfile::TempDir;
 

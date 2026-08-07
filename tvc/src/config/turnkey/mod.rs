@@ -203,7 +203,7 @@ mod disk {
     use super::{Aliases, CONFIG_VERSION, Config, OperatorKind, OperatorRecord, OrgConfig};
     use anyhow::{Context, Result, bail};
     use indexmap::IndexMap;
-    use serde::Serialize;
+    use serde::{Deserialize, Serialize};
     use std::path::PathBuf;
     use uuid::Uuid;
 
@@ -242,7 +242,7 @@ mod disk {
             let version = table
                 .remove("version")
                 .map(|value| {
-                    u16::try_from(value)
+                    u16::deserialize(value)
                         .context("config version must be an unsigned 16-bit integer")
                 })
                 .transpose()?;
@@ -618,38 +618,6 @@ pub struct OrgConfig {
 }
 
 impl OrgConfig {
-    /// Return the sole active local operator registry entry. `org_name` is
-    /// only used to identify the organization in error messages.
-    pub(crate) fn select_local_operator(&self, org_name: &str) -> Result<&OperatorRecord> {
-        if self.default_operator_kind != OperatorKind::Local {
-            bail!(
-                "the active operator kind for org '{org_name}' is {}",
-                self.default_operator_kind
-            )
-        }
-
-        let candidates: Vec<_> = self
-            .operators
-            .iter()
-            .filter(|operator| matches!(operator.kind, OperatorRecordKind::Local(_)))
-            .collect();
-
-        match candidates.as_slice() {
-            [] => bail!("No local operator configured for org '{org_name}'"),
-            [operator] => Ok(*operator),
-            _ => bail!("Multiple local operators are configured for org '{org_name}'"),
-        }
-    }
-
-    /// Return the kind-specific record for the sole active local operator.
-    pub fn select_local_record(&self, org_name: &str) -> Result<&LocalOperatorRecord> {
-        let operator = self.select_local_operator(org_name)?;
-        let OperatorRecordKind::Local(local) = &operator.kind else {
-            bail!("selected operator is not local");
-        };
-        Ok(local)
-    }
-
     /// Whether this profile's key files sit exactly in `dir` under the
     /// default file names — i.e. `dir` is a default-layout directory the
     /// profile owns. A profile with no local operators only needs its API key

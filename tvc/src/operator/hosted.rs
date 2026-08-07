@@ -1,23 +1,12 @@
-//! TVC operator creation and manifest approval.
+//! Turnkey-hosted operators: creation, registry resolution, and the
+//! API-signing [`Signer`] adapter.
 
-use crate::approvals::ValidatedManifest;
+use super::{OperatorPublicKey, OperatorPublicKeyParseError, parse_uuid, timestamp_ms};
 use crate::client::AuthenticatedClient;
-use crate::config::turnkey::{
-    Config, HostedOperatorRecord, OperatorKind, OperatorRecord, OperatorRecordKind,
-};
-use crate::local_operator_key::{
-    LocalOperatorSeedSource, resolve_local_operator, resolve_registered_local_operator,
-};
-use crate::pair::{LocalPair, Pair};
+use crate::config::turnkey::{Config, HostedOperatorRecord, OperatorRecord, OperatorRecordKind};
+use crate::pair::{Signer, SignerFuture};
 use anyhow::{Context, Result, anyhow, bail, ensure};
-use p256::{PublicKey, elliptic_curve::sec1::ToEncodedPoint};
-use qos_core::protocol::services::boot::{Approval, VersionedManifest};
-use std::{
-    fmt::{self, Display, Formatter},
-    str::FromStr,
-    time::{SystemTime, UNIX_EPOCH},
-};
-use thiserror::Error;
+use p256::elliptic_curve::sec1::ToEncodedPoint;
 use turnkey_client::{
     TurnkeyClientError,
     generated::{
@@ -37,57 +26,6 @@ use uuid::Uuid;
 /// signing account. Callers creating more than one operator in the same wallet
 /// must currently provide a different base path themselves.
 pub const DEFAULT_HOSTED_OPERATOR_BASE_PATH: &str = "m/5527107'/0'/0'";
-
-/// A validated, uncompressed P-256 operator public key.
-///
-/// String parsing accepts bare hexadecimal input with surrounding whitespace.
-/// Display always emits canonical lowercase hexadecimal.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct OperatorPublicKey(PublicKey);
-
-/// Error returned when parsing an [`OperatorPublicKey`].
-#[derive(Debug, Error)]
-#[cfg_attr(test, derive(PartialEq, Eq))]
-pub(crate) enum OperatorPublicKeyParseError {
-    /// The input was empty after trimming surrounding whitespace.
-    #[error("must not be empty")]
-    Empty,
-    /// The input was not bare hexadecimal.
-    #[error("must be bare hex encoded")]
-    InvalidHex,
-    /// The bytes were not an uncompressed 65-byte SEC1 point.
-    #[error("must be a 65-byte uncompressed P-256 public key")]
-    InvalidEncoding,
-    /// The bytes did not identify a valid point on the P-256 curve.
-    #[error("is not a valid P-256 point")]
-    InvalidPoint,
-}
-
-impl FromStr for OperatorPublicKey {
-    type Err = OperatorPublicKeyParseError;
-
-    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
-        let value = value.trim();
-        if value.is_empty() {
-            return Err(OperatorPublicKeyParseError::Empty);
-        }
-
-        let bytes = hex::decode(value).map_err(|_| OperatorPublicKeyParseError::InvalidHex)?;
-        if bytes.len() != 65 || bytes.first() != Some(&0x04) {
-            return Err(OperatorPublicKeyParseError::InvalidEncoding);
-        }
-
-        PublicKey::from_sec1_bytes(&bytes)
-            .map(Self)
-            .map_err(|_| OperatorPublicKeyParseError::InvalidPoint)
-    }
-}
-
-impl Display for OperatorPublicKey {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        formatter.write_str(&hex::encode(self.0.to_encoded_point(false).as_bytes()))
-    }
-}
 
 /// Inputs for creating one hosted TVC operator.
 #[derive(Debug, PartialEq, Eq)]
@@ -173,10 +111,6 @@ fn operator_record_from_result(
     })
 }
 
-fn parse_uuid(value: &str, field: &str) -> Result<Uuid> {
-    Uuid::parse_str(value).map_err(|_| anyhow!("{field} must be a UUID"))
-}
-
 fn parse_public_key(value: &str, field: &str) -> Result<OperatorPublicKey> {
     value
         .parse()
@@ -187,99 +121,8 @@ fn normalize_public_key(value: &str, field: &str) -> Result<String> {
     Ok(parse_public_key(value, field)?.to_string())
 }
 
-fn composite_public_key(record: &HostedOperatorRecord) -> Result<Vec<u8>> {
-    let encrypt = parse_public_key(
-        &record.encrypt_public_key,
-        "hosted operator encryption public key",
-    )?;
-    let sign = parse_public_key(
-        &record.sign_public_key,
-        "hosted operator signing public key",
-    )?;
-    ensure!(
-        encrypt != sign,
-        "hosted operator encryption and signing public keys must be distinct"
-    );
-
-    let mut composite = Vec::with_capacity(130);
-    composite.extend_from_slice(encrypt.0.to_encoded_point(false).as_bytes());
-    composite.extend_from_slice(sign.0.to_encoded_point(false).as_bytes());
-    Ok(composite)
-}
-
-fn validate_hosted_record(
-    name: &str,
-    record: HostedOperatorRecord,
-) -> Result<ValidatedHostedOperatorRecord> {
-    let HostedOperatorRecord {
-        operator_id,
-        wallet_id,
-        path,
-        encrypt_public_key,
-        sign_public_key,
-        extra,
-    } = record;
-    ensure!(
-        !name.trim().is_empty(),
-        "hosted operator name must not be empty"
-    );
-    ensure!(
-        !path.trim().is_empty(),
-        "hosted operator account path must not be empty"
-    );
-
-    let encrypt_public_key =
-        parse_public_key(&encrypt_public_key, "hosted operator encryption public key")?;
-    let sign_public_key = parse_public_key(&sign_public_key, "hosted operator signing public key")?;
-    ensure!(
-        encrypt_public_key != sign_public_key,
-        "hosted operator encryption and signing public keys must be distinct"
-    );
-
-    let record = HostedOperatorRecord {
-        operator_id,
-        wallet_id,
-        path,
-        encrypt_public_key: encrypt_public_key.to_string(),
-        sign_public_key: sign_public_key.to_string(),
-        extra,
-    };
-    Ok(ValidatedHostedOperatorRecord {
-        record,
-        encrypt_public_key,
-        sign_public_key,
-    })
-}
-
-/// A non-serializable operator with its credentials resolved for use.
-pub(crate) struct ResolvedOperator {
-    /// Absent for an ad-hoc local seed override.
-    name: Option<String>,
-    /// Always present for hosted operators and optional for local operators.
-    operator_id: Option<Uuid>,
-    /// Organization from which a registered operator was resolved.
-    organization_id: Option<Uuid>,
-    pub(crate) kind: ResolvedOperatorKind,
-}
-
-/// Kind-specific runtime capability held by a [`ResolvedOperator`].
-pub(crate) enum ResolvedOperatorKind {
-    Local(LocalPair),
-    Hosted(HostedOperatorRecord),
-}
-
-/// Shared dependencies for operator-level workflows.
-pub(crate) struct OperatorCtx<'a> {
-    pub(crate) auth: Option<&'a AuthenticatedClient>,
-}
-
-struct ValidatedHostedOperatorRecord {
-    record: HostedOperatorRecord,
-    encrypt_public_key: OperatorPublicKey,
-    sign_public_key: OperatorPublicKey,
-}
-
 /// One validated hosted operator resolved from the active organization.
+/// Its keys are parsed exactly once, at resolution.
 #[cfg_attr(test, derive(Debug, PartialEq, Eq))]
 pub(crate) struct ResolvedHostedOperator {
     organization_id: Uuid,
@@ -318,185 +161,58 @@ impl ResolvedHostedOperator {
     }
 }
 
-impl ResolvedOperator {
-    pub(crate) fn name(&self) -> Option<&str> {
-        self.name.as_deref()
-    }
+/// Parse and validate a hosted registry record into a resolved operator.
+fn validated_hosted_operator(
+    organization_id: Uuid,
+    name: &str,
+    record: &HostedOperatorRecord,
+) -> Result<ResolvedHostedOperator> {
+    let HostedOperatorRecord {
+        operator_id,
+        wallet_id: _,
+        path,
+        encrypt_public_key,
+        sign_public_key,
+        extra: _,
+    } = record;
 
-    pub(crate) fn id(&self) -> Option<Uuid> {
-        self.operator_id
-    }
-
-    pub(crate) fn is_hosted(&self) -> bool {
-        matches!(self.kind, ResolvedOperatorKind::Hosted(_))
-    }
-
-    pub(crate) fn public_key(&self) -> Result<Vec<u8>> {
-        match &self.kind {
-            ResolvedOperatorKind::Local(pair) => Ok(pair.public_key()),
-            ResolvedOperatorKind::Hosted(record) => composite_public_key(record),
-        }
-    }
-
-    pub(crate) async fn approve_manifest(
-        &self,
-        ctx: &OperatorCtx<'_>,
-        manifest: &ValidatedManifest<'_>,
-    ) -> Result<Approval> {
-        let public_key = self.public_key()?;
-        let member = manifest_member(manifest, &public_key, self.name())?;
-        let signature = match &self.kind {
-            ResolvedOperatorKind::Local(pair) => {
-                pair.sign(manifest.manifest_hash().to_vec()).await?
-            }
-            ResolvedOperatorKind::Hosted(record) => {
-                let auth = ctx
-                    .auth
-                    .context("authenticated client required for hosted operator approval")?;
-                let organization_id = self
-                    .organization_id
-                    .context("configured organization required for hosted operator approval")?;
-                ensure_authenticated_org(auth.org_id, organization_id)?;
-                sign_hosted_manifest(auth, record, manifest).await?
-            }
-        };
-
-        let approval = Approval { signature, member };
-
-        // Membership is already proven — `member` came out of the manifest
-        // set — so verifying the fresh signature is the only remaining check.
-        manifest.verify_approval(&approval)?;
-
-        Ok(approval)
-    }
-}
-
-fn manifest_member(
-    manifest: &VersionedManifest,
-    public_key: &[u8],
-    operator_name: Option<&str>,
-) -> Result<qos_core::protocol::services::boot::QuorumMember> {
-    manifest
-        .manifest_set()
-        .members
-        .iter()
-        .find(|member| member.pub_key == public_key)
-        .cloned()
-        .ok_or_else(|| match operator_name {
-            Some(name) => anyhow!(
-                "operator '{name}' ({}) not part of manifest set",
-                hex::encode(public_key)
-            ),
-            None => anyhow!(
-                "operator ({}) not part of manifest set",
-                hex::encode(public_key)
-            ),
-        })
-}
-
-pub(crate) fn ensure_authenticated_org(
-    authenticated_org_id: Uuid,
-    configured_org_id: Uuid,
-) -> Result<()> {
     ensure!(
-        authenticated_org_id == configured_org_id,
-        "authenticated organization ({authenticated_org_id}) does not match configured organization ({configured_org_id})"
+        !name.trim().is_empty(),
+        "hosted operator name must not be empty"
     );
-    Ok(())
-}
+    ensure!(
+        !path.trim().is_empty(),
+        "hosted operator account path must not be empty"
+    );
 
-pub(crate) async fn resolve_operator(
-    explicit: Option<LocalOperatorSeedSource>,
-    operator_id: Option<Uuid>,
-) -> Result<ResolvedOperator> {
-    if let Some(explicit) = explicit {
-        if let Some(id) = operator_id {
-            let config = Config::load().await?;
-            ensure!(
-                find_hosted_operator(&config, &id)?.is_none(),
-                "explicit local operator seed cannot be used with a hosted operator ID"
-            );
-        }
+    let encrypt_public_key =
+        parse_public_key(encrypt_public_key, "hosted operator encryption public key")?;
+    let sign_public_key = parse_public_key(sign_public_key, "hosted operator signing public key")?;
+    ensure!(
+        encrypt_public_key != sign_public_key,
+        "hosted operator encryption and signing public keys must be distinct"
+    );
 
-        return Ok(ResolvedOperator {
-            name: None,
-            operator_id,
-            organization_id: None,
-            kind: ResolvedOperatorKind::Local(resolve_local_operator(Some(explicit)).await?),
-        });
-    }
-
-    let config = Config::load().await?;
-    let hosted = match operator_id {
-        Some(id) => find_hosted_operator(&config, &id)?,
-        None => None,
-    };
-
-    if let Some((organization_id, name, validated)) = hosted {
-        let record = validated.record;
-
-        return Ok(ResolvedOperator {
-            name: Some(name),
-            operator_id: Some(record.operator_id),
-            organization_id: Some(organization_id),
-            kind: ResolvedOperatorKind::Hosted(record),
-        });
-    }
-
-    let (org_id, org) = config.active_org_config().ok_or_else(|| {
-        anyhow!(
-            "No active organization. Run `tvc login` first or provide \
-             --operator-seed or --operator-seed-path."
-        )
-    })?;
-    let org_name = config.display_name(org_id);
-
-    if org.default_operator_kind == OperatorKind::Hosted {
-        match operator_id {
-            Some(id) => bail!("hosted operator ID '{id}' was not found in org '{org_name}'"),
-            None => bail!("--operator-id is required to approve with a hosted operator"),
-        }
-    }
-
-    let operator = org.select_local_operator(&org_name)?;
-    let OperatorRecordKind::Local(local) = &operator.kind else {
-        return Err(anyhow!("selected operator is not local"));
-    };
-
-    let configured_operator_id = local
-        .operator_id
-        .as_deref()
-        .map(|id| parse_uuid(id, "configured local operator ID"))
-        .transpose()?;
-    let resolved_operator_id = match (configured_operator_id, operator_id) {
-        (Some(configured), Some(requested)) => {
-            ensure!(
-                configured == requested,
-                "requested operator ID ({requested}) does not match configured local operator ID ({configured})"
-            );
-            Some(configured)
-        }
-        (configured, requested) => configured.or(requested),
-    };
-
-    Ok(ResolvedOperator {
-        name: Some(operator.name.clone()),
-        operator_id: resolved_operator_id,
-        organization_id: Some(org_id),
-        kind: ResolvedOperatorKind::Local(
-            resolve_registered_local_operator(local.key_path.clone()).await?,
-        ),
+    Ok(ResolvedHostedOperator {
+        organization_id,
+        name: name.to_string(),
+        operator_id: *operator_id,
+        encrypt_public_key,
+        sign_public_key,
     })
 }
 
-fn find_hosted_operator(
+/// Find the hosted registry record with `operator_id` in the active
+/// organization, if any, validated for use.
+pub(super) fn find_hosted_operator(
     config: &Config,
     operator_id: &Uuid,
-) -> Result<Option<(Uuid, String, ValidatedHostedOperatorRecord)>> {
+) -> Result<Option<ResolvedHostedOperator>> {
     let Some((org_id, org)) = config.active_org_config() else {
         return Ok(None);
     };
-    let matches: Vec<_> = org
+
+    let mut matches = org
         .operators
         .iter()
         .filter_map(|operator| match &operator.kind {
@@ -504,17 +220,12 @@ fn find_hosted_operator(
                 (hosted.operator_id == *operator_id).then_some((operator.name.as_str(), hosted))
             }
             OperatorRecordKind::Local(_) => None,
-        })
-        .collect();
+        });
 
-    match matches.as_slice() {
-        [] => Ok(None),
-        [(name, record)] => Ok(Some((
-            org_id,
-            (*name).to_string(),
-            validate_hosted_record(name, (**record).clone())?,
-        ))),
-        _ => bail!("multiple hosted operators have ID {operator_id}"),
+    match (matches.next(), matches.next()) {
+        (None, _) => Ok(None),
+        (Some((name, record)), None) => Ok(Some(validated_hosted_operator(org_id, name, record)?)),
+        (Some(_), Some(_)) => bail!("multiple hosted operators have ID {operator_id}"),
     }
 }
 
@@ -526,25 +237,12 @@ pub(crate) fn resolve_hosted_operator(
     let (active_org_id, _) = config
         .active_org_config()
         .context("No active organization. Run `tvc login` first.")?;
-    let (organization_id, name, validated) = find_hosted_operator(config, operator_id)?
-        .ok_or_else(|| {
-            anyhow!(
-                "hosted operator ID '{operator_id}' was not found in org '{}'",
-                config.display_name(active_org_id)
-            )
-        })?;
-    let ValidatedHostedOperatorRecord {
-        record,
-        encrypt_public_key,
-        sign_public_key,
-    } = validated;
 
-    Ok(ResolvedHostedOperator {
-        organization_id,
-        name,
-        operator_id: record.operator_id,
-        encrypt_public_key,
-        sign_public_key,
+    find_hosted_operator(config, operator_id)?.ok_or_else(|| {
+        anyhow!(
+            "hosted operator ID '{operator_id}' was not found in org '{}'",
+            config.display_name(active_org_id)
+        )
     })
 }
 
@@ -556,19 +254,43 @@ pub(crate) fn resolve_hosted_operator_encrypt_key(
     Ok(resolve_hosted_operator(config, operator_id)?.encrypt_public_key)
 }
 
-async fn sign_hosted_manifest(
-    auth: &AuthenticatedClient,
-    record: &HostedOperatorRecord,
-    manifest: &VersionedManifest,
-) -> Result<Vec<u8>> {
-    let intent = hosted_signing_intent(record.sign_public_key.clone(), &manifest.manifest_hash());
-    let result = auth
-        .client
-        .sign_raw_payload(auth.org_id.to_string(), timestamp_ms()?, intent)
-        .await
-        .map_err(|error| hosted_activity_error("sign manifest with hosted operator", error))?;
+/// A Turnkey-hosted operator signing through the API with an owned
+/// authenticated client.
+pub(super) struct HostedSigner {
+    operator: ResolvedHostedOperator,
+    auth: AuthenticatedClient,
+}
 
-    signature_bytes(result.result)
+impl HostedSigner {
+    /// Assemble a hosted signer from its finished dependencies. The caller
+    /// has already verified that `auth` is authenticated against the
+    /// operator's organization.
+    pub(super) fn new(operator: ResolvedHostedOperator, auth: AuthenticatedClient) -> Self {
+        Self { operator, auth }
+    }
+}
+
+impl Signer for HostedSigner {
+    fn sign(&self, message: Vec<u8>) -> SignerFuture<'_, Result<Vec<u8>>> {
+        Box::pin(async move {
+            let intent =
+                hosted_signing_intent(self.operator.sign_public_key().to_string(), &message);
+            let result = self
+                .auth
+                .client
+                .sign_raw_payload(self.auth.org_id.to_string(), timestamp_ms()?, intent)
+                .await
+                .map_err(|error| {
+                    hosted_activity_error("sign manifest with hosted operator", error)
+                })?;
+
+            signature_bytes(result.result)
+        })
+    }
+
+    fn public_key(&self) -> Vec<u8> {
+        self.operator.composite_public_key()
+    }
 }
 
 fn hosted_signing_intent(sign_with: String, manifest_hash: &[u8]) -> SignRawPayloadIntentV2 {
@@ -608,17 +330,10 @@ pub(crate) fn hosted_activity_error(operation: &str, error: TurnkeyClientError) 
     anyhow::Error::new(error).context(context)
 }
 
-pub(crate) fn timestamp_ms() -> Result<u128> {
-    Ok(SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .context("system time before unix epoch")?
-        .as_millis())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::turnkey::{LocalOperatorRecord, OrgConfig};
+    use crate::config::turnkey::{LocalOperatorRecord, OperatorKind, OrgConfig};
     use qos_p256::P256Pair;
     use std::path::PathBuf;
 
@@ -667,44 +382,6 @@ mod tests {
             name: name.to_string(),
             kind: OperatorRecordKind::Hosted(record),
         }
-    }
-
-    #[test]
-    fn operator_public_key_parses_and_canonicalizes() {
-        let (key, _) = public_keys();
-        let parsed: OperatorPublicKey = format!("  {}  ", key.to_uppercase()).parse().unwrap();
-
-        assert_eq!(parsed.to_string(), key);
-    }
-
-    #[test]
-    fn operator_public_key_rejects_invalid_inputs() {
-        assert_eq!(
-            " ".parse::<OperatorPublicKey>().unwrap_err(),
-            OperatorPublicKeyParseError::Empty
-        );
-        assert_eq!(
-            "not-hex".parse::<OperatorPublicKey>().unwrap_err(),
-            OperatorPublicKeyParseError::InvalidHex
-        );
-        assert_eq!(
-            "04abcd".parse::<OperatorPublicKey>().unwrap_err(),
-            OperatorPublicKeyParseError::InvalidEncoding
-        );
-
-        let (uncompressed, _) = public_keys();
-        let public_key = PublicKey::from_sec1_bytes(&hex::decode(uncompressed).unwrap()).unwrap();
-        let compressed = hex::encode(public_key.to_encoded_point(true).as_bytes());
-        assert_eq!(
-            compressed.parse::<OperatorPublicKey>().unwrap_err(),
-            OperatorPublicKeyParseError::InvalidEncoding
-        );
-
-        let invalid_point = format!("04{}", "00".repeat(64));
-        assert_eq!(
-            invalid_point.parse::<OperatorPublicKey>().unwrap_err(),
-            OperatorPublicKeyParseError::InvalidPoint
-        );
     }
 
     #[test]
@@ -808,50 +485,12 @@ mod tests {
     }
 
     #[test]
-    fn authenticated_org_must_match_configured_org() {
-        let authenticated = Uuid::from_u128(0xA1);
-        let configured = Uuid::from_u128(0xA2);
-
-        assert_eq!(
-            ensure_authenticated_org(authenticated, configured)
-                .unwrap_err()
-                .to_string(),
-            format!(
-                "authenticated organization ({authenticated}) does not match \
-                 configured organization ({configured})"
-            )
-        );
-    }
-
-    #[test]
-    fn resolved_hosted_operator_exposes_common_identity() {
-        let record = hosted_record();
-        let operator = ResolvedOperator {
-            name: Some("operator".to_string()),
-            operator_id: Some(record.operator_id),
-            organization_id: Some(Uuid::from_u128(0xA1)),
-            kind: ResolvedOperatorKind::Hosted(record.clone()),
-        };
-
-        assert_eq!(operator.name(), Some("operator"));
-        assert_eq!(operator.id(), Some(Uuid::parse_str(OPERATOR_ID).unwrap()));
-        assert!(matches!(
-            &operator.kind,
-            ResolvedOperatorKind::Hosted(actual) if actual == &record
-        ));
-        assert_eq!(
-            operator.public_key().unwrap(),
-            composite_public_key(&record).unwrap()
-        );
-    }
-
-    #[test]
     fn hosted_operator_lookup_is_scoped_to_active_organization() {
         let operator_id = Uuid::parse_str(OPERATOR_ID).unwrap();
         let mut config = Config::default();
         config.orgs.insert(
             Uuid::from_u128(0xA1),
-            crate::config::turnkey::OrgConfig {
+            OrgConfig {
                 api_key_path: "active-api.json".into(),
                 api_base_url: "https://api.turnkey.com".to_string(),
                 default_operator_kind: OperatorKind::Local,
@@ -861,7 +500,7 @@ mod tests {
         );
         config.orgs.insert(
             Uuid::from_u128(0xA2),
-            crate::config::turnkey::OrgConfig {
+            OrgConfig {
                 api_key_path: "inactive-api.json".into(),
                 api_base_url: "https://api.turnkey.com".to_string(),
                 default_operator_kind: OperatorKind::Hosted,
