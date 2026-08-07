@@ -3,7 +3,7 @@
 use crate::config::turnkey::{Config, StoredApiKey};
 use crate::errors::MissingResource;
 use anyhow::{Context, Result, anyhow, bail};
-use reqwest::header::{HeaderMap, HeaderValue};
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use tracing::{debug, instrument};
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use turnkey_client::{
@@ -21,6 +21,8 @@ const ENV_ORG_ID: &str = "TVC_ORG_ID";
 const ENV_API_BASE_URL: &str = "TVC_API_BASE_URL";
 const ENV_API_KEY_PUBLIC: &str = "TVC_API_KEY_PUBLIC";
 const ENV_API_KEY_PRIVATE: &str = "TVC_API_KEY_PRIVATE";
+const ENV_TRACEPARENT: &str = "TVC_OTEL_TRACEPARENT";
+const ENV_TRACESTATE: &str = "TVC_OTEL_TRACESTATE";
 const DEFAULT_API_BASE_URL: &str = "https://api.turnkey.com";
 
 /// An authenticated Turnkey client with organization context.
@@ -129,6 +131,32 @@ async fn load_credentials_from_config() -> Result<(String, String, String, Strin
 /// enforces a minimum-version floor on it (enforce-when-present) to retire
 /// known-defective releases with an upgrade prompt.
 const TVC_CLIENT_VERSION_HEADER: &str = "X-TVC-CLIENT-VERSION";
+const TRACEPARENT_HEADER: HeaderName = HeaderName::from_static("traceparent");
+const TRACESTATE_HEADER: HeaderName = HeaderName::from_static("tracestate");
+
+fn tvc_client_headers(traceparent: Option<&str>, tracestate: Option<&str>) -> Result<HeaderMap> {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        TVC_CLIENT_VERSION_HEADER,
+        HeaderValue::from_static(env!("CARGO_PKG_VERSION")),
+    );
+
+    if let Some(value) = traceparent {
+        headers.insert(
+            TRACEPARENT_HEADER,
+            HeaderValue::from_str(value).context("invalid TVC_OTEL_TRACEPARENT header value")?,
+        );
+    }
+
+    if let Some(value) = tracestate {
+        headers.insert(
+            TRACESTATE_HEADER,
+            HeaderValue::from_str(value).context("invalid TVC_OTEL_TRACESTATE header value")?,
+        );
+    }
+
+    Ok(headers)
+}
 
 /// Build the Turnkey API client used for all tvc requests.
 ///
@@ -140,11 +168,9 @@ pub(crate) fn build_turnkey_client(
     stamper: TurnkeyP256ApiKey,
     api_base_url: &str,
 ) -> Result<TurnkeyClient<TurnkeyP256ApiKey>> {
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        TVC_CLIENT_VERSION_HEADER,
-        HeaderValue::from_static(env!("CARGO_PKG_VERSION")),
-    );
+    let traceparent = read_env_var(ENV_TRACEPARENT);
+    let tracestate = read_env_var(ENV_TRACESTATE);
+    let headers = tvc_client_headers(traceparent.as_deref(), tracestate.as_deref())?;
 
     TurnkeyClient::builder()
         .api_key(stamper)
@@ -268,5 +294,20 @@ mod tests {
 
         assert_eq!(response, serde_json::json!({}));
         server.verify().await;
+    }
+
+    #[test]
+    fn client_headers_forward_vivosuite_trace_context() {
+        let headers = tvc_client_headers(
+            Some("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"),
+            Some("vendor=value"),
+        )
+        .expect("headers build");
+
+        assert_eq!(
+            headers.get(TRACEPARENT_HEADER).unwrap(),
+            "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+        );
+        assert_eq!(headers.get(TRACESTATE_HEADER).unwrap(), "vendor=value");
     }
 }
