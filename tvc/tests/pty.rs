@@ -10,12 +10,18 @@
 
 mod common;
 
+use qos_p256::P256Pair;
 use rexpect::session::PtySession;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
 use std::path::Path;
 use std::process::Command;
 use std::thread::{self, JoinHandle};
+use tvc::config::app::KNOWN_QUORUM_KEY;
+use tvc::config::turnkey::{
+    Config, HostedOperatorRecord, OperatorKind, OperatorRecord, OperatorRecordKind, OrgConfig,
+};
+use uuid::Uuid;
 
 /// Default per-step timeout. Generous enough for CI-runner cold cargo builds
 /// of the binary; tight enough to fail fast if an `exp_string` mismatches.
@@ -26,6 +32,7 @@ const ORG_E2E: &str = "44444444-4444-4444-8444-444444444444";
 const ORG_SOLO: &str = "55555555-5555-4555-8555-555555555555";
 const ORG_BACKUP: &str = "66666666-6666-4666-8666-666666666666";
 const ORG_OTHER: &str = "77777777-7777-4777-8777-777777777777";
+const ORG_HOSTED: &str = "88888888-8888-4888-8888-888888888888";
 
 fn spawn(args: &str) -> PtySession {
     let bin = env!("CARGO_BIN_EXE_tvc");
@@ -65,7 +72,10 @@ fn spawn_with_home(home: &Path, args: &[&str]) -> PtySession {
         .env("HOME", home)
         .env_remove("TVC_ORG")
         .env_remove("TVC_API_BASE_URL")
-        .env_remove("TVC_NON_INTERACTIVE");
+        .env_remove("TVC_NON_INTERACTIVE")
+        .env_remove("TVC_ORG_ID")
+        .env_remove("TVC_API_KEY_PUBLIC")
+        .env_remove("TVC_API_KEY_PRIVATE");
 
     rexpect::session::spawn_command(cmd, Some(TIMEOUT_MS))
         .unwrap_or_else(|e| panic!("spawn failed: {e}\n  cmd: {bin} {}", args.join(" ")))
@@ -566,4 +576,168 @@ fn login_new_org_refuses_alias_already_in_use() {
         std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
     assert!(saved.contains(&format!("[orgs.{ORG_OTHER}]")), "{saved}");
     assert!(!saved.contains(ORG_SOLO));
+}
+
+/// Write a v2 config whose active org's registry holds exactly one operator,
+/// hosted, storing a real composite public key the way `operator create`
+/// stores it: encryption point and signing point as separate hex fields.
+/// Returns the composite.
+fn write_hosted_org_config(home: &Path) -> String {
+    let turnkey_dir = home.join(".config/turnkey");
+    std::fs::create_dir_all(&turnkey_dir).unwrap();
+
+    let composite = hex::encode(P256Pair::generate().unwrap().public_key().to_bytes());
+    let (encrypt_public_key, sign_public_key) = composite.split_at(composite.len() / 2);
+
+    let org_id: Uuid = ORG_HOSTED.parse().unwrap();
+    let mut config = Config::default();
+    config.orgs.insert(
+        org_id,
+        OrgConfig {
+            api_key_path: turnkey_dir.join(format!("orgs/{org_id}/api_key.json")),
+            api_base_url: common::LOCAL_API_BASE_URL.to_string(),
+            default_operator_kind: OperatorKind::Hosted,
+            operators: vec![OperatorRecord {
+                name: "hosted-op".to_string(),
+                kind: OperatorRecordKind::Hosted(HostedOperatorRecord {
+                    operator_id: "11111111-1111-4111-8111-111111111111".parse().unwrap(),
+                    wallet_id: "22222222-2222-4222-8222-222222222222".parse().unwrap(),
+                    path: "m/5527107'/0'/0'".to_string(),
+                    encrypt_public_key: encrypt_public_key.to_string(),
+                    sign_public_key: sign_public_key.to_string(),
+                    extra: toml::Table::new(),
+                }),
+            }],
+            extra: toml::Table::new(),
+        },
+    );
+    config.aliases.bind("hosted-org".to_string(), org_id);
+    config.set_active_org(org_id).unwrap();
+    std::fs::write(
+        turnkey_dir.join("tvc.config.toml"),
+        format!("version = 2\n{}", toml::to_string_pretty(&config).unwrap()),
+    )
+    .unwrap();
+
+    composite
+}
+
+/// The explicit minting path for an org whose operator is hosted: with
+/// `--no-operator-reuse`, `app create` offers the registered hosted
+/// operator's public key as the fill default, exactly as it offers a local
+/// key file's key. Both are the same qos composite — the local file stores
+/// encrypt ‖ sign concatenated, and the hosted registry record stores the
+/// two points separately — so the org's one operator must be one Enter away
+/// in both worlds. (Without the flag, the default flow reuses the registered
+/// identity by ID instead of minting; see the sibling test below.)
+///
+/// The command exits nonzero after the fill — creating the app needs
+/// credentials this fixture doesn't have — but that is outside this test's
+/// scope.
+#[test]
+fn app_create_offers_the_hosted_operator_key_as_the_fill_default() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let composite = write_hosted_org_config(temp.path());
+
+    // An app config whose only placeholder is the operator public key.
+    let app_config_path = temp.path().join("app.json");
+    std::fs::write(
+        &app_config_path,
+        format!(
+            r#"{{
+    "name": "test-app",
+    "quorumPublicKey": "{KNOWN_QUORUM_KEY}",
+    "manifestSetParams": {{
+        "name": "manifest-set",
+        "threshold": 1,
+        "newOperators": [{{
+            "name": "operator-1",
+            "publicKey": "<FILL_IN_OPERATOR_PUBLIC_KEY>"
+        }}]
+    }}
+}}"#
+        ),
+    )
+    .unwrap();
+
+    let mut session = spawn_with_home(
+        temp.path(),
+        &[
+            "app",
+            "create",
+            "--config-file",
+            app_config_path.to_str().unwrap(),
+            "--no-operator-reuse",
+        ],
+    );
+
+    // The prompt offers the hosted operator's composite key as its default;
+    // Enter accepts it.
+    session
+        .exp_string("Operator 'operator-1' public key")
+        .unwrap();
+    exp_wrapped(&mut session, &composite);
+    session.send_line("").unwrap();
+
+    session.exp_string("Save filled config").unwrap();
+    session.send_line("y").unwrap();
+    exp_wrapped(&mut session, "Wrote ");
+    session.exp_eof().unwrap();
+
+    let saved: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&app_config_path).unwrap()).unwrap();
+    assert_eq!(
+        saved["manifestSetParams"]["newOperators"][0]["publicKey"], composite,
+        "accepting the default must land the hosted operator's key in the saved config"
+    );
+}
+
+/// The default flow for an org with a registered hosted operator reuses that
+/// identity via `existingOperatorIds` instead of minting a duplicate operator
+/// around the same key material.
+///
+/// The command exits nonzero afterwards — creating the app needs credentials
+/// this fixture doesn't have — but the reuse announcement precedes that.
+#[test]
+fn app_create_reuses_the_registered_hosted_operator_by_default() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let composite = write_hosted_org_config(temp.path());
+
+    // A complete app config: nothing to fill, so the run goes straight to
+    // the reuse decision.
+    let app_config_path = temp.path().join("app.json");
+    std::fs::write(
+        &app_config_path,
+        format!(
+            r#"{{
+    "name": "test-app",
+    "quorumPublicKey": "{KNOWN_QUORUM_KEY}",
+    "manifestSetParams": {{
+        "name": "manifest-set",
+        "threshold": 1,
+        "newOperators": [{{
+            "name": "operator-1",
+            "publicKey": "{composite}"
+        }}]
+    }}
+}}"#
+        ),
+    )
+    .unwrap();
+
+    let mut session = spawn_with_home(
+        temp.path(),
+        &[
+            "app",
+            "create",
+            "--config-file",
+            app_config_path.to_str().unwrap(),
+        ],
+    );
+
+    exp_wrapped(
+        &mut session,
+        "Reusing operator hosted-op (11111111-1111-4111-8111-111111111111)",
+    );
+    session.exp_eof().unwrap();
 }

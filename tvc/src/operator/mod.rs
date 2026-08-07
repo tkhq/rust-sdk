@@ -15,7 +15,7 @@ pub(crate) use hosted::{
 
 use crate::approvals::ValidatedManifest;
 use crate::client::build_client;
-use crate::config::turnkey::{Config, OperatorKind};
+use crate::config::turnkey::{Config, OperatorKind, OperatorRecordKind, StoredQosOperatorKey};
 use crate::local_operator_key::{
     LocalOperatorSeedSource, resolve_local_operator, resolve_registered_local_operator,
     select_local_operator,
@@ -289,6 +289,79 @@ fn parse_uuid(value: &str, field: &str) -> Result<Uuid> {
     Uuid::parse_str(value).map_err(|_| anyhow!("{field} must be a UUID"))
 }
 
+/// Best-effort read of the active org's operator public key under its
+/// default backend, as qos composite hex, for prompt and template defaults.
+/// The local backend reads the sole registered key file; the hosted backend
+/// joins the sole record's stored points. `None` on any miss.
+pub(crate) async fn default_operator_public_key() -> Option<String> {
+    let config = Config::load().await.ok()?;
+    let (_, org) = config.active_org_config()?;
+
+    match org.default_operator_kind {
+        OperatorKind::Local => {
+            let (_, local) = select_local_operator(org).ok()?;
+            let operator_key = StoredQosOperatorKey::load(&local.key_path).await.ok()??;
+            Some(operator_key.public_key.to_string())
+        }
+        OperatorKind::Hosted => {
+            let (_, hosted) = select_hosted_operator(org).ok()?;
+            Some(format!(
+                "{}{}",
+                hosted.encrypt_public_key, hosted.sign_public_key
+            ))
+        }
+    }
+}
+
+/// One operator identity known for the active org, labeled with its registry
+/// name when it has one. The ID stays a string: callers that need a UUID
+/// parse at their own boundary.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct OperatorCandidate {
+    pub id: String,
+    pub name: Option<String>,
+}
+
+impl Display for OperatorCandidate {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match &self.name {
+            Some(name) => write!(f, "{name} ({})", self.id),
+            None => f.write_str(&self.id),
+        }
+    }
+}
+
+/// Operator identities known for the active org: registered hosted operators
+/// (config order) then the last `app create`'s manifest-set operator IDs,
+/// deduplicated by ID. Each source keeps one authoritative home — durable
+/// hosted identities live in the registry, app-create-minted ones only in
+/// the saved IDs.
+pub(crate) fn known_operator_candidates(config: &Config) -> Vec<OperatorCandidate> {
+    let Some((_, org)) = config.active_org_config() else {
+        return Vec::new();
+    };
+
+    let mut candidates: Vec<OperatorCandidate> = org
+        .operators
+        .iter()
+        .filter_map(|operator| match &operator.kind {
+            OperatorRecordKind::Hosted(hosted) => Some(OperatorCandidate {
+                id: hosted.operator_id.to_string(),
+                name: Some(operator.name.clone()),
+            }),
+            OperatorRecordKind::Local(_) => None,
+        })
+        .collect();
+
+    for id in config.get_last_operator_ids().unwrap_or_default() {
+        if candidates.iter().all(|candidate| candidate.id != id) {
+            candidates.push(OperatorCandidate { id, name: None });
+        }
+    }
+
+    candidates
+}
+
 pub(crate) fn timestamp_ms() -> Result<u128> {
     Ok(SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -299,12 +372,120 @@ pub(crate) fn timestamp_ms() -> Result<u128> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::turnkey::{
+        HostedOperatorRecord, LocalOperatorRecord, OperatorRecord, OrgConfig,
+    };
     use qos_p256::P256Pair;
+    use std::path::PathBuf;
 
     fn public_keys() -> (String, String) {
         let first = P256Pair::generate().unwrap().public_key().to_bytes();
         let second = P256Pair::generate().unwrap().public_key().to_bytes();
         (hex::encode(&first[..65]), hex::encode(&second[65..]))
+    }
+
+    const HOSTED_ID: &str = "11111111-1111-4111-8111-111111111111";
+
+    fn config_with_operators(operators: Vec<OperatorRecord>) -> Config {
+        let org_id = Uuid::from_u128(0xA1);
+        let mut config = Config::default();
+        config.orgs.insert(
+            org_id,
+            OrgConfig {
+                api_key_path: PathBuf::from("api-key.json"),
+                api_base_url: "https://api.turnkey.com".to_string(),
+                default_operator_kind: OperatorKind::Local,
+                operators,
+                extra: toml::Table::new(),
+            },
+        );
+        config.aliases.bind("active".to_string(), org_id);
+        config.set_active_org(org_id).unwrap();
+        config
+    }
+
+    fn hosted_operator(name: &str) -> OperatorRecord {
+        let (encrypt_public_key, sign_public_key) = public_keys();
+        OperatorRecord {
+            name: name.to_string(),
+            kind: OperatorRecordKind::Hosted(HostedOperatorRecord {
+                operator_id: Uuid::parse_str(HOSTED_ID).unwrap(),
+                wallet_id: Uuid::from_u128(0xB1),
+                path: "m/5527107'/0'/0'".to_string(),
+                encrypt_public_key,
+                sign_public_key,
+                extra: toml::Table::new(),
+            }),
+        }
+    }
+
+    fn local_operator() -> OperatorRecord {
+        OperatorRecord {
+            name: "local".to_string(),
+            kind: OperatorRecordKind::Local(LocalOperatorRecord {
+                key_path: PathBuf::from("operator.json"),
+                operator_id: None,
+                extra: toml::Table::new(),
+            }),
+        }
+    }
+
+    #[test]
+    fn candidates_are_registered_hosted_operators_then_saved_ids() {
+        let mut config = config_with_operators(vec![local_operator(), hosted_operator("hosted")]);
+        config
+            .set_last_operator_ids(&["44444444-4444-4444-8444-444444444444".to_string()])
+            .unwrap();
+
+        assert_eq!(
+            known_operator_candidates(&config),
+            vec![
+                OperatorCandidate {
+                    id: HOSTED_ID.to_string(),
+                    name: Some("hosted".to_string()),
+                },
+                OperatorCandidate {
+                    id: "44444444-4444-4444-8444-444444444444".to_string(),
+                    name: None,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn candidates_dedupe_saved_ids_against_the_registry() {
+        let mut config = config_with_operators(vec![hosted_operator("hosted")]);
+        config
+            .set_last_operator_ids(&[HOSTED_ID.to_string()])
+            .unwrap();
+
+        assert_eq!(
+            known_operator_candidates(&config),
+            vec![OperatorCandidate {
+                id: HOSTED_ID.to_string(),
+                name: Some("hosted".to_string()),
+            }]
+        );
+    }
+
+    #[test]
+    fn candidates_are_empty_without_an_active_org() {
+        assert_eq!(known_operator_candidates(&Config::default()), Vec::new());
+    }
+
+    #[test]
+    fn candidate_display_labels_named_operators() {
+        let named = OperatorCandidate {
+            id: HOSTED_ID.to_string(),
+            name: Some("hosted".to_string()),
+        };
+        let unnamed = OperatorCandidate {
+            id: HOSTED_ID.to_string(),
+            name: None,
+        };
+
+        assert_eq!(named.to_string(), format!("hosted ({HOSTED_ID})"));
+        assert_eq!(unnamed.to_string(), HOSTED_ID);
     }
 
     #[test]
