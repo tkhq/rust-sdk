@@ -22,7 +22,9 @@ use crate::local_operator_key::{
 };
 use crate::pair::Signer;
 use anyhow::{Context, Result, anyhow, bail, ensure};
-use hosted::{HostedSigner, find_hosted_operator};
+use hosted::{
+    HostedSigner, find_hosted_operator, select_hosted_operator, validated_hosted_operator,
+};
 use p256::{PublicKey, elliptic_curve::sec1::ToEncodedPoint};
 use qos_core::protocol::services::boot::{Approval, VersionedManifest};
 use std::{
@@ -175,8 +177,9 @@ pub(crate) enum SignerRequirement {
 ///    operator — even when the org's default operator kind is local.
 /// 3. Otherwise the active org's `default_operator_kind` decides, and never
 ///    crosses over: `local` resolves the sole local record (reconciling a
-///    given ID against its configured one); `hosted` refuses — an ID is
-///    required, and resolution never falls back to the local key.
+///    given ID against its configured one); `hosted` resolves the sole
+///    hosted record when no ID names one, and never falls back to the
+///    local key.
 pub(crate) async fn resolve_operator(
     explicit: Option<LocalOperatorSeedSource>,
     operator_id: Option<Uuid>,
@@ -233,7 +236,25 @@ pub(crate) async fn resolve_operator(
     if org.default_operator_kind == OperatorKind::Hosted {
         match operator_id {
             Some(id) => bail!("hosted operator ID '{id}' was not found in org '{org_name}'"),
-            None => bail!("--operator-id is required to approve with a hosted operator"),
+            None => {
+                // A hosted default cannot satisfy an offline approval;
+                // refuse before selection or credentials.
+                if requirement == SignerRequirement::OfflineApproval {
+                    bail!("--skip-post is only supported for local operators");
+                }
+
+                let (record, hosted) =
+                    select_hosted_operator(org).with_context(|| format!("org '{org_name}'"))?;
+                let hosted = validated_hosted_operator(org_id, &record.name, hosted)?;
+                let auth = build_client().await?;
+                ensure_authenticated_org(auth.org_id, hosted.organization_id())?;
+
+                return Ok(ResolvedOperator {
+                    name: Some(hosted.name().to_string()),
+                    operator_id: Some(hosted.operator_id()),
+                    signer: Box::new(HostedSigner::new(hosted, auth)),
+                });
+            }
         }
     }
 

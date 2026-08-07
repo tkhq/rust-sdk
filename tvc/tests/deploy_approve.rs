@@ -92,8 +92,11 @@ fn hosted_dry_run_does_not_require_operator_id() {
         .stdout(predicate::str::contains("Dry run complete"));
 }
 
+/// A hosted default alone cannot satisfy `--skip-post`: the refusal fires
+/// during resolution, before operator selection or credential loading (the
+/// fixture deliberately has no API key on disk).
 #[test]
-fn hosted_approval_requires_explicit_operator_id() {
+fn hosted_default_rejects_skip_post_without_operator_id() {
     let temp = TempDir::new().unwrap();
     write_hosted_config(&temp);
 
@@ -108,7 +111,7 @@ fn hosted_approval_requires_explicit_operator_id() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "--operator-id is required to approve with a hosted operator",
+            "--skip-post is only supported for local operators",
         ));
 }
 

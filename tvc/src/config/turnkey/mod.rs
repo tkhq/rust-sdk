@@ -552,13 +552,6 @@ impl OperatorRecord {
             }),
         }
     }
-
-    pub fn operator_kind(&self) -> OperatorKind {
-        match self.kind {
-            OperatorRecordKind::Local(_) => OperatorKind::Local,
-            OperatorRecordKind::Hosted(_) => OperatorKind::Hosted,
-        }
-    }
 }
 
 /// Kind-specific durable operator metadata.

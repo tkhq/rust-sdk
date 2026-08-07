@@ -3,10 +3,13 @@
 
 use super::{OperatorPublicKey, OperatorPublicKeyParseError, parse_uuid, timestamp_ms};
 use crate::client::AuthenticatedClient;
-use crate::config::turnkey::{Config, HostedOperatorRecord, OperatorRecord, OperatorRecordKind};
+use crate::config::turnkey::{
+    Config, HostedOperatorRecord, OperatorRecord, OperatorRecordKind, OrgConfig,
+};
 use crate::pair::{Signer, SignerFuture};
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use p256::elliptic_curve::sec1::ToEncodedPoint;
+use thiserror::Error;
 use turnkey_client::{
     TurnkeyClientError,
     generated::{
@@ -162,7 +165,7 @@ impl ResolvedHostedOperator {
 }
 
 /// Parse and validate a hosted registry record into a resolved operator.
-fn validated_hosted_operator(
+pub(super) fn validated_hosted_operator(
     organization_id: Uuid,
     name: &str,
     record: &HostedOperatorRecord,
@@ -200,6 +203,37 @@ fn validated_hosted_operator(
         encrypt_public_key,
         sign_public_key,
     })
+}
+
+/// Failure modes of selecting the sole hosted operator of an organization.
+/// Which organization it was is the caller's context to add.
+#[derive(Debug, Error)]
+pub enum SelectHostedOperatorError {
+    #[error("no hosted operator is configured")]
+    NoHostedOperator,
+    #[error("multiple hosted operators are configured")]
+    MultipleHostedOperators,
+}
+
+/// Select the sole hosted operator registry entry of an organization, with
+/// its kind-specific record. Purely a registry query: whether hosted is the
+/// organization's default backend is resolution policy, decided elsewhere.
+pub(crate) fn select_hosted_operator(
+    org: &OrgConfig,
+) -> Result<(&OperatorRecord, &HostedOperatorRecord), SelectHostedOperatorError> {
+    let mut hosted = org
+        .operators
+        .iter()
+        .filter_map(|operator| match &operator.kind {
+            OperatorRecordKind::Hosted(record) => Some((operator, record)),
+            OperatorRecordKind::Local(_) => None,
+        });
+
+    match (hosted.next(), hosted.next()) {
+        (Some(sole), None) => Ok(sole),
+        (None, _) => Err(SelectHostedOperatorError::NoHostedOperator),
+        (Some(_), Some(_)) => Err(SelectHostedOperatorError::MultipleHostedOperators),
+    }
 }
 
 /// Find the hosted registry record with `operator_id` in the active
@@ -482,6 +516,50 @@ mod tests {
                 .to_string(),
             "hosted operator encryption public key must be bare hex encoded"
         );
+    }
+
+    #[test]
+    fn selects_the_sole_hosted_operator_ignoring_locals() {
+        let local = OperatorRecord {
+            name: "local".to_string(),
+            kind: OperatorRecordKind::Local(LocalOperatorRecord {
+                key_path: PathBuf::from("operator.json"),
+                operator_id: None,
+                extra: toml::Table::new(),
+            }),
+        };
+        let config = config_with_operators(vec![local, hosted_operator("hosted", hosted_record())]);
+        let org = &config.orgs[&Uuid::from_u128(0xA1)];
+
+        let (operator, hosted) = select_hosted_operator(org).unwrap();
+
+        assert_eq!(operator.name, "hosted");
+        assert_eq!(hosted.operator_id, Uuid::parse_str(OPERATOR_ID).unwrap());
+    }
+
+    #[test]
+    fn selecting_a_hosted_operator_requires_one_to_exist() {
+        let config = config_with_operators(Vec::new());
+        let org = &config.orgs[&Uuid::from_u128(0xA1)];
+
+        assert!(matches!(
+            select_hosted_operator(org),
+            Err(SelectHostedOperatorError::NoHostedOperator)
+        ));
+    }
+
+    #[test]
+    fn selecting_a_hosted_operator_refuses_multiple() {
+        let config = config_with_operators(vec![
+            hosted_operator("first", hosted_record()),
+            hosted_operator("second", hosted_record()),
+        ]);
+        let org = &config.orgs[&Uuid::from_u128(0xA1)];
+
+        assert!(matches!(
+            select_hosted_operator(org),
+            Err(SelectHostedOperatorError::MultipleHostedOperators)
+        ));
     }
 
     #[test]
