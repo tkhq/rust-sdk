@@ -44,6 +44,10 @@ pub struct DeployConfig {
     pub health_check_type: TvcHealthCheckType,
     pub health_check_port: u16,
     pub public_ingress_port: u16,
+    /// Desired replica count for the deployment. When unset, the create
+    /// request omits it and the server applies its default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replicas: Option<u32>,
 }
 
 /// Build a config seeded from an existing deployment, for use as a template.
@@ -109,6 +113,9 @@ impl TryFrom<TvcDeployment> for DeployConfig {
             health_check_type,
             health_check_port,
             public_ingress_port,
+            // Not recoverable from the fetched deployment; leave unset so the
+            // server applies its default.
+            replicas: None,
         })
     }
 }
@@ -129,6 +136,7 @@ impl DeployConfig {
             health_check_type: TvcHealthCheckType::Http,
             health_check_port: 3000,
             public_ingress_port: 3000,
+            replicas: None,
         }
     }
 
@@ -250,6 +258,9 @@ impl DeployConfig {
                 placeholder: PULL_SECRET_PLACEHOLDER.to_string(),
             });
         }
+        if self.replicas == Some(0) {
+            errors.push(DeployConfigValidationError::InvalidReplicas);
+        }
 
         DeployConfigValidationErrors::ok_or_errors(errors)
     }
@@ -264,6 +275,8 @@ pub enum DeployConfigValidationError {
     },
     #[error("app_id is not a valid UUID: {value}")]
     InvalidAppId { value: String },
+    #[error("replicas must be at least 1")]
+    InvalidReplicas,
     #[error(
         "pivotContainerEncryptedPullSecret contains placeholder value {placeholder}; pass \
          --pivot-pull-secret <PATH> or remove pivotContainerEncryptedPullSecret for public images"
@@ -512,6 +525,25 @@ mod tests {
         config.expected_pivot_digest = "sha256:abc".into();
         config.pivot_container_encrypted_pull_secret = None;
         config
+    }
+
+    #[test]
+    fn config_without_replicas_field_stays_unset() {
+        // Config files written before the replicas field existed must keep
+        // working, and an absent field must stay absent (server default).
+        let mut json = serde_json::to_value(valid_config()).unwrap();
+        json.as_object_mut().unwrap().remove("replicas");
+        let config: DeployConfig = serde_json::from_value(json).unwrap();
+        assert_eq!(config.replicas, None);
+    }
+
+    #[test]
+    fn validate_rejects_zero_replicas() {
+        let mut config = valid_config();
+        config.replicas = Some(0);
+        let errors = config.validate().unwrap_err();
+        assert!(errors.to_string().contains("replicas"), "{errors}");
+        assert!(errors.has_non_placeholder_error());
     }
 
     #[test]

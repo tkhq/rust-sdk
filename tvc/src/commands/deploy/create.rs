@@ -142,6 +142,11 @@ struct Overrides {
     /// This is usually the port your server listens on for external requests.
     #[arg(long, env = "TVC_PUBLIC_INGRESS_PORT")]
     pub public_ingress_port: Option<u16>,
+
+    /// Desired replica count for the deployment. When omitted, the server
+    /// applies its default.
+    #[arg(long, env = "TVC_REPLICAS")]
+    pub replicas: Option<u32>,
 }
 
 struct ResolvedDeployInputs {
@@ -305,6 +310,9 @@ fn apply_overrides(config: &mut DeployConfig, overrides: &Overrides) {
     if let Some(v) = overrides.public_ingress_port {
         config.public_ingress_port = v;
     }
+    if let Some(v) = overrides.replicas {
+        config.replicas = Some(v);
+    }
 }
 
 fn invalid_deploy_config_error(errors: DeployConfigValidationErrors) -> anyhow::Error {
@@ -364,8 +372,7 @@ fn build_create_intent(
         health_check_type: deploy_config.health_check_type,
         health_check_port: deploy_config.health_check_port as u32,
         public_ingress_port: deploy_config.public_ingress_port as u32,
-        // Not yet configurable via the CLI; the server applies its default.
-        replicas: None,
+        replicas: deploy_config.replicas,
     }
 }
 
@@ -623,6 +630,54 @@ mod tests {
         assert!(resolved.pivot_args.is_empty());
         // Pull-secret placeholder cleared in flag-only mode.
         assert_eq!(resolved.pivot_container_encrypted_pull_secret, None);
+        // Replicas stays unset when not specified.
+        assert_eq!(resolved.replicas, None);
+    }
+
+    #[test]
+    fn replicas_flag_overrides_file_value() {
+        let file = write_config(&file_config()); // file leaves replicas unset
+        let overrides = Overrides {
+            replicas: Some(3),
+            ..Default::default()
+        };
+        let args = Args {
+            config_file: Some(file.path().to_path_buf()),
+            overrides,
+            ..Default::default()
+        };
+        let resolved = run_resolve(&args).unwrap();
+        assert_eq!(resolved.replicas, Some(3));
+    }
+
+    #[test]
+    fn zero_replicas_is_rejected() {
+        let file = write_config(&file_config());
+        let overrides = Overrides {
+            replicas: Some(0),
+            ..Default::default()
+        };
+        let args = Args {
+            config_file: Some(file.path().to_path_buf()),
+            overrides,
+            ..Default::default()
+        };
+        let err = run_resolve(&args).unwrap_err();
+        assert!(err.to_string().contains("replicas"), "{err}");
+    }
+
+    #[test]
+    fn create_intent_carries_replica_count() {
+        let mut config = file_config();
+        config.replicas = Some(4);
+        let intent = build_create_intent(&config, "image".into(), None);
+        assert_eq!(intent.replicas, Some(4));
+    }
+
+    #[test]
+    fn create_intent_omits_replicas_when_unset() {
+        let intent = build_create_intent(&file_config(), "image".into(), None);
+        assert_eq!(intent.replicas, None);
     }
 
     #[test]
