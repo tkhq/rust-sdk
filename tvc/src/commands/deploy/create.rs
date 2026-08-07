@@ -18,6 +18,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::try_join;
 use tracing::instrument;
 use turnkey_client::generated::{CreateTvcDeploymentIntent, ValidateTvcImageRequest};
+use uuid::Uuid;
 
 pub(crate) const LONG_ABOUT: &str = r#"
 Create a new TVC deployment.
@@ -335,7 +336,7 @@ fn offer_to_save_config(
 }
 
 fn build_validate_image_request(
-    organization_id: &str,
+    organization_id: Uuid,
     image_url: &str,
     pivot_container_encrypted_pull_secret: Option<String>,
 ) -> ValidateTvcImageRequest {
@@ -402,7 +403,7 @@ async fn run_with_resolved_inputs(
     };
 
     let validate_image_request = build_validate_image_request(
-        &auth.org_id,
+        auth.org_id,
         &deploy_config.pivot_container_image_url,
         pivot_container_encrypted_pull_secret.clone(),
     );
@@ -438,7 +439,7 @@ async fn run_with_resolved_inputs(
 
     let result = auth
         .client
-        .create_tvc_deployment(auth.org_id, timestamp_ms, intent)
+        .create_tvc_deployment(auth.org_id.to_string(), timestamp_ms, intent)
         .await
         .context("failed to create TVC deployment")?;
 

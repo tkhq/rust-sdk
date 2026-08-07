@@ -36,7 +36,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
     let deploy_id = args.deploy_id.to_string();
 
     let request = GetTvcDeploymentRequest {
-        organization_id: auth.org_id.clone(),
+        organization_id: auth.org_id.to_string(),
         deployment_id: deploy_id.clone(),
     };
 

@@ -9,18 +9,20 @@ use std::str::FromStr;
 use std::sync::Arc;
 use zeroize::Zeroizing;
 
-/// Boxed future returned by key pair operations.
-pub type PairFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+/// Boxed future returned by signing operations.
+pub type SignerFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
-/// Something that can do key pair operations with the QOS p256 scheme.
-pub trait Pair: Send + Sync {
+/// A signer for the QOS p256 operator scheme.
+///
+/// Implementations differ in where the key material lives — a local key
+/// pair, or a Turnkey-hosted operator signing through the API — and callers
+/// cannot tell them apart.
+pub trait Signer: Send + Sync {
     /// Sign the given message.
-    fn sign(&self, message: Vec<u8>) -> PairFuture<'_, anyhow::Result<Vec<u8>>>;
+    fn sign(&self, message: Vec<u8>) -> SignerFuture<'_, anyhow::Result<Vec<u8>>>;
 
-    /// Decrypt the given ciphertext.
-    fn decrypt(&self, ciphertext: Vec<u8>) -> PairFuture<'_, anyhow::Result<Zeroizing<Vec<u8>>>>;
-
-    /// The public key for this pair.
+    /// The operator public key in the qos composite form
+    /// (encryption point ‖ signing point).
     fn public_key(&self) -> Vec<u8>;
 }
 
@@ -77,10 +79,24 @@ impl LocalPair {
             pair: Arc::new(pair),
         })
     }
+
+    /// Decrypt the given ciphertext. Decryption needs the private key
+    /// material, so it lives on the concrete local pair rather than
+    /// [`Signer`].
+    pub async fn decrypt(&self, ciphertext: Vec<u8>) -> anyhow::Result<Zeroizing<Vec<u8>>> {
+        let pair2 = Arc::clone(&self.pair);
+
+        tokio::task::spawn_blocking(move || {
+            pair2
+                .decrypt(&ciphertext)
+                .map_err(|_| anyhow!("failed to decrypt with local signer"))
+        })
+        .await?
+    }
 }
 
-impl Pair for LocalPair {
-    fn sign(&self, message: Vec<u8>) -> PairFuture<'_, anyhow::Result<Vec<u8>>> {
+impl Signer for LocalPair {
+    fn sign(&self, message: Vec<u8>) -> SignerFuture<'_, anyhow::Result<Vec<u8>>> {
         let pair2 = Arc::clone(&self.pair);
 
         Box::pin(async move {
@@ -95,19 +111,6 @@ impl Pair for LocalPair {
 
     fn public_key(&self) -> Vec<u8> {
         self.pair.public_key().to_bytes()
-    }
-
-    fn decrypt(&self, ciphertext: Vec<u8>) -> PairFuture<'_, anyhow::Result<Zeroizing<Vec<u8>>>> {
-        let pair2 = Arc::clone(&self.pair);
-
-        Box::pin(async move {
-            tokio::task::spawn_blocking(move || {
-                pair2
-                    .decrypt(&ciphertext)
-                    .map_err(|_| anyhow!("failed to decrypt with local signer"))
-            })
-            .await?
-        })
     }
 }
 

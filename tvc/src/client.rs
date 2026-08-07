@@ -13,6 +13,7 @@ use turnkey_client::{
         external::data::v1::{TvcApp, TvcDeployment},
     },
 };
+use uuid::Uuid;
 
 /// Number of *required* auth env vars: org_id, api_key_public, api_key_private.
 /// `TVC_API_BASE_URL` is optional and defaults to `DEFAULT_API_BASE_URL`.
@@ -28,7 +29,7 @@ pub struct AuthenticatedClient {
     /// The Turnkey API client.
     pub client: TurnkeyClient<TurnkeyP256ApiKey>,
     /// The organization ID for API calls.
-    pub org_id: String,
+    pub org_id: Uuid,
     /// The API base URL for the active org. Used for environment-specific behavior.
     pub api_base_url: String,
 }
@@ -59,7 +60,7 @@ pub async fn build_client() -> Result<AuthenticatedClient> {
             }
         };
 
-    build_authed_client(&org_id, &api_base_url, &api_key_public, &api_key_private)
+    build_authed_client(org_id, &api_base_url, &api_key_public, &api_key_private)
 }
 
 #[instrument(skip_all)]
@@ -67,7 +68,7 @@ pub async fn fetch_tvc_app(auth: &AuthenticatedClient, app_id: &str) -> Result<T
     let response = auth
         .client
         .get_tvc_app(GetTvcAppRequest {
-            organization_id: auth.org_id.clone(),
+            organization_id: auth.org_id.to_string(),
             tvc_app_id: app_id.to_string(),
         })
         .await
@@ -99,26 +100,29 @@ pub async fn fetch_tvc_deployment(
 }
 
 #[instrument(skip_all)]
-async fn load_credentials_from_config() -> Result<(String, String, String, String)> {
+async fn load_credentials_from_config() -> Result<(Uuid, String, String, String)> {
     let config = Config::load().await?;
 
-    let (alias, org_config) = config
+    let (org_id, org_config) = config
         .active_org_config()
         .ok_or_else(|| anyhow!("No active organization. Run `tvc login` first."))?;
 
     debug!(
-        org_alias = %alias,
+        %org_id,
         api_base_url = %org_config.api_base_url,
         api_key_path = %org_config.api_key_path.display(),
         "resolved active organization config"
     );
 
-    let api_key = StoredApiKey::load(org_config)
-        .await?
-        .ok_or_else(|| anyhow!("No API key found for org '{alias}'. Run `tvc login` first."))?;
+    let api_key = StoredApiKey::load(org_config).await?.ok_or_else(|| {
+        anyhow!(
+            "No API key found for org '{}'. Run `tvc login` first.",
+            config.display_name(org_id)
+        )
+    })?;
 
     Ok((
-        org_config.id.clone(),
+        org_id,
         org_config.api_base_url.clone(),
         api_key.public_key.clone(),
         api_key.private_key.clone(),
@@ -156,7 +160,7 @@ pub(crate) fn build_turnkey_client(
 
 #[instrument(skip_all)]
 fn build_authed_client(
-    org_id: &str,
+    org_id: Uuid,
     api_base_url: &str,
     api_key_public: &str,
     api_key_private: &str,
@@ -172,7 +176,7 @@ fn build_authed_client(
 
     Ok(AuthenticatedClient {
         client,
-        org_id: org_id.to_string(),
+        org_id,
         api_base_url: api_base_url.to_string(),
     })
 }
@@ -190,7 +194,7 @@ fn read_env_var(name: &str) -> Option<String> {
 ///   required vars set; `api_base_url` falls back to the default if unset.
 /// - `Err`: only some of the required vars are set; the error names which.
 #[instrument(skip_all)]
-fn load_credentials_from_env_vars() -> Result<Option<(String, String, String, String)>> {
+fn load_credentials_from_env_vars() -> Result<Option<(Uuid, String, String, String)>> {
     let org_id = read_env_var(ENV_ORG_ID);
     let api_key_public = read_env_var(ENV_API_KEY_PUBLIC);
     let api_key_private = read_env_var(ENV_API_KEY_PRIVATE);
@@ -234,8 +238,13 @@ fn load_credentials_from_env_vars() -> Result<Option<(String, String, String, St
         );
     }
 
+    let org_id = org_id
+        .unwrap()
+        .parse()
+        .with_context(|| format!("{ENV_ORG_ID} must be a UUID"))?;
+
     Ok(Some((
-        org_id.unwrap(),
+        org_id,
         api_base_url,
         api_key_public.unwrap(),
         api_key_private.unwrap(),

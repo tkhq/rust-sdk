@@ -1,7 +1,7 @@
 //! Local quorum key init command - generates a template quorum key config file.
 
 use crate::config::quorum_key::{MAX_SHARES, MIN_THRESHOLD, QuorumKeyConfig};
-use crate::config::turnkey::{Config, StoredQosOperatorKey};
+use crate::operator::default_operator_public_key;
 use crate::outcome::Outcome;
 use crate::output::StdCtx;
 use anyhow::{Context, Result};
@@ -31,7 +31,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
         anyhow::bail!("File already exists: {}", args.output.display());
     }
 
-    let operator_public_key = load_operator_public_key().await;
+    let operator_public_key = default_operator_public_key().await;
 
     let config = QuorumKeyConfig::template(operator_public_key.as_deref());
     let json = serde_json::to_string_pretty(&config).context("failed to serialize config")?;
@@ -65,13 +65,4 @@ Edit the file to fill in your values, then run:
             self.path, self.path
         )
     }
-}
-
-/// Load the operator public key from the active org's config.
-async fn load_operator_public_key() -> Option<String> {
-    let config = Config::load().await.ok()?;
-    let (alias, org_config) = config.active_org_config()?;
-    let local = org_config.select_local_record(alias).ok()?;
-    let operator_key = StoredQosOperatorKey::load(&local.key_path).await.ok()??;
-    Some(operator_key.public_key)
 }
