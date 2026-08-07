@@ -11,8 +11,8 @@ use std::{
 };
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use tvc::config::turnkey::{
-    Config, KeyCurve, OperatorKind, OperatorRecord, OrgConfig, QosOperatorPublicKey, StoredApiKey,
-    StoredQosOperatorKey,
+    Config, HostedOperatorRecord, KeyCurve, OperatorKind, OperatorRecord, OperatorRecordKind,
+    OrgConfig, QosOperatorPublicKey, StoredApiKey, StoredQosOperatorKey,
 };
 use uuid::Uuid;
 
@@ -61,6 +61,55 @@ pub fn write_profiles_config(home: &Path, profiles: &[(&str, &str)], active_org:
             .id();
         config.set_active_org(id).unwrap();
     }
+
+    fs::write(
+        turnkey_dir.join("tvc.config.toml"),
+        format!("version = 2\n{}", toml::to_string_pretty(&config).unwrap()),
+    )
+    .unwrap();
+}
+
+/// Write a v2 `tvc.config.toml` under `home` whose sole, active organization
+/// defaults to the hosted backend and registers exactly one operator, hosted
+/// — the fixture for commands that need local key material a hosted-only org
+/// does not have. The record carries a real generated composite key split
+/// into its two points, the way `operator create` stores it.
+pub fn write_hosted_only_config(home: &Path, alias: &str, org_id: &str) {
+    let turnkey_dir = home.join(".config/turnkey");
+    fs::create_dir_all(&turnkey_dir).unwrap();
+
+    let id: Uuid = org_id.parse().expect("test org ids must be UUIDs");
+    let composite = hex::encode(
+        qos_p256::P256Pair::generate()
+            .unwrap()
+            .public_key()
+            .to_bytes(),
+    );
+    let (encrypt_public_key, sign_public_key) = composite.split_at(composite.len() / 2);
+
+    let mut config = Config::default();
+    config.orgs.insert(
+        id,
+        OrgConfig {
+            api_key_path: turnkey_dir.join(format!("orgs/{id}/api_key.json")),
+            api_base_url: LOCAL_API_BASE_URL.to_string(),
+            default_operator_kind: OperatorKind::Hosted,
+            operators: vec![OperatorRecord {
+                name: "hosted-op".to_string(),
+                kind: OperatorRecordKind::Hosted(HostedOperatorRecord {
+                    operator_id: "11111111-1111-4111-8111-111111111111".parse().unwrap(),
+                    wallet_id: "22222222-2222-4222-8222-222222222222".parse().unwrap(),
+                    path: "m/5527107'/0'/0'".to_string(),
+                    encrypt_public_key: encrypt_public_key.to_string(),
+                    sign_public_key: sign_public_key.to_string(),
+                    extra: toml::Table::new(),
+                }),
+            }],
+            extra: toml::Table::new(),
+        },
+    );
+    config.aliases.bind(alias.to_string(), id);
+    config.set_active_org(id).unwrap();
 
     fs::write(
         turnkey_dir.join("tvc.config.toml"),

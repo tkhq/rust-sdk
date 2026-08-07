@@ -1,6 +1,8 @@
 //! Re-encrypt local share command.
 
-use crate::local_operator_key::{LocalOperatorSeedSource, resolve_local_operator};
+use crate::local_operator_key::{
+    LocalOperatorSeedSource, SelectLocalOperatorError, resolve_local_operator,
+};
 use crate::outcome::Outcome;
 use crate::output::StdCtx;
 use crate::pair::{HexSeed, LocalPair, Signer};
@@ -113,7 +115,20 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
         read_json_file(&args.quorum_key_metadata, "quorum key metadata file").await?;
     let provision_bundle: ProvisionBundle =
         read_json_file(&args.provision_bundle, "provision bundle").await?;
-    let operator_pair = resolve_local_operator(operator_seed_source).await?;
+    let operator_pair = resolve_local_operator(operator_seed_source)
+        .await
+        .map_err(|error| {
+            // Decryption needs local key material a hosted-only org does not
+            // have; point at the hosted counterpart of this operation.
+            match error.downcast_ref::<SelectLocalOperatorError>() {
+                Some(SelectLocalOperatorError::NoLocalOperator) => error.context(
+                    "re-encrypting a local share needs the local operator key the share was \
+                     encrypted to; hosted operators re-encrypt through Turnkey with \
+                     `tvc deploy provision`",
+                ),
+                _ => error,
+            }
+        })?;
 
     let output = build_re_encrypted_share_output(
         &quorum_key_metadata,
