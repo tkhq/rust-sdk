@@ -403,9 +403,26 @@ impl TryFrom<Args> for ArgsWithResolvedOperatorSeedSource {
     }
 }
 
+/// A candidate for posting without `--operator-id`: the parsed ID that
+/// resolution needs, displayed with its registry name when it has one.
+struct ApprovingOperator {
+    id: Uuid,
+    name: Option<String>,
+}
+
+impl fmt::Display for ApprovingOperator {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match &self.name {
+            Some(name) => write!(f, "{name} ({})", self.id),
+            None => fmt::Display::fmt(&self.id, f),
+        }
+    }
+}
+
 /// Resolve where to post and which operator approves. No post target is
 /// built for `--dry-run` or `--skip-post`; without `--operator-id`, a lone
-/// saved operator ID is used and multiple prompt for a choice when possible.
+/// known operator (registered hosted or saved from the last `app create`)
+/// is used and multiple prompt for a choice when possible.
 async fn build_post_target(
     args: BuildPostTargetArgs,
     fetched_manifest_id: Option<Uuid>,
@@ -424,27 +441,32 @@ async fn build_post_target(
     } else {
         let config = Config::load().await?;
 
-        let saved_ids = config
-            .get_last_operator_ids()
-            .unwrap_or_default()
+        let candidates = config
+            .known_operator_candidates()
             .into_iter()
-            .map(|id| {
-                Uuid::parse_str(&id)
-                    .with_context(|| format!("saved operator ID '{id}' is not a UUID"))
+            .map(|candidate| {
+                let id = Uuid::parse_str(&candidate.id).with_context(|| {
+                    format!("saved operator ID '{}' is not a UUID", candidate.id)
+                })?;
+
+                Ok(ApprovingOperator {
+                    id,
+                    name: candidate.name,
+                })
             })
             .collect::<anyhow::Result<Vec<_>>>()?;
 
-        match saved_ids.len() {
+        match candidates.len() {
             0 => bail!(
                 "--operator-id is required to post approval to API. \
-                 No saved operator IDs found. \
+                 No registered or saved operator IDs found. \
                  Use --skip-post to only generate the approval locally."
             ),
-            1 => saved_ids[0],
+            1 => candidates[0].id,
             _ if non_interactive || !stdin_can_prompt() => bail!(
-                "--operator-id is required to post approval to API when multiple saved operator IDs are available"
+                "--operator-id is required to post approval to API when multiple operator IDs are available"
             ),
-            _ => prompts::select("Select approving operator", saved_ids)?,
+            _ => prompts::select("Select approving operator", candidates)?.id,
         }
     };
 

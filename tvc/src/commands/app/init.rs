@@ -1,8 +1,7 @@
 //! App init command - generates a template config file.
 
 use crate::config::app::AppConfig;
-use crate::config::turnkey::{Config, StoredQosOperatorKey};
-use crate::local_operator_key::select_local_operator;
+use crate::config::turnkey::Config;
 use crate::outcome::Outcome;
 use crate::output::StdCtx;
 use crate::prompts::{bail_interactive_conflicts_with_non_interactive, ensure_stdin_is_tty};
@@ -50,8 +49,11 @@ async fn execute(args: Args) -> Result<Outcome> {
         bail!("File already exists: {}", args.output.display());
     }
 
-    // Try to load operator public key from config
-    let operator_public_key = load_operator_public_key().await;
+    // Try to load the operator public key from config, best-effort.
+    let operator_public_key = match Config::load().await {
+        Ok(config) => config.default_operator_public_key().await,
+        Err(_) => None,
+    };
 
     // Generate template (optionally walking prompts to fill it in)
     let mut config = AppConfig::template(operator_public_key.as_deref());
@@ -102,16 +104,4 @@ Edit the file to fill in your values, then run:
             )
         }
     }
-}
-
-/// Load the operator public key from the active org's config
-async fn load_operator_public_key() -> Option<String> {
-    // Load config (return None on error)
-    let config = Config::load().await.ok()?;
-
-    // Get active org config
-    let (_, org_config) = config.active_org_config()?;
-    let (_, local) = select_local_operator(org_config).ok()?;
-    let operator_key = StoredQosOperatorKey::load(&local.key_path).await.ok()??;
-    Some(operator_key.public_key.to_string())
 }
