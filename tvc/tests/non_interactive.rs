@@ -32,7 +32,7 @@ fn write_config(
     home: &TempDir,
     api_key_path: std::path::PathBuf,
     operator_key_path: std::path::PathBuf,
-    last_operator_ids: Vec<String>,
+    last_operator_ids: Vec<Uuid>,
 ) {
     let turnkey_dir = home.path().join(".config").join("turnkey");
     fs::create_dir_all(&turnkey_dir).unwrap();
@@ -245,10 +245,9 @@ fn app_init_interactive_conflicts_with_non_interactive_env() {
         ));
 }
 
-/// `deploy create` with no config file and no required fields can't prompt for
-/// the missing values, so it bails naming every field the user still has to set.
+/// `deploy create` always requires an app-id.
 #[test]
-fn deploy_create_without_required_fields_bails_naming_each_field() {
+fn deploy_create_without_app_id_bails_naming_app_id() {
     let temp = TempDir::new().unwrap();
 
     cargo_bin_cmd!("tvc")
@@ -258,7 +257,23 @@ fn deploy_create_without_required_fields_bails_naming_each_field() {
         .arg("create")
         .assert()
         .failure()
-        .stderr(predicate::str::contains("app_id"))
+        .stderr(predicate::str::contains("app_id"));
+}
+
+/// `deploy create` with no config file and no required fields can't prompt for
+/// the missing values, so it bails naming every field the user still has to set.
+#[test]
+fn deploy_create_with_app_id_but_without_other_required_fields_bails_naming_each_field() {
+    let temp = TempDir::new().unwrap();
+
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env(NON_INTERACTIVE_ENV, "1")
+        .arg("deploy")
+        .arg("create")
+        .arg("--app-id=55cd0000-c532-4d10-b948-3a4c9131f68a")
+        .assert()
+        .failure()
         .stderr(predicate::str::contains("pivot_container_image_url"))
         .stderr(predicate::str::contains("pivot_path"))
         .stderr(predicate::str::contains("expected_pivot_digest"));
@@ -276,7 +291,7 @@ fn deploy_create_pull_secret_placeholder_bails_when_non_interactive() {
     // init-time sentinel that the user must resolve to null (public) or a real
     // encrypted secret (private).
     let config = r#"{
-        "appId": "file-app-id",
+        "appId": "c7455119-d4f1-4400-9386-f852c4766df1",
         "qosVersion": "file-qos",
         "pivotContainerImageUrl": "file-image",
         "pivotPath": "file-path",
@@ -344,8 +359,8 @@ fn approve_non_interactive_requires_operator_id_when_saved_ids_are_ambiguous() {
         api_key_path.clone(),
         operator_key_path,
         vec![
-            "11111111-1111-4111-8111-111111111111".to_string(),
-            "22222222-2222-4222-8222-222222222222".to_string(),
+            "11111111-1111-4111-8111-111111111111".parse().unwrap(),
+            "22222222-2222-4222-8222-222222222222".parse().unwrap(),
         ],
     );
     write_api_key(&api_key_path);

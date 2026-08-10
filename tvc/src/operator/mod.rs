@@ -230,16 +230,17 @@ pub(crate) async fn resolve_operator(
         });
     }
 
-    let (alias, org) = config.active_org_config().ok_or_else(|| {
+    let (org_id, org) = config.active_org_config().ok_or_else(|| {
         anyhow!(
             "No active organization. Run `tvc login` first or provide \
              --operator-seed or --operator-seed-path."
         )
     })?;
+    let org_name = config.display_name(org_id);
 
     if org.default_operator_kind == OperatorKind::Hosted {
         match operator_id {
-            Some(id) => bail!("hosted operator ID '{id}' was not found in org '{alias}'"),
+            Some(id) => bail!("hosted operator ID '{id}' was not found in org '{org_name}'"),
             None => {
                 // A hosted default cannot satisfy an offline approval;
                 // refuse before selection or credentials.
@@ -248,8 +249,8 @@ pub(crate) async fn resolve_operator(
                 }
 
                 let (record, hosted) =
-                    select_hosted_operator(org).with_context(|| format!("org '{alias}'"))?;
-                let hosted = validated_hosted_operator(org.id.clone(), &record.name, hosted)?;
+                    select_hosted_operator(org).with_context(|| format!("org '{org_name}'"))?;
+                let hosted = validated_hosted_operator(org_id, &record.name, hosted)?;
                 let auth = build_client().await?;
                 ensure_authenticated_org(auth.org_id, hosted.organization_id())?;
 
@@ -262,7 +263,8 @@ pub(crate) async fn resolve_operator(
         }
     }
 
-    let (operator, local) = select_local_operator(org).with_context(|| format!("org '{alias}'"))?;
+    let (operator, local) =
+        select_local_operator(org).with_context(|| format!("org '{org_name}'"))?;
 
     let configured_operator_id = local
         .operator_id
@@ -291,11 +293,10 @@ pub(crate) async fn resolve_operator(
 }
 
 /// One operator identity known for the active org, labeled with its registry
-/// name when it has one. The ID stays a string: callers that need a UUID
-/// parse at their own boundary.
+/// name when it has one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct OperatorCandidate {
-    pub id: String,
+    pub id: Uuid,
     pub name: Option<String>,
 }
 
@@ -303,7 +304,7 @@ impl Display for OperatorCandidate {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self.name {
             Some(name) => write!(f, "{name} ({})", self.id),
-            None => f.write_str(&self.id),
+            None => write!(f, "{}", self.id),
         }
     }
 }
@@ -349,16 +350,20 @@ impl Config {
         let mut candidates: Vec<OperatorCandidate> = org
             .hosted_operators()
             .map(|(record, hosted)| OperatorCandidate {
-                id: hosted.operator_id.to_string(),
+                id: hosted.operator_id,
                 name: Some(record.name.clone()),
             })
             .collect();
 
-        for id in self.get_last_operator_ids().unwrap_or_default() {
-            if candidates.iter().all(|candidate| candidate.id != id) {
-                candidates.push(OperatorCandidate { id, name: None });
-            }
-        }
+        self.get_last_operator_ids()
+            .unwrap_or_default()
+            .iter()
+            .copied()
+            .for_each(|id| {
+                if candidates.iter().all(|candidate| candidate.id != id) {
+                    candidates.push(OperatorCandidate { id, name: None });
+                }
+            });
 
         candidates
     }
@@ -378,7 +383,7 @@ mod tests {
         HostedOperatorRecord, LocalOperatorRecord, OperatorRecord, OperatorRecordKind, OrgConfig,
     };
     use qos_p256::P256Pair;
-    use std::{collections::HashMap, path::PathBuf};
+    use std::path::PathBuf;
 
     fn public_keys() -> (String, String) {
         let first = P256Pair::generate().unwrap().public_key().to_bytes();
@@ -389,21 +394,21 @@ mod tests {
     const HOSTED_ID: &str = "11111111-1111-4111-8111-111111111111";
 
     fn config_with_operators(operators: Vec<OperatorRecord>) -> Config {
-        Config {
-            active_org: Some("active".to_string()),
-            orgs: HashMap::from([(
-                "active".to_string(),
-                OrgConfig {
-                    id: "org-id".to_string(),
-                    api_key_path: PathBuf::from("api-key.json"),
-                    api_base_url: "https://api.turnkey.com".to_string(),
-                    default_operator_kind: OperatorKind::Local,
-                    operators,
-                    extra: toml::Table::new(),
-                },
-            )]),
-            ..Config::default()
-        }
+        let org_id = Uuid::from_u128(0xA1);
+        let mut config = Config::default();
+        config.orgs.insert(
+            org_id,
+            OrgConfig {
+                api_key_path: PathBuf::from("api-key.json"),
+                api_base_url: "https://api.turnkey.com".to_string(),
+                default_operator_kind: OperatorKind::Local,
+                operators,
+                extra: toml::Table::new(),
+            },
+        );
+        config.aliases.bind("active".to_string(), org_id);
+        config.set_active_org(org_id).unwrap();
+        config
     }
 
     fn hosted_operator(name: &str) -> OperatorRecord {
@@ -411,7 +416,7 @@ mod tests {
         OperatorRecord {
             name: name.to_string(),
             kind: OperatorRecordKind::Hosted(HostedOperatorRecord {
-                operator_id: HOSTED_ID.parse().unwrap(),
+                operator_id: Uuid::parse_str(HOSTED_ID).unwrap(),
                 wallet_id: Uuid::from_u128(0xB1),
                 path: "m/5527107'/0'/0'".to_string(),
                 encrypt_public_key,
@@ -436,18 +441,20 @@ mod tests {
     fn candidates_are_registered_hosted_operators_then_saved_ids() {
         let mut config = config_with_operators(vec![local_operator(), hosted_operator("hosted")]);
         config
-            .set_last_operator_ids(&["44444444-4444-4444-8444-444444444444".to_string()])
+            .set_last_operator_ids(vec![
+                "44444444-4444-4444-8444-444444444444".parse().unwrap(),
+            ])
             .unwrap();
 
         assert_eq!(
             config.known_operator_candidates(),
             vec![
                 OperatorCandidate {
-                    id: HOSTED_ID.to_string(),
+                    id: HOSTED_ID.parse().unwrap(),
                     name: Some("hosted".to_string()),
                 },
                 OperatorCandidate {
-                    id: "44444444-4444-4444-8444-444444444444".to_string(),
+                    id: "44444444-4444-4444-8444-444444444444".parse().unwrap(),
                     name: None,
                 },
             ]
@@ -458,13 +465,13 @@ mod tests {
     fn candidates_dedupe_saved_ids_against_the_registry() {
         let mut config = config_with_operators(vec![hosted_operator("hosted")]);
         config
-            .set_last_operator_ids(&[HOSTED_ID.to_string()])
+            .set_last_operator_ids(vec![HOSTED_ID.parse().unwrap()])
             .unwrap();
 
         assert_eq!(
             config.known_operator_candidates(),
             vec![OperatorCandidate {
-                id: HOSTED_ID.to_string(),
+                id: HOSTED_ID.parse().unwrap(),
                 name: Some("hosted".to_string()),
             }]
         );
@@ -478,11 +485,11 @@ mod tests {
     #[test]
     fn candidate_display_labels_named_operators() {
         let named = OperatorCandidate {
-            id: HOSTED_ID.to_string(),
+            id: HOSTED_ID.parse().unwrap(),
             name: Some("hosted".to_string()),
         };
         let unnamed = OperatorCandidate {
-            id: HOSTED_ID.to_string(),
+            id: HOSTED_ID.parse().unwrap(),
             name: None,
         };
 

@@ -445,12 +445,8 @@ async fn build_post_target(
             .known_operator_candidates()
             .into_iter()
             .map(|candidate| {
-                let id = Uuid::parse_str(&candidate.id).with_context(|| {
-                    format!("saved operator ID '{}' is not a UUID", candidate.id)
-                })?;
-
                 Ok(ApprovingOperator {
-                    id,
+                    id: candidate.id,
                     name: candidate.name,
                 })
             })
