@@ -6,6 +6,7 @@ use crate::{
         app::{AppConfig, AppConfigValidationErrors, OperatorSetParams},
         turnkey::{self, StoredQosOperatorKey},
     },
+    local_operator_key::select_local_operator,
     outcome::Outcome,
     output::{Ctx, StdCtx},
     prompts, shell_println,
@@ -231,8 +232,8 @@ fn offer_to_save_app_config(ctx: &mut StdCtx, path: &Path, config: &AppConfig) -
 /// so we can offer it as the default for new-operator prompts.
 async fn load_saved_operator_public_key() -> Option<String> {
     let config = turnkey::Config::load().await.ok()?;
-    let (alias, org_config) = config.active_org_config()?;
-    let local = org_config.select_local_record(alias).ok()?;
+    let (_, org_config) = config.active_org_config()?;
+    let (_, local) = select_local_operator(org_config).ok()?;
     let operator_key = StoredQosOperatorKey::load(&local.key_path).await.ok()??;
     Some(operator_key.public_key.to_string())
 }

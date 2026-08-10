@@ -7,6 +7,7 @@ use crate::config::turnkey::{
     StoredApiKey, StoredQosOperatorKey, dashboard_base_url, default_api_key_path,
     default_operator_key_path, default_org_dir,
 };
+use crate::local_operator_key::select_local_operator;
 use crate::outcome::Outcome;
 use crate::output::StdCtx;
 use crate::prompts::{self, error_required_in_non_interactive};
@@ -365,11 +366,9 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
     // Operator key path now lives in the org's local operator record (the
     // versioned registry), not on `OrgConfig` directly. Resolve it before the
     // struct literal so `alias` is still available (the struct moves it).
-    let operator_key_path = org_config
-        .select_local_record(&alias)?
-        .key_path
-        .display()
-        .to_string();
+    let (_, local) =
+        select_local_operator(&org_config).with_context(|| format!("org '{alias}'"))?;
+    let operator_key_path = local.key_path.display().to_string();
 
     Ok(Outcome::LoggedIn(LoggedIn {
         organization_name: whoami.organization_name,
@@ -562,7 +561,8 @@ async fn find_or_generate_operator_key(
     org_alias: &str,
     org_config: &OrgConfig,
 ) -> Result<StoredQosOperatorKey> {
-    let local = org_config.select_local_record(org_alias)?;
+    let (_, local) =
+        select_local_operator(org_config).with_context(|| format!("org '{org_alias}'"))?;
     debug!(operator_key_path = %local.key_path.display(), "resolving operator key");
 
     if let Some(operator_key) = StoredQosOperatorKey::load(&local.key_path).await? {

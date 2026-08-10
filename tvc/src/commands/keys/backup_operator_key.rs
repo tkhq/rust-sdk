@@ -4,6 +4,7 @@
 use crate::{
     commands::{Run, login::find_org},
     config::turnkey::{Config, QosOperatorPublicKey, StoredQosOperatorKey},
+    local_operator_key::select_local_operator,
     outcome::Outcome,
     output::StdCtx,
     prompts::{self, error_required_in_non_interactive},
@@ -57,7 +58,9 @@ impl Run for Args {
                 .ok_or_else(|| anyhow!("No active organization. Run `tvc login` first."))?,
         };
 
-        let source = &org_config.select_local_record(alias)?.key_path;
+        let (_, local) =
+            select_local_operator(org_config).with_context(|| format!("org '{alias}'"))?;
+        let source = &local.key_path;
 
         let destination: PathBuf = self.output.map(Ok).unwrap_or_else(|| {
             prompts::text(

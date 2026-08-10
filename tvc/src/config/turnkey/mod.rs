@@ -330,41 +330,6 @@ pub struct OrgConfig {
     pub extra: toml::Table,
 }
 
-impl OrgConfig {
-    /// Return the sole active local operator registry entry.
-    pub(crate) fn select_local_operator(&self, org_alias: &str) -> Result<&OperatorRecord> {
-        if self.default_operator_kind != OperatorKind::Local {
-            bail!(
-                "the active operator kind for org '{org_alias}' is {}",
-                self.default_operator_kind
-            )
-        }
-
-        let candidates: Vec<_> = self
-            .operators
-            .iter()
-            .filter(|operator| matches!(operator.kind, OperatorRecordKind::Local(_)))
-            .collect();
-
-        // TODO: Decouple this function from its org_alias callsite so it is more
-        // flexible to be used anywhere else.
-        match candidates.as_slice() {
-            [] => bail!("No local operator configured for org '{org_alias}'"),
-            [operator] => Ok(*operator),
-            _ => bail!("Multiple local operators are configured for org '{org_alias}'"),
-        }
-    }
-
-    /// Return the kind-specific record for the sole active local operator.
-    pub fn select_local_record(&self, org_alias: &str) -> Result<&LocalOperatorRecord> {
-        let operator = self.select_local_operator(org_alias)?;
-        let OperatorRecordKind::Local(local) = &operator.kind else {
-            bail!("selected operator is not local");
-        };
-        Ok(local)
-    }
-}
-
 fn default_api_base_url() -> String {
     API_BASE_URL_PROD.to_string()
 }
