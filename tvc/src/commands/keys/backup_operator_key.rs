@@ -60,7 +60,10 @@ impl Run for Args {
                 .ok_or_else(|| anyhow!("No active organization. Run `tvc login` first."))?,
         };
 
-        let source = &org_config.select_local_record(alias)?.key_path;
+        let (_, local) = org_config
+            .select_local_operator()
+            .with_context(|| format!("org '{alias}'"))?;
+        let source = &local.key_path;
 
         let destination = match self.output {
             // --output is a CLI argument: validate it, honoring --overwrite

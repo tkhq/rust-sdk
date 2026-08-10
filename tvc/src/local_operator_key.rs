@@ -57,7 +57,9 @@ pub async fn resolve_local_operator(
                      --operator-seed or --operator-seed-path."
                 )
             })?;
-            let local = org_config.select_local_record(alias)?;
+            let (_, local) = org_config
+                .select_local_operator()
+                .with_context(|| format!("org '{alias}'"))?;
             return resolve_registered_local_operator(local.key_path.clone()).await;
         }
     };
@@ -102,7 +104,7 @@ async fn resolve_local_credential(source: LocalCredentialSource) -> anyhow::Resu
 mod tests {
     use super::*;
     use crate::config::turnkey::{QosOperatorPublicKey, StoredQosOperatorKey};
-    use crate::pair::Pair;
+    use crate::pair::Signer;
     use std::fs;
     use tempfile::TempDir;
 
@@ -147,7 +149,6 @@ mod tests {
         fs::write(
             &path,
             serde_json::to_string(&StoredQosOperatorKey {
-                // The resolve path only reads the seed; a nil key stands in.
                 public_key: QosOperatorPublicKey::default(),
                 private_key: private_key.clone(),
             })

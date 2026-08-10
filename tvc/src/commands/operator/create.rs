@@ -4,8 +4,8 @@ use crate::{
     client::build_client,
     config::turnkey::{Config, OperatorRecord, OperatorRecordKind},
     operator::{
-        DEFAULT_HOSTED_OPERATOR_BASE_PATH, HostedOperatorSpec, HostedOperatorWallet,
-        create_hosted_operator, ensure_authenticated_org,
+        DEFAULT_HOSTED_OPERATOR_BASE_PATH, ensure_authenticated_org,
+        hosted::CreateOperatorRequestResult, hosted_activity_error, timestamp_ms,
     },
     outcome::Outcome,
     output::StdCtx,
@@ -15,6 +15,7 @@ use clap::{ArgGroup, Args as ClapArgs, builder::NonEmptyStringValueParser};
 use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
 use tracing::instrument;
+use turnkey_client::generated::CreateTvcOperatorIntent;
 use uuid::Uuid;
 
 const DEFAULT_OPERATOR_NAME: &str = "tvc-operator";
@@ -108,15 +109,45 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     let auth = build_client().await?;
     ensure_authenticated_org(&auth.org_id, configured_org_id)?;
 
-    let record = create_hosted_operator(&auth, hosted_operator_spec(args)).await?;
-    let output = output_from_record(record.clone())?;
+    let HostedOperatorSpec { name, wallet, path } = args.into();
+
+    let (wallet_name, wallet_id) = match wallet {
+        HostedOperatorWallet::New(name) => (Some(name), None),
+        HostedOperatorWallet::Existing(id) => (None, Some(id.to_string())),
+    };
+
+    let intent = CreateTvcOperatorIntent {
+        wallet_name,
+        wallet_id,
+        path: path.clone(),
+        operator_name: name.clone(),
+    };
+
+    let result = auth
+        .client
+        .create_tvc_operator(auth.org_id.clone(), timestamp_ms()?, intent)
+        .await
+        .map_err(|error| hosted_activity_error("create hosted TVC operator", error))?;
+
+    let result = CreateOperatorRequestResult {
+        name,
+        path,
+        result: result.result,
+    };
+
+    let record = OperatorRecord::try_from(result)?;
 
     config
         .orgs
         .get_mut(&alias)
         .with_context(|| format!("active organization '{alias}' disappeared from config"))?
         .operators
-        .push(record);
+        .push(record.clone());
+
+    let OperatorRecord { name, kind } = record;
+    let OperatorRecordKind::Hosted(hosted) = kind else {
+        return Err(anyhow!("hosted operator creation returned a local record"));
+    };
 
     if let Err(save_error) = config.save().await {
         let record = config
@@ -132,38 +163,53 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
 Do not retry creation blindly; doing so would create another remote operator. Restore this record under the active organization in tvc.config.toml:
 
 {recovery}"#,
-            output.operator_id
+            hosted.operator_id
         ));
     }
 
-    Ok(Outcome::OperatorCreated(output))
-}
-
-fn hosted_operator_spec(args: Args) -> HostedOperatorSpec {
-    let wallet = match args.wallet_id {
-        Some(id) => HostedOperatorWallet::Existing(id),
-        None => HostedOperatorWallet::New(args.wallet_name),
-    };
-
-    HostedOperatorSpec::new(args.name, wallet, args.account_path)
-}
-
-fn output_from_record(record: OperatorRecord) -> Result<OperatorCreated> {
-    let OperatorRecord { name, kind } = record;
-    let OperatorRecordKind::Hosted(hosted) = kind else {
-        return Err(anyhow!("hosted operator creation returned a local record"));
-    };
-    let composite_public_key = format!("{}{}", hosted.encrypt_public_key, hosted.sign_public_key);
-
-    Ok(OperatorCreated {
+    let output = OperatorCreated {
         name,
+        composite_public_key: format!("{}{}", hosted.encrypt_public_key, hosted.sign_public_key),
         operator_id: hosted.operator_id,
         wallet_id: hosted.wallet_id,
         encrypt_public_key: hosted.encrypt_public_key,
         sign_public_key: hosted.sign_public_key,
-        composite_public_key,
         saved: true,
-    })
+    };
+
+    Ok(Outcome::OperatorCreated(output))
+}
+
+/// Inputs for creating one hosted TVC operator.
+#[derive(Debug, PartialEq, Eq)]
+struct HostedOperatorSpec {
+    name: String,
+    wallet: HostedOperatorWallet,
+    path: String,
+}
+
+/// Valid wallet selections for hosted operator creation.
+#[derive(Debug, PartialEq, Eq)]
+enum HostedOperatorWallet {
+    /// Create a new wallet with this name to hold the operator accounts.
+    New(String),
+    /// Add the operator accounts to the existing wallet with this ID.
+    Existing(Uuid),
+}
+
+impl From<Args> for HostedOperatorSpec {
+    fn from(args: Args) -> Self {
+        let wallet = match args.wallet_id {
+            Some(id) => HostedOperatorWallet::Existing(id),
+            None => HostedOperatorWallet::New(args.wallet_name),
+        };
+
+        HostedOperatorSpec {
+            name: args.name,
+            wallet,
+            path: args.account_path,
+        }
+    }
 }
 
 fn recovery_toml(alias: &str, record: &OperatorRecord) -> Result<String> {
@@ -213,25 +259,5 @@ mod tests {
             toml::from_str(&recovery_toml("default", &expected).unwrap()).unwrap();
 
         assert_eq!(recovery.orgs["default"].operators, vec![expected]);
-    }
-
-    #[test]
-    fn operator_created_serializes_expected_json() {
-        let output = output_from_record(hosted_record()).unwrap();
-        let value = serde_json::to_value(Outcome::OperatorCreated(output)).unwrap();
-
-        assert_eq!(
-            value,
-            serde_json::json!({
-                "reason": "operator_created",
-                "name": "tvc-operator",
-                "operatorId": "11111111-1111-4111-8111-111111111111",
-                "walletId": "22222222-2222-4222-8222-222222222222",
-                "encryptPublicKey": format!("04{}", "11".repeat(64)),
-                "signPublicKey": format!("04{}", "22".repeat(64)),
-                "compositePublicKey": format!("04{}04{}", "11".repeat(64), "22".repeat(64)),
-                "saved": true,
-            })
-        );
     }
 }

@@ -7,7 +7,7 @@ use crate::{
     config::turnkey::Config,
     errors::MissingResource,
     local_operator_key::LocalOperatorSeedSource,
-    operator::{OperatorCtx, ResolvedOperator, resolve_operator},
+    operator::{SignerRequirement, resolve_operator},
     outcome::Outcome,
     output::StdCtx,
     pair::HexSeed,
@@ -481,24 +481,22 @@ async fn run_with_resolved_inputs(
             }
         });
 
-    let operator = resolve_operator(inputs.operator_seed_source, inputs.operator_id).await?;
-    if inputs.skip_post && operator.is_hosted() {
-        bail!("--skip-post is only supported for local operators");
-    }
-    let auth = if operator.is_hosted() {
-        Some(build_client().await?)
+    let requirement = if inputs.skip_post {
+        SignerRequirement::OfflineApproval
     } else {
-        None
+        SignerRequirement::Any
     };
-    let approval = sign_and_write_approval(
-        &operator,
-        &OperatorCtx {
-            auth: auth.as_ref(),
-        },
-        inputs.approval_out.as_deref(),
-        &inputs.manifest,
-    )
-    .await?;
+    let operator =
+        resolve_operator(inputs.operator_seed_source, inputs.operator_id, requirement).await?;
+
+    let approval = operator.approve_manifest(&inputs.manifest).await?;
+
+    // Reporting the approval (inline payload or file path) is the terminal
+    // outcome's job; `--approval-out` additionally persists it here.
+    if let Some(path) = inputs.approval_out.as_deref() {
+        let json = serde_json::to_string_pretty(&approval)?;
+        write_file(path, &json).await?;
+    }
 
     match inputs.post_target {
         Some(target) => {
@@ -554,25 +552,6 @@ async fn load_manifest(
         }
         (None, None) => bail!("a manifest source is required"),
     }
-}
-
-/// Sign the manifest and, when `--approval-out` is set, write the approval to
-/// that file. Reporting the approval (inline payload or file path) is the
-/// terminal outcome's job.
-async fn sign_and_write_approval(
-    operator: &ResolvedOperator,
-    operator_ctx: &OperatorCtx<'_>,
-    approval_out: Option<&Path>,
-    manifest: &ValidatedManifest<'_>,
-) -> anyhow::Result<Approval> {
-    let approval = operator.approve_manifest(operator_ctx, manifest).await?;
-
-    if let Some(path) = approval_out {
-        let json = serde_json::to_string_pretty(&approval)?;
-        write_file(path, &json).await?;
-    }
-
-    Ok(approval)
 }
 
 #[instrument(skip_all, fields(manifest_id = %plan.manifest_id, operator_id = %plan.operator_id, deploy_id = ?plan.deploy_id))]
