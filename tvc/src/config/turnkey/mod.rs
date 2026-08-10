@@ -63,10 +63,10 @@ pub struct Config {
     pub aliases: Aliases,
     /// Last created app ID per organization (for convenience).
     #[serde(default)]
-    pub last_created_app_id: HashMap<Uuid, String>,
+    pub last_created_app_id: HashMap<Uuid, Uuid>,
     /// Last manifest set operator IDs per organization (for convenience).
     #[serde(default)]
-    pub last_operator_ids: HashMap<Uuid, Vec<String>>,
+    pub last_operator_ids: HashMap<Uuid, Vec<Uuid>>,
     /// Unrecognized top-level fields retained across supported config rewrites.
     #[serde(default, flatten)]
     pub extra: toml::Table,
@@ -439,9 +439,9 @@ mod disk {
             #[serde(default)]
             pub(super) orgs: IndexMap<String, OrgConfig>,
             #[serde(default)]
-            pub(super) last_created_app_id: HashMap<String, String>,
+            pub(super) last_created_app_id: HashMap<String, Uuid>,
             #[serde(default)]
-            pub(super) last_operator_ids: HashMap<String, Vec<String>>,
+            pub(super) last_operator_ids: HashMap<String, Vec<Uuid>>,
             #[serde(default, flatten)]
             pub(super) extra: toml::Table,
         }
@@ -468,6 +468,7 @@ mod disk {
     pub(super) mod v0 {
         use serde::Deserialize;
         use std::collections::HashMap;
+        use uuid::Uuid;
 
         /// Legacy top-level schema. Organization tables remain untyped until
         /// migration extracts `operator_key_path` and parses the v1 shape.
@@ -478,9 +479,9 @@ mod disk {
             #[serde(default)]
             pub(super) orgs: HashMap<String, toml::Table>,
             #[serde(default)]
-            pub(super) last_created_app_id: HashMap<String, String>,
+            pub(super) last_created_app_id: HashMap<String, Uuid>,
             #[serde(default)]
-            pub(super) last_operator_ids: HashMap<String, Vec<String>>,
+            pub(super) last_operator_ids: HashMap<String, Vec<Uuid>>,
             /// Unknown root values are carried forward so a migration does not
             /// discard data owned by another writer.
             #[serde(default, flatten)]
@@ -907,27 +908,29 @@ file may be missing or already migrated), keep the right contents at
     }
 
     /// Store the last created app ID for the active org
-    pub fn set_last_app_id(&mut self, app_id: &str) -> Result<()> {
+    pub fn set_last_app_id(&mut self, app_id: Uuid) -> Result<()> {
         let org_id = self.active_org.context("no active organization set")?;
-        self.last_created_app_id.insert(org_id, app_id.to_string());
+        self.last_created_app_id.insert(org_id, app_id);
         Ok(())
     }
 
     /// Get the last created app ID for the active org, if any
-    pub fn get_last_app_id(&self) -> Option<String> {
+    pub fn get_last_app_id(&self) -> Option<Uuid> {
         self.last_created_app_id.get(&self.active_org?).cloned()
     }
 
     /// Store the last manifest set operator IDs for the active org
-    pub fn set_last_operator_ids(&mut self, operator_ids: &[String]) -> Result<()> {
+    pub fn set_last_operator_ids(&mut self, operator_ids: Vec<Uuid>) -> Result<()> {
         let org_id = self.active_org.context("no active organization set")?;
-        self.last_operator_ids.insert(org_id, operator_ids.to_vec());
+        self.last_operator_ids.insert(org_id, operator_ids);
         Ok(())
     }
 
     /// Get the last manifest set operator IDs for the active org
-    pub fn get_last_operator_ids(&self) -> Option<Vec<String>> {
-        self.last_operator_ids.get(&self.active_org?).cloned()
+    pub fn get_last_operator_ids(&self) -> Option<&[Uuid]> {
+        self.last_operator_ids
+            .get(&self.active_org?)
+            .map(Vec::as_slice)
     }
 }
 
@@ -946,6 +949,8 @@ mod tests {
 
     const ORG_1: Uuid = Uuid::from_u128(1);
     const ORG_2: Uuid = Uuid::from_u128(2);
+    const OPERATOR_ID: Uuid = Uuid::from_u128(123);
+    const APP_ID: Uuid = Uuid::from_u128(321);
 
     fn test_org(api_base_url: &str, dir: &Path) -> OrgConfig {
         OrgConfig {
@@ -1011,7 +1016,9 @@ mod tests {
         assert!(config.resolve(&query).is_none());
     }
 
-    const V0_CONFIG: &str = r#"
+    fn v0_config() -> String {
+        format!(
+            r#"
 active_org = "default"
 future_root = "keep-root"
 
@@ -1022,17 +1029,20 @@ operator_key_path = "/keys/operator.json"
 future_org = 42
 
 [last_created_app_id]
-default = "app-123"
+default = "{}"
 
 [last_operator_ids]
-default = ["operator-123"]
-"#;
+default = ["{}"]
+"#,
+            APP_ID, OPERATOR_ID
+        )
+    }
 
     #[tokio::test]
     async fn migrates_v0_to_v2_eagerly_with_backup_lifecycle() {
         let temp = TempDir::new().unwrap();
         let path = temp.path().join("tvc.config.toml");
-        tokio::fs::write(&path, V0_CONFIG).await.unwrap();
+        tokio::fs::write(&path, v0_config()).await.unwrap();
 
         let config = Config::load_from_path(&path).await.unwrap();
 
@@ -1050,11 +1060,8 @@ default = ["operator-123"]
             config.extra["future_root"],
             toml::Value::String("keep-root".into())
         );
-        assert_eq!(config.last_created_app_id[&ORG_1], "app-123");
-        assert_eq!(
-            config.last_operator_ids[&ORG_1],
-            vec!["operator-123".to_string()]
-        );
+        assert_eq!(config.last_created_app_id[&ORG_1], APP_ID);
+        assert_eq!(config.last_operator_ids[&ORG_1], vec![OPERATOR_ID]);
 
         // Eagerly rewritten: the file on disk is v2 and the backup is gone.
         let saved = tokio::fs::read_to_string(&path).await.unwrap();
@@ -1122,7 +1129,7 @@ default_alias = true
     async fn an_existing_backup_blocks_loading() {
         let temp = TempDir::new().unwrap();
         let path = temp.path().join("tvc.config.toml");
-        tokio::fs::write(&path, V0_CONFIG).await.unwrap();
+        tokio::fs::write(&path, v0_config()).await.unwrap();
         tokio::fs::write(backup_file_path(&path), "old contents")
             .await
             .unwrap();

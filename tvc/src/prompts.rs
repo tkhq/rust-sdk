@@ -53,7 +53,8 @@ pub fn text(message: &str, default: Option<&str>) -> Result<String> {
     if let Some(d) = default {
         prompt = prompt.with_default(d);
     }
-    Ok(prompt.prompt()?)
+    let res = prompt.prompt()?;
+    Ok(res.parse()?)
 }
 
 /// Prompt for a yes/no confirmation with a default.

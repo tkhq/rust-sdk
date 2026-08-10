@@ -11,6 +11,8 @@ const NON_INTERACTIVE_ENV: &str = "TVC_NON_INTERACTIVE";
 const ORG_A: &str = "11111111-2222-4333-8444-555555555555";
 const ORG_B: &str = "22222222-2222-4222-8222-222222222222";
 const ORG_TEST: &str = "33333333-3333-4333-8333-333333333333";
+const APP_ID: &str = "44444444-4444-4444-8444-444444444444";
+const OPERATOR_ID: &str = "55555555-5555-5555-8555-555555555555";
 
 fn write_login_config(
     home: &TempDir,
@@ -36,10 +38,10 @@ fn write_login_config(
     config.set_active_org(org_id).unwrap();
     config
         .last_created_app_id
-        .insert(org_id, "app-1".to_string());
+        .insert(org_id, APP_ID.parse().unwrap());
     config
         .last_operator_ids
-        .insert(org_id, vec!["operator-1".to_string()]);
+        .insert(org_id, vec![OPERATOR_ID.parse().unwrap()]);
 
     fs::write(
         turnkey_dir.join("tvc.config.toml"),

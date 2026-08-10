@@ -1,10 +1,15 @@
 //! App configuration file format for `tvc app create`.
 
-use crate::prompts;
+use super::placeholder::StringWithPlaceholder;
+use crate::{
+    config::placeholder::{PlaceholderText, text::FillInAppName},
+    prompts,
+};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display, Formatter};
 use thiserror::Error;
+use uuid::Uuid;
 
 pub const MIN_SHARE_SET_THRESHOLD: u32 = 2;
 
@@ -12,7 +17,7 @@ pub const MIN_SHARE_SET_THRESHOLD: u32 = 2;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppConfig {
-    pub name: String,
+    pub name: StringWithPlaceholder<FillInAppName>,
     pub quorum_public_key: String,
     #[serde(default)]
     pub enable_egress: bool,
@@ -39,7 +44,7 @@ pub struct OperatorSetParams {
     #[serde(default)]
     pub new_operators: Vec<OperatorParams>,
     #[serde(default)]
-    pub existing_operator_ids: Vec<String>,
+    pub existing_operator_ids: Vec<Uuid>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,7 +74,7 @@ impl AppConfig {
     /// Generate a default template config with placeholders.
     pub fn template(operator_public_key: Option<&str>) -> Self {
         Self {
-            name: "<FILL_IN_APP_NAME>".to_string(),
+            name: StringWithPlaceholder::placeholder(),
             quorum_public_key: KNOWN_QUORUM_KEY.to_string(),
             enable_egress: false,
             manifest_set_id: None,
@@ -112,8 +117,8 @@ impl AppConfig {
     /// `saved_operator_public_key` is offered as the default when prompting
     /// for a `<FILL_IN>` operator public key.
     pub fn fill_interactively(&mut self, saved_operator_public_key: Option<&str>) -> Result<()> {
-        if self.name.starts_with("<FILL_IN") {
-            self.name = prompts::required_text("App name", None)?;
+        if matches!(self.name, StringWithPlaceholder::Placeholder(_)) {
+            self.name = prompts::required_text("App name", None)?.into();
         }
         if let Some(set_params) = self.manifest_set_params.as_mut() {
             if set_params.name.starts_with("<FILL_IN") {
@@ -142,7 +147,7 @@ impl AppConfig {
 
     /// Check if config contains placeholder values.
     pub fn has_placeholders(&self) -> bool {
-        self.name.starts_with("<FILL_IN")
+        matches!(self.name, StringWithPlaceholder::Placeholder(_))
             || self.manifest_set_params.as_ref().is_some_and(|p| {
                 p.name.starts_with("<FILL_IN")
                     || p.new_operators
@@ -160,10 +165,14 @@ impl AppConfig {
     pub fn validate(&self) -> Result<(), AppConfigValidationErrors> {
         let mut errors = Vec::new();
 
-        if self.name.starts_with("<FILL_IN") {
+        if matches!(
+            self.name,
+            StringWithPlaceholder::<FillInAppName>::Placeholder(_)
+        ) {
             errors.push(AppConfigValidationError::Placeholder {
                 field: "name",
-                placeholder: self.name.clone(),
+                // TODO: replace with &'static str when placeholder Strings are removed
+                placeholder: FillInAppName::TEXT.into(),
             });
         }
 
@@ -255,6 +264,7 @@ pub enum AppConfigValidationError {
     #[error("{field} contains placeholder value {placeholder}")]
     Placeholder {
         field: &'static str,
+        // TODO: fix me when all the strings are replaced with types
         placeholder: String,
     },
     #[error("{set}.newOperators[{index}].publicKey contains placeholder value {placeholder}")]

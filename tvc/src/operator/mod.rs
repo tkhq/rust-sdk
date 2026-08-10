@@ -317,7 +317,7 @@ pub(crate) async fn default_operator_public_key() -> Option<String> {
 /// parse at their own boundary.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct OperatorCandidate {
-    pub id: String,
+    pub id: Uuid,
     pub name: Option<String>,
 }
 
@@ -325,7 +325,7 @@ impl Display for OperatorCandidate {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self.name {
             Some(name) => write!(f, "{name} ({})", self.id),
-            None => f.write_str(&self.id),
+            None => write!(f, "{}", self.id),
         }
     }
 }
@@ -345,18 +345,23 @@ pub(crate) fn known_operator_candidates(config: &Config) -> Vec<OperatorCandidat
         .iter()
         .filter_map(|operator| match &operator.kind {
             OperatorRecordKind::Hosted(hosted) => Some(OperatorCandidate {
-                id: hosted.operator_id.to_string(),
+                id: hosted.operator_id,
                 name: Some(operator.name.clone()),
             }),
             OperatorRecordKind::Local(_) => None,
         })
         .collect();
 
-    for id in config.get_last_operator_ids().unwrap_or_default() {
-        if candidates.iter().all(|candidate| candidate.id != id) {
-            candidates.push(OperatorCandidate { id, name: None });
-        }
-    }
+    config
+        .get_last_operator_ids()
+        .unwrap_or_default()
+        .iter()
+        .copied()
+        .for_each(|id| {
+            if candidates.iter().all(|candidate| candidate.id != id) {
+                candidates.push(OperatorCandidate { id, name: None });
+            }
+        });
 
     candidates
 }
@@ -433,18 +438,20 @@ mod tests {
     fn candidates_are_registered_hosted_operators_then_saved_ids() {
         let mut config = config_with_operators(vec![local_operator(), hosted_operator("hosted")]);
         config
-            .set_last_operator_ids(&["44444444-4444-4444-8444-444444444444".to_string()])
+            .set_last_operator_ids(vec![
+                "44444444-4444-4444-8444-444444444444".parse().unwrap(),
+            ])
             .unwrap();
 
         assert_eq!(
             known_operator_candidates(&config),
             vec![
                 OperatorCandidate {
-                    id: HOSTED_ID.to_string(),
+                    id: HOSTED_ID.parse().unwrap(),
                     name: Some("hosted".to_string()),
                 },
                 OperatorCandidate {
-                    id: "44444444-4444-4444-8444-444444444444".to_string(),
+                    id: "44444444-4444-4444-8444-444444444444".parse().unwrap(),
                     name: None,
                 },
             ]
@@ -455,13 +462,13 @@ mod tests {
     fn candidates_dedupe_saved_ids_against_the_registry() {
         let mut config = config_with_operators(vec![hosted_operator("hosted")]);
         config
-            .set_last_operator_ids(&[HOSTED_ID.to_string()])
+            .set_last_operator_ids(vec![HOSTED_ID.parse().unwrap()])
             .unwrap();
 
         assert_eq!(
             known_operator_candidates(&config),
             vec![OperatorCandidate {
-                id: HOSTED_ID.to_string(),
+                id: HOSTED_ID.parse().unwrap(),
                 name: Some("hosted".to_string()),
             }]
         );
@@ -475,11 +482,11 @@ mod tests {
     #[test]
     fn candidate_display_labels_named_operators() {
         let named = OperatorCandidate {
-            id: HOSTED_ID.to_string(),
+            id: HOSTED_ID.parse().unwrap(),
             name: Some("hosted".to_string()),
         };
         let unnamed = OperatorCandidate {
-            id: HOSTED_ID.to_string(),
+            id: HOSTED_ID.parse().unwrap(),
             name: None,
         };
 

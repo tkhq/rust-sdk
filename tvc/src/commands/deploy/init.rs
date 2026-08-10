@@ -3,18 +3,19 @@
 use super::PORT_GUIDANCE;
 use crate::{
     client::{build_client, fetch_tvc_deployment},
-    config::{deploy::DeployConfig, turnkey},
+    config::deploy::DeployConfig,
     outcome::Outcome,
     output::StdCtx,
     prompts::{bail_interactive_conflicts_with_non_interactive, ensure_stdin_is_tty},
 };
 use anyhow::{Context, Result, bail};
 use chrono::Local;
-use clap::Args as ClapArgs;
+use clap::{ArgGroup, Args as ClapArgs};
 use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
 use std::path::PathBuf;
 use tracing::instrument;
+use uuid::Uuid;
 
 pub(crate) const LONG_ABOUT: &str = r#"
 Generate a deployment config file to edit, then pass to `tvc deploy create`.
@@ -26,11 +27,23 @@ placeholder template is written."#;
 
 /// Generate a template deployment configuration file.
 #[derive(Debug, ClapArgs)]
-#[command(about, long_about = None)]
+#[command(
+    about,
+    long_about = None,
+    group(
+        ArgGroup::new("app_id_source")
+            .args(["app_id", "from_deployment"])
+            .multiple(false)
+    )
+)]
 pub struct Args {
     /// Output file path.
     #[arg(short, long, value_name = "PATH", env = "TVC_DEPLOY_CONFIG_OUT")]
     pub output: Option<PathBuf>,
+
+    /// App ID to prefill in the deployment config template.
+    #[arg(long, value_name = "APP_ID", env = "TVC_APP_ID")]
+    pub app_id: Option<Uuid>,
 
     /// Seed the config from an existing deployment instead of a blank template.
     ///
@@ -39,7 +52,7 @@ pub struct Args {
     /// is tied to the container image, so recompute it if you change the image. A
     /// pull secret, if the source used one, must be re-supplied.
     #[arg(long, value_name = "DEPLOY_ID", env = "TVC_FROM_DEPLOYMENT")]
-    pub from_deployment: Option<String>,
+    pub from_deployment: Option<Uuid>,
 
     /// Walk through prompts for each field and write a filled config instead
     /// of a placeholder template.
@@ -65,6 +78,7 @@ async fn execute(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
         output,
         from_deployment,
         interactive: is_interactive,
+        app_id,
     } = args;
 
     // Generate output filename with timestamp if not provided
@@ -80,37 +94,25 @@ async fn execute(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
 
     let is_from_deployment = from_deployment.is_some();
 
-    // Seed the config either from an existing deployment or a blank template.
-    let mut config = match from_deployment {
-        Some(deploy_id) => {
-            // TODO (TVC-154):
-            // TL;DR split fetching the data/resources separately
-            // from building the client
-            let auth = build_client().await?;
-            let org_id = auth.org_id.to_string();
-            let deployment = fetch_tvc_deployment(&auth, org_id, deploy_id).await?;
-            DeployConfig::try_from(deployment)?
-        }
-        None => {
-            // Try to get the last created app ID to prefill the template.
-            let last_app_id = turnkey::Config::load()
-                .await
-                .ok()
-                .and_then(|config| config.get_last_app_id());
-            DeployConfig::template(last_app_id.as_deref())
-        }
+    let is_deployment = from_deployment.is_some();
+    let id = from_deployment.or(app_id).unwrap_or_default();
+
+    let mut config = if is_deployment {
+        // TODO (TVC-154):
+        // TL;DR split fetching the data/resources separately
+        // from building the client
+        let auth = build_client().await?;
+        let org_id = auth.org_id.to_string();
+        let deployment = fetch_tvc_deployment(&auth, org_id, id.to_string()).await?;
+        DeployConfig::try_from(deployment)?
+    } else {
+        DeployConfig::template(id)
     };
 
     // Optionally walk prompts to fill any remaining placeholders (e.g. the
     // expected pivot digest that `--from-deployment` deliberately leaves blank).
-    // In `--from-deployment` mode the app ID is already set, so the saved-app-id
-    // default is only consulted for a blank template.
     if is_interactive {
-        let saved_app_id = turnkey::Config::load()
-            .await
-            .ok()
-            .and_then(|config| config.get_last_app_id());
-        config.fill_interactively(ctx, saved_app_id.as_deref())?;
+        config.fill_interactively(ctx)?;
     }
 
     let needs_pull_secret = config.pull_secret_is_placeholder();

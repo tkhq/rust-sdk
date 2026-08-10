@@ -8,5 +8,6 @@
 
 pub mod app;
 pub mod deploy;
+pub mod placeholder;
 pub mod quorum_key;
 pub mod turnkey;
