@@ -18,9 +18,11 @@ use std::net::TcpListener;
 use std::path::Path;
 use std::process::Command;
 use std::thread::{self, JoinHandle};
+use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use tvc::config::app::KNOWN_QUORUM_KEY;
 use tvc::config::turnkey::{
-    Config, HostedOperatorRecord, OperatorKind, OperatorRecord, OperatorRecordKind, OrgConfig,
+    Config, HostedOperatorRecord, KeyCurve, OperatorKind, OperatorRecord, OperatorRecordKind,
+    OrgConfig, StoredApiKey,
 };
 
 /// Default per-step timeout. Generous enough for CI-runner cold cargo builds
@@ -577,4 +579,53 @@ fn app_create_reuses_the_registered_hosted_operator_by_default() {
         "Reusing operator hosted-op (11111111-1111-4111-8111-111111111111)",
     );
     session.exp_eof().unwrap();
+}
+
+/// Logging in to an org whose default backend is hosted needs no local key:
+/// login reports the registered hosted operator and generates nothing.
+#[test]
+fn login_reports_the_hosted_operator_for_a_hosted_default_org() {
+    let temp = tempfile::TempDir::new().unwrap();
+    write_hosted_org_config(temp.path());
+
+    // An existing API key so login skips generation and goes straight to
+    // verification.
+    let api_key_dir = temp.path().join(".config/turnkey/orgs/hosted-org");
+    std::fs::create_dir_all(&api_key_dir).unwrap();
+    let stamper = TurnkeyP256ApiKey::generate();
+    let api_key = StoredApiKey {
+        public_key: hex::encode(stamper.compressed_public_key()),
+        private_key: hex::encode(stamper.private_key()),
+        curve: KeyCurve::P256,
+    };
+    std::fs::write(
+        api_key_dir.join("api_key.json"),
+        serde_json::to_string_pretty(&api_key).unwrap(),
+    )
+    .unwrap();
+
+    let (api_base_url, server) = spawn_whoami_server();
+
+    let mut session = spawn_with_home(
+        temp.path(),
+        &[
+            "login",
+            "--org",
+            "hosted-org",
+            "--api-base-url",
+            &api_base_url,
+        ],
+    );
+
+    session.exp_string("Using existing API key.").unwrap();
+    exp_wrapped(
+        &mut session,
+        "Using hosted operator 'hosted-op' (11111111-1111-4111-8111-111111111111).",
+    );
+    let output = session.exp_eof().unwrap();
+    server.join().unwrap();
+
+    assert!(output.contains("Successfully logged in!"), "{output}");
+    assert!(!output.contains("Generating operator key"), "{output}");
+    assert!(output.contains("Hosted operator:"), "{output}");
 }
