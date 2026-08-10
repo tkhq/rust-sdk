@@ -117,6 +117,28 @@ fn hosted_default_rejects_skip_post_without_operator_id() {
         ));
 }
 
+/// Without `--operator-id` or saved IDs, a registered hosted operator is the
+/// posting candidate: target-building auto-selects it and resolution then
+/// proceeds to credential loading.
+#[test]
+fn registered_hosted_operator_is_the_post_candidate_without_saved_ids() {
+    let temp = TempDir::new().unwrap();
+    write_hosted_config(&temp);
+
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .arg("deploy")
+        .arg("approve")
+        .arg("--manifest")
+        .arg("fixtures/manifest.json")
+        .arg("--manifest-id")
+        .arg("11111111-1111-4111-8111-111111111111")
+        .arg("--dangerous-skip-interactive")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("No API key found for org 'test'"));
+}
+
 #[test]
 fn explicit_seed_rejects_hosted_operator_id() {
     let temp = TempDir::new().unwrap();
