@@ -11,6 +11,7 @@ pub use hosted::DEFAULT_HOSTED_OPERATOR_BASE_PATH;
 pub(crate) use hosted::{
     HostedOperatorSpec, HostedOperatorWallet, ResolvedHostedOperator, create_hosted_operator,
     hosted_activity_error, resolve_hosted_operator, resolve_hosted_operator_encrypt_key,
+    select_hosted_operator,
 };
 
 use crate::{
@@ -24,9 +25,7 @@ use crate::{
     pair::Signer,
 };
 use anyhow::{Context, Result, anyhow, bail, ensure};
-use hosted::{
-    HostedSigner, find_hosted_operator, select_hosted_operator, validated_hosted_operator,
-};
+use hosted::{HostedSigner, find_hosted_operator, validated_hosted_operator};
 use p256::{PublicKey, elliptic_curve::sec1::ToEncodedPoint};
 use qos_core::protocol::services::boot::{Approval, VersionedManifest};
 use std::{
