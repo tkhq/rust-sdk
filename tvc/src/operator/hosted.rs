@@ -305,10 +305,19 @@ impl HostedSigner {
 }
 
 impl Signer for HostedSigner {
-    fn sign(&self, message: Vec<u8>) -> SignerFuture<'_, Result<Vec<u8>>> {
+    fn sign(&self, message: &[u8]) -> SignerFuture<'_, Result<Vec<u8>>> {
+        let intent = {
+            let sign_with = self.operator.sign_public_key().to_string();
+
+            SignRawPayloadIntentV2 {
+                sign_with,
+                payload: hex::encode(message),
+                encoding: PayloadEncoding::Hexadecimal,
+                hash_function: HashFunction::Sha256,
+            }
+        };
+
         Box::pin(async move {
-            let intent =
-                hosted_signing_intent(self.operator.sign_public_key().to_string(), &message);
             let result = self
                 .auth
                 .client
@@ -324,15 +333,6 @@ impl Signer for HostedSigner {
 
     fn public_key(&self) -> Vec<u8> {
         self.operator.composite_public_key()
-    }
-}
-
-fn hosted_signing_intent(sign_with: String, manifest_hash: &[u8]) -> SignRawPayloadIntentV2 {
-    SignRawPayloadIntentV2 {
-        sign_with,
-        payload: hex::encode(manifest_hash),
-        encoding: PayloadEncoding::Hexadecimal,
-        hash_function: HashFunction::Sha256,
     }
 }
 

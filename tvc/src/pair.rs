@@ -19,7 +19,7 @@ pub type SignerFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 /// cannot tell them apart.
 pub trait Signer: Send + Sync {
     /// Sign the given message.
-    fn sign(&self, message: Vec<u8>) -> SignerFuture<'_, anyhow::Result<Vec<u8>>>;
+    fn sign(&self, message: &[u8]) -> SignerFuture<'_, anyhow::Result<Vec<u8>>>;
 
     /// The operator public key in the qos composite form
     /// (encryption point ‖ signing point).
@@ -55,6 +55,7 @@ impl Debug for HexSeed {
 /// A local QOS P256 key pair.
 #[derive(Clone)]
 pub struct LocalPair {
+    /// The actual pair is a singleton
     pair: Arc<P256Pair>,
 }
 
@@ -96,17 +97,14 @@ impl LocalPair {
 }
 
 impl Signer for LocalPair {
-    fn sign(&self, message: Vec<u8>) -> SignerFuture<'_, anyhow::Result<Vec<u8>>> {
-        let pair2 = Arc::clone(&self.pair);
+    fn sign(&self, message: &[u8]) -> SignerFuture<'_, anyhow::Result<Vec<u8>>> {
+        // should be fine to "block" the executor here as the cli is essentially single-threaded anyway
+        let signature = self
+            .pair
+            .sign(message)
+            .map_err(|_| anyhow!("failed to sign with local signer"));
 
-        Box::pin(async move {
-            tokio::task::spawn_blocking(move || {
-                pair2
-                    .sign(&message)
-                    .map_err(|_| anyhow!("failed to sign with local signer"))
-            })
-            .await?
-        })
+        Box::pin(async move { signature })
     }
 
     fn public_key(&self) -> Vec<u8> {

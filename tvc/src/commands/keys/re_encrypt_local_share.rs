@@ -169,12 +169,7 @@ async fn build_re_encrypted_share_output(
     };
 
     let signature = operator_pair
-        .sign(
-            provision_bundle
-                .manifest_envelope()
-                .manifest_hash()
-                .to_vec(),
-        )
+        .sign(&provision_bundle.manifest_envelope().manifest_hash())
         .await
         .context("failed to sign share approval with operator key")?;
     let share_approval = Approval { signature, member };

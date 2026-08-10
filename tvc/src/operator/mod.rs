@@ -110,7 +110,7 @@ impl ResolvedOperator {
     ) -> Result<Approval> {
         let public_key = self.signer.public_key();
         let member = manifest_member(manifest, &public_key, self.name())?;
-        let signature = self.signer.sign(manifest.manifest_hash().to_vec()).await?;
+        let signature = self.signer.sign(&manifest.manifest_hash()).await?;
         let approval = Approval { signature, member };
 
         // Membership is already proven — `member` came out of the manifest
