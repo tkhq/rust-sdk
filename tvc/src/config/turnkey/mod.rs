@@ -265,13 +265,6 @@ impl OperatorRecord {
             }),
         }
     }
-
-    pub fn operator_kind(&self) -> OperatorKind {
-        match self.kind {
-            OperatorRecordKind::Local(_) => OperatorKind::Local,
-            OperatorRecordKind::Hosted(_) => OperatorKind::Hosted,
-        }
-    }
 }
 
 /// Kind-specific durable operator metadata.
@@ -328,6 +321,21 @@ pub struct OrgConfig {
     /// Unrecognized organization fields retained across supported config rewrites.
     #[serde(default, flatten)]
     pub extra: toml::Table,
+}
+
+impl OrgConfig {
+    /// The hosted operator registry entries, each with its kind-specific
+    /// record, in config order.
+    pub(crate) fn hosted_operators(
+        &self,
+    ) -> impl Iterator<Item = (&OperatorRecord, &HostedOperatorRecord)> {
+        self.operators
+            .iter()
+            .filter_map(|operator| match &operator.kind {
+                OperatorRecordKind::Hosted(hosted) => Some((operator, hosted)),
+                OperatorRecordKind::Local(_) => None,
+            })
+    }
 }
 
 fn default_api_base_url() -> String {
