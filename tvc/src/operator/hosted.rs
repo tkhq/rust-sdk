@@ -170,7 +170,7 @@ pub(crate) struct ResolvedHostedOperator {
 
 impl ResolvedHostedOperator {
     /// Parse and validate a hosted registry record into a resolved operator.
-    fn from_registry(
+    pub(super) fn from_registry(
         organization_id: String,
         name: &str,
         record: &HostedOperatorRecord,
@@ -246,21 +246,16 @@ impl Config {
             return Ok(None);
         };
 
-        let mut matches =
-            org.operators
-                .iter()
-                .filter_map(|operator| match &operator.kind {
-                    OperatorRecordKind::Hosted(hosted) => (hosted.operator_id == *operator_id)
-                        .then_some((operator.name.as_str(), hosted)),
-                    OperatorRecordKind::Local(_) => None,
-                });
+        let mut matches = org
+            .hosted_operators()
+            .filter(|(_, hosted)| hosted.operator_id == *operator_id);
 
         match (matches.next(), matches.next()) {
             (None, _) => Ok(None),
-            (Some((name, record)), None) => Ok(Some(ResolvedHostedOperator::from_registry(
+            (Some((record, hosted)), None) => Ok(Some(ResolvedHostedOperator::from_registry(
                 org.id.clone(),
-                name,
-                record,
+                &record.name,
+                hosted,
             )?)),
             (Some(_), Some(_)) => bail!("multiple hosted operators have ID {operator_id}"),
         }
@@ -371,7 +366,9 @@ pub(crate) fn hosted_activity_error(operation: &str, error: TurnkeyClientError) 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::turnkey::{LocalOperatorRecord, OperatorKind, OrgConfig};
+    use crate::config::turnkey::{
+        LocalOperatorRecord, OperatorKind, OrgConfig, SelectHostedOperatorError,
+    };
     use crate::operator::OperatorPublicKeyParseError;
     use qos_p256::P256Pair;
     use std::collections::HashMap;
@@ -528,6 +525,50 @@ mod tests {
             error.downcast_ref::<OperatorPublicKeyParseError>(),
             Some(&OperatorPublicKeyParseError::InvalidHex)
         );
+    }
+
+    #[test]
+    fn selects_the_sole_hosted_operator_ignoring_locals() {
+        let local = OperatorRecord {
+            name: "local".to_string(),
+            kind: OperatorRecordKind::Local(LocalOperatorRecord {
+                key_path: PathBuf::from("operator.json"),
+                operator_id: None,
+                extra: toml::Table::new(),
+            }),
+        };
+        let config = config_with_operators(vec![local, hosted_operator("hosted", hosted_record())]);
+        let org = &config.orgs["active"];
+
+        let (operator, hosted) = org.select_hosted_operator().unwrap();
+
+        assert_eq!(operator.name, "hosted");
+        assert_eq!(hosted.operator_id, Uuid::parse_str(OPERATOR_ID).unwrap());
+    }
+
+    #[test]
+    fn selecting_a_hosted_operator_requires_one_to_exist() {
+        let config = config_with_operators(Vec::new());
+        let org = &config.orgs["active"];
+
+        assert!(matches!(
+            org.select_hosted_operator(),
+            Err(SelectHostedOperatorError::NoHostedOperator)
+        ));
+    }
+
+    #[test]
+    fn selecting_a_hosted_operator_refuses_multiple() {
+        let config = config_with_operators(vec![
+            hosted_operator("first", hosted_record()),
+            hosted_operator("second", hosted_record()),
+        ]);
+        let org = &config.orgs["active"];
+
+        assert!(matches!(
+            org.select_hosted_operator(),
+            Err(SelectHostedOperatorError::MultipleHostedOperators)
+        ));
     }
 
     #[test]

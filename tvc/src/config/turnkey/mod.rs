@@ -266,13 +266,6 @@ impl OperatorRecord {
             }),
         }
     }
-
-    pub fn operator_kind(&self) -> OperatorKind {
-        match self.kind {
-            OperatorRecordKind::Local(_) => OperatorKind::Local,
-            OperatorRecordKind::Hosted(_) => OperatorKind::Hosted,
-        }
-    }
 }
 
 /// Kind-specific durable operator metadata.
@@ -341,6 +334,16 @@ pub enum SelectLocalOperatorError {
     MultipleLocalOperators,
 }
 
+/// Failure modes of selecting the sole hosted operator of an organization.
+/// Which organization it was is the caller's context to add.
+#[derive(Debug, Error)]
+pub enum SelectHostedOperatorError {
+    #[error("no hosted operator is configured")]
+    NoHostedOperator,
+    #[error("multiple hosted operators are configured")]
+    MultipleHostedOperators,
+}
+
 impl OrgConfig {
     /// Select the sole local operator registry entry, with its kind-specific
     /// record. Purely a registry query: whether local is the organization's
@@ -360,6 +363,34 @@ impl OrgConfig {
             (Some(sole), None) => Ok(sole),
             (None, _) => Err(SelectLocalOperatorError::NoLocalOperator),
             (Some(_), Some(_)) => Err(SelectLocalOperatorError::MultipleLocalOperators),
+        }
+    }
+
+    /// The hosted operator registry entries, each with its kind-specific
+    /// record, in config order.
+    pub(crate) fn hosted_operators(
+        &self,
+    ) -> impl Iterator<Item = (&OperatorRecord, &HostedOperatorRecord)> {
+        self.operators
+            .iter()
+            .filter_map(|operator| match &operator.kind {
+                OperatorRecordKind::Hosted(hosted) => Some((operator, hosted)),
+                OperatorRecordKind::Local(_) => None,
+            })
+    }
+
+    /// Select the sole hosted operator registry entry, with its kind-specific
+    /// record. Purely a registry query: whether hosted is the organization's
+    /// default backend is resolution policy, decided elsewhere.
+    pub(crate) fn select_hosted_operator(
+        &self,
+    ) -> Result<(&OperatorRecord, &HostedOperatorRecord), SelectHostedOperatorError> {
+        let mut hosted = self.hosted_operators();
+
+        match (hosted.next(), hosted.next()) {
+            (Some(sole), None) => Ok(sole),
+            (None, _) => Err(SelectHostedOperatorError::NoHostedOperator),
+            (Some(_), Some(_)) => Err(SelectHostedOperatorError::MultipleHostedOperators),
         }
     }
 }

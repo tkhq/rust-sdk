@@ -163,8 +163,13 @@ pub(crate) enum SignerRequirement {
 ///    operator — even when the org's default operator kind is local.
 /// 3. Otherwise the active org's `default_operator_kind` decides, and never
 ///    crosses over: `local` resolves the sole local record (reconciling a
-///    given ID against its configured one); `hosted` refuses — an ID is
-///    required, and resolution never falls back to the local key.
+///    given ID against its configured one); `hosted` resolves the sole
+///    hosted record when no ID names one, and never falls back to the
+///    local key.
+///
+/// Config is loaded lazily inside: the explicit-seed path must not depend
+/// on a config file being present or well-formed (pinned by
+/// `explicit_seed_does_not_load_malformed_config`).
 pub(crate) async fn resolve_operator(
     explicit: Option<LocalOperatorSeedSource>,
     operator_id: Option<Uuid>,
@@ -220,7 +225,27 @@ pub(crate) async fn resolve_operator(
     if org.default_operator_kind == OperatorKind::Hosted {
         match operator_id {
             Some(id) => bail!("hosted operator ID '{id}' was not found in org '{alias}'"),
-            None => bail!("--operator-id is required to approve with a hosted operator"),
+            None => {
+                // A hosted default cannot satisfy an offline approval;
+                // refuse before selection or credentials.
+                if requirement == SignerRequirement::OfflineApproval {
+                    bail!("--skip-post is only supported for local operators");
+                }
+
+                let (record, hosted) = org
+                    .select_hosted_operator()
+                    .with_context(|| format!("org '{alias}'"))?;
+                let hosted =
+                    ResolvedHostedOperator::from_registry(org.id.clone(), &record.name, hosted)?;
+                let auth = build_client().await?;
+                ensure_authenticated_org(&auth.org_id, hosted.organization_id())?;
+
+                return Ok(ResolvedOperator {
+                    name: Some(hosted.name().to_string()),
+                    operator_id: Some(hosted.operator_id()),
+                    signer: Box::new(HostedSigner::new(hosted, auth)),
+                });
+            }
         }
     }
 
