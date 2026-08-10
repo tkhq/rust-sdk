@@ -461,7 +461,7 @@ impl Display for OrgChoice {
     }
 }
 
-fn find_org<'a>(config: &'a Config, org: &str) -> Option<(&'a String, &'a OrgConfig)> {
+pub(crate) fn find_org<'a>(config: &'a Config, org: &str) -> Option<(&'a String, &'a OrgConfig)> {
     if let Some((alias, org_config)) = config.orgs.get_key_value(org) {
         return Some((alias, org_config));
     }
