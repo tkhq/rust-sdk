@@ -101,7 +101,7 @@ async fn resolve_local_credential(source: LocalCredentialSource) -> anyhow::Resu
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::turnkey::StoredQosOperatorKey;
+    use crate::config::turnkey::{QosOperatorPublicKey, StoredQosOperatorKey};
     use crate::pair::Pair;
     use std::fs;
     use tempfile::TempDir;
@@ -147,7 +147,8 @@ mod tests {
         fs::write(
             &path,
             serde_json::to_string(&StoredQosOperatorKey {
-                public_key: "unused".to_string(),
+                // The resolve path only reads the seed; a nil key stands in.
+                public_key: QosOperatorPublicKey::default(),
                 private_key: private_key.clone(),
             })
             .unwrap(),
