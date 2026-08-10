@@ -2,9 +2,9 @@
 
 use crate::client::build_turnkey_client;
 use crate::config::turnkey::{
-    API_BASE_URL_PROD, Config, KeyCurve, OperatorRecordKind, OrgConfig, StoredApiKey,
-    StoredQosOperatorKey, dashboard_base_url, default_api_key_path, default_operator_key_path,
-    default_org_dir,
+    API_BASE_URL_PROD, Config, KeyCurve, OperatorRecordKind, OrgConfig, QosOperatorPublicKey,
+    StoredApiKey, StoredQosOperatorKey, dashboard_base_url, default_api_key_path,
+    default_operator_key_path, default_org_dir,
 };
 use crate::outcome::Outcome;
 use crate::output::StdCtx;
@@ -376,7 +376,7 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
         user_id: whoami.user_id,
         alias,
         api_public_key: api_key.public_key.clone(),
-        operator_public_key: operator_key.public_key.clone(),
+        operator_public_key: operator_key.public_key,
         config_file_path: crate::config::turnkey::config_file_path()?
             .display()
             .to_string(),
@@ -575,12 +575,12 @@ async fn find_or_generate_operator_key(
 
     let pair =
         P256Pair::generate().map_err(|e| anyhow!("failed to generate operator key: {e:?}"))?;
-    let public_key = hex::encode(pair.public_key().to_bytes());
-    let private_key = hex::encode(pair.to_master_seed());
+    let public_key = QosOperatorPublicKey::try_from(pair.public_key().to_bytes().as_slice())
+        .context("generated operator public key")?;
 
     let operator_key = StoredQosOperatorKey {
-        public_key: public_key.clone(),
-        private_key,
+        public_key,
+        private_key: hex::encode(pair.to_master_seed()),
     };
 
     operator_key.save(&local.key_path).await?;
@@ -649,7 +649,7 @@ pub struct LoggedIn {
     user_id: String,
     alias: String,
     api_public_key: String,
-    operator_public_key: String,
+    operator_public_key: QosOperatorPublicKey,
     config_file_path: String,
     api_key_path: String,
     operator_key_path: String,
