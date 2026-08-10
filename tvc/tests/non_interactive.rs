@@ -393,3 +393,19 @@ fn deploy_init_template_does_not_require_readable_existing_config() {
 
     assert!(output.exists(), "deploy init should write the template");
 }
+
+#[test]
+fn keys_backup_operator_key_without_output_errors_when_non_interactive() {
+    let temp = TempDir::new().unwrap();
+
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env(NON_INTERACTIVE_ENV, "1")
+        .arg("keys")
+        .arg("backup-operator-key")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--output is required in non-interactive mode",
+        ));
+}

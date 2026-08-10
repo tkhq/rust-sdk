@@ -8,7 +8,11 @@
 
 #![cfg(unix)]
 
+mod common;
+
 use rexpect::session::PtySession;
+use std::path::Path;
+use std::process::Command;
 
 /// Default per-step timeout. Generous enough for CI-runner cold cargo builds
 /// of the binary; tight enough to fail fast if an `exp_string` mismatches.
@@ -19,6 +23,23 @@ fn spawn(args: &str) -> PtySession {
     let cmd = format!("{bin} {args}");
     rexpect::spawn(&cmd, Some(TIMEOUT_MS))
         .unwrap_or_else(|e| panic!("spawn failed: {e}\n  cmd: {cmd}"))
+}
+
+/// Spawn the binary in a PTY with `HOME` pointed at an isolated directory and
+/// ambient `TVC_*` variables scrubbed so developer shells can't leak into the
+/// prompts under test.
+fn spawn_with_home(home: &Path, args: &[&str]) -> PtySession {
+    let bin = env!("CARGO_BIN_EXE_tvc");
+
+    let mut cmd = Command::new(bin);
+    cmd.args(args)
+        .env("HOME", home)
+        .env_remove("TVC_ORG")
+        .env_remove("TVC_API_BASE_URL")
+        .env_remove("TVC_NON_INTERACTIVE");
+
+    rexpect::session::spawn_command(cmd, Some(TIMEOUT_MS))
+        .unwrap_or_else(|e| panic!("spawn failed: {e}\n  cmd: {bin} {}", args.join(" ")))
 }
 
 /// `tvc deploy approve` walks all five section confirmations in order and
@@ -117,4 +138,24 @@ fn login_with_empty_org_id_bails() {
     session.send_line("").unwrap();
     session.exp_string("Organization ID is required").unwrap();
     session.exp_eof().unwrap();
+}
+
+/// Interactive `keys backup-operator-key` prompts for the destination and
+/// reports the copy.
+#[test]
+fn keys_backup_operator_key_prompts_for_destination() {
+    let temp = tempfile::TempDir::new().unwrap();
+    common::write_profiles_config(temp.path(), &[("alias-a", "org-backup")], Some("alias-a"));
+    common::write_profile_key_files(temp.path(), "alias-a");
+    let destination = temp.path().join("operator-backup.json");
+
+    let mut session = spawn_with_home(temp.path(), &["keys", "backup-operator-key"]);
+
+    session.exp_string("Backup file path").unwrap();
+    session.send_line(destination.to_str().unwrap()).unwrap();
+
+    session.exp_string("Operator key backed up!").unwrap();
+    session.exp_eof().unwrap();
+
+    assert!(destination.exists());
 }
