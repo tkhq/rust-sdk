@@ -3,7 +3,9 @@
 
 use crate::{
     commands::{Run, login::find_org},
-    config::turnkey::{Config, QosOperatorPublicKey, StoredQosOperatorKey},
+    config::turnkey::{
+        Config, QosOperatorPublicKey, SelectLocalOperatorError, StoredQosOperatorKey,
+    },
     outcome::Outcome,
     output::StdCtx,
     prompts::{self, error_required_in_non_interactive},
@@ -62,7 +64,19 @@ impl Run for Args {
 
         let (_, local) = org_config
             .select_local_operator()
-            .with_context(|| format!("org '{alias}'"))?;
+            .map_err(|error| match error {
+                // Nothing exportable exists for a hosted-only org; explain
+                // that instead of leaving a bare missing-operator error.
+                SelectLocalOperatorError::NoLocalOperator => {
+                    anyhow::Error::new(error).context(format!(
+                        "org '{alias}' has no local operator key file to back up; hosted \
+                         operators' private keys are held by Turnkey and cannot be exported"
+                    ))
+                }
+                SelectLocalOperatorError::MultipleLocalOperators => {
+                    anyhow::Error::new(error).context(format!("org '{alias}'"))
+                }
+            })?;
         let source = &local.key_path;
 
         let destination = match self.output {
