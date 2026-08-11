@@ -2279,6 +2279,24 @@ message ImportSecretsRequest {
   immutable.activity.v1.ImportSecretsIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
 }
 
+message ExportSecretsRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_EXPORT_SECRETS"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.ExportSecretsIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+}
+
 message SparkPrepareTransferRequest {
   string type = 1 [
     (google.api.field_behavior) = REQUIRED,
