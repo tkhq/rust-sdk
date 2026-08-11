@@ -792,3 +792,230 @@ fn login_reports_the_hosted_operator_for_a_hosted_default_org() {
     assert!(!output.contains("Generating operator key"), "{output}");
     assert!(output.contains("Hosted operator:"), "{output}");
 }
+
+/// A crash between the directory rename and the config save leaves the files
+/// moved but the config still pointing at the legacy paths. The next
+/// interactive login heals: it treats the move as done and rewrites the
+/// config.
+#[test]
+fn login_heals_a_crash_between_directory_move_and_config_save() {
+    let temp = tempfile::TempDir::new().unwrap();
+    common::write_profiles_config(temp.path(), &[("alias-a", ORG_E2E)], Some("alias-a"));
+    common::write_profile_key_files(temp.path(), "alias-a");
+    let legacy_dir = temp.path().join(".config/turnkey/orgs/alias-a");
+    let id_dir = temp.path().join(".config/turnkey/orgs").join(ORG_E2E);
+
+    // Recreate the crash window: the rename happened, the save did not.
+    std::fs::rename(&legacy_dir, &id_dir).unwrap();
+
+    let (api_base_url, server) = spawn_whoami_server();
+
+    let mut session = spawn_with_home(
+        temp.path(),
+        &["login", "--org", "alias-a", "--api-base-url", &api_base_url],
+    );
+
+    exp_wrapped(
+        &mut session,
+        &format!(
+            "Moved key directory: {} -> {}",
+            legacy_dir.display(),
+            id_dir.display()
+        ),
+    );
+    session.exp_string("Successfully logged in!").unwrap();
+    session.exp_eof().unwrap();
+    server.join().unwrap();
+
+    let saved =
+        std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
+    let table: toml::Table = toml::from_str(&saved).unwrap();
+    assert_eq!(
+        table["orgs"][ORG_E2E]["api_key_path"].as_str().unwrap(),
+        id_dir.join("api_key.json").to_str().unwrap()
+    );
+}
+
+/// A crash mid-loop strands at most one organization (the migration saves
+/// after each): the next interactive login finishes the job in one pass,
+/// healing the moved-but-unsaved org and moving the untouched one.
+#[test]
+fn login_finishes_a_partially_migrated_config_in_one_pass() {
+    let temp = tempfile::TempDir::new().unwrap();
+    common::write_profiles_config(
+        temp.path(),
+        &[("alias-a", ORG_E2E), ("alias-b", ORG_OTHER)],
+        Some("alias-a"),
+    );
+    common::write_profile_key_files(temp.path(), "alias-a");
+    common::write_profile_key_files(temp.path(), "alias-b");
+    let legacy_a = temp.path().join(".config/turnkey/orgs/alias-a");
+    let legacy_b = temp.path().join(".config/turnkey/orgs/alias-b");
+    let id_a = temp.path().join(".config/turnkey/orgs").join(ORG_E2E);
+    let id_b = temp.path().join(".config/turnkey/orgs").join(ORG_OTHER);
+
+    // Org A crashed between rename and save; org B was never reached.
+    std::fs::rename(&legacy_a, &id_a).unwrap();
+
+    let (api_base_url, server) = spawn_whoami_server();
+
+    let mut session = spawn_with_home(
+        temp.path(),
+        &["login", "--org", "alias-a", "--api-base-url", &api_base_url],
+    );
+
+    exp_wrapped(
+        &mut session,
+        &format!(
+            "Moved key directory: {} -> {}",
+            legacy_a.display(),
+            id_a.display()
+        ),
+    );
+    exp_wrapped(
+        &mut session,
+        &format!(
+            "Moved key directory: {} -> {}",
+            legacy_b.display(),
+            id_b.display()
+        ),
+    );
+    session.exp_string("Successfully logged in!").unwrap();
+    session.exp_eof().unwrap();
+    server.join().unwrap();
+
+    assert!(!legacy_a.exists());
+    assert!(!legacy_b.exists());
+    assert!(id_a.join("operator.json").exists());
+    assert!(id_b.join("operator.json").exists());
+
+    let saved =
+        std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
+    let table: toml::Table = toml::from_str(&saved).unwrap();
+    assert_eq!(
+        table["orgs"][ORG_E2E]["api_key_path"].as_str().unwrap(),
+        id_a.join("api_key.json").to_str().unwrap()
+    );
+    assert_eq!(
+        table["orgs"][ORG_OTHER]["api_key_path"].as_str().unwrap(),
+        id_b.join("api_key.json").to_str().unwrap()
+    );
+}
+
+/// An occupied target directory fails the move: the migration warns, keeps
+/// the organization on its legacy paths, and login still succeeds — nothing
+/// is deleted or overwritten.
+#[test]
+fn login_skips_migration_when_the_target_directory_is_occupied() {
+    let temp = tempfile::TempDir::new().unwrap();
+    common::write_profiles_config(temp.path(), &[("alias-a", ORG_E2E)], Some("alias-a"));
+    common::write_profile_key_files(temp.path(), "alias-a");
+    let legacy_dir = temp.path().join(".config/turnkey/orgs/alias-a");
+    let id_dir = temp.path().join(".config/turnkey/orgs").join(ORG_E2E);
+
+    // Someone (or something) already owns the target directory.
+    std::fs::create_dir_all(&id_dir).unwrap();
+    std::fs::write(id_dir.join("unrelated.txt"), "not ours").unwrap();
+
+    let (api_base_url, server) = spawn_whoami_server();
+
+    let mut session = spawn_with_home(
+        temp.path(),
+        &["login", "--org", "alias-a", "--api-base-url", &api_base_url],
+    );
+
+    exp_wrapped(&mut session, "WARNING: could not move key directory");
+    session.exp_string("Successfully logged in!").unwrap();
+    session.exp_eof().unwrap();
+    server.join().unwrap();
+
+    // Both directories intact; the config still points at the legacy paths.
+    assert!(legacy_dir.join("operator.json").exists());
+    assert_eq!(
+        std::fs::read_to_string(id_dir.join("unrelated.txt")).unwrap(),
+        "not ours"
+    );
+    let saved =
+        std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
+    let table: toml::Table = toml::from_str(&saved).unwrap();
+    assert_eq!(
+        table["orgs"][ORG_E2E]["api_key_path"].as_str().unwrap(),
+        legacy_dir.join("api_key.json").to_str().unwrap()
+    );
+}
+
+/// Merging v1 duplicate profiles keeps one registration per organization;
+/// the losing alias's directory is deliberately orphaned on disk (reported
+/// in the migration note), and only the kept profile's directory migrates.
+#[test]
+fn duplicate_alias_merge_leaves_the_losing_directory_orphaned() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let turnkey_dir = temp.path().join(".config/turnkey");
+    std::fs::create_dir_all(&turnkey_dir).unwrap();
+    common::write_profile_key_files(temp.path(), "alias-a");
+    common::write_profile_key_files(temp.path(), "alias-b");
+    let legacy_a = temp.path().join(".config/turnkey/orgs/alias-a");
+    let legacy_b = temp.path().join(".config/turnkey/orgs/alias-b");
+    let id_dir = temp.path().join(".config/turnkey/orgs").join(ORG_E2E);
+    std::fs::write(
+        turnkey_dir.join("tvc.config.toml"),
+        format!(
+            r#"version = 1
+active_org = "alias-b"
+
+[orgs.alias-a]
+id = "{ORG_E2E}"
+api_key_path = "{a}/api_key.json"
+api_base_url = "{url}"
+
+[[orgs.alias-a.operators]]
+name = "default"
+kind = "local"
+key_path = "{a}/operator.json"
+
+[orgs.alias-b]
+id = "{ORG_E2E}"
+api_key_path = "{b}/api_key.json"
+api_base_url = "{url}"
+default_alias = true
+
+[[orgs.alias-b.operators]]
+name = "default"
+kind = "local"
+key_path = "{b}/operator.json"
+"#,
+            a = legacy_a.display(),
+            b = legacy_b.display(),
+            url = common::LOCAL_API_BASE_URL,
+        ),
+    )
+    .unwrap();
+
+    let (api_base_url, server) = spawn_whoami_server();
+
+    let mut session = spawn_with_home(
+        temp.path(),
+        &["login", "--org", "alias-b", "--api-base-url", &api_base_url],
+    );
+
+    exp_wrapped(
+        &mut session,
+        "config migration: merged duplicate profile 'alias-a'",
+    );
+    exp_wrapped(
+        &mut session,
+        &format!(
+            "Moved key directory: {} -> {}",
+            legacy_b.display(),
+            id_dir.display()
+        ),
+    );
+    session.exp_string("Successfully logged in!").unwrap();
+    session.exp_eof().unwrap();
+    server.join().unwrap();
+
+    // The loser's files stay on disk, untouched and unregistered.
+    assert!(legacy_a.join("operator.json").exists());
+    assert!(!legacy_b.exists());
+    assert!(id_dir.join("operator.json").exists());
+}
