@@ -1,8 +1,6 @@
 //! Deployment configuration file format for `tvc deploy create`.
 
-use crate::output::Ctx;
-use crate::prompts;
-use crate::shell_println;
+use crate::{output::Ctx, prompts, shell_println};
 use anyhow::{Context, Result, anyhow};
 use qos_core::protocol::services::boot::VersionedManifest;
 use serde::{Deserialize, Serialize};
@@ -27,7 +25,7 @@ pub const DEFAULT_QOS_VERSION: &str = "0.12.1";
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeployConfig {
-    pub app_id: String,
+    pub app_id: Uuid,
     pub qos_version: String,
     pub pivot_container_image_url: String,
     pub pivot_path: String,
@@ -75,6 +73,8 @@ impl TryFrom<TvcDeployment> for DeployConfig {
             ..
         } = deployment;
 
+        let app_id = app_id.parse()?;
+
         let tvc_manifest =
             manifest.ok_or_else(|| anyhow!("deployment {id} has no manifest to seed from"))?;
         let manifest = VersionedManifest::try_from_slice_compat(&tvc_manifest.manifest)
@@ -116,9 +116,9 @@ impl TryFrom<TvcDeployment> for DeployConfig {
 impl DeployConfig {
     /// Generate a default template config with placeholders.
     // Future: Could auto-fill appId if there's only one app in the org
-    pub fn template(app_id: Option<&str>) -> Self {
+    pub fn template(app_id: Uuid) -> Self {
         Self {
-            app_id: app_id.unwrap_or("<FILL_IN_APP_ID>").to_string(),
+            app_id,
             qos_version: DEFAULT_QOS_VERSION.to_string(),
             pivot_container_image_url: "<FILL_IN_PIVOT_CONTAINER_IMAGE_URL>".to_string(),
             pivot_path: "<FILL_IN_PIVOT_PATH>".to_string(),
@@ -136,14 +136,7 @@ impl DeployConfig {
     /// Non-placeholder fields are preserved unchanged so partial edits work.
     ///
     /// `saved_app_id` is offered as the default for the App ID prompt when set.
-    pub fn fill_interactively<W: Write, W2: Write>(
-        &mut self,
-        ctx: &mut Ctx<W, W2>,
-        saved_app_id: Option<&str>,
-    ) -> Result<()> {
-        if self.app_id.starts_with("<FILL_IN") {
-            self.app_id = prompts::required_text("App ID", saved_app_id)?;
-        }
+    pub fn fill_interactively<W: Write, W2: Write>(&mut self, ctx: &mut Ctx<W, W2>) -> Result<()> {
         if self.qos_version.starts_with("<FILL_IN") {
             self.qos_version = prompts::required_text("QOS version", None)?;
         }
@@ -174,8 +167,7 @@ impl DeployConfig {
 
     /// Check if config contains placeholder values.
     pub fn has_placeholders(&self) -> bool {
-        self.app_id.starts_with("<FILL_IN")
-            || self.qos_version.starts_with("<FILL_IN")
+        self.qos_version.starts_with("<FILL_IN")
             || self.pivot_container_image_url.starts_with("<FILL_IN")
             || self.pivot_path.starts_with("<FILL_IN")
             || self.expected_pivot_digest.starts_with("<FILL_IN")
@@ -187,9 +179,6 @@ impl DeployConfig {
     /// `<FILL_IN...>` placeholders, in struct order. Empty if complete.
     pub fn missing_required_fields(&self) -> Vec<&'static str> {
         let mut missing = Vec::new();
-        if self.app_id.starts_with("<FILL_IN") {
-            missing.push("--app-id");
-        }
         if self.qos_version.starts_with("<FILL_IN") {
             missing.push("--qos-version");
         }
@@ -211,16 +200,6 @@ impl DeployConfig {
 
     pub fn validate(&self) -> Result<(), DeployConfigValidationErrors> {
         let mut errors = Vec::new();
-        if self.app_id.starts_with("<FILL_IN") {
-            errors.push(DeployConfigValidationError::Placeholder {
-                field: "app_id",
-                placeholder: self.app_id.clone(),
-            });
-        } else if Uuid::try_parse(&self.app_id).is_err() {
-            errors.push(DeployConfigValidationError::InvalidAppId {
-                value: self.app_id.clone(),
-            });
-        }
         if self.qos_version.starts_with("<FILL_IN") {
             errors.push(DeployConfigValidationError::Placeholder {
                 field: "qos_version",
@@ -343,7 +322,7 @@ mod tests {
         TvcDeployment {
             id: "deploy-123".into(),
             organization_id: "org-1".into(),
-            app_id: "app-1".into(),
+            app_id: Uuid::from_u128(645).to_string(),
             manifest_set: None,
             share_set: None,
             manifest: Some(manifest(false)),
@@ -368,7 +347,6 @@ mod tests {
     #[test]
     fn from_deployment_copies_recoverable_fields() {
         let config = DeployConfig::try_from(sample_deployment(false)).unwrap();
-        assert_eq!(config.app_id, "app-1");
         assert_eq!(config.qos_version, "0.6.1");
         assert_eq!(config.pivot_container_image_url, "ghcr.io/x/y@sha256:img");
         assert_eq!(config.pivot_path, "/bin/pivot");
@@ -445,7 +423,7 @@ mod tests {
 
     #[test]
     fn fresh_template_is_all_placeholders() {
-        let config = DeployConfig::template(None);
+        let config = DeployConfig::template(Default::default());
         assert!(config.has_placeholders());
     }
 
@@ -453,8 +431,7 @@ mod tests {
     fn filled_config_with_pull_secret_still_placeholder_is_detected() {
         // Previously this case slipped through: all FILL_IN fields replaced,
         // but the pull-secret sentinel left intact.
-        let mut config = DeployConfig::template(None);
-        config.app_id = "app_123".into();
+        let mut config = DeployConfig::template(Default::default());
         config.qos_version = "0.6.1".into();
         config.pivot_container_image_url = "ghcr.io/x/y:v1".into();
         config.pivot_path = "/bin/pivot".into();
@@ -470,8 +447,7 @@ mod tests {
         // If every field is already set, fill_interactively must not attempt
         // to prompt — this is the contract that lets unit tests run without
         // injecting stdin.
-        let mut config = DeployConfig::template(None);
-        config.app_id = "app_xyz".into();
+        let mut config = DeployConfig::template(Default::default());
         config.qos_version = "0.6.1".into();
         config.pivot_container_image_url = "ghcr.io/x/y:v1".into();
         config.pivot_path = "/bin/pivot".into();
@@ -480,8 +456,7 @@ mod tests {
 
         let shell = EmptyShell::default();
         let mut ctx = Ctx::new(shell, false);
-        config.fill_interactively(&mut ctx, None).unwrap();
-        assert_eq!(config.app_id, "app_xyz");
+        config.fill_interactively(&mut ctx).unwrap();
         assert_eq!(config.qos_version, "0.6.1");
         assert_eq!(config.pivot_container_image_url, "ghcr.io/x/y:v1");
         assert_eq!(config.pivot_path, "/bin/pivot");
@@ -491,8 +466,8 @@ mod tests {
 
     #[test]
     fn fully_filled_config_has_no_placeholders() {
-        let mut config = DeployConfig::template(None);
-        config.app_id = "651b573c-861b-4f10-a478-cbcfe0c226af".into();
+        let app_id = "651b573c-861b-4f10-a478-cbcfe0c226af".parse().unwrap();
+        let mut config = DeployConfig::template(app_id);
         config.qos_version = "0.6.1".into();
         config.pivot_container_image_url = "ghcr.io/x/y:v1".into();
         config.pivot_path = "/bin/pivot".into();
@@ -501,49 +476,12 @@ mod tests {
         assert!(!config.has_placeholders());
     }
 
-    /// Build a config with every required field filled by a valid (non-placeholder)
-    /// value, so `validate()` returns `Ok` unless a test perturbs one field.
-    fn valid_config() -> DeployConfig {
-        let mut config = DeployConfig::template(None);
-        config.app_id = "651b573c-861b-4f10-a478-cbcfe0c226af".into();
-        config.qos_version = "0.6.1".into();
-        config.pivot_container_image_url = "ghcr.io/x/y:v1".into();
-        config.pivot_path = "/bin/pivot".into();
-        config.expected_pivot_digest = "sha256:abc".into();
-        config.pivot_container_encrypted_pull_secret = None;
-        config
-    }
-
-    #[test]
-    fn validate_rejects_non_uuid_app_id() {
-        let mut config = valid_config();
-        config.app_id = "not-a-uuid".into();
-        let errors = config.validate().unwrap_err();
-        assert!(errors.to_string().contains("not a valid UUID"), "{errors}");
-        // A malformed app_id is a hard error, so interactive mode bails instead
-        // of prompting the user to "fill in" an already-present value.
-        assert!(errors.has_non_placeholder_error());
-    }
-
-    #[test]
-    fn validate_accepts_well_formed_uuid() {
-        // Turnkey resource IDs come in both UUID v4 and v7 forms; accept either.
-        for app_id in [
-            "651b573c-861b-4f10-a478-cbcfe0c226af", // v4
-            "019660f7-801d-75d8-a40e-e4f69944b711", // v7
-        ] {
-            let mut config = valid_config();
-            config.app_id = app_id.into();
-            assert!(config.validate().is_ok(), "should accept {app_id}");
-        }
-    }
-
     /// The placeholder branch takes precedence over the UUID check, so an
     /// unfilled `<FILL_IN_APP_ID>` is reported as a placeholder (which interactive
     /// mode prompts to fill), not as an "invalid UUID" hard error.
     #[test]
     fn validate_reports_placeholder_app_id_as_placeholder() {
-        let config = DeployConfig::template(None);
+        let config = DeployConfig::template(Default::default());
         let errors = config.validate().unwrap_err();
         let msg = errors.to_string();
         assert!(msg.contains("placeholder"), "{msg}");

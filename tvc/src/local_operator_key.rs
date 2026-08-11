@@ -86,14 +86,14 @@ pub async fn resolve_local_operator(
         Some(source) => LocalCredentialSource::Explicit(source),
         None => {
             let config = Config::load().await?;
-            let (alias, org_config) = config.active_org_config().ok_or_else(|| {
+            let (org_id, org_config) = config.active_org_config().ok_or_else(|| {
                 anyhow!(
                     "No active organization. Run `tvc login` first or provide \
                      --operator-seed or --operator-seed-path."
                 )
             })?;
-            let (_, local) =
-                select_local_operator(org_config).with_context(|| format!("org '{alias}'"))?;
+            let (_, local) = select_local_operator(org_config)
+                .with_context(|| format!("org '{}'", config.display_name(org_id)))?;
             return resolve_registered_local_operator(local.key_path.clone()).await;
         }
     };

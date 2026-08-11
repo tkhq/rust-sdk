@@ -12,7 +12,6 @@ mod common;
 
 use qos_p256::P256Pair;
 use rexpect::session::PtySession;
-use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
 use std::path::Path;
@@ -24,11 +23,17 @@ use tvc::config::turnkey::{
     Config, HostedOperatorRecord, KeyCurve, OperatorKind, OperatorRecord, OperatorRecordKind,
     OrgConfig, StoredApiKey,
 };
+use uuid::Uuid;
 
 /// Default per-step timeout. Generous enough for CI-runner cold cargo builds
 /// of the binary; tight enough to fail fast if an `exp_string` mismatches.
 const TIMEOUT_MS: u64 = 10_000;
 
+const ORG_DUP: &str = "11111111-2222-4333-8444-555555555555";
+const ORG_E2E: &str = "44444444-4444-4444-8444-444444444444";
+const ORG_SOLO: &str = "55555555-5555-4555-8555-555555555555";
+const ORG_BACKUP: &str = "66666666-6666-4666-8666-666666666666";
+const ORG_OTHER: &str = "77777777-7777-4777-8777-777777777777";
 const ORG_HOSTED: &str = "88888888-8888-4888-8888-888888888888";
 
 fn spawn(args: &str) -> PtySession {
@@ -128,6 +133,30 @@ fn spawn_whoami_server() -> (String, JoinHandle<()>) {
     (format!("http://{address}"), handle)
 }
 
+/// Drive `tvc login` through the interactive new-org flow (empty config, so
+/// no org selector appears) against a dead-port API base URL. Login persists
+/// the profile and its generated API key before the final whoami request, so
+/// the profile exists on disk even though the command exits nonzero when that
+/// request fails.
+fn pty_create_profile(home: &Path, org_id: &str, alias: &str) {
+    let mut session = spawn_with_home(home, &["login", "--api-base-url", "http://127.0.0.1:1"]);
+
+    session.exp_string("Organization ID").unwrap();
+    session.send_line(org_id).unwrap();
+    session.exp_string("Organization alias").unwrap();
+    session.send_line(alias).unwrap();
+
+    session
+        .exp_string(&format!("Selected org: {alias} ({org_id})"))
+        .unwrap();
+    session.exp_string("API Key Generated!").unwrap();
+    session.exp_string("Press Enter when done...").unwrap();
+    session.send_line("").unwrap();
+
+    session.exp_string("Verifying credentials...").unwrap();
+    session.exp_eof().unwrap();
+}
+
 /// `tvc deploy approve` walks all five section confirmations in order and
 /// emits the signed approval JSON when the user accepts every section.
 ///
@@ -207,18 +236,7 @@ fn approve_bails_when_user_rejects_pivot() {
 fn login_with_empty_org_id_bails() {
     let temp = tempfile::TempDir::new().unwrap();
 
-    let bin = env!("CARGO_BIN_EXE_tvc");
-    let cmd = format!("{bin} login");
-
-    let mut session = rexpect::session::spawn_command(
-        {
-            let mut c = std::process::Command::new(bin);
-            c.arg("login").env("HOME", temp.path());
-            c
-        },
-        Some(TIMEOUT_MS),
-    )
-    .unwrap_or_else(|e| panic!("spawn failed: {e}\n  cmd: {cmd}"));
+    let mut session = spawn_with_home(temp.path(), &["login"]);
 
     session.exp_string("Organization ID").unwrap();
     session.send_line("").unwrap();
@@ -226,24 +244,184 @@ fn login_with_empty_org_id_bails() {
     session.exp_eof().unwrap();
 }
 
-/// Interactive `keys backup-operator-key` prompts for the destination and
-/// reports the copy.
+/// Organization IDs are UUIDs; anything else is rejected at the prompt
+/// boundary before any profile is created.
 #[test]
-fn keys_backup_operator_key_prompts_for_destination() {
+fn login_with_non_uuid_org_id_bails() {
     let temp = tempfile::TempDir::new().unwrap();
-    common::write_profiles_config(temp.path(), &[("alias-a", "org-backup")], Some("alias-a"));
-    common::write_profile_key_files(temp.path(), "alias-a");
-    let destination = temp.path().join("operator-backup.json");
 
-    let mut session = spawn_with_home(temp.path(), &["keys", "backup-operator-key"]);
+    let mut session = spawn_with_home(temp.path(), &["login"]);
 
-    session.exp_string("Backup file path").unwrap();
-    session.send_line(destination.to_str().unwrap()).unwrap();
-
-    session.exp_string("Operator key backed up!").unwrap();
+    session.exp_string("Organization ID").unwrap();
+    session.send_line("not-a-uuid").unwrap();
+    session
+        .exp_string("Organization ID must be a UUID")
+        .unwrap();
     session.exp_eof().unwrap();
 
-    assert!(destination.exists());
+    assert!(
+        !temp.path().join(".config/turnkey/tvc.config.toml").exists(),
+        "no config may be written for a rejected organization ID"
+    );
+}
+
+/// `profile delete` without --org prompts with the organization picker and
+/// deletes only the chosen organization.
+#[test]
+fn profile_delete_without_query_prompts_with_picker() {
+    let temp = tempfile::TempDir::new().unwrap();
+    common::write_profiles_config(
+        temp.path(),
+        &[("alias-a", ORG_DUP), ("alias-b", ORG_OTHER)],
+        Some("alias-a"),
+    );
+    common::write_profile_key_files(temp.path(), "alias-a");
+    common::write_profile_key_files(temp.path(), "alias-b");
+
+    let mut session = spawn_with_home(temp.path(), &["profile", "delete"]);
+
+    session.exp_string("Select organization to delete").unwrap();
+    session.send_line("alias-b").unwrap();
+
+    exp_wrapped(
+        &mut session,
+        &format!("Permanently delete 'alias-b' ({ORG_OTHER})"),
+    );
+    session.send_line("y").unwrap();
+
+    session
+        .exp_string("Deleted the login for organization")
+        .unwrap();
+    session.exp_eof().unwrap();
+
+    assert!(!temp.path().join(".config/turnkey/orgs/alias-b").exists());
+    assert!(temp.path().join(".config/turnkey/orgs/alias-a").exists());
+
+    let saved =
+        std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
+    assert!(!saved.contains("alias-b"));
+    assert!(saved.contains("alias-a"));
+}
+
+/// The interactive new-org flow (the only way to create a profile) works end
+/// to end, keys its directory by org ID (TVC-55), and persists the profile
+/// even though the final whoami request fails against the dead-port URL.
+#[test]
+fn login_creates_first_profile_and_persists_it() {
+    let temp = tempfile::TempDir::new().unwrap();
+    pty_create_profile(temp.path(), ORG_SOLO, "solo");
+
+    let saved =
+        std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
+    assert!(saved.contains(&format!("[orgs.{ORG_SOLO}]")), "{saved}");
+    assert!(
+        saved.contains(&format!(r#"solo = "{ORG_SOLO}""#)),
+        "{saved}"
+    );
+
+    let org_dir = temp.path().join(".config/turnkey/orgs").join(ORG_SOLO);
+    assert!(org_dir.join("api_key.json").exists());
+    assert!(!temp.path().join(".config/turnkey/orgs/solo").exists());
+}
+
+/// Entering an organization ID that is already configured refuses to create a
+/// second profile for it (one profile per organization, TVC-159) and names
+/// the existing alias.
+#[test]
+fn login_new_org_refuses_already_configured_org_id() {
+    let temp = tempfile::TempDir::new().unwrap();
+    common::write_profiles_config(temp.path(), &[("alias-a", ORG_DUP)], Some("alias-a"));
+
+    let mut session = spawn_with_home(temp.path(), &["login"]);
+
+    session.exp_string("Select organization").unwrap();
+    session.send_line("new").unwrap();
+
+    session.exp_string("Organization ID").unwrap();
+    session.send_line(ORG_DUP).unwrap();
+
+    exp_wrapped(
+        &mut session,
+        &format!("Organization '{ORG_DUP}' is already configured as 'alias-a'."),
+    );
+    session
+        .exp_string("tvc profile delete --org alias-a")
+        .unwrap();
+    session.exp_eof().unwrap();
+
+    // Refused before any mutation: still exactly one configured org and one
+    // alias.
+    let saved =
+        std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
+    // "\n[orgs." matches the org table header but not "[[orgs.<id>.operators]]".
+    assert_eq!(saved.matches("\n[orgs.").count(), 1, "{saved}");
+    assert!(
+        saved.contains(&format!(r#"alias-a = "{ORG_DUP}""#)),
+        "{saved}"
+    );
+}
+
+/// TVC-55: interactive login migrates a legacy alias-keyed key directory to
+/// the id-keyed layout — directory renamed, config paths rewritten, login
+/// succeeds — and a second login finds nothing left to migrate.
+#[test]
+fn login_migrates_legacy_key_directory() {
+    let temp = tempfile::TempDir::new().unwrap();
+    common::write_profiles_config(temp.path(), &[("alias-a", ORG_E2E)], Some("alias-a"));
+    common::write_profile_key_files(temp.path(), "alias-a");
+    let legacy_dir = temp.path().join(".config/turnkey/orgs/alias-a");
+    let id_dir = temp.path().join(".config/turnkey/orgs").join(ORG_E2E);
+
+    let (api_base_url, server) = spawn_whoami_server();
+
+    let mut session = spawn_with_home(
+        temp.path(),
+        &["login", "--org", "alias-a", "--api-base-url", &api_base_url],
+    );
+
+    exp_wrapped(
+        &mut session,
+        &format!(
+            "Moved key directory: {} -> {}",
+            legacy_dir.display(),
+            id_dir.display()
+        ),
+    );
+    session.exp_string("Using existing API key.").unwrap();
+    session.exp_string("Successfully logged in!").unwrap();
+    session.exp_eof().unwrap();
+    server.join().unwrap();
+
+    assert!(!legacy_dir.exists());
+    assert!(id_dir.join("api_key.json").exists());
+    assert!(id_dir.join("operator.json").exists());
+
+    let saved =
+        std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
+    let table: toml::Table = toml::from_str(&saved).unwrap();
+    let org = table["orgs"][ORG_E2E].as_table().unwrap();
+    assert_eq!(
+        org["api_key_path"].as_str().unwrap(),
+        id_dir.join("api_key.json").to_str().unwrap()
+    );
+    assert_eq!(
+        org["operators"].as_array().unwrap()[0]["key_path"]
+            .as_str()
+            .unwrap(),
+        id_dir.join("operator.json").to_str().unwrap()
+    );
+
+    // Idempotent: a second login has nothing to move and succeeds silently.
+    let (api_base_url, server) = spawn_whoami_server();
+    let mut session = spawn_with_home(
+        temp.path(),
+        &["login", "--org", "alias-a", "--api-base-url", &api_base_url],
+    );
+    let output = session.exp_eof().unwrap();
+    server.join().unwrap();
+
+    assert!(output.contains("Successfully logged in!"), "{output}");
+    assert!(!output.contains("Moved key directory"), "{output}");
 }
 
 /// TVC-53: generating a fresh operator key during login offers a backup;
@@ -252,7 +430,7 @@ fn keys_backup_operator_key_prompts_for_destination() {
 #[test]
 fn login_fresh_operator_key_offers_backup() {
     let temp = tempfile::TempDir::new().unwrap();
-    common::write_profiles_config(temp.path(), &[("alias-a", "org-e2e")], Some("alias-a"));
+    common::write_profiles_config(temp.path(), &[("alias-a", ORG_E2E)], Some("alias-a"));
     common::write_profile_key_files(temp.path(), "alias-a");
     std::fs::remove_file(
         temp.path()
@@ -282,11 +460,15 @@ fn login_fresh_operator_key_offers_backup() {
     session.exp_eof().unwrap();
     server.join().unwrap();
 
+    // The legacy directory was migrated on the way in, so the freshly
+    // generated key lives in the id-keyed layout.
     assert_eq!(
         std::fs::read(&destination).unwrap(),
         std::fs::read(
             temp.path()
-                .join(".config/turnkey/orgs/alias-a/operator.json")
+                .join(".config/turnkey/orgs")
+                .join(ORG_E2E)
+                .join("operator.json")
         )
         .unwrap()
     );
@@ -297,7 +479,7 @@ fn login_fresh_operator_key_offers_backup() {
 #[test]
 fn login_backup_decline_points_at_command() {
     let temp = tempfile::TempDir::new().unwrap();
-    common::write_profiles_config(temp.path(), &[("alias-a", "org-e2e")], Some("alias-a"));
+    common::write_profiles_config(temp.path(), &[("alias-a", ORG_E2E)], Some("alias-a"));
     common::write_profile_key_files(temp.path(), "alias-a");
     std::fs::remove_file(
         temp.path()
@@ -330,7 +512,7 @@ fn login_backup_decline_points_at_command() {
 #[test]
 fn login_existing_operator_key_prints_backup_tip() {
     let temp = tempfile::TempDir::new().unwrap();
-    common::write_profiles_config(temp.path(), &[("alias-a", "org-e2e")], Some("alias-a"));
+    common::write_profiles_config(temp.path(), &[("alias-a", ORG_E2E)], Some("alias-a"));
     common::write_profile_key_files(temp.path(), "alias-a");
 
     let (api_base_url, server) = spawn_whoami_server();
@@ -349,7 +531,56 @@ fn login_existing_operator_key_prints_backup_tip() {
     server.join().unwrap();
 }
 
-/// Write a v1 config whose active org's registry holds exactly one operator,
+/// Interactive `keys backup-operator-key` prompts for the destination and
+/// reports the copy.
+#[test]
+fn keys_backup_operator_key_prompts_for_destination() {
+    let temp = tempfile::TempDir::new().unwrap();
+    common::write_profiles_config(temp.path(), &[("alias-a", ORG_BACKUP)], Some("alias-a"));
+    common::write_profile_key_files(temp.path(), "alias-a");
+    let destination = temp.path().join("operator-backup.json");
+
+    let mut session = spawn_with_home(temp.path(), &["keys", "backup-operator-key"]);
+
+    session.exp_string("Backup file path").unwrap();
+    session.send_line(destination.to_str().unwrap()).unwrap();
+
+    session.exp_string("Operator key backed up!").unwrap();
+    session.exp_eof().unwrap();
+
+    assert!(destination.exists());
+}
+
+/// Reusing an existing profile alias for a different organization refuses
+/// instead of silently overwriting the profile.
+#[test]
+fn login_new_org_refuses_alias_already_in_use() {
+    let temp = tempfile::TempDir::new().unwrap();
+    common::write_profiles_config(temp.path(), &[("alias-a", ORG_OTHER)], Some("alias-a"));
+
+    let mut session = spawn_with_home(temp.path(), &["login"]);
+
+    session.exp_string("Select organization").unwrap();
+    session.send_line("new").unwrap();
+
+    session.exp_string("Organization ID").unwrap();
+    session.send_line(ORG_SOLO).unwrap();
+    session.exp_string("Organization alias").unwrap();
+    session.send_line("alias-a").unwrap();
+
+    exp_wrapped(
+        &mut session,
+        &format!("Alias 'alias-a' already names organization '{ORG_OTHER}'."),
+    );
+    session.exp_eof().unwrap();
+
+    let saved =
+        std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
+    assert!(saved.contains(&format!("[orgs.{ORG_OTHER}]")), "{saved}");
+    assert!(!saved.contains(ORG_SOLO));
+}
+
+/// Write a v2 config whose active org's registry holds exactly one operator,
 /// hosted, storing a real composite public key the way `operator create`
 /// stores it: encryption point and signing point as separate hex fields.
 /// Returns the composite.
@@ -360,36 +591,33 @@ fn write_hosted_org_config(home: &Path) -> String {
     let composite = hex::encode(P256Pair::generate().unwrap().public_key().to_bytes());
     let (encrypt_public_key, sign_public_key) = composite.split_at(composite.len() / 2);
 
-    let config = Config {
-        active_org: Some("hosted-org".to_string()),
-        orgs: HashMap::from([(
-            "hosted-org".to_string(),
-            OrgConfig {
-                id: ORG_HOSTED.to_string(),
-                api_key_path: turnkey_dir.join("orgs/hosted-org/api_key.json"),
-                api_base_url: common::LOCAL_API_BASE_URL.to_string(),
-                default_operator_kind: OperatorKind::Hosted,
-                operators: vec![OperatorRecord {
-                    name: "hosted-op".to_string(),
-                    kind: OperatorRecordKind::Hosted(HostedOperatorRecord {
-                        operator_id: "11111111-1111-4111-8111-111111111111".parse().unwrap(),
-                        wallet_id: "22222222-2222-4222-8222-222222222222".parse().unwrap(),
-                        path: "m/5527107'/0'/0'".to_string(),
-                        encrypt_public_key: encrypt_public_key.to_string(),
-                        sign_public_key: sign_public_key.to_string(),
-                        extra: toml::Table::new(),
-                    }),
-                }],
-                extra: toml::Table::new(),
-            },
-        )]),
-        last_created_app_id: HashMap::new(),
-        last_operator_ids: HashMap::new(),
-        extra: toml::Table::new(),
-    };
+    let org_id: Uuid = ORG_HOSTED.parse().unwrap();
+    let mut config = Config::default();
+    config.orgs.insert(
+        org_id,
+        OrgConfig {
+            api_key_path: turnkey_dir.join(format!("orgs/{org_id}/api_key.json")),
+            api_base_url: common::LOCAL_API_BASE_URL.to_string(),
+            default_operator_kind: OperatorKind::Hosted,
+            operators: vec![OperatorRecord {
+                name: "hosted-op".to_string(),
+                kind: OperatorRecordKind::Hosted(HostedOperatorRecord {
+                    operator_id: "11111111-1111-4111-8111-111111111111".parse().unwrap(),
+                    wallet_id: "22222222-2222-4222-8222-222222222222".parse().unwrap(),
+                    path: "m/5527107'/0'/0'".to_string(),
+                    encrypt_public_key: encrypt_public_key.to_string(),
+                    sign_public_key: sign_public_key.to_string(),
+                    extra: toml::Table::new(),
+                }),
+            }],
+            extra: toml::Table::new(),
+        },
+    );
+    config.aliases.bind("hosted-org".to_string(), org_id);
+    config.set_active_org(org_id).unwrap();
     std::fs::write(
         turnkey_dir.join("tvc.config.toml"),
-        format!("version = 1\n{}", toml::to_string_pretty(&config).unwrap()),
+        format!("version = 2\n{}", toml::to_string_pretty(&config).unwrap()),
     )
     .unwrap();
 
@@ -525,7 +753,7 @@ fn login_reports_the_hosted_operator_for_a_hosted_default_org() {
 
     // An existing API key so login skips generation and goes straight to
     // verification.
-    let api_key_dir = temp.path().join(".config/turnkey/orgs/hosted-org");
+    let api_key_dir = temp.path().join(".config/turnkey/orgs").join(ORG_HOSTED);
     std::fs::create_dir_all(&api_key_dir).unwrap();
     let stamper = TurnkeyP256ApiKey::generate();
     let api_key = StoredApiKey {
@@ -563,4 +791,231 @@ fn login_reports_the_hosted_operator_for_a_hosted_default_org() {
     assert!(output.contains("Successfully logged in!"), "{output}");
     assert!(!output.contains("Generating operator key"), "{output}");
     assert!(output.contains("Hosted operator:"), "{output}");
+}
+
+/// A crash between the directory rename and the config save leaves the files
+/// moved but the config still pointing at the legacy paths. The next
+/// interactive login heals: it treats the move as done and rewrites the
+/// config.
+#[test]
+fn login_heals_a_crash_between_directory_move_and_config_save() {
+    let temp = tempfile::TempDir::new().unwrap();
+    common::write_profiles_config(temp.path(), &[("alias-a", ORG_E2E)], Some("alias-a"));
+    common::write_profile_key_files(temp.path(), "alias-a");
+    let legacy_dir = temp.path().join(".config/turnkey/orgs/alias-a");
+    let id_dir = temp.path().join(".config/turnkey/orgs").join(ORG_E2E);
+
+    // Recreate the crash window: the rename happened, the save did not.
+    std::fs::rename(&legacy_dir, &id_dir).unwrap();
+
+    let (api_base_url, server) = spawn_whoami_server();
+
+    let mut session = spawn_with_home(
+        temp.path(),
+        &["login", "--org", "alias-a", "--api-base-url", &api_base_url],
+    );
+
+    exp_wrapped(
+        &mut session,
+        &format!(
+            "Moved key directory: {} -> {}",
+            legacy_dir.display(),
+            id_dir.display()
+        ),
+    );
+    session.exp_string("Successfully logged in!").unwrap();
+    session.exp_eof().unwrap();
+    server.join().unwrap();
+
+    let saved =
+        std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
+    let table: toml::Table = toml::from_str(&saved).unwrap();
+    assert_eq!(
+        table["orgs"][ORG_E2E]["api_key_path"].as_str().unwrap(),
+        id_dir.join("api_key.json").to_str().unwrap()
+    );
+}
+
+/// A crash mid-loop strands at most one organization (the migration saves
+/// after each): the next interactive login finishes the job in one pass,
+/// healing the moved-but-unsaved org and moving the untouched one.
+#[test]
+fn login_finishes_a_partially_migrated_config_in_one_pass() {
+    let temp = tempfile::TempDir::new().unwrap();
+    common::write_profiles_config(
+        temp.path(),
+        &[("alias-a", ORG_E2E), ("alias-b", ORG_OTHER)],
+        Some("alias-a"),
+    );
+    common::write_profile_key_files(temp.path(), "alias-a");
+    common::write_profile_key_files(temp.path(), "alias-b");
+    let legacy_a = temp.path().join(".config/turnkey/orgs/alias-a");
+    let legacy_b = temp.path().join(".config/turnkey/orgs/alias-b");
+    let id_a = temp.path().join(".config/turnkey/orgs").join(ORG_E2E);
+    let id_b = temp.path().join(".config/turnkey/orgs").join(ORG_OTHER);
+
+    // Org A crashed between rename and save; org B was never reached.
+    std::fs::rename(&legacy_a, &id_a).unwrap();
+
+    let (api_base_url, server) = spawn_whoami_server();
+
+    let mut session = spawn_with_home(
+        temp.path(),
+        &["login", "--org", "alias-a", "--api-base-url", &api_base_url],
+    );
+
+    exp_wrapped(
+        &mut session,
+        &format!(
+            "Moved key directory: {} -> {}",
+            legacy_a.display(),
+            id_a.display()
+        ),
+    );
+    exp_wrapped(
+        &mut session,
+        &format!(
+            "Moved key directory: {} -> {}",
+            legacy_b.display(),
+            id_b.display()
+        ),
+    );
+    session.exp_string("Successfully logged in!").unwrap();
+    session.exp_eof().unwrap();
+    server.join().unwrap();
+
+    assert!(!legacy_a.exists());
+    assert!(!legacy_b.exists());
+    assert!(id_a.join("operator.json").exists());
+    assert!(id_b.join("operator.json").exists());
+
+    let saved =
+        std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
+    let table: toml::Table = toml::from_str(&saved).unwrap();
+    assert_eq!(
+        table["orgs"][ORG_E2E]["api_key_path"].as_str().unwrap(),
+        id_a.join("api_key.json").to_str().unwrap()
+    );
+    assert_eq!(
+        table["orgs"][ORG_OTHER]["api_key_path"].as_str().unwrap(),
+        id_b.join("api_key.json").to_str().unwrap()
+    );
+}
+
+/// An occupied target directory fails the move: the migration warns, keeps
+/// the organization on its legacy paths, and login still succeeds — nothing
+/// is deleted or overwritten.
+#[test]
+fn login_skips_migration_when_the_target_directory_is_occupied() {
+    let temp = tempfile::TempDir::new().unwrap();
+    common::write_profiles_config(temp.path(), &[("alias-a", ORG_E2E)], Some("alias-a"));
+    common::write_profile_key_files(temp.path(), "alias-a");
+    let legacy_dir = temp.path().join(".config/turnkey/orgs/alias-a");
+    let id_dir = temp.path().join(".config/turnkey/orgs").join(ORG_E2E);
+
+    // Someone (or something) already owns the target directory.
+    std::fs::create_dir_all(&id_dir).unwrap();
+    std::fs::write(id_dir.join("unrelated.txt"), "not ours").unwrap();
+
+    let (api_base_url, server) = spawn_whoami_server();
+
+    let mut session = spawn_with_home(
+        temp.path(),
+        &["login", "--org", "alias-a", "--api-base-url", &api_base_url],
+    );
+
+    exp_wrapped(&mut session, "WARNING: could not move key directory");
+    session.exp_string("Successfully logged in!").unwrap();
+    session.exp_eof().unwrap();
+    server.join().unwrap();
+
+    // Both directories intact; the config still points at the legacy paths.
+    assert!(legacy_dir.join("operator.json").exists());
+    assert_eq!(
+        std::fs::read_to_string(id_dir.join("unrelated.txt")).unwrap(),
+        "not ours"
+    );
+    let saved =
+        std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
+    let table: toml::Table = toml::from_str(&saved).unwrap();
+    assert_eq!(
+        table["orgs"][ORG_E2E]["api_key_path"].as_str().unwrap(),
+        legacy_dir.join("api_key.json").to_str().unwrap()
+    );
+}
+
+/// Merging v1 duplicate profiles keeps one registration per organization;
+/// the losing alias's directory is deliberately orphaned on disk (reported
+/// in the migration note), and only the kept profile's directory migrates.
+#[test]
+fn duplicate_alias_merge_leaves_the_losing_directory_orphaned() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let turnkey_dir = temp.path().join(".config/turnkey");
+    std::fs::create_dir_all(&turnkey_dir).unwrap();
+    common::write_profile_key_files(temp.path(), "alias-a");
+    common::write_profile_key_files(temp.path(), "alias-b");
+    let legacy_a = temp.path().join(".config/turnkey/orgs/alias-a");
+    let legacy_b = temp.path().join(".config/turnkey/orgs/alias-b");
+    let id_dir = temp.path().join(".config/turnkey/orgs").join(ORG_E2E);
+    std::fs::write(
+        turnkey_dir.join("tvc.config.toml"),
+        format!(
+            r#"version = 1
+active_org = "alias-b"
+
+[orgs.alias-a]
+id = "{ORG_E2E}"
+api_key_path = "{a}/api_key.json"
+api_base_url = "{url}"
+
+[[orgs.alias-a.operators]]
+name = "default"
+kind = "local"
+key_path = "{a}/operator.json"
+
+[orgs.alias-b]
+id = "{ORG_E2E}"
+api_key_path = "{b}/api_key.json"
+api_base_url = "{url}"
+default_alias = true
+
+[[orgs.alias-b.operators]]
+name = "default"
+kind = "local"
+key_path = "{b}/operator.json"
+"#,
+            a = legacy_a.display(),
+            b = legacy_b.display(),
+            url = common::LOCAL_API_BASE_URL,
+        ),
+    )
+    .unwrap();
+
+    let (api_base_url, server) = spawn_whoami_server();
+
+    let mut session = spawn_with_home(
+        temp.path(),
+        &["login", "--org", "alias-b", "--api-base-url", &api_base_url],
+    );
+
+    exp_wrapped(
+        &mut session,
+        "config migration: merged duplicate profile 'alias-a'",
+    );
+    exp_wrapped(
+        &mut session,
+        &format!(
+            "Moved key directory: {} -> {}",
+            legacy_b.display(),
+            id_dir.display()
+        ),
+    );
+    session.exp_string("Successfully logged in!").unwrap();
+    session.exp_eof().unwrap();
+    server.join().unwrap();
+
+    // The loser's files stay on disk, untouched and unregistered.
+    assert!(legacy_a.join("operator.json").exists());
+    assert!(!legacy_b.exists());
+    assert!(id_dir.join("operator.json").exists());
 }

@@ -2,8 +2,8 @@
 //! user-chosen destination.
 
 use crate::{
-    commands::{Run, login::find_org},
-    config::turnkey::{Config, QosOperatorPublicKey, StoredQosOperatorKey},
+    commands::{Run, login::resolve_org_query},
+    config::turnkey::{Config, OrgQuery, QosOperatorPublicKey, StoredQosOperatorKey},
     local_operator_key::{SelectLocalOperatorError, select_local_operator},
     outcome::Outcome,
     output::StdCtx,
@@ -15,6 +15,7 @@ use serde::Serialize;
 use std::{
     fmt::{self, Display, Formatter},
     path::PathBuf,
+    str::FromStr,
 };
 
 /// Back up a local operator key by copying its key file to a chosen
@@ -24,8 +25,8 @@ use std::{
 pub struct Args {
     /// Organization alias or ID whose operator key to back up.
     /// Defaults to the active organization.
-    #[arg(long, env = "TVC_ORG", value_name = "ORG")]
-    org: Option<String>,
+    #[arg(long, env = "TVC_ORG", value_name = "ORG", value_parser = OrgQuery::from_str)]
+    org: Option<OrgQuery>,
     /// Destination file for the backup copy.
     #[arg(short, long, value_name = "PATH", env = "TVC_OPERATOR_KEY_BACKUP_OUT")]
     output: Option<PathBuf>,
@@ -46,29 +47,27 @@ impl Run for Args {
 
         let config = Config::load().await?;
 
-        let (alias, org_config) = match &self.org {
-            Some(query) => find_org(&config, query).ok_or_else(|| {
-                anyhow!(
-                    "Login profile '{query}' not found. \
-                     Run `tvc login` to see configured profiles."
-                )
-            })?,
-            None => config
-                .active_org_config()
-                .ok_or_else(|| anyhow!("No active organization. Run `tvc login` first."))?,
-        };
+        let (resolved, org_config) = self
+            .org
+            .as_ref()
+            .map(|query| resolve_org_query(&config, query))
+            .unwrap_or_else(|| {
+                config
+                    .resolve_active()
+                    .ok_or_else(|| anyhow!("No active organization. Run `tvc login` first."))
+            })?;
 
         let (_, local) = select_local_operator(org_config).map_err(|error| match error {
             // Nothing exportable exists for a hosted-only org; explain that
             // instead of leaving a bare missing-operator error.
             SelectLocalOperatorError::NoLocalOperator => {
                 anyhow::Error::new(error).context(format!(
-                    "org '{alias}' has no local operator key file to back up; hosted \
+                    "org '{resolved}' has no local operator key file to back up; hosted \
                      operators' private keys are held by Turnkey and cannot be exported"
                 ))
             }
             SelectLocalOperatorError::MultipleLocalOperators => {
-                anyhow::Error::new(error).context(format!("org '{alias}'"))
+                anyhow::Error::new(error).context(format!("org '{resolved}'"))
             }
         })?;
         let source = &local.key_path;
@@ -76,7 +75,7 @@ impl Run for Args {
         let destination: PathBuf = self.output.map(Ok).unwrap_or_else(|| {
             prompts::text(
                 "Backup file path",
-                Some(&format!("operator-{alias}-backup.json")),
+                Some(&format!("operator-{resolved}-backup.json")),
             )
             .map(Into::into)
         })?;
@@ -99,7 +98,7 @@ impl Run for Args {
             prompts::confirm_or_bail(&format!("Overwrite {}?", destination.display()), "backup")?;
         }
 
-        back_up(alias.to_string(), source.clone(), destination).await
+        back_up(resolved.to_string(), source.clone(), destination).await
     }
 }
 

@@ -49,7 +49,7 @@ async fn execute(args: Args) -> Result<Outcome> {
         bail!("File already exists: {}", args.output.display());
     }
 
-    // Try to load the operator public key from config, best-effort.
+    // Try to load operator public key from config
     let operator_public_key = match Config::load().await {
         Ok(config) => config.default_operator_public_key().await,
         Err(_) => None,

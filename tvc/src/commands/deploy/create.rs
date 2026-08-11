@@ -3,7 +3,6 @@
 use super::format_port_summary;
 use crate::client::{build_client, fetch_tvc_app};
 use crate::config::deploy::{DeployConfig, DeployConfigValidationErrors};
-use crate::config::turnkey::Config;
 use crate::outcome::Outcome;
 use crate::output::StdCtx;
 use crate::prompts;
@@ -18,6 +17,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::try_join;
 use tracing::instrument;
 use turnkey_client::generated::{CreateTvcDeploymentIntent, ValidateTvcImageRequest};
+use uuid::Uuid;
 
 pub(crate) const LONG_ABOUT: &str = r#"
 Create a new TVC deployment.
@@ -103,7 +103,7 @@ struct Overrides {
 
     /// Override the appId field.
     #[arg(long, env = "TVC_APP_ID")]
-    pub app_id: Option<String>,
+    pub app_id: Option<Uuid>,
 
     /// Override the qosVersion field.
     #[arg(long, env = "TVC_QOS_VERSION")]
@@ -167,6 +167,13 @@ async fn build_inputs_interactive(ctx: &mut StdCtx, args: Args) -> Result<Resolv
         pivot_pull_secret,
         overrides,
     } = args;
+
+    let app_id = if let Some(app_id) = overrides.app_id {
+        app_id
+    } else {
+        prompts::text("enter an app-id", None)?.parse()?
+    };
+
     let (mut config, file_loaded) = read_config_file_bytes(config_path.as_deref())
         .await?
         .map(|(path, contents)| {
@@ -175,7 +182,7 @@ async fn build_inputs_interactive(ctx: &mut StdCtx, args: Args) -> Result<Resolv
         })
         .transpose()?
         .map(|config| (config, true))
-        .unwrap_or_else(|| (flag_only_template(), false));
+        .unwrap_or_else(|| (flag_only_template(app_id), false));
 
     apply_overrides(&mut config, &overrides);
 
@@ -188,8 +195,7 @@ async fn build_inputs_interactive(ctx: &mut StdCtx, args: Args) -> Result<Resolv
             }
             _ => {
                 config_updated = true;
-                let saved_app_id = Config::load().await.ok().and_then(|c| c.get_last_app_id());
-                config.fill_interactively(ctx, saved_app_id.as_deref())?;
+                config.fill_interactively(ctx)?;
             }
         }
     }
@@ -221,7 +227,13 @@ async fn build_inputs_non_interactive(args: Args) -> Result<ResolvedDeployInputs
     let mut config = match file {
         Some((path, bytes)) => serde_json::from_str(&bytes)
             .with_context(|| format!("failed to parse config file: {}", path.display()))?,
-        _ => flag_only_template(),
+        _ => {
+            let app_id = overrides
+                .app_id
+                .ok_or_else(|| anyhow!("--app_id is a required argument"))?;
+
+            flag_only_template(app_id)
+        }
     };
 
     apply_overrides(&mut config, &overrides);
@@ -268,8 +280,8 @@ async fn read_pivot_pull_secret(path: Option<&Path>) -> Result<Option<String>> {
     Ok(pull_secret.into())
 }
 
-fn flag_only_template() -> DeployConfig {
-    let mut template = DeployConfig::template(None);
+fn flag_only_template(app_id: Uuid) -> DeployConfig {
+    let mut template = DeployConfig::template(app_id);
     // Strip the template's "<REMOVE_ME...>" hint so flag-only mode doesn't ship
     // it to the API for public images.
     template.pivot_container_encrypted_pull_secret = None;
@@ -278,7 +290,7 @@ fn flag_only_template() -> DeployConfig {
 
 fn apply_overrides(config: &mut DeployConfig, overrides: &Overrides) {
     if let Some(v) = &overrides.app_id {
-        config.app_id = v.clone();
+        config.app_id = *v;
     }
     if let Some(v) = &overrides.qos_version {
         config.qos_version = v.clone();
@@ -335,7 +347,7 @@ fn offer_to_save_config(
 }
 
 fn build_validate_image_request(
-    organization_id: &str,
+    organization_id: Uuid,
     image_url: &str,
     pivot_container_encrypted_pull_secret: Option<String>,
 ) -> ValidateTvcImageRequest {
@@ -352,7 +364,7 @@ fn build_create_intent(
     pivot_container_encrypted_pull_secret: Option<String>,
 ) -> CreateTvcDeploymentIntent {
     CreateTvcDeploymentIntent {
-        app_id: deploy_config.app_id.clone(),
+        app_id: deploy_config.app_id.to_string(),
         qos_version: deploy_config.qos_version.clone(),
         pivot_container_image_url,
         pivot_path: deploy_config.pivot_path.clone(),
@@ -394,7 +406,7 @@ async fn run_with_resolved_inputs(
     let auth = build_client().await?;
 
     // validate that the app exists
-    fetch_tvc_app(&auth, &deploy_config.app_id).await?;
+    fetch_tvc_app(&auth, &deploy_config.app_id.to_string()).await?;
 
     let pivot_container_encrypted_pull_secret = match inputs.pivot_pull_secret.as_ref() {
         Some(pull_secret) => Some(encrypt_pivot_pull_secret(pull_secret, &auth.api_base_url)?),
@@ -402,7 +414,7 @@ async fn run_with_resolved_inputs(
     };
 
     let validate_image_request = build_validate_image_request(
-        &auth.org_id,
+        auth.org_id,
         &deploy_config.pivot_container_image_url,
         pivot_container_encrypted_pull_secret.clone(),
     );
@@ -438,7 +450,7 @@ async fn run_with_resolved_inputs(
 
     let result = auth
         .client
-        .create_tvc_deployment(auth.org_id, timestamp_ms, intent)
+        .create_tvc_deployment(auth.org_id.to_string(), timestamp_ms, intent)
         .await
         .context("failed to create TVC deployment")?;
 
@@ -457,7 +469,7 @@ async fn run_with_resolved_inputs(
 #[serde(rename_all = "camelCase")]
 pub struct DeploymentCreated {
     deployment_id: String,
-    app_id: String,
+    app_id: Uuid,
     pinned_image_url: String,
     /// Present when the deployment was created from a config file.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -495,7 +507,7 @@ Next steps:
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
+    use std::{io::Write, str::FromStr};
     use tempfile::NamedTempFile;
 
     // App IDs are validated as UUIDs, so test fixtures must use well-formed ones.
@@ -516,7 +528,7 @@ mod tests {
 
     fn all_required_flags() -> Args {
         let overrides = Overrides {
-            app_id: Some(FLAG_APP_ID.into()),
+            app_id: Some(FLAG_APP_ID.parse().unwrap()),
             qos_version: Some("flag-qos".into()),
             pivot_image_url: Some("flag-image".into()),
             expected_pivot_digest: Some("flag-digest".into()),
@@ -531,8 +543,7 @@ mod tests {
     }
 
     fn file_config() -> DeployConfig {
-        let mut c = DeployConfig::template(None);
-        c.app_id = FILE_APP_ID.into();
+        let mut c = DeployConfig::template(FILE_APP_ID.parse().unwrap());
         c.qos_version = "file-qos".into();
         c.pivot_container_image_url = "file-image".into();
         c.pivot_path = "file-path".into();
@@ -565,7 +576,7 @@ mod tests {
                     Some((path, bytes)) => serde_json::from_str(&bytes).with_context(|| {
                         format!("failed to parse config file: {}", path.display())
                     })?,
-                    None => flag_only_template(),
+                    None => flag_only_template(FILE_APP_ID.parse().unwrap()),
                 };
                 apply_overrides(&mut config, &args.overrides);
                 if let Err(errors) = config.validate() {
@@ -579,7 +590,7 @@ mod tests {
     fn flag_overrides_file_value() {
         let file = write_config(&file_config());
         let overrides = Overrides {
-            app_id: Some(FLAG_APP_ID.into()),
+            app_id: Some(FLAG_APP_ID.parse().unwrap()),
             ..Default::default()
         };
         let args = Args {
@@ -588,7 +599,7 @@ mod tests {
             ..Default::default()
         };
         let resolved = run_resolve(&args).unwrap();
-        assert_eq!(resolved.app_id, FLAG_APP_ID);
+        assert_eq!(resolved.app_id.to_string(), FLAG_APP_ID);
         // Untouched fields keep their file values.
         assert_eq!(resolved.qos_version, "file-qos");
         assert_eq!(resolved.health_check_port, 4000);
@@ -602,7 +613,7 @@ mod tests {
             ..Default::default()
         };
         let resolved = run_resolve(&args).unwrap();
-        assert_eq!(resolved.app_id, FILE_APP_ID);
+        assert_eq!(resolved.app_id.to_string(), FILE_APP_ID);
         assert_eq!(resolved.qos_version, "file-qos");
         assert_eq!(resolved.health_check_port, 4000);
     }
@@ -611,7 +622,7 @@ mod tests {
     fn no_file_uses_flag_only_with_template_defaults() {
         let resolved = run_resolve(&all_required_flags()).unwrap();
         // Required fields come from flags.
-        assert_eq!(resolved.app_id, FLAG_APP_ID);
+        assert_eq!(resolved.app_id.to_string(), FLAG_APP_ID);
         assert_eq!(resolved.qos_version, "flag-qos");
         assert_eq!(resolved.pivot_container_image_url, "flag-image");
         assert_eq!(resolved.pivot_path, "flag-path");
@@ -629,7 +640,6 @@ mod tests {
     fn no_file_no_required_flags_bails_naming_each_field() {
         let err = run_resolve(&Default::default()).unwrap_err();
         let msg = err.to_string();
-        assert!(msg.contains("app_id"), "{msg}");
         assert!(msg.contains("pivot_container_image_url"), "{msg}");
         assert!(msg.contains("pivot_path"), "{msg}");
         assert!(msg.contains("expected_pivot_digest"), "{msg}");
@@ -743,7 +753,7 @@ mod tests {
         let args = TestCli::try_parse_from([
             "tvc-deploy-create",
             "--app-id",
-            "test-app",
+            FLAG_APP_ID,
             "--qos-version",
             "test-qos",
             "--pivot-image-url",
@@ -765,8 +775,9 @@ mod tests {
         .unwrap()
         .args;
 
-        let template = flag_only_template();
-        let mut resolved = flag_only_template();
+        let app_id = FILE_APP_ID.parse().unwrap();
+        let template = flag_only_template(app_id);
+        let mut resolved = flag_only_template(app_id);
         apply_overrides(&mut resolved, &args.overrides);
 
         // Each override moved off its template default ...
@@ -790,7 +801,7 @@ mod tests {
         );
 
         // ... to the value passed on the CLI.
-        assert_eq!(resolved.app_id, "test-app");
+        assert_eq!(resolved.app_id, Uuid::from_str(FLAG_APP_ID).unwrap());
         assert_eq!(resolved.qos_version, "test-qos");
         assert_eq!(resolved.pivot_container_image_url, "test-image");
         assert_eq!(resolved.expected_pivot_digest, "sha256:test");
@@ -809,7 +820,8 @@ mod tests {
 
     #[test]
     fn non_interactive_overrides_can_complete_placeholder_file_without_prompting_to_save() {
-        let mut cfg = DeployConfig::template(None);
+        let app_id = FLAG_APP_ID.parse().unwrap();
+        let mut cfg = DeployConfig::template(app_id);
         cfg.pivot_container_encrypted_pull_secret = None;
         let file = write_config(&cfg);
         let args = Args {
@@ -818,7 +830,7 @@ mod tests {
         };
 
         let resolved = run_resolve(&args).unwrap();
-        assert_eq!(resolved.app_id, FLAG_APP_ID);
+        assert_eq!(resolved.app_id, app_id);
         assert_eq!(resolved.qos_version, "flag-qos");
         assert_eq!(resolved.pivot_container_image_url, "flag-image");
         assert_eq!(resolved.pivot_path, "flag-path");
