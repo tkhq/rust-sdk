@@ -30,7 +30,7 @@ fn authenticated_command(api_base_url: &str) -> assert_cmd::Command {
     let stamper = TurnkeyP256ApiKey::generate();
     let mut command = tvc_command();
     command
-        .env("TVC_ORG_ID", "org-test")
+        .env("TVC_ORG_ID", "99999999-9999-4999-8999-999999999999")
         .env(
             "TVC_API_KEY_PUBLIC",
             hex::encode(stamper.compressed_public_key()),

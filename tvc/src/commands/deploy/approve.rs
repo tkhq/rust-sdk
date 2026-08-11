@@ -7,7 +7,7 @@ use crate::{
     config::turnkey::Config,
     errors::MissingResource,
     local_operator_key::LocalOperatorSeedSource,
-    operator::{OperatorCtx, ResolvedOperator, resolve_operator},
+    operator::{SignerRequirement, known_operator_candidates, resolve_operator},
     outcome::Outcome,
     output::StdCtx,
     pair::HexSeed,
@@ -403,9 +403,26 @@ impl TryFrom<Args> for ArgsWithResolvedOperatorSeedSource {
     }
 }
 
+/// A candidate for posting without `--operator-id`: the parsed ID that
+/// resolution needs, displayed with its registry name when it has one.
+struct ApprovingOperator {
+    id: Uuid,
+    name: Option<String>,
+}
+
+impl fmt::Display for ApprovingOperator {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match &self.name {
+            Some(name) => write!(f, "{name} ({})", self.id),
+            None => fmt::Display::fmt(&self.id, f),
+        }
+    }
+}
+
 /// Resolve where to post and which operator approves. No post target is
 /// built for `--dry-run` or `--skip-post`; without `--operator-id`, a lone
-/// saved operator ID is used and multiple prompt for a choice when possible.
+/// known operator (registered hosted or saved from the last `app create`)
+/// is used and multiple prompt for a choice when possible.
 async fn build_post_target(
     args: BuildPostTargetArgs,
     fetched_manifest_id: Option<Uuid>,
@@ -424,27 +441,27 @@ async fn build_post_target(
     } else {
         let config = Config::load().await?;
 
-        let saved_ids = config
-            .get_last_operator_ids()
-            .unwrap_or_default()
+        let candidates = known_operator_candidates(&config)
             .into_iter()
-            .map(|id| {
-                Uuid::parse_str(&id)
-                    .with_context(|| format!("saved operator ID '{id}' is not a UUID"))
+            .map(|candidate| {
+                Ok(ApprovingOperator {
+                    id: candidate.id,
+                    name: candidate.name,
+                })
             })
             .collect::<anyhow::Result<Vec<_>>>()?;
 
-        match saved_ids.len() {
+        match candidates.len() {
             0 => bail!(
                 "--operator-id is required to post approval to API. \
-                 No saved operator IDs found. \
+                 No registered or saved operator IDs found. \
                  Use --skip-post to only generate the approval locally."
             ),
-            1 => saved_ids[0],
+            1 => candidates[0].id,
             _ if non_interactive || !stdin_can_prompt() => bail!(
-                "--operator-id is required to post approval to API when multiple saved operator IDs are available"
+                "--operator-id is required to post approval to API when multiple operator IDs are available"
             ),
-            _ => prompts::select("Select approving operator", saved_ids)?,
+            _ => prompts::select("Select approving operator", candidates)?.id,
         }
     };
 
@@ -481,24 +498,22 @@ async fn run_with_resolved_inputs(
             }
         });
 
-    let operator = resolve_operator(inputs.operator_seed_source, inputs.operator_id).await?;
-    if inputs.skip_post && operator.is_hosted() {
-        bail!("--skip-post is only supported for local operators");
-    }
-    let auth = if operator.is_hosted() {
-        Some(build_client().await?)
+    let requirement = if inputs.skip_post {
+        SignerRequirement::OfflineApproval
     } else {
-        None
+        SignerRequirement::Any
     };
-    let approval = sign_and_write_approval(
-        &operator,
-        &OperatorCtx {
-            auth: auth.as_ref(),
-        },
-        inputs.approval_out.as_deref(),
-        &inputs.manifest,
-    )
-    .await?;
+    let operator =
+        resolve_operator(inputs.operator_seed_source, inputs.operator_id, requirement).await?;
+
+    let approval = operator.approve_manifest(&inputs.manifest).await?;
+
+    // Reporting the approval (inline payload or file path) is the terminal
+    // outcome's job; `--approval-out` additionally persists it here.
+    if let Some(path) = inputs.approval_out.as_deref() {
+        let json = serde_json::to_string_pretty(&approval)?;
+        write_file(path, &json).await?;
+    }
 
     match inputs.post_target {
         Some(target) => {
@@ -556,25 +571,6 @@ async fn load_manifest(
     }
 }
 
-/// Sign the manifest and, when `--approval-out` is set, write the approval to
-/// that file. Reporting the approval (inline payload or file path) is the
-/// terminal outcome's job.
-async fn sign_and_write_approval(
-    operator: &ResolvedOperator,
-    operator_ctx: &OperatorCtx<'_>,
-    approval_out: Option<&Path>,
-    manifest: &ValidatedManifest<'_>,
-) -> anyhow::Result<Approval> {
-    let approval = operator.approve_manifest(operator_ctx, manifest).await?;
-
-    if let Some(path) = approval_out {
-        let json = serde_json::to_string_pretty(&approval)?;
-        write_file(path, &json).await?;
-    }
-
-    Ok(approval)
-}
-
 #[instrument(skip_all, fields(manifest_id = %plan.manifest_id, operator_id = %plan.operator_id, deploy_id = ?plan.deploy_id))]
 async fn post_approval_to_api(
     ctx: &mut StdCtx,
@@ -604,14 +600,14 @@ async fn post_approval_to_api(
 
     let result = auth
         .client
-        .create_tvc_manifest_approvals(auth.org_id.clone(), timestamp_ms, intent)
+        .create_tvc_manifest_approvals(auth.org_id.to_string(), timestamp_ms, intent)
         .await
         .context("failed to post manifest approval")?;
 
     let quorum_reached = match plan.deploy_id {
         Some(deploy_id) => {
             let request = GetTvcDeploymentRequest {
-                organization_id: auth.org_id.clone(),
+                organization_id: auth.org_id.to_string(),
                 deployment_id: deploy_id.to_string(),
             };
 
@@ -782,7 +778,7 @@ async fn fetch_manifest_from_deploy(
     let auth = build_client().await?;
 
     let request = GetTvcDeploymentRequest {
-        organization_id: auth.org_id.clone(),
+        organization_id: auth.org_id.to_string(),
         deployment_id: deploy_id.to_string(),
     };
 

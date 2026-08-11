@@ -1,7 +1,7 @@
 //! App init command - generates a template config file.
 
 use crate::config::app::AppConfig;
-use crate::config::turnkey::{Config, StoredQosOperatorKey};
+use crate::operator::default_operator_public_key;
 use crate::outcome::Outcome;
 use crate::output::StdCtx;
 use crate::prompts::{bail_interactive_conflicts_with_non_interactive, ensure_stdin_is_tty};
@@ -50,7 +50,7 @@ async fn execute(args: Args) -> Result<Outcome> {
     }
 
     // Try to load operator public key from config
-    let operator_public_key = load_operator_public_key().await;
+    let operator_public_key = default_operator_public_key().await;
 
     // Generate template (optionally walking prompts to fill it in)
     let mut config = AppConfig::template(operator_public_key.as_deref());
@@ -101,16 +101,4 @@ Edit the file to fill in your values, then run:
             )
         }
     }
-}
-
-/// Load the operator public key from the active org's config
-async fn load_operator_public_key() -> Option<String> {
-    // Load config (return None on error)
-    let config = Config::load().await.ok()?;
-
-    // Get active org config
-    let (alias, org_config) = config.active_org_config()?;
-    let local = org_config.select_local_record(alias).ok()?;
-    let operator_key = StoredQosOperatorKey::load(&local.key_path).await.ok()??;
-    Some(operator_key.public_key)
 }

@@ -1,0 +1,155 @@
+//! Fixtures shared across the tvc integration-test binaries.
+
+// Each test binary that declares `mod common;` compiles its own copy and
+// uses a subset of these helpers, so every binary's build has genuinely
+// unused items here; without this, each `cargo test` target warns.
+#![allow(dead_code)]
+
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
+use turnkey_api_key_stamper::TurnkeyP256ApiKey;
+use tvc::config::turnkey::{
+    Config, HostedOperatorRecord, KeyCurve, OperatorKind, OperatorRecord, OperatorRecordKind,
+    OrgConfig, QosOperatorPublicKey, StoredApiKey, StoredQosOperatorKey,
+};
+use uuid::Uuid;
+
+/// Dead port: connection attempts fail immediately, so commands stop at their
+/// first network step without hanging.
+pub const LOCAL_API_BASE_URL: &str = "http://127.0.0.1:1";
+
+fn org_dir(home: &Path, alias: &str) -> PathBuf {
+    home.join(".config/turnkey/orgs").join(alias)
+}
+
+/// Write a v2 `tvc.config.toml` under `home` with one organization per
+/// `(alias, org_id)` pair, using the legacy alias-keyed key-file layout and a
+/// dead-port API base URL. The legacy layout is deliberate: these fixtures
+/// seed pre-existing user state (which interactive login migrates to the
+/// id-keyed layout); the current layout is exercised through the real CLI's
+/// new-org flow.
+pub fn write_profiles_config(home: &Path, profiles: &[(&str, &str)], active_org: Option<&str>) {
+    let turnkey_dir = home.join(".config/turnkey");
+    fs::create_dir_all(&turnkey_dir).unwrap();
+
+    let mut config = Config::default();
+
+    for (alias, org_id) in profiles {
+        let id: Uuid = org_id.parse().expect("test org ids must be UUIDs");
+        let dir = org_dir(home, alias);
+
+        config.orgs.insert(
+            id,
+            OrgConfig {
+                api_key_path: dir.join("api_key.json"),
+                api_base_url: LOCAL_API_BASE_URL.to_string(),
+                default_operator_kind: OperatorKind::Local,
+                operators: vec![OperatorRecord::local(dir.join("operator.json"))],
+                extra: toml::Table::new(),
+            },
+        );
+        config.aliases.bind(alias.to_string(), id);
+    }
+
+    if let Some(active) = active_org {
+        let id = config
+            .aliases
+            .resolve(active)
+            .expect("active_org must name a fixture profile")
+            .id();
+        config.set_active_org(id).unwrap();
+    }
+
+    fs::write(
+        turnkey_dir.join("tvc.config.toml"),
+        format!("version = 2\n{}", toml::to_string_pretty(&config).unwrap()),
+    )
+    .unwrap();
+}
+
+/// Write a v2 `tvc.config.toml` under `home` whose sole, active organization
+/// defaults to the hosted backend and registers exactly one operator, hosted
+/// — the fixture for commands that need local key material a hosted-only org
+/// does not have. The record carries a real generated composite key split
+/// into its two points, the way `operator create` stores it.
+pub fn write_hosted_only_config(home: &Path, alias: &str, org_id: &str) {
+    let turnkey_dir = home.join(".config/turnkey");
+    fs::create_dir_all(&turnkey_dir).unwrap();
+
+    let id: Uuid = org_id.parse().expect("test org ids must be UUIDs");
+    let composite = hex::encode(
+        qos_p256::P256Pair::generate()
+            .unwrap()
+            .public_key()
+            .to_bytes(),
+    );
+    let (encrypt_public_key, sign_public_key) = composite.split_at(composite.len() / 2);
+
+    let mut config = Config::default();
+    config.orgs.insert(
+        id,
+        OrgConfig {
+            api_key_path: turnkey_dir.join(format!("orgs/{id}/api_key.json")),
+            api_base_url: LOCAL_API_BASE_URL.to_string(),
+            default_operator_kind: OperatorKind::Hosted,
+            operators: vec![OperatorRecord {
+                name: "hosted-op".to_string(),
+                kind: OperatorRecordKind::Hosted(HostedOperatorRecord {
+                    operator_id: "11111111-1111-4111-8111-111111111111".parse().unwrap(),
+                    wallet_id: "22222222-2222-4222-8222-222222222222".parse().unwrap(),
+                    path: "m/5527107'/0'/0'".to_string(),
+                    encrypt_public_key: encrypt_public_key.to_string(),
+                    sign_public_key: sign_public_key.to_string(),
+                    extra: toml::Table::new(),
+                }),
+            }],
+            extra: toml::Table::new(),
+        },
+    );
+    config.aliases.bind(alias.to_string(), id);
+    config.set_active_org(id).unwrap();
+
+    fs::write(
+        turnkey_dir.join("tvc.config.toml"),
+        format!("version = 2\n{}", toml::to_string_pretty(&config).unwrap()),
+    )
+    .unwrap();
+}
+
+/// Create the legacy-layout key files for `alias`: a valid generated
+/// `StoredApiKey` (login loads it before its first network step) and a real
+/// generated operator key. Returns the operator public key so tests can
+/// assert on rendered output.
+pub fn write_profile_key_files(home: &Path, alias: &str) -> QosOperatorPublicKey {
+    let dir = org_dir(home, alias);
+    fs::create_dir_all(&dir).unwrap();
+
+    let stamper = TurnkeyP256ApiKey::generate();
+    let api_key = StoredApiKey {
+        public_key: hex::encode(stamper.compressed_public_key()),
+        private_key: hex::encode(stamper.private_key()),
+        curve: KeyCurve::P256,
+    };
+
+    fs::write(
+        dir.join("api_key.json"),
+        serde_json::to_string_pretty(&api_key).unwrap(),
+    )
+    .unwrap();
+
+    let pair = qos_p256::P256Pair::generate().unwrap();
+    let operator_key = StoredQosOperatorKey {
+        public_key: QosOperatorPublicKey::try_from(pair.public_key().to_bytes().as_slice())
+            .unwrap(),
+        private_key: hex::encode(pair.to_master_seed()),
+    };
+    fs::write(
+        dir.join("operator.json"),
+        serde_json::to_string_pretty(&operator_key).unwrap(),
+    )
+    .unwrap();
+
+    operator_key.public_key
+}

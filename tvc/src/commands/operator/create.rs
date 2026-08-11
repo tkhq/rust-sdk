@@ -100,33 +100,37 @@ Saved: true"#,
 #[instrument(skip_all)]
 pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     let mut config = Config::load().await?;
-    let (alias, configured_org_id) = config
+    let configured_org_id = config
         .active_org_config()
-        .map(|(alias, org)| (alias.clone(), org.id.as_str()))
+        .map(|(org_id, _)| org_id)
         .context("No active organization. Run `tvc login` first.")?;
 
     let auth = build_client().await?;
-    ensure_authenticated_org(&auth.org_id, configured_org_id)?;
+    ensure_authenticated_org(auth.org_id, configured_org_id)?;
 
     let record = create_hosted_operator(&auth, hosted_operator_spec(args)).await?;
     let output = output_from_record(record.clone())?;
 
     config
         .orgs
-        .get_mut(&alias)
-        .with_context(|| format!("active organization '{alias}' disappeared from config"))?
+        .get_mut(&configured_org_id)
+        .with_context(|| {
+            format!("active organization '{configured_org_id}' disappeared from config")
+        })?
         .operators
         .push(record);
 
     if let Err(save_error) = config.save().await {
         let record = config
             .orgs
-            .get(&alias)
+            .get(&configured_org_id)
             .and_then(|org| org.operators.last())
             .with_context(|| {
-                format!("hosted operator disappeared from active organization '{alias}'")
+                format!(
+                    "hosted operator disappeared from active organization '{configured_org_id}'"
+                )
             })?;
-        let recovery = recovery_toml(&alias, record)?;
+        let recovery = recovery_toml(configured_org_id, record)?;
         return Err(anyhow!(
             r#"hosted operator {} was created remotely, but saving the local config failed: {save_error}
 Do not retry creation blindly; doing so would create another remote operator. Restore this record under the active organization in tvc.config.toml:
@@ -166,13 +170,11 @@ fn output_from_record(record: OperatorRecord) -> Result<OperatorCreated> {
     })
 }
 
-fn recovery_toml(alias: &str, record: &OperatorRecord) -> Result<String> {
-    let quoted_alias = serde_json::to_string(alias)
-        .context("failed to quote organization alias for recovery record")?;
+fn recovery_toml(org_id: Uuid, record: &OperatorRecord) -> Result<String> {
     let record = toml::to_string_pretty(record)
         .context("failed to serialize hosted operator recovery record")?;
     Ok(format!(
-        r#"[[orgs.{quoted_alias}.operators]]
+        r#"[[orgs."{org_id}".operators]]
 {}"#,
         record.trim()
     ))
@@ -210,9 +212,12 @@ mod tests {
 
         let expected = hosted_record();
         let recovery: Recovery =
-            toml::from_str(&recovery_toml("default", &expected).unwrap()).unwrap();
+            toml::from_str(&recovery_toml(Uuid::from_u128(0xA1), &expected).unwrap()).unwrap();
 
-        assert_eq!(recovery.orgs["default"].operators, vec![expected]);
+        assert_eq!(
+            recovery.orgs[&Uuid::from_u128(0xA1).to_string()].operators,
+            vec![expected]
+        );
     }
 
     #[test]
