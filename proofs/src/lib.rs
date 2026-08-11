@@ -67,9 +67,9 @@ pub fn cert_from_pem(pem: &[u8]) -> Result<Vec<u8>, AttestError> {
 /// Extract the DER encoded `AttestationDoc` from the nitro secure module
 /// (nsm) provided COSE Sign1 structure.
 ///
-/// WARNING: This will not perform any validation of the attestation doc and
-/// should not be used directly in production; instead use
-/// [`attestation_doc_from_der`].
+/// WARNING: This is demo code. It performs no validation of the attestation
+/// doc at all. See <https://github.com/tkhq/qos> for the canonical
+/// verification checks.
 ///
 /// # Arguments
 ///
@@ -92,6 +92,13 @@ pub fn unsafe_attestation_doc_from_der(
 /// (nsm) provided COSE Sign1 structure. This function will verify the the
 /// root certificate authority via the CA bundle and verify that the end
 /// entity certificate signed the COSE Sign1 structure.
+///
+/// WARNING: This is demo code. It only verifies AWS Nitro PKI/COSE
+/// authenticity (certificate chain to the provided root and COSE Sign1
+/// signature) plus syntactic validation. It does NOT validate the enclave's
+/// identity: PCR values, `user_data`, and manifest policy are not checked
+/// against expected or pinned values. See <https://github.com/tkhq/qos> for
+/// the canonical PCR, manifest, and attestation checks.
 ///
 /// # Arguments
 ///
@@ -225,6 +232,11 @@ impl Hash for Sha2 {
 }
 
 /// Parses and verifies an AWS nitro attestation, provided as a base64 encoded string (defaults to using current time for validation)
+///
+/// WARNING: This is demo code. It only verifies AWS Nitro PKI/COSE
+/// authenticity; it does NOT validate PCR identity, `user_data`, or manifest
+/// policy against expected/pinned values. See <https://github.com/tkhq/qos>
+/// for the canonical PCR, manifest, and attestation checks.
 pub fn parse_and_verify_aws_nitro_attestation<S: AsRef<str>>(
     encoded_attestation: S,
     validation_time: Option<std::time::SystemTime>,
@@ -321,9 +333,22 @@ pub fn verify_app_proof_signature(app_proof: &AppProof) -> Result<(), AppProofEr
 /// Verify the app proof boot proof pair.
 ///  - Verify app proof signature
 ///  - Verify the boot proof
-///    - Attestation doc was signed by AWS
-///    - Attestation doc matches the approved QOS manifest and live PCR commitment
-///  - Verify the app proof / boot proof connection - that the ephemeral keys match
+///    - Attestation doc was signed by AWS (certificate chain and COSE Sign1
+///      signature)
+///    - Manifest envelope approvals are self-consistent (checked against the
+///      manifest set contained in the supplied envelope)
+///    - Manifest, manifest envelope, and attestation doc `user_data` all
+///      commit to the same manifest hash
+///    - Attestation doc PCR0-3 match the supplied manifest and PCR17 matches
+///      the live manifest commitment
+///  - Verify the app proof / boot proof connection - that the ephemeral keys
+///    match across the app proof, boot proof, and attestation doc
+///
+/// WARNING: This is demo code. All manifest checks are against the manifest
+/// supplied in the boot proof itself; this function does NOT compare the
+/// supplied manifest contents, manifest-set members, or approval threshold to
+/// an independently pinned/known-good Turnkey trust anchor. See
+/// <https://github.com/tkhq/qos> for the canonical verification checks.
 ///
 /// To learn more about verifying app proofs and boot proofs, see:
 /// <https://whitepaper.turnkey.com/foundations/>.
