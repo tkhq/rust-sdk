@@ -6,7 +6,7 @@ use std::fs;
 use tempfile::TempDir;
 use tvc::config::turnkey::{
     Config, HostedOperatorRecord, LocalOperatorRecord, OperatorKind, OperatorRecord,
-    OperatorRecordKind, OrgConfig, StoredQosOperatorKey,
+    OperatorRecordKind, OrgConfig, QosOperatorPublicKey, StoredQosOperatorKey,
 };
 use uuid::Uuid;
 
@@ -268,7 +268,8 @@ fn auto_selected_hosted_id_controls_signer_resolution_in_mixed_registry() {
     fs::write(
         &operator_key_path,
         serde_json::to_string(&StoredQosOperatorKey {
-            public_key: "unused".to_string(),
+            // The signer path only reads the seed; a nil key stands in.
+            public_key: QosOperatorPublicKey::default(),
             private_key: fixture_seed_hex(),
         })
         .unwrap(),

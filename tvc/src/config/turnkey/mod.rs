@@ -11,7 +11,7 @@ mod api_key;
 mod qos_operator_key;
 
 pub use api_key::{KeyCurve, StoredApiKey};
-pub use qos_operator_key::StoredQosOperatorKey;
+pub use qos_operator_key::{QosOperatorPublicKey, StoredQosOperatorKey};
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};

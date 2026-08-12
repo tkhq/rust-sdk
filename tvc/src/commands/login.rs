@@ -1,10 +1,13 @@
 //! Login command for authenticating with Turnkey.
 
 use crate::client::build_turnkey_client;
+use crate::commands::keys::backup_operator_key::{
+    OperatorKeyBackedUp, back_up, prompt_for_backup_destination,
+};
 use crate::config::turnkey::{
-    API_BASE_URL_PROD, Config, KeyCurve, OperatorRecordKind, OrgConfig, StoredApiKey,
-    StoredQosOperatorKey, dashboard_base_url, default_api_key_path, default_operator_key_path,
-    default_org_dir,
+    API_BASE_URL_PROD, Config, KeyCurve, OperatorRecordKind, OrgConfig, QosOperatorPublicKey,
+    StoredApiKey, StoredQosOperatorKey, dashboard_base_url, default_api_key_path,
+    default_operator_key_path, default_org_dir,
 };
 use crate::outcome::Outcome;
 use crate::output::StdCtx;
@@ -376,7 +379,7 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
         user_id: whoami.user_id,
         alias,
         api_public_key: api_key.public_key.clone(),
-        operator_public_key: operator_key.public_key.clone(),
+        operator_public_key: operator_key.public_key,
         config_file_path: crate::config::turnkey::config_file_path()?
             .display()
             .to_string(),
@@ -461,7 +464,7 @@ impl Display for OrgChoice {
     }
 }
 
-fn find_org<'a>(config: &'a Config, org: &str) -> Option<(&'a String, &'a OrgConfig)> {
+pub(crate) fn find_org<'a>(config: &'a Config, org: &str) -> Option<(&'a String, &'a OrgConfig)> {
     if let Some((alias, org_config)) = config.orgs.get_key_value(org) {
         return Some((alias, org_config));
     }
@@ -566,6 +569,7 @@ async fn find_or_generate_operator_key(
     if let Some(operator_key) = StoredQosOperatorKey::load(&local.key_path).await? {
         debug!("using existing operator key");
         shell_println!(ctx, "Using existing operator key.")?;
+        shell_println!(ctx, "Tip: back it up with `tvc keys backup-operator-key`.")?;
         return Ok(operator_key);
     }
 
@@ -575,12 +579,12 @@ async fn find_or_generate_operator_key(
 
     let pair =
         P256Pair::generate().map_err(|e| anyhow!("failed to generate operator key: {e:?}"))?;
-    let public_key = hex::encode(pair.public_key().to_bytes());
-    let private_key = hex::encode(pair.to_master_seed());
+    let public_key = QosOperatorPublicKey::try_from(pair.public_key().to_bytes().as_slice())
+        .context("generated operator public key")?;
 
     let operator_key = StoredQosOperatorKey {
-        public_key: public_key.clone(),
-        private_key,
+        public_key,
+        private_key: hex::encode(pair.to_master_seed()),
     };
 
     operator_key.save(&local.key_path).await?;
@@ -598,6 +602,55 @@ async fn find_or_generate_operator_key(
         ctx,
         "Make sure to register this as an operator in your organization."
     )?;
+
+    // Onboarding nudge for the freshly generated key. JSON mode already
+    // forces non-interactive; the TTY check keeps piped runs from hanging on
+    // the prompt.
+    if !ctx.is_non_interactive() && prompts::stdin_can_prompt() {
+        shell_println!(ctx)?;
+        shell_println!(
+            ctx,
+            "WARNING: This key exists only on this machine; if it's lost you \
+             cannot approve deployments with it."
+        )?;
+
+        // Everything below is advisory: a prompt the user escapes out of and a
+        // backup that fails both degrade to a warning, because the config and
+        // both key files are already saved by this point and the login outcome
+        // must still land.
+        let attempt: Result<Option<OperatorKeyBackedUp>> = async {
+            if !prompts::confirm("Back up your operator key now?", true)? {
+                return Ok(None);
+            }
+
+            let Some(destination) = prompt_for_backup_destination(org_alias)? else {
+                return Ok(None);
+            };
+
+            back_up(org_alias.to_string(), local.key_path.clone(), destination)
+                .await
+                .map(Some)
+        }
+        .await;
+
+        let backed_up = match attempt {
+            Ok(report) => report,
+            Err(error) => {
+                shell_eprintln!(ctx, "WARNING: backup skipped: {error:#}")?;
+                None
+            }
+        };
+
+        if let Some(report) = backed_up {
+            shell_println!(ctx)?;
+            shell_println!(ctx, "{report}")?;
+        } else {
+            shell_println!(
+                ctx,
+                "You can back up any time with `tvc keys backup-operator-key`."
+            )?;
+        }
+    }
 
     Ok(operator_key)
 }
@@ -649,7 +702,7 @@ pub struct LoggedIn {
     user_id: String,
     alias: String,
     api_public_key: String,
-    operator_public_key: String,
+    operator_public_key: QosOperatorPublicKey,
     config_file_path: String,
     api_key_path: String,
     operator_key_path: String,
