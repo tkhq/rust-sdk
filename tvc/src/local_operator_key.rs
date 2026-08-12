@@ -147,7 +147,6 @@ mod tests {
         fs::write(
             &path,
             serde_json::to_string(&StoredQosOperatorKey {
-                // The resolve path only reads the seed; a nil key stands in.
                 public_key: QosOperatorPublicKey::default(),
                 private_key: private_key.clone(),
             })

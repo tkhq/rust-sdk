@@ -84,9 +84,7 @@ impl_hex_debug!(QosOperatorPublicKey);
 /// which construct every outcome shape via `Default`.
 impl Default for QosOperatorPublicKey {
     fn default() -> Self {
-        // Not `Self(Default::default())`: std's array `Default` stops at 32
-        // elements, so the repeat expression delegates per element instead.
-        Self([Default::default(); QOS_OPERATOR_PUBLIC_KEY_LEN])
+        Self([0; QOS_OPERATOR_PUBLIC_KEY_LEN])
     }
 }
 
