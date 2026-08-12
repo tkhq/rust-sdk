@@ -179,6 +179,10 @@ impl DebugLogQueryRequest {
     }
 }
 
+// PURE-DEPS-REVIEW T23 (medium): client is injected (good) but the poll loop
+// fuses dedupe/print accounting with real tokio::time::sleep — the loop cannot
+// be driven in tests. Extract the pure poll-step decision; the async shell
+// keeps the sleep.
 async fn query_debug_logs(
     ctx: &mut StdCtx,
     client: &turnkey_client::TurnkeyClient<TurnkeyP256ApiKey>,

@@ -132,6 +132,11 @@ impl DeployConfig {
         }
     }
 
+    // PURE-DEPS-REVIEW T19 (high): interactive prompting embedded in a domain
+    // config type. The "which placeholder fields remain" logic is provably
+    // separable (cf. pull_secret_is_placeholder) but untestable without a TTY
+    // here. Split: pure missing-fields query on the type; prompting at the
+    // command layer folds answers back in.
     /// Walk the user through any placeholder fields and fill them in.
     /// Non-placeholder fields are preserved unchanged so partial edits work.
     ///

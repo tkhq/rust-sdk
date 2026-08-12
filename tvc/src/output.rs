@@ -37,6 +37,10 @@ pub struct Shell<Out = Stdout, Err = Stderr> {
 }
 
 impl Shell {
+    // PURE-DEPS-REVIEW T29 (low, borderline): TTY detection inside a
+    // constructor; called exactly once from Cli::run and Shell<W, W2> is
+    // otherwise fully generic/injectable, so this is close to the line rather
+    // than over it.
     pub fn standard(message_format: MessageFormat, color: ColorChoice) -> Self {
         let use_color = match color {
             ColorChoice::Auto => io::stderr().is_terminal(),

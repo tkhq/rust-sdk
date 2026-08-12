@@ -151,6 +151,9 @@ const USAGE_ERROR_EXIT_CODE: i32 = 2;
 /// parse failures are emitted as a single `command_error`/`usage_error` NDJSON
 /// line on stdout when `--message-format json` was requested, otherwise handed
 /// back to clap's default rendering via `error.exit()`.
+// PURE-DEPS-REVIEW T29 (low, borderline): reads process argv one hop below
+// Cli::run; acceptable since the decision fn (args_request_json_output) is
+// already parameterized and unit-tested — the acquisition is a thin shell.
 fn handle_parse_error(error: clap::Error) -> ExitCode {
     match error.kind() {
         // Help/version output must never be JSON — let clap print and exit.

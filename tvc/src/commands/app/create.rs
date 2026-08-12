@@ -240,6 +240,8 @@ async fn run_with_app_config(
     shell_println!(ctx, "Creating app '{}'...", app_config.name)?;
 
     let auth = build_client(&config).await?;
+    // PURE-DEPS-REVIEW T12 (low): inline clock read below; use the shared
+    // timestamp_ms() helper (operator.rs).
 
     let intent = build_create_tvc_app_intent(&app_config);
 

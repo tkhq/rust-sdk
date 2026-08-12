@@ -129,6 +129,8 @@ pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcom
     if let Some(configured_org_id) = configured_org_id {
         ensure_authenticated_org(&auth.org_id, &configured_org_id)?;
     }
+    // PURE-DEPS-REVIEW T12 (low): inline clock read; use the shared
+    // timestamp_ms() helper (operator.rs) at entrypoints.
     let timestamp_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .context("system time before unix epoch")?

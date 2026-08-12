@@ -234,6 +234,9 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) 
 /// Resolve the alias of a configured profile to delete. Prompts interactively
 /// with a picker when no query is given; a query that matches nothing is handled
 /// by `find_org` returning `None`.
+// PURE-DEPS-REVIEW T16 (medium): resolver prompts interactively (prompts::select
+// below); it already receives &Config, so the prompt is the only untestable
+// part — hoist the picker to the entrypoint.
 fn resolve_profile_alias(config: &Config, org: Option<String>) -> Result<String> {
     match org {
         Some(query) => match find_org(config, &query) {
@@ -278,6 +281,10 @@ impl Display for ProfileChoice<'_> {
     }
 }
 
+// PURE-DEPS-REVIEW T16 (medium): builder drives interactive prompts (via
+// prompt_for_org_plan) rather than receiving resolved answers. Acceptable as
+// the plan-building step IF all prompting is concentrated here and nothing
+// below execute_login prompts again — today it isn't (see T13).
 fn build_login_plan_interactive(
     ctx: &mut StdCtx,
     args: Args,
@@ -306,6 +313,11 @@ fn build_login_plan_non_interactive(args: Args) -> Result<LoginPlan> {
     })
 }
 
+// PURE-DEPS-REVIEW T16 (medium): a de-facto second wiring layer below run() —
+// config save, key load, key generation fused to disk writes, network call,
+// and $HOME resolution (config_file_path in the outcome literal) all live
+// here. Target shape: prompts/acquisition finish while building the plan;
+// this becomes prompt-free execution of a complete plan.
 async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) -> Result<Outcome> {
     let (alias, org_config) = match plan.org {
         OrgPlan::Existing(query) => {
@@ -413,6 +425,9 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
     }))
 }
 
+// PURE-DEPS-REVIEW T16 (medium): forwards the raw Option<&str> override so the
+// callee constructs the dashboard URL internally (see prompt_for_new_org_inputs)
+// — pass the resolved URL instead of the fragment.
 fn prompt_for_org_plan(
     ctx: &mut StdCtx,
     config: &Config,
@@ -453,6 +468,9 @@ fn prompt_for_org_plan(
     }
 }
 
+// PURE-DEPS-REVIEW T16 (medium): raw-fragment antipattern — takes Option<&str>
+// and builds the real dependency (dashboard_base_url(...)) internally; should
+// receive the resolved dashboard URL.
 fn prompt_for_new_org_inputs(
     ctx: &mut StdCtx,
     api_base_url_override: Option<&str>,
@@ -534,6 +552,8 @@ fn update_api_base_url_from_override(
     }
 }
 
+// PURE-DEPS-REVIEW T16 (medium): key derivation (pure) fused to a disk write
+// (api_key.save) below the entrypoint, interleaved with presentation output.
 async fn generate_api_key(ctx: &mut StdCtx, org_config: &OrgConfig) -> Result<StoredApiKey> {
     debug!("generating new API key");
     shell_println!(ctx)?;
@@ -575,6 +595,9 @@ async fn generate_api_key(ctx: &mut StdCtx, org_config: &OrgConfig) -> Result<St
     Ok(api_key)
 }
 
+// PURE-DEPS-REVIEW T14 (high): reads raw stdin directly, bypassing the prompts
+// module — the one sanctioned interactive-acquisition wrapper — so this cannot
+// be stubbed in tests.
 fn wait_for_dashboard_registration(ctx: &mut StdCtx) -> Result<()> {
     shell_print!(ctx, "Press Enter when done...")?;
 
@@ -583,6 +606,12 @@ fn wait_for_dashboard_registration(ctx: &mut StdCtx) -> Result<()> {
     Ok(())
 }
 
+// PURE-DEPS-REVIEW T13 (high): three levels below the entrypoint this helper
+// reads the key file, generates a pair, writes to disk, detects TTY
+// (stdin_can_prompt below — the only below-entrypoint TTY detection in the
+// crate), prompts twice, and copies files. None of the branching is testable
+// without a real terminal and home dir. Split: pure decision + injected I/O,
+// prompts hoisted to the plan step.
 async fn find_or_generate_operator_key(
     ctx: &mut StdCtx,
     org_alias: &str,
@@ -686,6 +715,10 @@ pub struct WhoamiResult {
     pub user_id: String,
 }
 
+// PURE-DEPS-REVIEW T15 (high): takes three raw fragments and constructs the
+// stamper + client internally before the whoami call — the raw-fragment
+// antipattern (PR #235). Should receive a constructed client and do only the
+// network call + response mapping.
 async fn verify_credentials(
     api_key: &StoredApiKey,
     org_id: &str,

@@ -61,6 +61,9 @@ impl FetchedProvisioningDetails {
     }
 }
 
+// PURE-DEPS-REVIEW T11 (medium): mixes a clock read + network fetch + pure parse
+// in one function. The pure half (provisioning_details_from_response) already
+// exists — hoist the SystemTime::now() read to the caller as fetched_at_unix_ms.
 /// Fetch and parse provisioning details for one deployment.
 pub(crate) async fn fetch_provisioning_details(
     auth: &AuthenticatedClient,

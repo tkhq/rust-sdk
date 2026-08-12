@@ -111,6 +111,9 @@ impl AppConfig {
     ///
     /// `saved_operator_public_key` is offered as the default when prompting
     /// for a `<FILL_IN>` operator public key.
+    // PURE-DEPS-REVIEW T20 (high): same as DeployConfig::fill_interactively
+    // (T19) — prompting inside a domain type, reached from four different
+    // commands. Split pure missing-fields query from command-layer prompting.
     pub fn fill_interactively(&mut self, saved_operator_public_key: Option<&str>) -> Result<()> {
         if self.name.starts_with("<FILL_IN") {
             self.name = prompts::required_text("App name", None)?;

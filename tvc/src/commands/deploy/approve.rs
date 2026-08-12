@@ -420,6 +420,9 @@ impl fmt::Display for ApprovingOperator {
     }
 }
 
+// PURE-DEPS-REVIEW T7 (high): loads Config AND prompts interactively deep inside
+// resolution logic, well below the entrypoint. Config should be passed in; the
+// choose-an-operator prompt belongs at the plan/entrypoint step.
 /// Resolve where to post and which operator approves. No post target is
 /// built for `--dry-run` or `--skip-post`; without `--operator-id`, a lone
 /// known operator (registered hosted or saved from the last `app create`)

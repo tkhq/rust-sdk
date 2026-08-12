@@ -315,6 +315,8 @@ fn invalid_deploy_config_error(errors: DeployConfigValidationErrors) -> anyhow::
     anyhow!("invalid deploy config: {}", errors)
 }
 
+// PURE-DEPS-REVIEW T29 (low): prompt-and-write pair below the entrypoint; the
+// wording decision (file_loaded) is pure but inseparable from the I/O here.
 /// Ask the user whether to write the updated config back to disk.
 /// `file_loaded` distinguishes "saving over an existing file" from
 /// "creating a new file at this path" in the prompt wording.
@@ -396,6 +398,8 @@ async fn run_with_resolved_inputs(
     shell_println!(ctx, "{}", format_port_summary(&deploy_config))?;
     shell_println!(ctx)?;
 
+    // PURE-DEPS-REVIEW T12 (low): inline SystemTime::now() below; use the
+    // shared timestamp_ms() helper (operator.rs).
     let auth = build_client(config).await?;
 
     // validate that the app exists

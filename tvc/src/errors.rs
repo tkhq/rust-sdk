@@ -120,6 +120,10 @@ pub fn hint(error: &anyhow::Error) -> Option<String> {
     })
 }
 
+// PURE-DEPS-REVIEW T25 (medium): reads process argv inside otherwise-pure
+// message formatting — version-rejection rendering is only testable by
+// manipulating argv. Formatters should take the name as a parameter; read
+// argv once at the cli layer.
 /// The invoked binary's name for user-facing version messaging: argv[0]'s file
 /// stem (so `/usr/local/bin/tvc` and `./tvc` both read as `tvc`), falling back
 /// to `tvc` when argv is empty.

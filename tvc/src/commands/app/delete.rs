@@ -31,6 +31,8 @@ pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcom
         app_id: args.app_id.to_string(),
     };
 
+    // PURE-DEPS-REVIEW T12 (low): inline clock read at the entrypoint; use the
+    // shared timestamp_ms() helper (operator.rs).
     let timestamp_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .context("system time before unix epoch")?

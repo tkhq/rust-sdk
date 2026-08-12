@@ -60,6 +60,9 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: turnkey::Config) -> Resul
     execute(ctx, args, &config).await
 }
 
+// PURE-DEPS-REVIEW T17 (low, rescoped): config double-load fixed upstream
+// (passed in); still below the entrypoint here: Local::now() for the default
+// filename, an exists() probe, prompts, and the file write.
 async fn execute(ctx: &mut StdCtx, args: Args, config: &turnkey::Config) -> Result<Outcome> {
     let Args {
         output,

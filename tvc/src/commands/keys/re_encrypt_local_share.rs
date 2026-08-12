@@ -219,6 +219,10 @@ fn find_share_set_member(
         })
 }
 
+// PURE-DEPS-REVIEW T29 (low, borderline): the inline-vs-file policy decision is
+// fused with the write and stderr narration; thin and path-parameterized, so
+// low priority. (Contrast: build_re_encrypted_share_output above is the best
+// in-crate example of the target shape — every dependency injected.)
 async fn write_output(
     ctx: &mut StdCtx,
     path: Option<&Path>,

@@ -397,6 +397,9 @@ fn default_api_base_url() -> String {
     API_BASE_URL_PROD.to_string()
 }
 
+// PURE-DEPS-REVIEW T3 (low, rescoped): loading now happens at dispatch (pure
+// from_toml + file read at the wiring layer), but save() and the default-path
+// helpers still resolve $HOME internally below the entrypoint.
 /// Returns the base config directory: `~/.config/turnkey/`
 pub fn config_dir() -> Result<PathBuf> {
     let home = std::env::var("HOME").context("HOME environment variable not set")?;

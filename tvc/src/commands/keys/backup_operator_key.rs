@@ -114,6 +114,9 @@ impl Run for Args {
     }
 }
 
+// PURE-DEPS-REVIEW T22 (medium): prompts + fs probes (is_dir/exists) below two
+// different entrypoints (also called from login.rs). Keep as shared prompt-layer
+// code, but extract the path validation into a pure fn both callers use.
 /// Prompt for a backup destination: the default file name, the
 /// directory-destination rejection, and the overwrite question live here, so
 /// every interactive caller asks them the same way. Returns `None` when the
@@ -147,6 +150,10 @@ pub(crate) fn prompt_for_backup_destination(alias: &str) -> Result<Option<PathBu
 /// The source is parsed to validate it and capture the public key, but the
 /// original bytes are written verbatim so any unknown fields survive the
 /// copy. This is the only place an [`OperatorKeyBackedUp`] is constructed.
+// PURE-DEPS-REVIEW T29 (low, borderline): dependencies ARE parameters here
+// (good), but key-file validation (the serde parse whose error message is
+// user-facing policy) is fused with create_dir_all + copy, so the parse step
+// needs a real file to exercise.
 pub(crate) async fn back_up(
     alias: String,
     source: PathBuf,

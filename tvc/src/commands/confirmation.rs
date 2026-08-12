@@ -3,6 +3,9 @@
 //! Public functions use standard streams, while internals accept injected IO
 //! so tests can exercise prompt behavior without terminal input.
 
+// PURE-DEPS-REVIEW T28 (low): dead code — this module has zero call sites
+// outside itself and duplicates prompts::confirm/confirm_or_bail. Delete
+// candidate rather than refactor candidate.
 use anyhow::{Result, bail};
 use std::io::{BufRead, Write};
 
