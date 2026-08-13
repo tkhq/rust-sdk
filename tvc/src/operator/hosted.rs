@@ -252,9 +252,9 @@ impl Config {
 
         match (matches.next(), matches.next()) {
             (None, _) => Ok(None),
-            (Some((record, hosted)), None) => Ok(Some(ResolvedHostedOperator::from_registry(
+            (Some((name, hosted)), None) => Ok(Some(ResolvedHostedOperator::from_registry(
                 org.id.clone(),
-                &record.name,
+                name,
                 hosted,
             )?)),
             (Some(_), Some(_)) => bail!("multiple hosted operators have ID {operator_id}"),
@@ -540,9 +540,9 @@ mod tests {
         let config = config_with_operators(vec![local, hosted_operator("hosted", hosted_record())]);
         let org = &config.orgs["active"];
 
-        let (operator, hosted) = org.select_hosted_operator().unwrap();
+        let (name, hosted) = org.select_hosted_operator().unwrap();
 
-        assert_eq!(operator.name, "hosted");
+        assert_eq!(name, "hosted");
         assert_eq!(hosted.operator_id, Uuid::parse_str(OPERATOR_ID).unwrap());
     }
 

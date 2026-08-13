@@ -368,13 +368,11 @@ impl OrgConfig {
 
     /// The hosted operator registry entries, each with its kind-specific
     /// record, in config order.
-    pub(crate) fn hosted_operators(
-        &self,
-    ) -> impl Iterator<Item = (&OperatorRecord, &HostedOperatorRecord)> {
+    pub(crate) fn hosted_operators(&self) -> impl Iterator<Item = (&str, &HostedOperatorRecord)> {
         self.operators
             .iter()
             .filter_map(|operator| match &operator.kind {
-                OperatorRecordKind::Hosted(hosted) => Some((operator, hosted)),
+                OperatorRecordKind::Hosted(hosted) => Some((operator.name.as_str(), hosted)),
                 OperatorRecordKind::Local(_) => None,
             })
     }
@@ -384,7 +382,7 @@ impl OrgConfig {
     /// default backend is resolution policy, decided elsewhere.
     pub(crate) fn select_hosted_operator(
         &self,
-    ) -> Result<(&OperatorRecord, &HostedOperatorRecord), SelectHostedOperatorError> {
+    ) -> Result<(&str, &HostedOperatorRecord), SelectHostedOperatorError> {
         let mut hosted = self.hosted_operators();
 
         match (hosted.next(), hosted.next()) {

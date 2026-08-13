@@ -380,18 +380,18 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
             }
         }
         OperatorKind::Hosted => {
-            let (record, hosted) = org_config
+            let (name, hosted) = org_config
                 .select_hosted_operator()
                 .with_context(|| format!("org '{alias}'"))?;
             shell_println!(
                 ctx,
                 "Using hosted operator '{}' ({}).",
-                record.name,
+                name,
                 hosted.operator_id
             )?;
 
             LoggedInOperator::Hosted {
-                operator_name: record.name.clone(),
+                operator_name: name.to_owned(),
                 operator_id: hosted.operator_id,
                 operator_public_key: format!(
                     "{}{}",

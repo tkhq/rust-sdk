@@ -232,11 +232,10 @@ pub(crate) async fn resolve_operator(
                     bail!("--skip-post is only supported for local operators");
                 }
 
-                let (record, hosted) = org
+                let (name, hosted) = org
                     .select_hosted_operator()
                     .with_context(|| format!("org '{alias}'"))?;
-                let hosted =
-                    ResolvedHostedOperator::from_registry(org.id.clone(), &record.name, hosted)?;
+                let hosted = ResolvedHostedOperator::from_registry(org.id.clone(), name, hosted)?;
                 let auth = build_client().await?;
                 ensure_authenticated_org(&auth.org_id, hosted.organization_id())?;
 
@@ -337,9 +336,9 @@ impl Config {
 
         let mut candidates: Vec<OperatorCandidate> = org
             .hosted_operators()
-            .map(|(record, hosted)| OperatorCandidate {
+            .map(|(name, hosted)| OperatorCandidate {
                 id: hosted.operator_id.to_string(),
-                name: Some(record.name.clone()),
+                name: name.to_owned().into(),
             })
             .collect();
 
