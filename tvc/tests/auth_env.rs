@@ -33,9 +33,13 @@ fn generated_api_key() -> (String, String) {
 
 #[test]
 fn env_auth_accepts_all_three_required_vars() {
+    // Config is built before dispatch, so the binary needs a HOME even on the
+    // env-auth path; a fresh temp dir keeps each test hermetic.
+    let home = TempDir::new().unwrap();
     let (public_key, private_key) = generated_api_key();
 
     app_status_cmd()
+        .env("HOME", home.path())
         .env(ENV_ORG_ID, "org-env")
         .env(ENV_API_KEY_PUBLIC, public_key)
         .env(ENV_API_KEY_PRIVATE, private_key)
@@ -48,9 +52,11 @@ fn env_auth_accepts_all_three_required_vars() {
 
 #[test]
 fn env_auth_rejects_two_required_vars() {
+    let home = TempDir::new().unwrap();
     let (public_key, _) = generated_api_key();
 
     app_status_cmd()
+        .env("HOME", home.path())
         .env(ENV_ORG_ID, "org-env")
         .env(ENV_API_KEY_PUBLIC, public_key)
         .assert()
@@ -61,7 +67,10 @@ fn env_auth_rejects_two_required_vars() {
 
 #[test]
 fn env_auth_rejects_one_required_var() {
+    let home = TempDir::new().unwrap();
+
     app_status_cmd()
+        .env("HOME", home.path())
         .env(ENV_ORG_ID, "org-env")
         .assert()
         .failure()

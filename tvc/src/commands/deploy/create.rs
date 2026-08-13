@@ -151,57 +151,61 @@ struct ResolvedDeployInputs {
 }
 
 #[instrument(skip_all)]
-pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
+pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome> {
     let inputs = if ctx.is_non_interactive() {
         build_inputs_non_interactive(args).await?
     } else {
-        build_inputs_interactive(ctx, args).await?
+        build_inputs_interactive(ctx, args, &config).await?
     };
 
-    run_with_resolved_inputs(ctx, inputs).await
+    run_with_resolved_inputs(ctx, inputs, &config).await
 }
 
-async fn build_inputs_interactive(ctx: &mut StdCtx, args: Args) -> Result<ResolvedDeployInputs> {
+async fn build_inputs_interactive(
+    ctx: &mut StdCtx,
+    args: Args,
+    config: &Config,
+) -> Result<ResolvedDeployInputs> {
     let Args {
         config_file: config_path,
         pivot_pull_secret,
         overrides,
     } = args;
-    let (mut config, file_loaded) = read_config_file_bytes(config_path.as_deref())
+    let (mut deploy_config, file_loaded) = read_config_file_bytes(config_path.as_deref())
         .await?
         .map(|(path, contents)| {
             serde_json::from_str(&contents)
                 .with_context(|| format!("failed to parse config file: {}", path.display()))
         })
         .transpose()?
-        .map(|config| (config, true))
+        .map(|deploy_config| (deploy_config, true))
         .unwrap_or_else(|| (flag_only_template(), false));
 
-    apply_overrides(&mut config, &overrides);
+    apply_overrides(&mut deploy_config, &overrides);
 
     let mut config_updated = false;
     loop {
-        match config.validate() {
+        match deploy_config.validate() {
             Ok(()) => break,
             Err(errors) if errors.has_non_placeholder_error() => {
                 return Err(invalid_deploy_config_error(errors));
             }
             _ => {
                 config_updated = true;
-                let saved_app_id = Config::load().await.ok().and_then(|c| c.get_last_app_id());
-                config.fill_interactively(ctx, saved_app_id.as_deref())?;
+                let saved_app_id = config.get_last_app_id();
+                deploy_config.fill_interactively(ctx, saved_app_id.as_deref())?;
             }
         }
     }
 
     if config_updated && let Some(path) = &config_path {
-        offer_to_save_config(ctx, path, &config, file_loaded)?;
+        offer_to_save_config(ctx, path, &deploy_config, file_loaded)?;
     }
     let pivot_pull_secret = read_pivot_pull_secret(pivot_pull_secret.as_deref()).await?;
 
     Ok(ResolvedDeployInputs {
         config_path,
-        config,
+        config: deploy_config,
         pivot_pull_secret,
     })
 }
@@ -380,6 +384,7 @@ fn pin_image_url(image_url: &str, resolved_digest: &str) -> String {
 async fn run_with_resolved_inputs(
     ctx: &mut StdCtx,
     inputs: ResolvedDeployInputs,
+    config: &Config,
 ) -> Result<Outcome> {
     let deploy_config = inputs.config;
 
@@ -391,7 +396,7 @@ async fn run_with_resolved_inputs(
     shell_println!(ctx, "{}", format_port_summary(&deploy_config))?;
     shell_println!(ctx)?;
 
-    let auth = build_client().await?;
+    let auth = build_client(config).await?;
 
     // validate that the app exists
     fetch_tvc_app(&auth, &deploy_config.app_id).await?;

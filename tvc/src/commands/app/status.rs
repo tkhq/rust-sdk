@@ -13,6 +13,7 @@ use crate::commands::app_status::{
     ReplicaCounts, TimestampPayload, format_replica_counts, sanitize_app_status,
 };
 use crate::commands::display::format_egress_enabled;
+use crate::config::turnkey::Config;
 use crate::outcome::Outcome;
 use tracing::instrument;
 
@@ -29,8 +30,8 @@ pub struct Args {
 
 /// Run the app status command.
 #[instrument(skip_all)]
-pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
-    let auth = crate::client::build_client().await?;
+pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Result<Outcome> {
+    let auth = crate::client::build_client(&config).await?;
 
     let app_id = args.app_id.to_string();
 

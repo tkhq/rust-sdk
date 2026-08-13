@@ -45,12 +45,12 @@ pub enum LocalCredentialSource {
 /// Resolve one local key pair. Explicit credentials bypass config entirely;
 /// otherwise the sole active local registry entry supplies the JSON key path.
 pub async fn resolve_local_operator(
+    config: &Config,
     explicit: Option<LocalOperatorSeedSource>,
 ) -> anyhow::Result<LocalPair> {
     let source = match explicit {
         Some(source) => LocalCredentialSource::Explicit(source),
         None => {
-            let config = Config::load().await?;
             let (alias, org_config) = config.active_org_config().ok_or_else(|| {
                 anyhow!(
                     "No active organization. Run `tvc login` first or provide \
@@ -183,8 +183,11 @@ mod tests {
 
     #[tokio::test]
     async fn explicit_value_resolves_without_config() {
-        resolve_local_operator(Some(LocalOperatorSeedSource::Value(seed())))
-            .await
-            .unwrap();
+        resolve_local_operator(
+            &Config::default(),
+            Some(LocalOperatorSeedSource::Value(seed())),
+        )
+        .await
+        .unwrap();
     }
 }

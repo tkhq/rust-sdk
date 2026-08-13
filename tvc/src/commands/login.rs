@@ -69,15 +69,13 @@ struct LoginPlan {
 }
 
 #[instrument(skip_all)]
-pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
+pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome> {
     debug!(
         non_interactive = ctx.is_non_interactive(),
         org_arg_present = args.org.is_some(),
         api_base_url_override_present = args.api_base_url.is_some(),
         "running login command"
     );
-
-    let config = Config::load().await?;
 
     let plan = if ctx.is_non_interactive() {
         build_login_plan_non_interactive(args)?
@@ -90,7 +88,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
 
 /// Permanently delete a saved login profile: its config entry and its API and
 /// operator key files on disk.
-pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs) -> Result<Outcome> {
+pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) -> Result<Outcome> {
     let is_non_interactive = ctx.is_non_interactive();
     debug!(
         non_interactive = is_non_interactive,
@@ -110,7 +108,6 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs) -> Result<Outcome> {
         }
     }
 
-    let mut config = Config::load().await?;
     let alias = resolve_profile_alias(&config, args.org)?;
     let org_id = config
         .orgs

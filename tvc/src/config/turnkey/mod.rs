@@ -23,8 +23,8 @@ use thiserror::Error;
 use tracing::debug;
 use uuid::Uuid;
 
-const CONFIG_DIR: &str = ".config/turnkey";
-const CONFIG_FILE: &str = "tvc.config.toml";
+pub const CONFIG_DIR: &str = ".config/turnkey";
+pub const CONFIG_FILE: &str = "tvc.config.toml";
 const ORGS_DIR: &str = "orgs";
 const API_KEY_FILE: &str = "api_key.json";
 const OPERATOR_KEY_FILE: &str = "operator.json";
@@ -429,25 +429,8 @@ pub fn default_operator_key_path(alias: &str) -> Result<PathBuf> {
 }
 
 impl Config {
-    /// Load config from disk, or return default if it doesn't exist
-    pub async fn load() -> Result<Self> {
-        let path = config_file_path()?;
-        debug!(config_path = %path.display(), "loading tvc config");
-        if !path.exists() {
-            debug!(config_path = %path.display(), "tvc config not found; using defaults");
-            return Ok(Config::default());
-        }
-
-        let config = Self::load_from_path(&path).await?;
-
-        debug!(
-            config_path = %path.display(),
-            active_org = ?config.active_org,
-            org_count = config.orgs.len(),
-            "loaded tvc config"
-        );
-
-        Ok(config)
+    pub fn from_toml(content: &str) -> Result<Self> {
+        disk::from_toml(content)
     }
 
     /// Save config to disk
@@ -461,14 +444,6 @@ impl Config {
         );
 
         self.save_to_path(&path).await
-    }
-
-    async fn load_from_path(path: &Path) -> Result<Self> {
-        let content = tokio::fs::read_to_string(path)
-            .await
-            .with_context(|| format!("failed to read config file: {}", path.display()))?;
-        disk::from_toml(&content)
-            .with_context(|| format!("failed to parse config file: {}", path.display()))
     }
 
     async fn save_to_path(&self, path: &Path) -> Result<()> {
@@ -631,7 +606,8 @@ default = ["operator-123"]
         let path = temp.path().join("tvc.config.toml");
         tokio::fs::write(&path, V0_CONFIG).await.unwrap();
 
-        let config = Config::load_from_path(&path).await.unwrap();
+        let content = tokio::fs::read_to_string(&path).await.unwrap();
+        let config = Config::from_toml(&content).unwrap();
         let original = tokio::fs::read_to_string(&path).await.unwrap();
         assert_eq!(original, V0_CONFIG);
 

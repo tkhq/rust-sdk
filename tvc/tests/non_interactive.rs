@@ -371,7 +371,9 @@ fn approve_non_interactive_requires_operator_id_when_saved_ids_are_ambiguous() {
 }
 
 #[test]
-fn deploy_init_template_does_not_require_readable_existing_config() {
+fn deploy_init_fails_before_dispatch_on_malformed_config() {
+    // Config is built once before dispatch, so a corrupt config file surfaces
+    // immediately for every command — even offline template generation.
     let temp = TempDir::new().unwrap();
     let turnkey_dir = temp.path().join(".config").join("turnkey");
     fs::create_dir_all(&turnkey_dir).unwrap();
@@ -385,13 +387,10 @@ fn deploy_init_template_does_not_require_readable_existing_config() {
         .arg("--output")
         .arg(&output)
         .assert()
-        .success()
-        .stdout(predicate::str::contains("Port guidance:"))
-        .stdout(predicate::str::contains(
-            "Use the same port for both unless your binary exposes health checks",
-        ));
+        .failure()
+        .stderr(predicate::str::contains("failed to parse config file"));
 
-    assert!(output.exists(), "deploy init should write the template");
+    assert!(!output.exists(), "no template should be written");
 }
 
 #[test]

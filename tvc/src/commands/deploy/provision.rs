@@ -62,7 +62,7 @@ impl Display for ProvisioningShareCreated {
 
 /// Run the hosted deploy provision command.
 #[instrument(skip_all)]
-pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
+pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome> {
     let Args {
         deploy_id,
         operator_id,
@@ -76,9 +76,8 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
         )?;
     }
 
-    let config = Config::load().await?;
     let operator = config.resolve_hosted_operator(&operator_id)?;
-    let auth = build_client().await?;
+    let auth = build_client(&config).await?;
     ensure_authenticated_org(&auth.org_id, operator.organization_id())?;
 
     let details = fetch_provisioning_details(&auth, &deploy_id).await?;

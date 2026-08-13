@@ -57,26 +57,20 @@ struct Overrides {
 }
 
 #[instrument(skip_all)]
-pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
-    let config = if ctx.is_non_interactive() {
+pub async fn run(ctx: &mut StdCtx, args: Args, config: turnkey::Config) -> Result<Outcome> {
+    let app_config = if ctx.is_non_interactive() {
         build_app_config_non_interactive(&args).await?
     } else {
-        build_app_config_interactive(ctx, &args).await?
+        build_app_config_interactive(ctx, &args, &config).await?
     };
 
-    let mut app_config = apply_overrides(config, &args.overrides);
+    let mut app_config = apply_overrides(app_config, &args.overrides);
 
     // Reuse a known operator by default so repeated `app create` runs don't
     // mint a fresh operator ID for the same key. The decision itself is pure
-    // (`decide_operator_reuse`); this endpoint does the I/O — collecting
-    // candidates best-effort, since reuse is a convenience: a failed config
-    // load falls back to no reuse and the real error surfaces when
-    // `run_with_config` reloads the config — and adapts multi-candidate
-    // handling to the mode.
-    let candidates = match turnkey::Config::load().await {
-        Ok(config) => config.known_operator_candidates(),
-        Err(_) => Vec::new(),
-    };
+    // (`decide_operator_reuse`); this endpoint supplies the candidates and
+    // adapts multi-candidate handling to the mode.
+    let candidates = config.known_operator_candidates();
 
     match decide_operator_reuse(
         args.no_operator_reuse,
@@ -103,7 +97,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
         }
     }
 
-    run_with_config(ctx, args, app_config).await
+    run_with_app_config(ctx, args, config, app_config).await
 }
 
 /// What to do with the manifest set's operators at create time.
@@ -168,35 +162,36 @@ fn apply_operator_reuse<Out: io::Write, Err: io::Write>(
     Ok(())
 }
 
-async fn build_app_config_interactive(ctx: &mut StdCtx, args: &Args) -> Result<AppConfig> {
-    let mut config = match read_app_config_file_bytes(&args.config_file).await {
+async fn build_app_config_interactive(
+    ctx: &mut StdCtx,
+    args: &Args,
+    config: &turnkey::Config,
+) -> Result<AppConfig> {
+    let mut app_config = match read_app_config_file_bytes(&args.config_file).await {
         Ok(bytes) => parse_app_config(&bytes, &args.config_file)?,
         Err(_) => AppConfig::template(None),
     };
 
     let mut changed = false;
     loop {
-        match config.validate() {
+        match app_config.validate() {
             Ok(()) => break,
             Err(errors) if errors.has_non_placeholder_error() => {
                 return Err(invalid_app_config_error(&args.config_file, errors));
             }
             _ => {
                 changed = true;
-                let saved_operator_public_key = match turnkey::Config::load().await {
-                    Ok(config) => config.default_operator_public_key().await,
-                    Err(_) => None,
-                };
-                config.fill_interactively(saved_operator_public_key.as_deref())?;
+                let saved_operator_public_key = config.default_operator_public_key().await;
+                app_config.fill_interactively(saved_operator_public_key.as_deref())?;
             }
         }
     }
 
     if changed {
-        offer_to_save_app_config(ctx, &args.config_file, &config)?;
+        offer_to_save_app_config(ctx, &args.config_file, &app_config)?;
     }
 
-    Ok(config)
+    Ok(app_config)
 }
 
 async fn build_app_config_non_interactive(args: &Args) -> Result<AppConfig> {
@@ -236,10 +231,15 @@ fn offer_to_save_app_config(ctx: &mut StdCtx, path: &Path, config: &AppConfig) -
     Ok(())
 }
 
-async fn run_with_config(ctx: &mut StdCtx, args: Args, app_config: AppConfig) -> Result<Outcome> {
+async fn run_with_app_config(
+    ctx: &mut StdCtx,
+    args: Args,
+    mut config: turnkey::Config,
+    app_config: AppConfig,
+) -> Result<Outcome> {
     shell_println!(ctx, "Creating app '{}'...", app_config.name)?;
 
-    let auth = build_client().await?;
+    let auth = build_client(&config).await?;
 
     let intent = build_create_tvc_app_intent(&app_config);
 
@@ -257,7 +257,6 @@ async fn run_with_config(ctx: &mut StdCtx, args: Args, app_config: AppConfig) ->
     let app_id = result.result.app_id;
     let operator_ids = result.result.manifest_set_operator_ids;
 
-    let mut config = turnkey::Config::load().await?;
     config.set_last_app_id(&app_id)?;
     config.set_last_operator_ids(&operator_ids)?;
     config.save().await?;

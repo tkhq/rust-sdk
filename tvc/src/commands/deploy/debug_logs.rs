@@ -1,6 +1,7 @@
 //! Deploy debug-logs command.
 
 use crate::commands::app_status::TimestampPayload;
+use crate::config::turnkey::Config;
 use crate::outcome::Outcome;
 use crate::output::{Ctx, StdCtx};
 use crate::shell_eprintln;
@@ -126,8 +127,8 @@ pub struct Args {
 
 /// Run the `deploy debug-logs` command.
 #[instrument(skip_all)]
-pub async fn run(ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
-    let auth = crate::client::build_client().await?;
+pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Result<Outcome> {
+    let auth = crate::client::build_client(&config).await?;
 
     let request = DebugLogQueryRequest {
         organization_id: auth.org_id,

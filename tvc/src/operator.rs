@@ -171,27 +171,27 @@ pub(crate) enum SignerRequirement {
 /// on a config file being present or well-formed (pinned by
 /// `explicit_seed_does_not_load_malformed_config`).
 pub(crate) async fn resolve_operator(
+    config: &Config,
     explicit: Option<LocalOperatorSeedSource>,
     operator_id: Option<Uuid>,
     requirement: SignerRequirement,
 ) -> Result<ResolvedOperator> {
     if let Some(explicit) = explicit {
         if let Some(id) = operator_id {
-            let config = Config::load().await?;
             ensure!(
                 config.find_hosted_operator(&id)?.is_none(),
                 "explicit local operator seed cannot be used with a hosted operator ID"
             );
         }
 
+        let signer = resolve_local_operator(config, Some(explicit)).await?;
+
         return Ok(ResolvedOperator {
             name: None,
             operator_id,
-            signer: Box::new(resolve_local_operator(Some(explicit)).await?),
+            signer: Box::new(signer),
         });
     }
-
-    let config = Config::load().await?;
 
     let hosted = operator_id
         .map(|id| config.find_hosted_operator(&id))
@@ -205,7 +205,7 @@ pub(crate) async fn resolve_operator(
             bail!("--skip-post is only supported for local operators");
         }
 
-        let auth = build_client().await?;
+        let auth = build_client(config).await?;
         ensure_authenticated_org(&auth.org_id, hosted.organization_id())?;
 
         return Ok(ResolvedOperator {
@@ -236,7 +236,7 @@ pub(crate) async fn resolve_operator(
                     .select_hosted_operator()
                     .with_context(|| format!("org '{alias}'"))?;
                 let hosted = ResolvedHostedOperator::from_registry(org.id.clone(), name, hosted)?;
-                let auth = build_client().await?;
+                let auth = build_client(config).await?;
                 ensure_authenticated_org(&auth.org_id, hosted.organization_id())?;
 
                 return Ok(ResolvedOperator {

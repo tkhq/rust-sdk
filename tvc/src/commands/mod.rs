@@ -5,7 +5,7 @@
 //! an implementation of [`Run`] (the target shape; `deploy approve` is the
 //! pilot).
 
-use crate::{outcome, output::StdCtx};
+use crate::{config::turnkey::Config, outcome, output::StdCtx};
 
 pub mod app;
 pub mod app_status;
@@ -25,5 +25,9 @@ pub mod version;
 pub trait Run {
     type Outcome: Into<outcome::Outcome>;
 
-    fn run(self, ctx: &mut StdCtx) -> impl Future<Output = anyhow::Result<Self::Outcome>> + Send;
+    fn run(
+        self,
+        ctx: &mut StdCtx,
+        config: Config,
+    ) -> impl Future<Output = anyhow::Result<Self::Outcome>> + Send;
 }

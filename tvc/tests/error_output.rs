@@ -15,6 +15,7 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
 use std::process::Output;
 use std::thread::{self, JoinHandle};
+use tempfile::TempDir;
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 
 const DEPLOYMENT_ID: &str = "00000000-0000-0000-0000-000000000000";
@@ -26,10 +27,13 @@ fn tvc_command() -> assert_cmd::Command {
     command
 }
 
-fn authenticated_command(api_base_url: &str) -> assert_cmd::Command {
+// Config is built before dispatch, so the binary needs a HOME even on the
+// env-auth path; the caller owns the temp dir so it outlives the command run.
+fn authenticated_command(home: &TempDir, api_base_url: &str) -> assert_cmd::Command {
     let stamper = TurnkeyP256ApiKey::generate();
     let mut command = tvc_command();
     command
+        .env("HOME", home.path())
         .env("TVC_ORG_ID", "org-test")
         .env(
             "TVC_API_KEY_PUBLIC",
@@ -110,8 +114,12 @@ fn spawn_json_server(
     (format!("http://{address}"), handle)
 }
 
-fn deploy_status_command(api_base_url: &str, message_format: Option<&str>) -> assert_cmd::Command {
-    let mut command = authenticated_command(api_base_url);
+fn deploy_status_command(
+    home: &TempDir,
+    api_base_url: &str,
+    message_format: Option<&str>,
+) -> assert_cmd::Command {
+    let mut command = authenticated_command(home, api_base_url);
     command
         .arg("deploy")
         .arg("status")
@@ -199,6 +207,8 @@ fn help_remains_plain_text() {
 
 #[test]
 fn http_status_errors_emit_stable_codes_status_and_full_chain() {
+    let home = TempDir::new().unwrap();
+
     for (status, expected_code) in [
         (401, "unauthorized"),
         (403, "unauthorized"),
@@ -208,7 +218,7 @@ fn http_status_errors_emit_stable_codes_status_and_full_chain() {
         let server_message = format!("server failure {status}");
         let body = format!(r#"{{"code":{status},"message":"{server_message}"}}"#);
         let (api_base_url, server) = spawn_json_server(status, body, GET_DEPLOYMENT_PATH);
-        let output = command_output(deploy_status_command(&api_base_url, Some("json")), 1);
+        let output = command_output(deploy_status_command(&home, &api_base_url, Some("json")), 1);
         server.join().unwrap();
 
         let message = single_json_message(&output);
@@ -227,12 +237,13 @@ fn http_status_errors_emit_stable_codes_status_and_full_chain() {
 
 #[test]
 fn successful_response_with_missing_resource_has_no_http_status() {
+    let home = TempDir::new().unwrap();
     let (api_base_url, server) = spawn_json_server(
         200,
         r#"{"tvcDeployment":null}"#.to_string(),
         GET_DEPLOYMENT_PATH,
     );
-    let output = command_output(deploy_status_command(&api_base_url, Some("json")), 1);
+    let output = command_output(deploy_status_command(&home, &api_base_url, Some("json")), 1);
     server.join().unwrap();
 
     let message = single_json_message(&output);
@@ -247,11 +258,12 @@ fn successful_response_with_missing_resource_has_no_http_status() {
 
 #[test]
 fn connection_failure_emits_network_error_without_http_status() {
+    let home = TempDir::new().unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let api_base_url = format!("http://{}", listener.local_addr().unwrap());
     drop(listener);
 
-    let mut command = authenticated_command(&api_base_url);
+    let mut command = authenticated_command(&home, &api_base_url);
     command
         .arg("app")
         .arg("list")
@@ -271,15 +283,19 @@ fn connection_failure_emits_network_error_without_http_status() {
 
 #[test]
 fn human_and_json_runtime_errors_render_identical_message_text() {
+    let home = TempDir::new().unwrap();
     let body = r#"{"code":404,"message":"deployment absent"}"#.to_string();
     let (json_api_base_url, json_server) =
         spawn_json_server(404, body.clone(), GET_DEPLOYMENT_PATH);
-    let json_output = command_output(deploy_status_command(&json_api_base_url, Some("json")), 1);
+    let json_output = command_output(
+        deploy_status_command(&home, &json_api_base_url, Some("json")),
+        1,
+    );
     json_server.join().unwrap();
     let json_message = single_json_message(&json_output);
 
     let (human_api_base_url, human_server) = spawn_json_server(404, body, GET_DEPLOYMENT_PATH);
-    let human_output = command_output(deploy_status_command(&human_api_base_url, None), 1);
+    let human_output = command_output(deploy_status_command(&home, &human_api_base_url, None), 1);
     human_server.join().unwrap();
 
     assert!(human_output.stdout.is_empty());
@@ -297,12 +313,13 @@ const CLIENT_VERSION_TOO_OLD_BODY: &str = r#"{"code":3,"message":"tvc 0.12.0 is 
 
 #[test]
 fn client_version_rejection_emits_dedicated_code() {
+    let home = TempDir::new().unwrap();
     let (api_base_url, server) = spawn_json_server(
         400,
         CLIENT_VERSION_TOO_OLD_BODY.to_string(),
         GET_DEPLOYMENT_PATH,
     );
-    let output = command_output(deploy_status_command(&api_base_url, Some("json")), 1);
+    let output = command_output(deploy_status_command(&home, &api_base_url, Some("json")), 1);
     server.join().unwrap();
 
     let message = single_json_message(&output);
@@ -313,12 +330,13 @@ fn client_version_rejection_emits_dedicated_code() {
 
 #[test]
 fn client_version_rejection_renders_human_hint() {
+    let home = TempDir::new().unwrap();
     let (api_base_url, server) = spawn_json_server(
         400,
         CLIENT_VERSION_TOO_OLD_BODY.to_string(),
         GET_DEPLOYMENT_PATH,
     );
-    let output = command_output(deploy_status_command(&api_base_url, None), 1);
+    let output = command_output(deploy_status_command(&home, &api_base_url, None), 1);
     server.join().unwrap();
 
     assert!(output.stdout.is_empty());

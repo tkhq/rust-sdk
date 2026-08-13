@@ -8,6 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use turnkey_client::generated::{ActivityStatus, RestoreTvcDeploymentIntent};
 use uuid::Uuid;
 
+use crate::config::turnkey::Config;
 use crate::outcome::Outcome;
 use tracing::instrument;
 
@@ -24,8 +25,8 @@ pub struct Args {
 
 /// Run the deploy restore command.
 #[instrument(skip_all)]
-pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
-    let auth = crate::client::build_client().await?;
+pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Result<Outcome> {
+    let auth = crate::client::build_client(&config).await?;
 
     let intent = RestoreTvcDeploymentIntent {
         deployment_id: args.deploy_id.to_string(),
