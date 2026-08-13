@@ -86,13 +86,18 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
         OperatorReuse::KeepConfig => {}
         OperatorReuse::Reuse(operator) => apply_operator_reuse(ctx, &mut app_config, operator)?,
         OperatorReuse::MultipleCandidates(operators) => {
-            if ctx.is_non_interactive() {
+            // Picking a candidate needs a prompt, which is impossible under
+            // --non-interactive, JSON mode, or a non-TTY stdin.
+            let can_prompt = !ctx.is_non_interactive() && prompts::stdin_can_prompt();
+
+            if !can_prompt {
                 bail!(
                     "multiple operator IDs are known for the active org; \
                      set manifestSetParams.existingOperatorIds in your config to reuse one, \
                      or pass --no-operator-reuse to create a new operator"
                 );
             }
+
             let operator = prompts::select("Select operator to reuse", operators)?;
             apply_operator_reuse(ctx, &mut app_config, operator)?;
         }

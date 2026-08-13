@@ -417,8 +417,9 @@ fn login_existing_operator_key_prints_backup_tip() {
 /// Write a v1 config whose active org's registry holds exactly one operator,
 /// hosted, storing a real composite public key the way `operator create`
 /// stores it: encryption point and signing point as separate hex fields.
-/// Returns the composite.
-fn write_hosted_org_config(home: &Path) -> String {
+/// `saved_operator_ids` become the org's `last_operator_ids`, making them
+/// additional reuse candidates. Returns the composite.
+fn write_hosted_org_config(home: &Path, saved_operator_ids: &[&str]) -> String {
     let turnkey_dir = home.join(".config/turnkey");
     std::fs::create_dir_all(&turnkey_dir).unwrap();
 
@@ -449,7 +450,10 @@ fn write_hosted_org_config(home: &Path) -> String {
             },
         )]),
         last_created_app_id: HashMap::new(),
-        last_operator_ids: HashMap::new(),
+        last_operator_ids: HashMap::from([(
+            "hosted-org".to_string(),
+            saved_operator_ids.iter().map(|id| id.to_string()).collect(),
+        )]),
         extra: toml::Table::new(),
     };
     std::fs::write(
@@ -476,7 +480,7 @@ fn write_hosted_org_config(home: &Path) -> String {
 #[test]
 fn app_create_offers_the_hosted_operator_key_as_the_fill_default() {
     let temp = tempfile::TempDir::new().unwrap();
-    let composite = write_hosted_org_config(temp.path());
+    let composite = write_hosted_org_config(temp.path(), &[]);
 
     // An app config whose only placeholder is the operator public key.
     let app_config_path = temp.path().join("app.json");
@@ -540,7 +544,7 @@ fn app_create_offers_the_hosted_operator_key_as_the_fill_default() {
 #[test]
 fn app_create_reuses_the_registered_hosted_operator_by_default() {
     let temp = tempfile::TempDir::new().unwrap();
-    let composite = write_hosted_org_config(temp.path());
+    let composite = write_hosted_org_config(temp.path(), &[]);
 
     // A complete app config: nothing to fill, so the run goes straight to
     // the reuse decision.
@@ -581,12 +585,77 @@ fn app_create_reuses_the_registered_hosted_operator_by_default() {
     session.exp_eof().unwrap();
 }
 
+/// With SEVERAL known operators — a registered hosted record plus a saved
+/// manifest-set ID — the default flow prompts to pick one, and the chosen
+/// candidate (here the second, selected with a down-arrow) is what gets
+/// reused.
+///
+/// The command exits nonzero afterwards — creating the app needs credentials
+/// this fixture doesn't have — but the selection and reuse announcement
+/// precede that.
+#[test]
+fn app_create_prompts_to_pick_among_multiple_reuse_candidates() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let composite = write_hosted_org_config(temp.path(), &["33333333-3333-4333-8333-333333333333"]);
+
+    // A complete app config: nothing to fill, so the run goes straight to
+    // the reuse decision.
+    let app_config_path = temp.path().join("app.json");
+    std::fs::write(
+        &app_config_path,
+        format!(
+            r#"{{
+    "name": "test-app",
+    "quorumPublicKey": "{KNOWN_QUORUM_KEY}",
+    "manifestSetParams": {{
+        "name": "manifest-set",
+        "threshold": 1,
+        "newOperators": [{{
+            "name": "operator-1",
+            "publicKey": "{composite}"
+        }}]
+    }}
+}}"#
+        ),
+    )
+    .unwrap();
+
+    let mut session = spawn_with_home(
+        temp.path(),
+        &[
+            "app",
+            "create",
+            "--config-file",
+            app_config_path.to_str().unwrap(),
+        ],
+    );
+
+    // Both candidates are offered: the registered record with its name, and
+    // the saved ID bare.
+    session.exp_string("Select operator to reuse").unwrap();
+    exp_wrapped(
+        &mut session,
+        "hosted-op (11111111-1111-4111-8111-111111111111)",
+    );
+    exp_wrapped(&mut session, "33333333-3333-4333-8333-333333333333");
+
+    // Down-arrow to the saved ID, Enter to confirm.
+    session.send("\x1b[B").unwrap();
+    session.send_line("").unwrap();
+
+    exp_wrapped(
+        &mut session,
+        "Reusing operator 33333333-3333-4333-8333-333333333333",
+    );
+    session.exp_eof().unwrap();
+}
+
 /// Logging in to an org whose default backend is hosted needs no local key:
 /// login reports the registered hosted operator and generates nothing.
 #[test]
 fn login_reports_the_hosted_operator_for_a_hosted_default_org() {
     let temp = tempfile::TempDir::new().unwrap();
-    write_hosted_org_config(temp.path());
+    write_hosted_org_config(temp.path(), &[]);
 
     // An existing API key so login skips generation and goes straight to
     // verification.
