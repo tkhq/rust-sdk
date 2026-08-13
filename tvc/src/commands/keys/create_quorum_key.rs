@@ -3,10 +3,7 @@
 use crate::{
     client::build_client,
     config::turnkey::Config,
-    operator::{
-        OperatorPublicKey, ensure_authenticated_org, hosted_activity_error,
-        resolve_hosted_operator_encrypt_key,
-    },
+    operator::{OperatorPublicKey, ensure_authenticated_org, hosted_activity_error},
     outcome::Outcome,
     output::StdCtx,
 };
@@ -171,14 +168,17 @@ fn resolve_operator_ids(
     let (_, org) = config
         .active_org_config()
         .context("No active organization. Run `tvc login` first.")?;
-    let configured_org_id = org.id.clone();
-    let mut keys = Vec::with_capacity(operator_ids.len());
 
-    for operator_id in operator_ids {
-        keys.push(resolve_hosted_operator_encrypt_key(config, operator_id)?);
-    }
+    let keys = operator_ids
+        .iter()
+        .map(|id| {
+            config
+                .resolve_hosted_operator_encrypt_key(id)
+                .map(OperatorPublicKey::from)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
-    Ok((keys, Some(configured_org_id)))
+    Ok((keys, Some(org.id.clone())))
 }
 
 fn validate_operator_ids(operator_ids: &[Uuid]) -> Result<()> {

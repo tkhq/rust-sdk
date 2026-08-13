@@ -4,8 +4,7 @@ use crate::{
     client::{build_client, fetch_tvc_deployment},
     config::turnkey::Config,
     operator::{
-        ResolvedHostedOperator, ensure_authenticated_org, hosted_activity_error,
-        resolve_hosted_operator, timestamp_ms,
+        ResolvedHostedOperator, ensure_authenticated_org, hosted_activity_error, timestamp_ms,
     },
     outcome::Outcome,
     output::StdCtx,
@@ -78,7 +77,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     }
 
     let config = Config::load().await?;
-    let operator = resolve_hosted_operator(&config, &operator_id)?;
+    let operator = config.resolve_hosted_operator(&operator_id)?;
     let auth = build_client().await?;
     ensure_authenticated_org(&auth.org_id, operator.organization_id())?;
 
@@ -265,11 +264,9 @@ mod tests {
     }
 
     fn resolved_member(fixture: &ValidProvisioningDetailsFixture) -> ResolvedHostedOperator {
-        resolve_hosted_operator(
-            &config_for_member(fixture),
-            &Uuid::parse_str(OPERATOR_ID).unwrap(),
-        )
-        .unwrap()
+        config_for_member(fixture)
+            .resolve_hosted_operator(&Uuid::parse_str(OPERATOR_ID).unwrap())
+            .unwrap()
     }
 
     fn deployment_manifest_bytes(manifest_envelope: VersionedManifestEnvelope) -> Vec<u8> {

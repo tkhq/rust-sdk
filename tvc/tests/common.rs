@@ -1,8 +1,4 @@
 //! Fixtures shared across the tvc integration-test binaries.
-//!
-//! Each test binary that declares `mod common;` compiles its own copy and
-//! uses a subset of these helpers, so unused items are expected in every
-//! build of this file; the crate-level allow keeps those builds quiet.
 
 use std::{
     collections::HashMap,

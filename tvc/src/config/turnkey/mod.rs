@@ -19,6 +19,7 @@ use std::collections::HashMap;
 use std::fmt::{self, Display, Formatter};
 use std::path::Path;
 use std::path::PathBuf;
+use thiserror::Error;
 use tracing::debug;
 use uuid::Uuid;
 
@@ -330,38 +331,36 @@ pub struct OrgConfig {
     pub extra: toml::Table,
 }
 
-impl OrgConfig {
-    /// Return the sole active local operator registry entry.
-    pub(crate) fn select_local_operator(&self, org_alias: &str) -> Result<&OperatorRecord> {
-        if self.default_operator_kind != OperatorKind::Local {
-            bail!(
-                "the active operator kind for org '{org_alias}' is {}",
-                self.default_operator_kind
-            )
-        }
+/// Failure modes of selecting the sole local operator of an organization.
+/// Which organization it was is the caller's context to add.
+#[derive(Debug, Error)]
+pub enum SelectLocalOperatorError {
+    #[error("no local operator is configured")]
+    NoLocalOperator,
+    #[error("multiple local operators are configured")]
+    MultipleLocalOperators,
+}
 
-        let candidates: Vec<_> = self
+impl OrgConfig {
+    /// Select the sole local operator registry entry, with its kind-specific
+    /// record. Purely a registry query: whether local is the organization's
+    /// default backend is resolution policy, decided elsewhere.
+    pub(crate) fn select_local_operator(
+        &self,
+    ) -> Result<(&OperatorRecord, &LocalOperatorRecord), SelectLocalOperatorError> {
+        let mut locals = self
             .operators
             .iter()
-            .filter(|operator| matches!(operator.kind, OperatorRecordKind::Local(_)))
-            .collect();
+            .filter_map(|operator| match &operator.kind {
+                OperatorRecordKind::Local(local) => Some((operator, local)),
+                OperatorRecordKind::Hosted(_) => None,
+            });
 
-        // TODO: Decouple this function from its org_alias callsite so it is more
-        // flexible to be used anywhere else.
-        match candidates.as_slice() {
-            [] => bail!("No local operator configured for org '{org_alias}'"),
-            [operator] => Ok(*operator),
-            _ => bail!("Multiple local operators are configured for org '{org_alias}'"),
+        match (locals.next(), locals.next()) {
+            (Some(sole), None) => Ok(sole),
+            (None, _) => Err(SelectLocalOperatorError::NoLocalOperator),
+            (Some(_), Some(_)) => Err(SelectLocalOperatorError::MultipleLocalOperators),
         }
-    }
-
-    /// Return the kind-specific record for the sole active local operator.
-    pub fn select_local_record(&self, org_alias: &str) -> Result<&LocalOperatorRecord> {
-        let operator = self.select_local_operator(org_alias)?;
-        let OperatorRecordKind::Local(local) = &operator.kind else {
-            bail!("selected operator is not local");
-        };
-        Ok(local)
     }
 }
 
