@@ -22,7 +22,7 @@ use crate::{
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use hosted::HostedSigner;
 use p256::{PublicKey, elliptic_curve::sec1::ToEncodedPoint};
-use qos_core::protocol::services::boot::{Approval, VersionedManifest};
+use qos_core::protocol::services::boot::Approval;
 use std::{
     fmt::{self, Display, Formatter},
     str::FromStr,
@@ -93,10 +93,6 @@ pub(crate) struct ResolvedOperator {
 }
 
 impl ResolvedOperator {
-    pub(crate) fn name(&self) -> Option<&str> {
-        self.name.as_deref()
-    }
-
     pub(crate) fn id(&self) -> Option<Uuid> {
         self.operator_id
     }
@@ -106,7 +102,24 @@ impl ResolvedOperator {
         manifest: &ValidatedManifest<'_>,
     ) -> Result<Approval> {
         let public_key = self.signer.public_key();
-        let member = manifest_member(manifest, &public_key, self.name())?;
+        let member = {
+            manifest
+                .manifest_set()
+                .members
+                .iter()
+                .find(|member| member.pub_key == public_key)
+                .cloned()
+                .ok_or_else(|| match &self.name {
+                    Some(name) => anyhow!(
+                        "operator '{name}' ({}) not part of manifest set",
+                        hex::encode(public_key)
+                    ),
+                    None => anyhow!(
+                        "operator ({}) not part of manifest set",
+                        hex::encode(public_key)
+                    ),
+                })
+        }?;
         let signature = self.signer.sign(&manifest.manifest_hash()).await?;
         let approval = Approval { signature, member };
 
@@ -116,29 +129,6 @@ impl ResolvedOperator {
 
         Ok(approval)
     }
-}
-
-fn manifest_member(
-    manifest: &VersionedManifest,
-    public_key: &[u8],
-    operator_name: Option<&str>,
-) -> Result<qos_core::protocol::services::boot::QuorumMember> {
-    manifest
-        .manifest_set()
-        .members
-        .iter()
-        .find(|member| member.pub_key == public_key)
-        .cloned()
-        .ok_or_else(|| match operator_name {
-            Some(name) => anyhow!(
-                "operator '{name}' ({}) not part of manifest set",
-                hex::encode(public_key)
-            ),
-            None => anyhow!(
-                "operator ({}) not part of manifest set",
-                hex::encode(public_key)
-            ),
-        })
 }
 
 pub(crate) fn ensure_authenticated_org(
