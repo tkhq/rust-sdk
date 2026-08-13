@@ -1756,6 +1756,19 @@ pub struct ImportSecretsRequest {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct ExportSecretsRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::ExportSecretsIntent,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct SparkPrepareTransferRequest {
     pub r#type: ::prost::alloc::string::String,
     pub timestamp_ms: ::prost::alloc::string::String,
