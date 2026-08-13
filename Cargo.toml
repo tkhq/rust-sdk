@@ -73,7 +73,7 @@ coset = { version = "0.3.7", default-features = false }
 
 # Certificate handling
 webpki = { version = "0.22.4", default-features = false }
-x509-cert = { version = "=0.1.0", features = ["pem"], default-features = false }
+x509-cert = { version = "=0.2.5", features = ["pem"], default-features = false }
 x509-parser = { version = "0.14.0", default-features = false }
 
 # Serialization formats
