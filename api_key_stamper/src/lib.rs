@@ -123,6 +123,11 @@ impl TurnkeyP256ApiKey {
         Self::from_bytes(private_key_bytes, public_key_bytes)
     }
 
+    // PURE-DEPS-REVIEW W11 (low, borderline-acceptable): filesystem reads inside
+    // a constructor — but it's a named loader that delegates all parsing to the
+    // pure from_strings, so it can stand as the documented wiring-layer entry
+    // point. Note TurnkeySecp256k1ApiKey has no from_files counterpart.
+    // See tvc/PURE_DEPS_PLAN_0.md Part 2.
     /// Helper to create an API from pre-existing files. This is useful if you used
     /// the Turnkey CLI (<https://github.com/tkhq/tkcli>) to generate keys.
     pub fn from_files<P: AsRef<Path>, Q: AsRef<Path>>(
@@ -168,6 +173,9 @@ impl Stamp for TurnkeyP256ApiKey {
             signature: hex::encode(sig.to_der()),
             scheme: SIGNATURE_SCHEME_P256.to_string(),
         };
+        // PURE-DEPS-REVIEW W15 (low): unwrap inside otherwise-pure header
+        // construction; return StamperError instead. Same in the secp256k1
+        // impl below. See tvc/PURE_DEPS_PLAN_0.md Part 2.
         let json_stamp = serde_json::to_string(&stamp).unwrap();
         Ok(StampHeader {
             name: API_KEY_STAMP_HEADER_NAME.to_string(),

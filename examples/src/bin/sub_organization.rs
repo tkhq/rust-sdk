@@ -90,6 +90,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .api_key(sub_organization_secp256k1_api_key)
         .base_url(api_base_url)
         .build()?;
+    // PURE-DEPS-REVIEW W18 (low): timestamp read off the parent `client` for a
+    // request sent by sub_organization_client — harmless (same clock) but
+    // confusing. See tvc/PURE_DEPS_PLAN_0.md Part 2.
     let delete_res = sub_organization_client
         .delete_sub_organization(
             create_res.result.sub_organization_id.clone(),

@@ -62,6 +62,10 @@ impl EnclaveEncryptServer {
         }
     }
 
+    // PURE-DEPS-REVIEW W8 (medium): this and auth_encrypt below inherit the
+    // buried OsRng from crate::encrypt() (W5) — signing + message assembly are
+    // otherwise deterministic. Fixed by threading an rng parameter through.
+    // See tvc/PURE_DEPS_PLAN_0.md Part 2.
     /// Encrypt a message to the `client_target_public` key.
     pub fn encrypt(
         &self,

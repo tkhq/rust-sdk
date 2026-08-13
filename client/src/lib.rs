@@ -150,6 +150,9 @@ impl<S: Stamp> std::fmt::Debug for TurnkeyClientBuilder<S> {
 }
 
 impl<S: Stamp> TurnkeyClientBuilder<S> {
+    // PURE-DEPS-REVIEW W4b (low): acquires reqwest::Client::builder() in the
+    // constructor; mitigated by with_reqwest_builder, subsumed by W1.
+    // See tvc/PURE_DEPS_PLAN_0.md Part 2.
     pub fn new() -> Self {
         Self {
             api_key: None,
@@ -201,6 +204,12 @@ impl<S: Stamp> TurnkeyClientBuilder<S> {
         self
     }
 
+    // PURE-DEPS-REVIEW W1 (medium): constructs the reqwest::Client, the 20s
+    // default timeout, and the User-Agent internally; a caller cannot supply a
+    // finished reqwest::Client (pool sharing/instrumentation) or a HeaderMap —
+    // only the builder-mutating closure. Add .http_client(reqwest::Client) and
+    // .default_headers(HeaderMap) injection points.
+    // See tvc/PURE_DEPS_PLAN_0.md Part 2.
     pub fn build(mut self) -> Result<TurnkeyClient<S>, TurnkeyClientError> {
         if self.timeout.is_none() {
             self.reqwest_builder = self.reqwest_builder.timeout(Duration::from_secs(20));
@@ -303,6 +312,12 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// If the server errors with a validation error, a server error, a deserialization error, the proper variant of `TurnkeyClientError` is returned.
     /// If the activity is pending and exceeds the maximum amount of retries allowed, `TurnkeyClientError::ExceededRetries` is returned.
     /// If the activity requires consensus or authenticators, `TurnkeyClientError::ActivityRequiresApproval` is returned.
+    // PURE-DEPS-REVIEW W3 (medium): the polling state machine (status dispatch,
+    // retry counting) is welded to real tokio::time::sleep, so retry-exhaustion
+    // tests burn wall clock through a mock server. Extract the pure next-step
+    // decision; keep sleep in the async shell. The policy half (RetryConfig::
+    // compute_delay) is already pure — the exemplar to follow.
+    // See tvc/PURE_DEPS_PLAN_0.md Part 2.
     pub async fn process_activity<Request: Serialize>(
         &self,
         request: Request,
@@ -345,6 +360,11 @@ impl<S: Stamp> TurnkeyClient<S> {
         }
     }
 
+    // PURE-DEPS-REVIEW W4 (low): clock read on a &self method (the &self is
+    // unused) with no override, and it panics via expect(). Small blast radius:
+    // all callers are in examples/ — generated activity methods already take
+    // timestamp_ms as a parameter, which is the right pattern.
+    // See tvc/PURE_DEPS_PLAN_0.md Part 2.
     /// Returns the current timestamp as a u128.
     pub fn current_timestamp(&self) -> u128 {
         let now = SystemTime::now();
@@ -360,6 +380,11 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// * POSTing the POST body and the associated stamp to the Turnkey API
     ///
     /// This function is generic and can handle POSTing queries or activities.
+    // PURE-DEPS-REVIEW W2 (medium): mixes pure request construction (URL, JSON,
+    // stamp) + HTTP send + pure response validation/decode in one body, so
+    // neither pure half is testable without a mock HTTP server. Split into
+    // build_request / parse_response with a thin await between them.
+    // See tvc/PURE_DEPS_PLAN_0.md Part 2.
     pub async fn process_request<Request, Response>(
         &self,
         request: &Request,

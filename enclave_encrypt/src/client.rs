@@ -50,6 +50,11 @@ impl AuthenticationClient {
     /// WARNING: This interface can be misused if the same key material is provided over and over.
     /// Indeed, enclave-to-end-user secure channels assume that encryption is "one-shot". After decryption is done, the key should not be reused.
     /// You may use this interface to allow for ikm persistence and loading if it's not realistic or convenient to hold ikm in memory between initialization and decryption.
+    // PURE-DEPS-REVIEW W7 (medium): a constructor whose contract is
+    // "deterministic from supplied ikm" secretly consumes entropy for a
+    // never-used dummy auth key, so equal inputs don't produce an equal
+    // object. Make the dummy verifying key a constant/LazyLock or accept the
+    // auth key as a parameter. See tvc/PURE_DEPS_PLAN_0.md Part 2.
     pub fn dangerous_from_bytes<B: AsRef<[u8]>>(private: B) -> Self {
         let random_key = SigningKey::random(&mut OsRng);
         let (pair_private_key, pair_public_key) = Kem::derive_keypair(private.as_ref());
@@ -82,6 +87,10 @@ pub struct ExportClient {
 }
 
 impl ExportClient {
+    // PURE-DEPS-REVIEW W16 (low): constructor panics (.expect) on a
+    // caller-supplied quorum key instead of returning Result; same in
+    // dangerous_from_bytes below and in ImportClient.
+    // See tvc/PURE_DEPS_PLAN_0.md Part 2.
     /// Creates a new Export client. Takes in a Quorum public key (use `QuorumPublicKey::production_signer()`)
     ///
     /// # Panics
@@ -172,6 +181,10 @@ pub struct ImportClient {
 }
 
 impl ImportClient {
+    // PURE-DEPS-REVIEW W16 (low): constructor panics (.expect) on a
+    // caller-supplied quorum key instead of returning Result; same in
+    // dangerous_from_bytes below and in ExportClient.
+    // See tvc/PURE_DEPS_PLAN_0.md Part 2.
     /// Creates a new Import client. Takes in a Quorum public key (use `QuorumPublicKey::production_signer()`)
     ///
     /// # Panics
@@ -335,6 +348,11 @@ impl EnclaveEncryptClient {
         }
     }
 
+    // PURE-DEPS-REVIEW W6 (medium): substantial pure verification (bundle
+    // parse, signature check, org/user-ID checks) is welded to the OsRng-
+    // capturing encrypt() seal (W5), so the whole path can't be tested against
+    // fixed ciphertext vectors. Split the pure resolve-receiver-key half; let
+    // encrypt take an rng. See tvc/PURE_DEPS_PLAN_0.md Part 2.
     /// Encrypt a message to the given server target.
     #[allow(clippy::unused_self)]
     pub fn encrypt(
@@ -559,6 +577,9 @@ impl ReusableEnclaveEncryptClientSend {
         &self.quorum_public_key
     }
 
+    // PURE-DEPS-REVIEW W8 (medium): key extraction here is pure but the seal
+    // inherits the buried OsRng from encrypt() (W5); fixed by the same rng
+    // parameter. See tvc/PURE_DEPS_PLAN_0.md Part 2.
     /// Encrypt directly to this client's quorum public key.
     pub fn encrypt(&self, plaintext: &[u8]) -> Result<ClientSendMsg, EnclaveEncryptError> {
         let target_public_key_bytes = self

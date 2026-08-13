@@ -218,6 +218,12 @@ pub struct ClientSendMsg {
     ciphertext: Vec<u8>,
 }
 
+// PURE-DEPS-REVIEW W5 (medium): randomness acquired inside the encryption
+// primitive (&mut OsRng below) instead of parameterized — no HPKE test vectors
+// possible and every caller (W6-W8) inherits nondeterminism. Idiomatic
+// RustCrypto/hpke takes rng: &mut impl CryptoRng + RngCore; one signature
+// change here fixes the whole crate. Contrast decrypt() below: fully
+// parameterized, no rng. See tvc/PURE_DEPS_PLAN_0.md Part 2.
 fn encrypt(
     receiver_public: &<Kem as KemTrait>::PublicKey,
     plaintext: &[u8],

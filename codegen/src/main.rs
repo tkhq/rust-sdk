@@ -296,6 +296,11 @@ fn main() {
 
     // Write the generated client to the `client` crate
     let generated_client_path = PathBuf::from(GENERATED_CLIENT_DIR).join("client.rs");
+    // PURE-DEPS-REVIEW W17 (low, latent bug): this create_dir_all path disagrees
+    // with GENERATED_CLIENT_DIR used for the write on the next line — it only
+    // works because tonic_build already created the dir. Use
+    // fs::create_dir_all(generated_client_path.parent()).
+    // See tvc/PURE_DEPS_PLAN_0.md Part 2.
     fs::create_dir_all("../client/src/generated").unwrap();
     fs::write(generated_client_path, output).expect("Failed to write generated file");
 

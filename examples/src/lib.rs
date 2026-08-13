@@ -2,6 +2,11 @@ use std::env;
 use std::error::Error;
 use turnkey_client::TurnkeyP256ApiKey;
 
+// PURE-DEPS-REVIEW W13 (low): the dotenv bootstrap block (current_dir + exists
+// probe + dotenvy) is duplicated verbatim in load_base_url_from_env, silently
+// depends on cwd being the workspace root, and the sibling panics on
+// current_dir. Hoist into a single init_env() called once from each main.
+// See tvc/PURE_DEPS_PLAN_0.md Part 2.
 // Convenience function shared across examples to load a Turnkey API key from the local `examples/.env` file, or from env vars.
 pub fn load_api_key_from_env() -> Result<TurnkeyP256ApiKey, Box<dyn Error>> {
     // Load .env file from the example folder (examples/.env)

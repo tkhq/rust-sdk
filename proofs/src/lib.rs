@@ -224,6 +224,13 @@ impl Hash for Sha2 {
     }
 }
 
+// PURE-DEPS-REVIEW W9+W10 (medium/low): the trust anchor is re-parsed from the
+// embedded PEM on every call with .unwrap(), even though the callee
+// (parse_and_verify_der_attestation) already takes root_cert: &[u8] — this
+// wrapper drops that seam. Also duration_since().unwrap() can panic on a
+// caller-supplied pre-epoch time. Note the validation_time Option-with-now-
+// default IS the repo exemplar pattern — keep it.
+// See tvc/PURE_DEPS_PLAN_0.md Part 2.
 /// Parses and verifies an AWS nitro attestation, provided as a base64 encoded string (defaults to using current time for validation)
 pub fn parse_and_verify_aws_nitro_attestation<S: AsRef<str>>(
     encoded_attestation: S,
@@ -382,6 +389,9 @@ pub fn verify(app_proof: &AppProof, boot_proof: &BootProof) -> Result<(), Verify
         )));
     }
 
+    // PURE-DEPS-REVIEW W14 (low): this .expect() and the user_data one above
+    // panic inside verification logic instead of returning VerifyError, making
+    // those failure modes untestable. See tvc/PURE_DEPS_PLAN_0.md Part 2.
     // 3. Verify that all the ephemeral public keys match: app proof, boot proof structure, actual attestation doc
     let attestation_pub_key_bytes = attestation_doc
         .public_key

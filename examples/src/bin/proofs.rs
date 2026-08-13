@@ -9,6 +9,10 @@ use turnkey_client::generated::immutable::common::v1::{AddressFormat, Curve, Pat
 use turnkey_examples::load_api_key_from_env;
 use turnkey_proofs::{get_boot_proof_for_app_proof, verify};
 
+// PURE-DEPS-REVIEW W12 (low): helper builds the intent AND reads the clock via
+// client.current_timestamp(); take timestamp_ms: u128 as a parameter and read
+// the clock in main. Same in delete_wallet below.
+// See tvc/PURE_DEPS_PLAN_0.md Part 2.
 async fn create_wallet(
     client: &turnkey_client::TurnkeyClient<impl Stamp>,
     organization_id: String,
