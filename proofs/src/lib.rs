@@ -179,8 +179,8 @@ fn verify_cose_sign1_sig(
         .tbs_certificate
         .subject_public_key_info
         .subject_public_key;
-    let key =
-        PublicKey::from_sec1_bytes(pub_key).map_err(|_| AttestError::FailedDecodeKeyFromCert)?;
+    let key = PublicKey::from_sec1_bytes(pub_key.raw_bytes())
+        .map_err(|_| AttestError::FailedDecodeKeyFromCert)?;
     let key_wrapped = P384PubKey(key);
 
     // Verify the signature against the extracted public key

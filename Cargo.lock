@@ -778,7 +778,6 @@ checksum = "f1a467a65c5e759bce6e65eaf91cc29f466cdc57cb65777bd646872a8a1fd4de"
 dependencies = [
  "const-oid",
  "der_derive 0.6.1",
- "flagset",
  "pem-rfc7468 0.6.0",
  "zeroize",
 ]
@@ -2809,7 +2808,7 @@ dependencies = [
  "serde_bytes",
  "sha2",
  "webpki",
- "x509-cert 0.2.5",
+ "x509-cert",
 ]
 
 [[package]]
@@ -4204,7 +4203,7 @@ dependencies = [
  "turnkey_api_key_stamper",
  "turnkey_client",
  "webpki",
- "x509-cert 0.1.0",
+ "x509-cert",
  "x509-parser",
 ]
 
@@ -4843,18 +4842,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05f360fc0b24296329c78fda852a1e9ae82de9cf7b27dae4b7f62f118f77b9ed"
 dependencies = [
  "tap",
-]
-
-[[package]]
-name = "x509-cert"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6bd27a832a85efcf56cad058e4e3256d1781b927e113a9e37d96916d639e4af7"
-dependencies = [
- "const-oid",
- "der 0.6.1",
- "flagset",
- "spki 0.6.0",
 ]
 
 [[package]]
