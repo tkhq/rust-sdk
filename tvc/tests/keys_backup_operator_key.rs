@@ -7,12 +7,37 @@ use std::path::PathBuf;
 use tempfile::TempDir;
 
 const NON_INTERACTIVE_ENV: &str = "TVC_NON_INTERACTIVE";
+const ORG_HOSTED_ONLY: &str = "88888888-8888-4888-8888-888888888888";
 
 fn operator_key_path(home: &TempDir, alias: &str) -> PathBuf {
     home.path()
         .join(".config/turnkey/orgs")
         .join(alias)
         .join("operator.json")
+}
+
+/// A hosted-only org has nothing exportable: the failure explains why
+/// instead of leaving a bare missing-operator error.
+#[test]
+fn hosted_only_org_explains_there_is_no_key_file_to_back_up() {
+    let temp = TempDir::new().unwrap();
+    common::write_hosted_only_config(temp.path(), "hosted-org", ORG_HOSTED_ONLY);
+
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env(NON_INTERACTIVE_ENV, "1")
+        .arg("keys")
+        .arg("backup-operator-key")
+        .arg("--output")
+        .arg(temp.path().join("backup.json"))
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "org 'hosted-org' has no local operator key file to back up",
+        ))
+        .stderr(predicate::str::contains(
+            "held by Turnkey and cannot be exported",
+        ));
 }
 
 #[test]
