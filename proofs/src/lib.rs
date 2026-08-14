@@ -281,9 +281,19 @@ pub fn get_boot_proof_time(
         .nanos
         .parse()
         .map_err(|e: ParseIntError| BootProofError::InvalidTimestamp(e.to_string()))?;
+    if nanos >= 1_000_000_000 {
+        return Err(BootProofError::InvalidTimestamp(format!(
+            "nanos must be less than 1000000000, got: {nanos}"
+        )));
+    }
 
-    let duration = std::time::Duration::new(seconds, nanos);
-    Ok(std::time::UNIX_EPOCH + duration)
+    std::time::UNIX_EPOCH
+        .checked_add(std::time::Duration::new(seconds, nanos))
+        .ok_or_else(|| {
+            BootProofError::InvalidTimestamp(format!(
+                "timestamp out of range: seconds: {seconds}, nanos: {nanos}"
+            ))
+        })
 }
 
 /// Verify the app proof's signature
@@ -538,6 +548,25 @@ mod tests {
             result,
             Err(AppProofError::FailedSignatureVerification(_))
         ));
+    }
+
+    #[test]
+    fn test_get_boot_proof_time_rejects_out_of_range_timestamps() {
+        let mut boot_proof = test_boot_proof1();
+
+        boot_proof.created_at = Some(Timestamp {
+            seconds: u64::MAX.to_string(),
+            nanos: "1000000000".to_string(),
+        });
+        let result = get_boot_proof_time(&boot_proof);
+        assert!(matches!(result, Err(BootProofError::InvalidTimestamp(_))));
+
+        boot_proof.created_at = Some(Timestamp {
+            seconds: u64::MAX.to_string(),
+            nanos: "0".to_string(),
+        });
+        let result = get_boot_proof_time(&boot_proof);
+        assert!(matches!(result, Err(BootProofError::InvalidTimestamp(_))));
     }
 
     #[test]
