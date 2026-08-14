@@ -443,6 +443,7 @@ mod tests {
             VersionedManifest::V2(manifest) => manifest.namespace.nonce += 1,
             VersionedManifest::V1(manifest) => manifest.namespace.nonce += 1,
             VersionedManifest::V0(manifest) => manifest.namespace.nonce += 1,
+            _ => panic!("this test needs to be updated to handle newer versions"),
         }
         let different_manifest = different_manifest.to_storage_vec().unwrap();
 
