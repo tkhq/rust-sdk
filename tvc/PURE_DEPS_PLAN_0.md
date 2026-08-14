@@ -153,6 +153,16 @@ value". Each phase compiles and passes `cargo fmt` + `cargo clippy` +
 
 The golden example the ticket asks for.
 
+> **STATUS: implemented, awaiting human review** (2026-08-12). Gate: clippy
+> clean, 249 unit + all integration suites green, no integration test
+> touched. T2 annotation removed (fully fixed); T1 annotation retained,
+> rescoped to the remaining zero-arg acquisition that Phase C parameterizes
+> (the 21 call sites' hidden config load). Deviation from the
+> sketch below: `Credentials` uses plain `String` fields (open question 1
+> resolved toward minimal diff); `build_client()` keeps its zero-arg
+> signature as the wiring composition so the 21 command call sites are
+> untouched until Phase C.
+
 1. Introduce a `Credentials` struct (org_id, api_base_url, api_key_public,
    api_key_private — consider domain wrappers per AGENTS.md typing rules)
    replacing the 4-string tuple.

@@ -33,6 +33,18 @@ pub struct AuthenticatedClient {
     pub api_base_url: String,
 }
 
+/// Auth material for one organization, resolved from env vars or the local
+/// config at the wiring layer before any client is constructed.
+///
+/// `Debug` stays test-only: the struct carries the API private key.
+#[cfg_attr(test, derive(Debug))]
+pub(crate) struct Credentials {
+    org_id: String,
+    api_base_url: String,
+    api_key_public: String,
+    api_key_private: String,
+}
+
 /// Build an authenticated Turnkey client.
 ///
 /// Prefers env auth (CI use case): if `TVC_ORG_ID`, `TVC_API_KEY_PUBLIC`, and
@@ -48,19 +60,18 @@ pub struct AuthenticatedClient {
 pub async fn build_client(config: &Config) -> Result<AuthenticatedClient> {
     debug!("building authenticated Turnkey client");
 
-    let (org_id, api_base_url, api_key_public, api_key_private) =
-        match load_credentials_from_env_vars()? {
-            Some(creds) => {
-                debug!(auth_source = "env", "using env auth credentials");
-                creds
-            }
-            None => {
-                debug!(auth_source = "config", "using local config credentials");
-                load_credentials_from_config(config).await?
-            }
-        };
+    let credentials = match load_credentials_from_env_vars()? {
+        Some(credentials) => {
+            debug!(auth_source = "env", "using env auth credentials");
+            credentials
+        }
+        None => {
+            debug!(auth_source = "config", "using local config credentials");
+            load_credentials_from_config(config).await?
+        }
+    };
 
-    build_authed_client(&org_id, &api_base_url, &api_key_public, &api_key_private)
+    build_authed_client(credentials)
 }
 
 #[instrument(skip_all)]
@@ -100,7 +111,7 @@ pub async fn fetch_tvc_deployment(
 }
 
 #[instrument(skip_all)]
-async fn load_credentials_from_config(config: &Config) -> Result<(String, String, String, String)> {
+async fn load_credentials_from_config(config: &Config) -> Result<Credentials> {
     let (alias, org_config) = config
         .active_org_config()
         .ok_or_else(|| anyhow!("No active organization. Run `tvc login` first."))?;
@@ -116,12 +127,18 @@ async fn load_credentials_from_config(config: &Config) -> Result<(String, String
         .await?
         .ok_or_else(|| anyhow!("No API key found for org '{alias}'. Run `tvc login` first."))?;
 
-    Ok((
-        org_config.id.clone(),
-        org_config.api_base_url.clone(),
-        api_key.public_key.clone(),
-        api_key.private_key.clone(),
-    ))
+    let StoredApiKey {
+        public_key,
+        private_key,
+        curve: _,
+    } = api_key;
+
+    Ok(Credentials {
+        org_id: org_config.id.clone(),
+        api_base_url: org_config.api_base_url.clone(),
+        api_key_public: public_key,
+        api_key_private: private_key,
+    })
 }
 
 /// Header carrying the tvc release version on every API request. The backend
@@ -129,22 +146,29 @@ async fn load_credentials_from_config(config: &Config) -> Result<(String, String
 /// known-defective releases with an upgrade prompt.
 const TVC_CLIENT_VERSION_HEADER: &str = "X-TVC-CLIENT-VERSION";
 
-/// Build the Turnkey API client used for all tvc requests.
-///
-/// Every tvc client must be constructed here: this is the single place that
-/// stamps [`TVC_CLIENT_VERSION_HEADER`] with this crate's release version, and
-/// the backend's version gate relies on it riding every request.
-#[instrument(skip_all)]
-pub(crate) fn build_turnkey_client(
-    stamper: TurnkeyP256ApiKey,
-    api_base_url: &str,
-) -> Result<TurnkeyClient<TurnkeyP256ApiKey>> {
+/// Default headers every tvc request carries: [`TVC_CLIENT_VERSION_HEADER`]
+/// stamped with this crate's release version. The backend's version gate
+/// relies on it riding every request, so callers pass this map to
+/// [`build_turnkey_client`] as-is or extended — never replaced.
+pub(crate) fn tvc_client_headers() -> HeaderMap {
     let mut headers = HeaderMap::new();
     headers.insert(
         TVC_CLIENT_VERSION_HEADER,
         HeaderValue::from_static(env!("CARGO_PKG_VERSION")),
     );
+    headers
+}
 
+/// Build the Turnkey API client used for all tvc requests from fully
+/// constructed inputs.
+///
+/// `headers` is assembled by the caller, starting from [`tvc_client_headers`].
+#[instrument(skip_all)]
+pub(crate) fn build_turnkey_client(
+    stamper: TurnkeyP256ApiKey,
+    api_base_url: &str,
+    headers: HeaderMap,
+) -> Result<TurnkeyClient<TurnkeyP256ApiKey>> {
     TurnkeyClient::builder()
         .api_key(stamper)
         .base_url(api_base_url)
@@ -154,25 +178,27 @@ pub(crate) fn build_turnkey_client(
 }
 
 #[instrument(skip_all)]
-fn build_authed_client(
-    org_id: &str,
-    api_base_url: &str,
-    api_key_public: &str,
-    api_key_private: &str,
-) -> Result<AuthenticatedClient> {
+fn build_authed_client(credentials: Credentials) -> Result<AuthenticatedClient> {
+    let Credentials {
+        org_id,
+        api_base_url,
+        api_key_public,
+        api_key_private,
+    } = credentials;
+
     debug!("constructing API key stamper");
-    let stamper = TurnkeyP256ApiKey::from_strings(api_key_private, Some(api_key_public))
+    let stamper = TurnkeyP256ApiKey::from_strings(&api_key_private, Some(&api_key_public))
         .context("failed to load API key")?;
 
     debug!(%api_base_url, "building Turnkey API client");
-    let client = build_turnkey_client(stamper, api_base_url)?;
+    let client = build_turnkey_client(stamper, &api_base_url, tvc_client_headers())?;
 
     debug!("authenticated Turnkey client ready");
 
     Ok(AuthenticatedClient {
         client,
-        org_id: org_id.to_string(),
-        api_base_url: api_base_url.to_string(),
+        org_id,
+        api_base_url,
     })
 }
 
@@ -182,21 +208,41 @@ fn read_env_var(name: &str) -> Option<String> {
     std::env::var(name).ok().filter(|s| !s.is_empty())
 }
 
-/// Parse auth env vars for building client.
+/// Read auth env vars and assemble [`Credentials`] from them.
 ///
 /// - `Ok(None)`: none of the required env vars set; caller should fall back to disk.
-/// - `Ok(Some((org_id, api_base_url, api_key_public, api_key_private)))`: all three
-///   required vars set; `api_base_url` falls back to the default if unset.
+/// - `Ok(Some(credentials))`: all three required vars set; `api_base_url`
+///   falls back to the default if unset.
 /// - `Err`: only some of the required vars are set; the error names which.
 #[instrument(skip_all)]
-fn load_credentials_from_env_vars() -> Result<Option<(String, String, String, String)>> {
+fn load_credentials_from_env_vars() -> Result<Option<Credentials>> {
     let org_id = read_env_var(ENV_ORG_ID);
     let api_key_public = read_env_var(ENV_API_KEY_PUBLIC);
     let api_key_private = read_env_var(ENV_API_KEY_PRIVATE);
     // Optional; defaults to prod if unset.
-    let api_base_url =
-        read_env_var(ENV_API_BASE_URL).unwrap_or_else(|| DEFAULT_API_BASE_URL.to_string());
+    let api_base_url = read_env_var(ENV_API_BASE_URL);
 
+    debug!(
+        tvc_org_id_set = org_id.is_some(),
+        tvc_api_key_public_set = api_key_public.is_some(),
+        tvc_api_key_private_set = api_key_private.is_some(),
+        tvc_api_base_url_set = api_base_url.is_some(),
+        "read auth env vars"
+    );
+
+    credentials_from_env_values(org_id, api_key_public, api_key_private, api_base_url)
+}
+
+/// Assemble [`Credentials`] from already-read env values.
+///
+/// Pure over its inputs so the all/partial/none contract is unit-tested
+/// without touching process env.
+fn credentials_from_env_values(
+    org_id: Option<String>,
+    api_key_public: Option<String>,
+    api_key_private: Option<String>,
+    api_base_url: Option<String>,
+) -> Result<Option<Credentials>> {
     let mut missing: Vec<&str> = Vec::new();
     if org_id.is_none() {
         missing.push(ENV_ORG_ID);
@@ -207,15 +253,6 @@ fn load_credentials_from_env_vars() -> Result<Option<(String, String, String, St
     if api_key_private.is_none() {
         missing.push(ENV_API_KEY_PRIVATE);
     }
-
-    debug!(
-        tvc_org_id_set = org_id.is_some(),
-        tvc_api_key_public_set = api_key_public.is_some(),
-        tvc_api_key_private_set = api_key_private.is_some(),
-        tvc_api_base_url_set = read_env_var(ENV_API_BASE_URL).is_some(),
-        missing = ?missing,
-        "read auth env vars"
-    );
 
     // Acceptable to have none set: fall back to disk.
     if missing.len() == NUM_AUTH_ENV_VARS {
@@ -233,12 +270,12 @@ fn load_credentials_from_env_vars() -> Result<Option<(String, String, String, St
         );
     }
 
-    Ok(Some((
-        org_id.unwrap(),
-        api_base_url,
-        api_key_public.unwrap(),
-        api_key_private.unwrap(),
-    )))
+    Ok(Some(Credentials {
+        org_id: org_id.unwrap(),
+        api_base_url: api_base_url.unwrap_or_else(|| DEFAULT_API_BASE_URL.to_string()),
+        api_key_public: api_key_public.unwrap(),
+        api_key_private: api_key_private.unwrap(),
+    }))
 }
 
 #[cfg(test)]
@@ -246,6 +283,64 @@ mod tests {
     use super::*;
     use wiremock::matchers::{header, method};
     use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    fn set(value: &str) -> Option<String> {
+        Some(value.to_string())
+    }
+
+    #[test]
+    fn env_credentials_absent_when_no_auth_vars_set() {
+        let credentials =
+            credentials_from_env_values(None, None, None, None).expect("no vars set is valid");
+        assert!(credentials.is_none());
+    }
+
+    #[test]
+    fn env_credentials_error_names_every_missing_var() {
+        let error = credentials_from_env_values(set("org"), None, None, None)
+            .expect_err("partial env auth must error");
+        assert_eq!(
+            error.to_string(),
+            "partial env var auth: missing TVC_API_KEY_PUBLIC, TVC_API_KEY_PRIVATE. \
+             Set all three (TVC_ORG_ID, TVC_API_KEY_PUBLIC, TVC_API_KEY_PRIVATE) env vars or none."
+        );
+    }
+
+    #[test]
+    fn env_credentials_default_base_url_when_unset() {
+        let credentials = credentials_from_env_values(set("org"), set("pub"), set("priv"), None)
+            .expect("complete env auth")
+            .expect("credentials present");
+        assert_eq!(credentials.org_id, "org");
+        assert_eq!(credentials.api_base_url, DEFAULT_API_BASE_URL);
+        assert_eq!(credentials.api_key_public, "pub");
+        assert_eq!(credentials.api_key_private, "priv");
+    }
+
+    #[test]
+    fn env_credentials_use_explicit_base_url() {
+        let credentials = credentials_from_env_values(
+            set("org"),
+            set("pub"),
+            set("priv"),
+            set("http://localhost:8081"),
+        )
+        .expect("complete env auth")
+        .expect("credentials present");
+        assert_eq!(credentials.api_base_url, "http://localhost:8081");
+    }
+
+    #[test]
+    fn client_headers_carry_exactly_the_release_version() {
+        let headers = tvc_client_headers();
+        assert_eq!(headers.len(), 1);
+        assert_eq!(
+            headers
+                .get(TVC_CLIENT_VERSION_HEADER)
+                .map(|value| value.to_str().expect("version header is ascii")),
+            Some(env!("CARGO_PKG_VERSION"))
+        );
+    }
 
     #[tokio::test]
     async fn built_clients_stamp_the_tvc_release_version_on_every_request() {
@@ -258,8 +353,12 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = build_turnkey_client(TurnkeyP256ApiKey::generate(), &server.uri())
-            .expect("client builds");
+        let client = build_turnkey_client(
+            TurnkeyP256ApiKey::generate(),
+            &server.uri(),
+            tvc_client_headers(),
+        )
+        .expect("client builds");
         let response: serde_json::Value = client
             .process_request(&serde_json::json!({}), "/any/path".to_string())
             .await
