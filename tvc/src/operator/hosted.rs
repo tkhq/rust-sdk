@@ -315,6 +315,9 @@ impl Signer for HostedSigner {
         };
 
         Box::pin(async move {
+            // PURE-DEPS-REVIEW T24 (low): clock read (timestamp_ms) inside the
+            // signer; injecting the timestamp would make intent assembly
+            // deterministic. See tvc/PURE_DEPS_PLAN_0.md.
             let result = self
                 .auth
                 .client

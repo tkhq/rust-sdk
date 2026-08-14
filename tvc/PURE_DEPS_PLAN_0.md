@@ -142,6 +142,31 @@ of the retry loop whose policy half is already pure).
 
 ---
 
+## Reconciliation with PR #245 (2026-08-13)
+
+This branch is rebased onto `richard/no-more-config-load` (PR #245, "load
+config once at dispatch and pass it into commands"), which lands most of
+Phase B and Phase C wholesale:
+
+- **Retired by #245 (+ Phase A):** T1, T2 (build_client(config) + typed
+  Credentials), T4 (`Config::load()` deleted — pure `from_toml` + file read
+  at dispatch; zero `Config::load()` call sites remain), T5, T6 (resolvers
+  take `&Config`), T8 (config threaded through approve's client builds),
+  T9, T10, T27 (loaders parameterized; `load_saved_operator_ids` deleted),
+  T18 (loop load gone), T21, T26 (single dispatch-time load).
+- **Rescoped down:** T3 (low — save-side `$HOME` resolution remains),
+  T7 (medium — prompt deep in resolution remains), T17 (low — clock/probe/
+  prompts in `execute`), T24 (low — clock moved into `HostedSigner`).
+- **Still open:** T11–T16, T19, T20, T22, T23, T25, T28, T29, and all
+  W-series (workspace) findings.
+- #245 also supersedes the Phase C lazy-config design question: dispatch
+  loads config unconditionally, and #245's updated integration tests
+  (auth_env, error_output, non_interactive) define the new contract.
+
+Phase B and Phase C below are therefore **largely done by #245**; the
+remaining tvc work is Phase C leftovers folded into Phase D (prompts to
+the edge, clocks via `timestamp_ms`, T25 argv injection, T28 deletion).
+
 ## Part 3 — refactor plan (tvc first)
 
 Principle for every phase: the pure core moves down, acquisition moves up.
