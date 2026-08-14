@@ -65,7 +65,7 @@ impl StoredApiKey {
 
         let content = serde_json::to_string_pretty(self).context("failed to serialize API key")?;
 
-        tokio::fs::write(path, content)
+        crate::util::write_owner_only_file(path, content)
             .await
             .with_context(|| format!("failed to write API key: {}", path.display()))?;
 
