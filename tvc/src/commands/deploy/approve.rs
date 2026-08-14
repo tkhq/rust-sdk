@@ -113,7 +113,7 @@ impl Run for Args {
     type Outcome = ApproveOutcome;
 
     #[instrument(skip_all)]
-    async fn run(self, ctx: &mut StdCtx) -> anyhow::Result<Self::Outcome> {
+    async fn run(self, ctx: &mut StdCtx, config: Config) -> anyhow::Result<Self::Outcome> {
         let args = ArgsWithResolvedOperatorSeedSource::try_from(self)?;
 
         // Manifest review prompts are required unless explicitly skipped;
@@ -122,7 +122,7 @@ impl Run for Args {
             bail_required_in_non_interactive("--dangerous-skip-interactive")?;
         }
 
-        let (manifest, fetched) = load_manifest(ctx, &args).await?;
+        let (manifest, fetched) = load_manifest(ctx, &args, &config).await?;
         let manifest = ValidatedManifest::try_from(&manifest)?;
 
         if !args.dangerous_skip_interactive {
@@ -133,6 +133,7 @@ impl Run for Args {
             BuildPostTargetArgs::from(&args),
             fetched.as_ref().map(|(id, _)| *id),
             ctx.is_non_interactive(),
+            &config,
         )
         .await?;
 
@@ -147,7 +148,7 @@ impl Run for Args {
             posted_approvals: fetched.map(|(_, approvals)| approvals).unwrap_or_default(),
         };
 
-        run_with_resolved_inputs(ctx, inputs).await
+        run_with_resolved_inputs(ctx, inputs, &config).await
     }
 }
 
@@ -427,6 +428,7 @@ async fn build_post_target(
     args: BuildPostTargetArgs,
     fetched_manifest_id: Option<Uuid>,
     non_interactive: bool,
+    config: &Config,
 ) -> anyhow::Result<(Option<PostTarget>, Option<Uuid>)> {
     if args.dry_run || args.skip_post {
         return Ok((None, args.operator_id));
@@ -439,8 +441,6 @@ async fn build_post_target(
     let operator_id = if let Some(operator_id) = args.operator_id {
         operator_id
     } else {
-        let config = Config::load().await?;
-
         let candidates = config
             .known_operator_candidates()
             .into_iter()
@@ -481,6 +481,7 @@ async fn build_post_target(
 async fn run_with_resolved_inputs(
     ctx: &mut StdCtx,
     inputs: ResolvedApproveInputs<'_>,
+    config: &Config,
 ) -> anyhow::Result<ApproveOutcome> {
     if inputs.dry_run {
         return Ok(ApproveOutcome::DryRun(ApprovalDryRun));
@@ -508,8 +509,14 @@ async fn run_with_resolved_inputs(
     } else {
         SignerRequirement::Any
     };
-    let operator =
-        resolve_operator(inputs.operator_seed_source, inputs.operator_id, requirement).await?;
+
+    let operator = resolve_operator(
+        config,
+        inputs.operator_seed_source,
+        inputs.operator_id,
+        requirement,
+    )
+    .await?;
 
     let approval = operator.approve_manifest(&inputs.manifest).await?;
 
@@ -545,7 +552,8 @@ async fn run_with_resolved_inputs(
                 operator_id: &operator_id,
                 deploy_id: target.deploy_id.as_ref(),
             };
-            let posted = post_approval_to_api(ctx, plan, &approval, &inputs.manifest).await?;
+            let posted =
+                post_approval_to_api(ctx, plan, &approval, &inputs.manifest, config).await?;
 
             Ok(ApproveOutcome::Posted(ApprovalPosted {
                 approval_or_path: ApprovalOutput::new(approval, inputs.approval_out),
@@ -564,12 +572,13 @@ async fn run_with_resolved_inputs(
 async fn load_manifest(
     ctx: &mut StdCtx,
     args: &ArgsWithResolvedOperatorSeedSource,
+    config: &Config,
 ) -> anyhow::Result<(VersionedManifest, Option<(Uuid, Vec<OperatorApproval>)>)> {
     match (&args.manifest, &args.deploy_id) {
         (Some(path), _) => Ok((read_manifest_from_path(path).await?, None)),
         (_, Some(deploy_id)) => {
             let (manifest, manifest_id, approvals) =
-                fetch_manifest_from_deploy(ctx, &deploy_id.to_string()).await?;
+                fetch_manifest_from_deploy(ctx, &deploy_id.to_string(), config).await?;
             Ok((manifest, Some((manifest_id, approvals))))
         }
         (None, None) => bail!("a manifest source is required"),
@@ -582,11 +591,12 @@ async fn post_approval_to_api(
     plan: PostApprovalPlan<'_>,
     approval: &Approval,
     manifest: &ValidatedManifest<'_>,
+    config: &Config,
 ) -> anyhow::Result<PostedApproval> {
     shell_println!(ctx)?;
     shell_println!(ctx, "Posting approval to Turnkey...")?;
 
-    let auth = crate::client::build_client().await?;
+    let auth = crate::client::build_client(config).await?;
 
     let tvc_approval = TvcManifestApproval {
         operator_id: plan.operator_id.to_string(),
@@ -773,14 +783,15 @@ async fn read_manifest_from_path(path: &Path) -> anyhow::Result<VersionedManifes
 
 /// Fetch manifest from Turnkey using GetTvcDeployment API.
 /// Returns the manifest, its Turnkey manifest_id, and the deployment itself.
-#[instrument(skip(ctx))]
+#[instrument(skip(ctx, config))]
 async fn fetch_manifest_from_deploy(
     ctx: &mut StdCtx,
     deploy_id: &str,
+    config: &Config,
 ) -> anyhow::Result<(VersionedManifest, Uuid, Vec<OperatorApproval>)> {
     shell_println!(ctx, "Fetching deployment {deploy_id}...")?;
 
-    let auth = build_client().await?;
+    let auth = build_client(config).await?;
 
     let request = GetTvcDeploymentRequest {
         organization_id: auth.org_id.clone(),

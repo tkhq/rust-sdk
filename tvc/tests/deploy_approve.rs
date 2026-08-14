@@ -186,7 +186,10 @@ fn hosted_operator_rejects_skip_post_before_api_activity() {
 }
 
 #[test]
-fn explicit_seed_does_not_load_malformed_config() {
+fn malformed_config_fails_before_dispatch_even_with_explicit_seed() {
+    // Config is built once before dispatch, so a corrupt config file surfaces
+    // immediately for every command — even an offline approve whose explicit
+    // seed never reads it.
     let temp = TempDir::new().unwrap();
     let config_dir = temp.path().join(".config/turnkey");
     fs::create_dir_all(&config_dir).unwrap();
@@ -203,7 +206,8 @@ fn explicit_seed_does_not_load_malformed_config() {
         .arg("--skip-post")
         .arg("--dangerous-skip-interactive")
         .assert()
-        .success();
+        .failure()
+        .stderr(predicate::str::contains("failed to parse config file"));
 }
 
 #[test]

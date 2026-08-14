@@ -1,6 +1,7 @@
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
 use qos_p256::P256Pair;
+use tempfile::TempDir;
 
 const FIRST_OPERATOR_ID: &str = "11111111-1111-4111-8111-111111111111";
 const SECOND_OPERATOR_ID: &str = "22222222-2222-4222-8222-222222222222";
@@ -45,11 +46,15 @@ fn create_quorum_key_requires_threshold_and_one_operator_source() {
 
 #[test]
 fn create_quorum_key_reads_explicit_inputs_from_env() {
+    // Config is built before dispatch, so reaching in-command validation
+    // needs a HOME; a fresh temp dir keeps the test hermetic.
+    let home = TempDir::new().unwrap();
     let first = operator_encrypt_key();
     let second = operator_encrypt_key();
 
     cargo_bin_cmd!("tvc")
         .env_clear()
+        .env("HOME", home.path())
         .env("TVC_QUORUM_KEY_THRESHOLD", "3")
         .env("TVC_OPERATOR_ENCRYPT_KEYS", format!("{first},{second}"))
         .arg("keys")
@@ -66,8 +71,11 @@ fn create_quorum_key_reads_explicit_inputs_from_env() {
 
 #[test]
 fn create_quorum_key_reads_operator_ids_from_env() {
+    let home = TempDir::new().unwrap();
+
     cargo_bin_cmd!("tvc")
         .env_clear()
+        .env("HOME", home.path())
         .env("TVC_QUORUM_KEY_THRESHOLD", "3")
         .env(
             "TVC_OPERATOR_IDS",

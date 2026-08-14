@@ -38,7 +38,7 @@ pub struct Args {
 impl Run for Args {
     type Outcome = OperatorKeyBackedUp;
 
-    async fn run(self, ctx: &mut StdCtx) -> Result<OperatorKeyBackedUp> {
+    async fn run(self, ctx: &mut StdCtx, config: Config) -> Result<OperatorKeyBackedUp> {
         // Reject before loading config or resolving the organization when
         // there is no way to prompt for the destination: --non-interactive,
         // JSON mode, or a non-TTY stdin.
@@ -47,8 +47,6 @@ impl Run for Args {
         if !can_prompt && self.output.is_none() {
             return Err(error_required_in_non_interactive("--output"));
         }
-
-        let config = Config::load().await?;
 
         let (alias, org_config) = match &self.org {
             Some(query) => find_org(&config, query).ok_or_else(|| {

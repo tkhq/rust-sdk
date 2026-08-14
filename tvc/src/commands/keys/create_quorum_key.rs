@@ -103,7 +103,7 @@ impl OperatorSource {
 
 /// Run the hosted quorum-key creation command.
 #[instrument(skip_all)]
-pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
+pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome> {
     let Args {
         threshold,
         operator_encrypt_keys,
@@ -120,12 +120,12 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     validate_threshold(threshold, operator_source.len())?;
 
     let (operator_encrypt_keys, configured_org_id) =
-        resolve_operator_encrypt_keys(operator_source).await?;
+        resolve_operator_encrypt_keys(&config, operator_source)?;
     let operator_encrypt_keys = normalize_operator_encrypt_keys(operator_encrypt_keys)?;
 
     let intent = build_create_tvc_quorum_key_intent(threshold, operator_encrypt_keys);
     let expected_share_count = intent.operator_encrypt_keys.len();
-    let auth = build_client().await?;
+    let auth = build_client(&config).await?;
     if let Some(configured_org_id) = configured_org_id {
         ensure_authenticated_org(&auth.org_id, &configured_org_id)?;
     }
@@ -148,15 +148,15 @@ fn parse_operator_id(value: &str) -> std::result::Result<Uuid, String> {
     Uuid::parse_str(value.trim()).map_err(|_| "must be a UUID".to_string())
 }
 
-async fn resolve_operator_encrypt_keys(
+fn resolve_operator_encrypt_keys(
+    config: &Config,
     operator_source: OperatorSource,
 ) -> Result<(Vec<OperatorPublicKey>, Option<String>)> {
     match operator_source {
         OperatorSource::EncryptKeys(keys) => Ok((keys, None)),
         OperatorSource::OperatorIds(operator_ids) => {
             validate_operator_ids(&operator_ids)?;
-            let config = Config::load().await?;
-            resolve_operator_ids(&config, &operator_ids)
+            resolve_operator_ids(config, &operator_ids)
         }
     }
 }

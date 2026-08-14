@@ -38,9 +38,14 @@ fn missing_deploy_id_fails() {
 
 #[test]
 fn set_live_deploy_reaches_auth_setup() {
+    // Config is built before dispatch, so the binary needs a HOME even on the
+    // env-auth path; a fresh temp dir keeps the test hermetic.
+    let home = tempfile::TempDir::new().unwrap();
+
     set_live_deploy_cmd()
         .arg("--deploy-id")
         .arg("5376f492-d014-4e01-a6bb-20fc97448e25")
+        .env("HOME", home.path())
         .env("TVC_ORG_ID", "org_env")
         .assert()
         .failure()

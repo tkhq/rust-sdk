@@ -32,7 +32,7 @@ pub struct Args {
 }
 
 /// Run the app init command.
-pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
+pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome> {
     if args.interactive {
         if ctx.is_non_interactive() {
             bail_interactive_conflicts_with_non_interactive()?;
@@ -40,28 +40,25 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
             ensure_stdin_is_tty()?;
         }
     }
-    execute(args).await
+    execute(args, &config).await
 }
 
-async fn execute(args: Args) -> Result<Outcome> {
+async fn execute(args: Args, config: &Config) -> Result<Outcome> {
     // Check if file already exists
     if args.output.exists() {
         bail!("File already exists: {}", args.output.display());
     }
 
     // Try to load the operator public key from config, best-effort.
-    let operator_public_key = match Config::load().await {
-        Ok(config) => config.default_operator_public_key().await,
-        Err(_) => None,
-    };
+    let operator_public_key = config.default_operator_public_key().await;
 
     // Generate template (optionally walking prompts to fill it in)
-    let mut config = AppConfig::template(operator_public_key.as_deref());
+    let mut app_config = AppConfig::template(operator_public_key.as_deref());
     if args.interactive {
-        config.fill_interactively(operator_public_key.as_deref())?;
+        app_config.fill_interactively(operator_public_key.as_deref())?;
     }
 
-    let json = serde_json::to_string_pretty(&config).context("failed to serialize config")?;
+    let json = serde_json::to_string_pretty(&app_config).context("failed to serialize config")?;
 
     // Write to file
     std::fs::write(&args.output, json)

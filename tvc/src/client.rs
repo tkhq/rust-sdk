@@ -39,12 +39,13 @@ pub struct AuthenticatedClient {
 /// `TVC_API_KEY_PRIVATE` are all set, builds the client from env vars.
 /// `TVC_API_BASE_URL` is optional and defaults to `https://api.turnkey.com`.
 ///
-/// Otherwise, falls back to loading from `~/.config/turnkey/` (after `tvc login`).
+/// Otherwise, falls back to the active org's stored credentials in `config`
+/// (set up by `tvc login`).
 ///
 /// If only some of the three required env vars are set, errors with the list of
 /// missing names — no merged resolve between env and disk vars.
 #[instrument(skip_all)]
-pub async fn build_client() -> Result<AuthenticatedClient> {
+pub async fn build_client(config: &Config) -> Result<AuthenticatedClient> {
     debug!("building authenticated Turnkey client");
 
     let (org_id, api_base_url, api_key_public, api_key_private) =
@@ -55,7 +56,7 @@ pub async fn build_client() -> Result<AuthenticatedClient> {
             }
             None => {
                 debug!(auth_source = "config", "using local config credentials");
-                load_credentials_from_config().await?
+                load_credentials_from_config(config).await?
             }
         };
 
@@ -99,9 +100,7 @@ pub async fn fetch_tvc_deployment(
 }
 
 #[instrument(skip_all)]
-async fn load_credentials_from_config() -> Result<(String, String, String, String)> {
-    let config = Config::load().await?;
-
+async fn load_credentials_from_config(config: &Config) -> Result<(String, String, String, String)> {
     let (alias, org_config) = config
         .active_org_config()
         .ok_or_else(|| anyhow!("No active organization. Run `tvc login` first."))?;

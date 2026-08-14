@@ -1,5 +1,6 @@
 //! Deploy provisioning-details command.
 
+use crate::config::turnkey::Config;
 use crate::outcome::Outcome;
 use crate::output::StdCtx;
 use crate::provisioning::{
@@ -61,8 +62,8 @@ const SUMMARY_PCR_MAX_INDEX: usize = 17;
 
 /// Run the deploy provisioning-details command.
 #[instrument(skip_all)]
-pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
-    let auth = crate::client::build_client().await?;
+pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Result<Outcome> {
+    let auth = crate::client::build_client(&config).await?;
     let details = fetch_provisioning_details(&auth, &args.deploy_id).await?;
 
     let summary = build_summary_with_optional_verify(

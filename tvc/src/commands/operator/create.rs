@@ -99,14 +99,13 @@ Saved: true"#,
 }
 
 #[instrument(skip_all)]
-pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
-    let mut config = Config::load().await?;
+pub async fn run(_ctx: &mut StdCtx, args: Args, mut config: Config) -> Result<Outcome> {
     let (alias, configured_org_id) = config
         .active_org_config()
         .map(|(alias, org)| (alias.clone(), org.id.as_str()))
         .context("No active organization. Run `tvc login` first.")?;
 
-    let auth = build_client().await?;
+    let auth = build_client(&config).await?;
     ensure_authenticated_org(&auth.org_id, configured_org_id)?;
 
     let HostedOperatorSpec { name, wallet, path } = args.into();

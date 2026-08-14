@@ -1,6 +1,7 @@
 //! App set-live-deploy command.
 
 use crate::client::build_client;
+use crate::config::turnkey::Config;
 use crate::outcome::Outcome;
 use crate::output::StdCtx;
 use anyhow::{Context, Result};
@@ -23,8 +24,8 @@ pub struct Args {
 
 /// Run the app set-live-deploy command.
 #[instrument(skip_all)]
-pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
-    let auth = build_client().await?;
+pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome> {
+    let auth = build_client(&config).await?;
 
     let deployment_id = args.deploy_id.to_string();
 

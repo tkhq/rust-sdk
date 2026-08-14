@@ -1,6 +1,7 @@
 //! Deploy post-share command.
 
 use crate::commands::keys::re_encrypt_local_share::ReEncryptedShareOutput;
+use crate::config::turnkey::Config;
 use crate::outcome::Outcome;
 use crate::output::StdCtx;
 use crate::util::read_json_file;
@@ -29,7 +30,7 @@ pub struct Args {
 
 /// Run the deploy post-share command.
 #[instrument(skip_all)]
-pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
+pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Result<Outcome> {
     let re_encrypted_share: ReEncryptedShareOutput =
         read_json_file(&args.re_encrypted_share, "re-encrypted share output").await?;
 
@@ -38,7 +39,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
         &args.share_operator_id.to_string(),
     );
 
-    let auth = crate::client::build_client().await?;
+    let auth = crate::client::build_client(&config).await?;
     let timestamp_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .context("system time before unix epoch")?

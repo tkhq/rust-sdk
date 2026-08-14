@@ -26,15 +26,12 @@ pub struct Args {
 }
 
 /// Run the quorum key init command.
-pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
+pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome> {
     if args.output.exists() {
         anyhow::bail!("File already exists: {}", args.output.display());
     }
 
-    let operator_public_key = match Config::load().await {
-        Ok(config) => config.default_operator_public_key().await,
-        Err(_) => None,
-    };
+    let operator_public_key = config.default_operator_public_key().await;
 
     let config = QuorumKeyConfig::template(operator_public_key.as_deref());
     let json = serde_json::to_string_pretty(&config).context("failed to serialize config")?;

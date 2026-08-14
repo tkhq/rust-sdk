@@ -8,6 +8,7 @@ use turnkey_client::generated::GetTvcAppsRequest;
 use turnkey_client::generated::external::data::v1::TvcApp;
 
 use crate::commands::display::{format_egress_enabled, yes_no};
+use crate::config::turnkey::Config;
 use crate::outcome::Outcome;
 use tracing::instrument;
 
@@ -26,8 +27,8 @@ pub struct Args {
 
 /// Run the app list command.
 #[instrument(skip_all)]
-pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
-    let auth = crate::client::build_client().await?;
+pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Result<Outcome> {
+    let auth = crate::client::build_client(&config).await?;
 
     let response = auth
         .client

@@ -49,7 +49,7 @@ pub struct Args {
 
 /// Run the deploy init command.
 #[instrument(skip_all)]
-pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
+pub async fn run(ctx: &mut StdCtx, args: Args, config: turnkey::Config) -> Result<Outcome> {
     if args.interactive {
         if ctx.is_non_interactive() {
             bail_interactive_conflicts_with_non_interactive()?;
@@ -57,10 +57,10 @@ pub async fn run(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
             ensure_stdin_is_tty()?;
         }
     }
-    execute(ctx, args).await
+    execute(ctx, args, &config).await
 }
 
-async fn execute(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
+async fn execute(ctx: &mut StdCtx, args: Args, config: &turnkey::Config) -> Result<Outcome> {
     let Args {
         output,
         from_deployment,
@@ -80,25 +80,22 @@ async fn execute(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
 
     let is_from_deployment = from_deployment.is_some();
 
+    // The last created app ID prefills the blank template and the interactive
+    // prompt defaults.
+    let saved_app_id = config.get_last_app_id();
+
     // Seed the config either from an existing deployment or a blank template.
-    let mut config = match from_deployment {
+    let mut deploy_config = match from_deployment {
         Some(deploy_id) => {
             // TODO (TVC-154):
             // TL;DR split fetching the data/resources separately
             // from building the client
-            let auth = build_client().await?;
+            let auth = build_client(config).await?;
             let org_id = auth.org_id.clone();
             let deployment = fetch_tvc_deployment(&auth, org_id, deploy_id).await?;
             DeployConfig::try_from(deployment)?
         }
-        None => {
-            // Try to get the last created app ID to prefill the template.
-            let last_app_id = turnkey::Config::load()
-                .await
-                .ok()
-                .and_then(|config| config.get_last_app_id());
-            DeployConfig::template(last_app_id.as_deref())
-        }
+        None => DeployConfig::template(saved_app_id.as_deref()),
     };
 
     // Optionally walk prompts to fill any remaining placeholders (e.g. the
@@ -106,16 +103,13 @@ async fn execute(ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     // In `--from-deployment` mode the app ID is already set, so the saved-app-id
     // default is only consulted for a blank template.
     if is_interactive {
-        let saved_app_id = turnkey::Config::load()
-            .await
-            .ok()
-            .and_then(|config| config.get_last_app_id());
-        config.fill_interactively(ctx, saved_app_id.as_deref())?;
+        deploy_config.fill_interactively(ctx, saved_app_id.as_deref())?;
     }
 
-    let needs_pull_secret = config.pull_secret_is_placeholder();
+    let needs_pull_secret = deploy_config.pull_secret_is_placeholder();
 
-    let json = serde_json::to_string_pretty(&config).context("failed to serialize config")?;
+    let json =
+        serde_json::to_string_pretty(&deploy_config).context("failed to serialize config")?;
 
     // Write to file
     std::fs::write(&output, json)

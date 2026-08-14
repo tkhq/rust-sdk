@@ -15,6 +15,7 @@ use crate::{
     client::{fetch_tvc_app, fetch_tvc_deployment},
     commands::app_status::{ReplicaCounts, TimestampPayload, format_replica_counts},
     commands::display::format_egress_enabled,
+    config::turnkey::Config,
     outcome::Outcome,
     output::StdCtx,
 };
@@ -30,14 +31,14 @@ pub struct Args {
 
 /// Run the deploy get-status command.
 #[instrument(skip_all)]
-pub async fn run(_ctx: &mut StdCtx, args: Args) -> anyhow::Result<Outcome> {
+pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Result<Outcome> {
     let deployment_id = args.deploy_id.to_string();
 
     // TODO (TVC-154):
     // this is a little backwards, all the variables that are needed to build the client
     // are resolved INSIDE the `build-client`. Instead, all the necessary data for the client
     // should be resolved, then passed into an infallible constructor
-    let auth = crate::client::build_client().await?;
+    let auth = crate::client::build_client(&config).await?;
     let org_id = auth.org_id.clone();
 
     let deployment = fetch_tvc_deployment(&auth, org_id.clone(), deployment_id.clone()).await?;
