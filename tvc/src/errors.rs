@@ -236,6 +236,12 @@ fn classify_turnkey_client_error(error: &TurnkeyClientError) -> Classification {
         TurnkeyClientError::ActivityRequiresApproval(_) => {
             Classification::new(ErrorCode::ApprovalRequired, None)
         }
+        // The server answered with a redirect the client would not follow, so
+        // the request never reached a usable endpoint. Report it as an API
+        // error carrying the redirect status.
+        TurnkeyClientError::RefusedRedirect(status, _) => {
+            Classification::new(ErrorCode::ApiError, Some(*status))
+        }
         // The server responded, but its response violated the expected API
         // protocol or the activity did not complete successfully.
         TurnkeyClientError::MissingContentTypeHeader
