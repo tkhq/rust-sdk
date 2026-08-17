@@ -46,6 +46,7 @@ fn write_two_candidate_config(home: &Path) -> String {
                 extra: toml::Table::new(),
             },
         )]),
+        yubikeys: Vec::new(),
         last_created_app_id: HashMap::new(),
         last_operator_ids: HashMap::from([(
             "hosted-org".to_string(),

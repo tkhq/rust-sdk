@@ -27,6 +27,7 @@ fn write_login_config(
                 extra: toml::Table::new(),
             },
         )]),
+        yubikeys: Vec::new(),
         last_created_app_id: HashMap::from([("test".to_string(), "app-1".to_string())]),
         last_operator_ids: HashMap::from([("test".to_string(), vec!["operator-1".to_string()])]),
         extra: toml::Table::new(),
