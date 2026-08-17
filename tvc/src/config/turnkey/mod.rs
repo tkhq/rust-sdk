@@ -9,9 +9,15 @@
 
 mod api_key;
 mod qos_operator_key;
+mod yubikey;
 
 pub use api_key::{KeyCurve, StoredApiKey};
-pub use qos_operator_key::{QosOperatorPublicKey, StoredQosOperatorKey};
+pub use qos_operator_key::{
+    QosOperatorPublicKey, QosOperatorPublicKeyParseError, StoredQosOperatorKey,
+};
+pub use yubikey::{
+    YubiKeyOperatorRecord, YubiKeyRegistryEntry, YubiKeySerial, YubiKeySerialParseError,
+};
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
@@ -45,6 +51,11 @@ pub struct Config {
     /// Map of org alias -> org config
     #[serde(default)]
     pub orgs: HashMap<String, OrgConfig>,
+    /// Registered YubiKey devices, shared across organizations. Absent from
+    /// disk entirely while empty, so configs predating the registry rewrite
+    /// byte-identically.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub yubikeys: Vec<YubiKeyRegistryEntry>,
     /// Map of org alias -> last created app ID (for convenience)
     #[serde(default)]
     pub last_created_app_id: HashMap<String, String>,
@@ -157,6 +168,7 @@ mod disk {
         Ok(Config {
             active_org: config.active_org,
             orgs,
+            yubikeys: Vec::new(),
             last_created_app_id: config.last_created_app_id,
             last_operator_ids: config.last_operator_ids,
             extra: config.extra,
@@ -271,10 +283,11 @@ impl OperatorRecord {
 /// Kind-specific durable operator metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(test, derive(PartialEq))]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(tag = "kind", rename_all = "camelCase")]
 pub enum OperatorRecordKind {
     Local(LocalOperatorRecord),
     Hosted(HostedOperatorRecord),
+    Yubikey(YubiKeyOperatorRecord),
 }
 
 /// Locator and optional Turnkey identity for a local operator key.
@@ -356,7 +369,7 @@ impl OrgConfig {
             .iter()
             .filter_map(|operator| match &operator.kind {
                 OperatorRecordKind::Local(local) => Some((operator, local)),
-                OperatorRecordKind::Hosted(_) => None,
+                OperatorRecordKind::Hosted(_) | OperatorRecordKind::Yubikey(_) => None,
             });
 
         match (locals.next(), locals.next()) {
@@ -373,7 +386,7 @@ impl OrgConfig {
             .iter()
             .filter_map(|operator| match &operator.kind {
                 OperatorRecordKind::Hosted(hosted) => Some((operator.name.as_str(), hosted)),
-                OperatorRecordKind::Local(_) => None,
+                OperatorRecordKind::Local(_) | OperatorRecordKind::Yubikey(_) => None,
             })
     }
 
@@ -635,5 +648,61 @@ default = ["operator-123"]
                 .to_string()
                 .contains("config version must be an unsigned 16-bit integer")
         );
+    }
+
+    /// Serials are deliberately non-canonical (uppercase, unpadded) to pin
+    /// the parse-then-canonicalize behavior on save.
+    fn v1_yubikey_config() -> String {
+        format!(
+            r#"
+version = 1
+active_org = "default"
+
+[[yubikeys]]
+serial = "1C95C1F"
+public_key = "{}"
+future_entry = "keep"
+
+[orgs.default]
+id = "org-123"
+api_key_path = "/keys/api.json"
+
+[[orgs.default.operators]]
+name = "yubikey"
+kind = "yubikey"
+serial = "1C95C1F"
+"#,
+            "07".repeat(130)
+        )
+    }
+
+    #[test]
+    fn round_trips_yubikey_registry_and_operator_records() {
+        let config = disk::from_toml(&v1_yubikey_config()).unwrap();
+
+        let serial = YubiKeySerial::from(0x01c9_5c1f);
+        assert_eq!(config.yubikeys.len(), 1);
+        assert_eq!(config.yubikeys[0].serial, serial);
+        assert_eq!(config.yubikeys[0].public_key.to_string(), "07".repeat(130));
+
+        let org = &config.orgs["default"];
+        let OperatorRecordKind::Yubikey(record) = &org.operators[0].kind else {
+            panic!("operator must be a yubikey record");
+        };
+        assert_eq!(record.serial, serial);
+
+        let saved = disk::to_toml(&config).unwrap();
+        assert!(saved.contains("serial = \"01c95c1f\""));
+        assert!(!saved.contains("1C95C1F"));
+        assert!(saved.contains("kind = \"yubikey\""));
+        assert!(saved.contains("future_entry = \"keep\""));
+        assert_eq!(disk::from_toml(&saved).unwrap(), config);
+    }
+
+    #[test]
+    fn empty_registry_stays_off_disk() {
+        let config = disk::from_toml(MIGRATED_V1_CONFIG).unwrap();
+
+        assert!(!disk::to_toml(&config).unwrap().contains("yubikeys"));
     }
 }

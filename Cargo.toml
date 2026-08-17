@@ -22,6 +22,8 @@ qos_core = { version = "0.13", default-features = false }
 qos_crypto = { version = "0.13", default-features = false }
 qos_nsm = { version = "0.13", default-features = false }
 qos_p256 = { version = "0.13", default-features = false }
+# Matches qos_client's own pin; goes away once qos_client re-exports the crate.
+yubikey = { version = "0.8", features = ["untested"], default-features = false }
 
 # Encoding and serialization
 base64 = { version = "0.22.0", default-features = false, features = ["std"] }

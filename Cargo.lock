@@ -4311,6 +4311,7 @@ dependencies = [
  "turnkey_enclave_encrypt",
  "uuid",
  "wiremock",
+ "yubikey",
  "zeroize",
 ]
 

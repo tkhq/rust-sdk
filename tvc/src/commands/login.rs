@@ -1010,6 +1010,7 @@ mod tests {
                     extra: toml::Table::new(),
                 },
             )]),
+            yubikeys: Vec::new(),
             last_created_app_id: HashMap::new(),
             last_operator_ids: HashMap::new(),
             extra: toml::Table::new(),
