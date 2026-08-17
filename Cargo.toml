@@ -17,7 +17,7 @@ members = [
 resolver = "2"
 
 [workspace.dependencies]
-# QuorumOS
+qos_client = { version = "0.13", default-features = false, features = ["smartcard"] }
 qos_core = { version = "0.13", default-features = false }
 qos_crypto = { version = "0.13", default-features = false }
 qos_nsm = { version = "0.13", default-features = false }
@@ -101,7 +101,7 @@ assert_cmd = { version = "2", default-features = false }
 predicates = { version = "3", default-features = false }
 rexpect = { version = "0.5", default-features = false }
 tempfile = { version = "3.19.1", default-features = false }
-signature = "2"
+signature = "2.2"
 strum = { version = "0.27.2", default-features = false, features = ["derive", "std", "strum_macros"] }
 wiremock = { version = "0.6", default-features = false }
 http = { version = "0.2", default-features = false }
