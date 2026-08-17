@@ -12,6 +12,7 @@ keywords = ["turnkey", "tvc", "enclaves", "cli"]
 categories = ["command-line-utilities", "cryptography"]
 
 [dependencies]
+qos_client = { workspace = true }
 qos_core = { workspace = true }
 qos_crypto = { workspace = true }
 qos_nsm = { workspace = true }
