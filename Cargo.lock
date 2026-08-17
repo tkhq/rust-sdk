@@ -3969,7 +3969,7 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "turnkey_api_key_stamper"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "base64 0.22.1",
  "hex",
@@ -3985,7 +3985,7 @@ dependencies = [
 
 [[package]]
 name = "turnkey_client"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -4022,7 +4022,7 @@ dependencies = [
 
 [[package]]
 name = "turnkey_enclave_encrypt"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "bs58",
  "hex",
@@ -4054,7 +4054,7 @@ dependencies = [
 
 [[package]]
 name = "turnkey_proofs"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "attestation-doc-validation",
  "aws-nitro-enclaves-cose",
@@ -4084,7 +4084,7 @@ dependencies = [
 
 [[package]]
 name = "tvc"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "anstyle",
  "anyhow",
