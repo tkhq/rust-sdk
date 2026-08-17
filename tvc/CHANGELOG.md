@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.15.0](https://github.com/tkhq/rust-sdk/compare/tvc-v0.14.0...tvc-v0.15.0) - 2026-08-17
+
+### Added
+
+- *(tvc)* log in to hosted-default orgs with a backend-shaped outcome
+- *(tvc)* offer registered hosted operators in app create and approve defaults
+- *(tvc)* resolve the sole hosted operator when the default backend is hosted
+- *(tvc)* offer operator key backup during login onboarding
+- *(tvc)* add keys backup-operator-key command
+- *(tvc)* collapse client-version-too-old error and instrument the CLI callstack
+- *(tvc)* classify backend client-version rejection and render upgrade hint
+
+### Fixed
+
+- *(tvc)* fence the multi-candidate reuse prompt and pin the selection paths
+- *(tvc)* explain the local-only key commands to hosted-operator orgs
+
+### Other
+
+- Merge pull request #234 from tkhq/zeke/deployment-approval-prompts
+- Improve tvc key file output handling
+- Update qos_* versions
+- *(tvc)* load config once at dispatch and pass it into commands
+- *(tvc)* simplify return types
+- *(tvc)* remove single-use functions
+- *(tvc)* seal operator backends behind a Signer port
+- *(tvc)* parse stored operator public keys into a typed composite
+- Merge pull request #228 from tkhq/richard/eng-4082-ensure-tvc-cli-is-on-a-recent-enough-version
+
 ## [0.14.0](https://github.com/tkhq/rust-sdk/compare/tvc-v0.13.1...tvc-v0.14.0) - 2026-08-05
 
 ### Added
