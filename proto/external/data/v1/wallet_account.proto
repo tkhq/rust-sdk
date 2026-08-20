@@ -61,6 +61,10 @@ message WalletAccount {
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable name for this Wallet Account, unique within the organization."}
   ];
+  optional string caip2_prefix = 14 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The CAIP-2 namespace shared by the chains supported by this account (for example, 'eip155' or 'solana')."}
+  ];
   // TODO(tim): temporarily removing this since it's always "false"
   //bool exported = 12 [
   //  (google.api.field_behavior) = REQUIRED,

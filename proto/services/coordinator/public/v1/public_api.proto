@@ -15,6 +15,7 @@ import "external/options/v1/options.proto";
 import "external/webauthn/v1/webauthn.proto";
 import "immutable/activity/v1/activity.proto";
 import "immutable/data/v1/earn.proto";
+import "immutable/models/v1/models.proto";
 import "immutable/sdk_models/v1/models.proto";
 import "vendor/google/api/annotations.proto";
 import "vendor/google/api/field_behavior.proto";
@@ -1841,7 +1842,6 @@ service PublicApiService {
   }
 
   rpc CreateSwapQuote(external.activity.v1.CreateSwapQuoteRequest) returns (ActivityResponse) {
-    option (google.api.method_visibility).restriction = "INTERNAL";
     option (google.api.http) = {
       post: "/public/v1/submit/create_swap_quote"
       body: "*"
@@ -1866,7 +1866,6 @@ service PublicApiService {
   }
 
   rpc ExecuteSwap(external.activity.v1.ExecuteSwapRequest) returns (ActivityResponse) {
-    option (google.api.method_visibility).restriction = "INTERNAL";
     option (google.api.http) = {
       post: "/public/v1/submit/execute_swap"
       body: "*"
@@ -2043,6 +2042,18 @@ service PublicApiService {
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Validate a container image URL and pull secret for TVC deployment"
       summary: "Validate Container Image for TVC"
+      tags: "TVC"
+    };
+  }
+
+  rpc GetTvcQosVersions(GetTvcQosVersionsRequest) returns (GetTvcQosVersionsResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_tvc_qos_versions"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "List QOS versions supported for new TVC deployments and the latest recommended QOS version."
+      summary: "Get TVC QOS versions"
       tags: "TVC"
     };
   }
@@ -2230,6 +2241,30 @@ service PublicApiService {
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Import secrets encrypted to target keys returned from InitImportSecrets."
       summary: "Import secrets"
+      tags: "Secrets"
+    };
+  }
+
+  rpc ExportSecrets(external.activity.v1.ExportSecretsRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/export_secrets"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Export secrets encrypted to client-provided target public keys."
+      summary: "Export secrets"
+      tags: "Secrets"
+    };
+  }
+
+  rpc ListSecrets(ListSecretsRequest) returns (ListSecretsResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/list_secrets"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "List secret metadata for an organization."
+      summary: "List secrets"
       tags: "Secrets"
     };
   }
@@ -3145,15 +3180,15 @@ message GetSwapStatusRequest {
 message SwapRefund {
   string asset = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-19 asset returned to the user after a failed swap."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-19 asset returned by the swap provider after a failed cross-chain fill."}
   ];
   string amount = 2 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Base-unit amount of the refunded asset."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Base-unit amount returned by the swap provider."}
   ];
   optional string tx_hash = 3 [
     (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Transaction that delivered the refunded funds, when applicable."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Transaction that delivered the provider refund, when applicable."}
   ];
 }
 
@@ -3169,6 +3204,10 @@ message SwapError {
   optional TxError origin_tx_error = 3 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Origin-chain transaction failure details, present when reason is ORIGIN_TRANSACTION_FAILED and details are available."}
+  ];
+  optional string provider_reason = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional detail from the swap provider about why the fill did not complete, when available."}
   ];
 }
 
@@ -3211,7 +3250,7 @@ message GetSwapStatusResponse {
   ];
   optional SwapRefund refund = 10 [
     (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Asset and amount returned to the user after a failed swap, when recoverable. Present only on FAILED."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Funds returned by the provider after a successful origin transfer and failed cross-chain fill. Omitted for origin transaction failures and same-chain swaps."}
   ];
   reserved 11, 12, 13;
   string updated_at = 14 [
@@ -4008,6 +4047,45 @@ message EmailEventDetails {
   ];
 }
 
+message ListSecretsRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for the organization or sub-organization whose secrets are listed."}
+  ];
+  external.options.v1.Pagination pagination_options = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Parameters used for cursor-based pagination."}
+  ];
+}
+
+message ListSecretsResponse {
+  repeated SecretMetadata secrets = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Metadata for each secret in the organization, ordered by most recently created first."}
+  ];
+}
+
+// Metadata view of a secret. Excludes the encrypted payload and
+// cryptographic material.
+message SecretMetadata {
+  string secret_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for the secret."}
+  ];
+  optional string name = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional human-readable name for the secret."}
+  ];
+  repeated immutable.models.v1.KeyValue static_properties = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Policy visible static properties bound to the secret at creation time."}
+  ];
+  uint64 created_at_unix_ms = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unix timestamp in milliseconds for when the secret was created."}
+  ];
+}
+
 message ListEthTransactionHistoryRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
@@ -4284,5 +4362,23 @@ message TransactionHistoryTurnkey {
   string submitted_at = 3 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp when Turnkey submitted the transaction, in RFC 3339 format."}
+  ];
+}
+
+message GetTvcQosVersionsRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+}
+
+message GetTvcQosVersionsResponse {
+  repeated string available_versions = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "QOS versions supported for new TVC deployments."}
+  ];
+  string latest_version = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Latest recommended QOS version for new TVC deployments."}
   ];
 }

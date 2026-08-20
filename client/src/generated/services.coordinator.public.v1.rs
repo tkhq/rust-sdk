@@ -749,6 +749,8 @@ pub struct SwapError {
     pub message: ::prost::alloc::string::String,
     #[serde(default)]
     pub origin_tx_error: ::core::option::Option<TxError>,
+    #[serde(default)]
+    pub provider_reason: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -1523,6 +1525,44 @@ pub struct EmailEventDetails {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct ListSecretsRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub pagination_options: ::core::option::Option<
+        super::super::super::super::external::options::v1::Pagination,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct ListSecretsResponse {
+    #[serde(default)]
+    pub secrets: ::prost::alloc::vec::Vec<SecretMetadata>,
+}
+#[derive(Debug)]
+#[serde_with::serde_as]
+/// Metadata view of a secret. Excludes the encrypted payload and
+/// cryptographic material.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SecretMetadata {
+    pub secret_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub name: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub static_properties: ::prost::alloc::vec::Vec<
+        super::super::super::super::immutable::models::v1::KeyValue,
+    >,
+    #[serde(default)]
+    #[serde_as(as = "serde_with::DisplayFromStr")]
+    pub created_at_unix_ms: u64,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct ListEthTransactionHistoryRequest {
     pub organization_id: ::prost::alloc::string::String,
     pub address: ::prost::alloc::string::String,
@@ -1679,4 +1719,20 @@ pub struct TransactionHistoryTurnkey {
     pub sponsored: bool,
     pub activity_fingerprint: ::prost::alloc::string::String,
     pub submitted_at: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetTvcQosVersionsRequest {
+    pub organization_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetTvcQosVersionsResponse {
+    #[serde(default)]
+    pub available_versions: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    pub latest_version: ::prost::alloc::string::String,
 }

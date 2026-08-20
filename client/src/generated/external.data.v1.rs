@@ -843,11 +843,13 @@ pub struct WalletAccount {
     pub public_key: ::core::option::Option<::prost::alloc::string::String>,
     #[serde(default)]
     pub wallet_details: ::core::option::Option<Wallet>,
+    #[serde(default)]
+    pub name: ::core::option::Option<::prost::alloc::string::String>,
     /// TODO(tim): temporarily removing this since it's always "false"
     /// bool exported = 12 [
     ///   (google.api.field_behavior) = REQUIRED,
     ///   (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "True when a given Account is exported, false otherwise."}
     /// ];
     #[serde(default)]
-    pub name: ::core::option::Option<::prost::alloc::string::String>,
+    pub caip2_prefix: ::core::option::Option<::prost::alloc::string::String>,
 }
