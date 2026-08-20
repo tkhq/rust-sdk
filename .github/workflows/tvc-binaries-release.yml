@@ -1,0 +1,247 @@
+name: TVC binaries
+
+on:
+  pull_request:
+    # TEMPORARY: opened/synchronize/reopened let PR #206 validate all four
+    # archives before merge. Remove them after the downloadable artifacts have
+    # been inspected, leaving only `closed` for post-merge validation.
+    types: [ opened, synchronize, reopened, closed ]
+#    types: [ closed ]
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: Optional comma-separated targets; empty builds all supported targets
+        required: false
+        type: string
+        default: ""
+  workflow_call:
+    inputs:
+      publish_release_assets:
+        # Keep publishing opt-in
+        description: Upload the generated archives and checksums to release_tag
+        required: false
+        type: boolean
+        default: false
+      release_tag:
+        description: Existing tvc GitHub release tag to build and upload
+        required: false
+        type: string
+        default: ""
+      targets:
+        description: Optional comma-separated targets; empty builds all supported targets
+        required: false
+        type: string
+        default: ""
+
+concurrency:
+  # Give each release tag and manual run its own group, while all ordinary post-merge validations share the "main" group.
+  group: tvc-binaries-${{ inputs.release_tag || (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'release') && 'main') || github.run_id }}
+  # A newer ordinary merge supersedes an older main-branch validation. Never cancel release builds, manual runs, or release-labeled merge handling.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && inputs.release_tag == '' && !contains(github.event.pull_request.labels.*.name, 'release') }}
+
+jobs:
+  prepare:
+    name: Prepare tvc binary build
+    # TEMPORARY: the non-closed pull_request branch lets PR #206 reach the
+    # build matrix. Remove it with the temporary event types above.
+    if: >
+      github.repository_owner == 'tkhq' &&
+      (
+        inputs.publish_release_assets == true ||
+        inputs.release_tag != '' ||
+        github.event_name != 'pull_request' ||
+        (
+          github.event_name == 'pull_request' &&
+          github.event.action != 'closed'
+        ) ||
+        (
+          github.event.pull_request.merged == true &&
+          !contains(github.event.pull_request.labels.*.name, 'release')
+        )
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      publish_release_assets: ${{ steps.matrix.outputs.publish_release_assets }}
+    steps:
+      - name: Select build targets
+        id: matrix
+        env:
+          PUBLISH_RELEASE_ASSETS: ${{ inputs.publish_release_assets }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          REQUESTED_TARGETS: ${{ inputs.targets }}
+        run: |
+          set -euo pipefail
+
+          # Keep the target-to-runner/build configuration inside this workflow.
+          # Callers may select targets, but cannot supply arbitrary runners,
+          # build tools, or flags.
+          declare -A configs=(
+            [x86_64-unknown-linux-musl]='{"target":"x86_64-unknown-linux-musl","os":"ubuntu-latest","build_tool":"cross","rustflags":"-C target-feature=+crt-static"}'
+            [aarch64-unknown-linux-musl]='{"target":"aarch64-unknown-linux-musl","os":"ubuntu-latest","build_tool":"cross","rustflags":"-C target-feature=+crt-static"}'
+            [aarch64-apple-darwin]='{"target":"aarch64-apple-darwin","os":"macos-14","build_tool":"cargo","rustflags":""}'
+            [x86_64-apple-darwin]='{"target":"x86_64-apple-darwin","os":"macos-14","build_tool":"cargo","rustflags":""}'
+          )
+
+          # An empty target input means "build every supported target".
+          default_targets=(
+            x86_64-unknown-linux-musl
+            aarch64-unknown-linux-musl
+            aarch64-apple-darwin
+            x86_64-apple-darwin
+          )
+
+          if [[ -z "${REQUESTED_TARGETS//[[:space:]]/}" ]]; then
+            targets=("${default_targets[@]}")
+          else
+            # Parse the comma-separated input, trim surrounding whitespace, and
+            # reject empty, unknown, or duplicate targets before allocating the
+            # more expensive matrix runners.
+            IFS=',' read -r -a requested_targets <<< "${REQUESTED_TARGETS}"
+            targets=()
+            declare -A selected=()
+            for raw_target in "${requested_targets[@]}"; do
+              target="${raw_target#"${raw_target%%[![:space:]]*}"}"
+              target="${target%"${target##*[![:space:]]}"}"
+              if [[ -z "${target}" ]]; then
+                echo "Target list contains an empty entry" >&2
+                exit 1
+              fi
+              if [[ -z "${configs[${target}]+present}" ]]; then
+                echo "Unsupported target: ${target}" >&2
+                exit 1
+              fi
+              if [[ -n "${selected[${target}]+present}" ]]; then
+                echo "Duplicate target: ${target}" >&2
+                exit 1
+              fi
+              selected["${target}"]=true
+              targets+=("${target}")
+            done
+          fi
+
+          # GitHub Actions requires a JSON object for a matrix generated by an
+          # earlier job. Preserve the caller's target order in that matrix.
+          rows=()
+          for target in "${targets[@]}"; do
+            rows+=("${configs[${target}]}")
+          done
+          matrix=$(IFS=,; echo "{\"include\":[${rows[*]}]}")
+
+          # Publishing is the only behavior this flag controls. With its
+          # default of false, post-merge and manual validation runs still build,
+          # package, and checksum every selected target without changing a
+          # GitHub Release. The protected release workflow opts in and must also
+          # provide the release tag that receives the assets.
+          publish_release_assets=false
+          if [[ "${PUBLISH_RELEASE_ASSETS}" == "true" ]]; then
+            if [[ -z "${RELEASE_TAG}" ]]; then
+              echo "publish_release_assets requires release_tag" >&2
+              exit 1
+            fi
+            publish_release_assets=true
+          fi
+
+          # Expose the selected matrix and upload decision to the build jobs.
+          echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}"
+          echo "publish_release_assets=${publish_release_assets}" >> "${GITHUB_OUTPUT}"
+
+  build:
+    name: Build tvc binary (${{ matrix.target }})
+    needs: prepare
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    env:
+      RUSTFLAGS: ${{ matrix.rustflags }}
+      TARGET: ${{ matrix.target }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.release_tag || github.sha }}
+          persist-credentials: false
+
+      - name: Install Rust target
+        run: |
+          set -euo pipefail
+          rustup show active-toolchain || rustup toolchain install
+          rustup target add "${TARGET}"
+
+      - name: Install cross
+        if: matrix.build_tool == 'cross'
+        env:
+          CROSS_SHA256: a486cefa6cb486971b97be321ea9dfc2e90c1979550295314a368f53fab6d588
+          CROSS_VERSION: 0.2.5
+        run: |
+          set -euo pipefail
+          archive="${RUNNER_TEMP}/cross.tar.gz"
+          install_dir="${RUNNER_TEMP}/cross"
+          url="https://github.com/cross-rs/cross/releases/download/v${CROSS_VERSION}/cross-x86_64-unknown-linux-musl.tar.gz"
+
+          curl --fail --location --retry 5 --output "${archive}" "${url}"
+          echo "${CROSS_SHA256}  ${archive}" | sha256sum --check -
+          mkdir -p "${install_dir}"
+          tar -xzf "${archive}" -C "${install_dir}"
+          echo "${install_dir}" >> "${GITHUB_PATH}"
+
+      - name: Build tvc
+        env:
+          BUILD_TOOL: ${{ matrix.build_tool }}
+        run: |
+          set -euo pipefail
+          "${BUILD_TOOL}" build \
+            --release \
+            --bin tvc \
+            --locked \
+            --package tvc \
+            --target "${TARGET}"
+
+      - name: Package and checksum tvc
+        env:
+          COPYFILE_DISABLE: "1"
+        run: |
+          set -euo pipefail
+          archive="tvc-${TARGET}.tar.gz"
+          binary_dir="target/${TARGET}/release"
+
+          tar -C "${binary_dir}" -czf "${archive}" tvc
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "${archive}" > "${archive}.sha256"
+          else
+            shasum -a 256 "${archive}" > "${archive}.sha256"
+          fi
+          cat "${archive}.sha256"
+
+      # TEMPORARY: retain PR validation outputs so the archives and checksums
+      # can be downloaded and inspected. Release uploads remain disabled.
+      - name: Upload temporary PR validation artifacts
+        if: github.event_name == 'pull_request' && github.event.action != 'closed'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: tvc-${{ matrix.target }}
+          path: |
+            tvc-${{ matrix.target }}.tar.gz
+            tvc-${{ matrix.target }}.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
+
+      - name: Upload tvc release assets
+        if: needs.prepare.outputs.publish_release_assets == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          gh release upload "${RELEASE_TAG}" \
+            "tvc-${TARGET}.tar.gz" \
+            "tvc-${TARGET}.tar.gz.sha256" \
+            --clobber
