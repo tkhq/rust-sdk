@@ -566,6 +566,25 @@ pub struct EarnVault {
     pub display: ::core::option::Option<EarnValueDisplay>,
     pub name: ::prost::alloc::string::String,
     pub curator: ::prost::alloc::string::String,
+    pub liquidity: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub liquidity_display: ::core::option::Option<EarnValueDisplay>,
+}
+#[derive(Debug)]
+/// EarnVaultExposure is one underlying market a vault allocates into, and the
+/// share of the vault's assets held there.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct EarnVaultExposure {
+    pub market_id: ::prost::alloc::string::String,
+    pub collateral_symbol: ::prost::alloc::string::String,
+    pub collateral_caip19: ::prost::alloc::string::String,
+    pub lltv_pct: ::prost::alloc::string::String,
+    pub supplied: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub display: ::core::option::Option<EarnValueDisplay>,
+    pub share_pct: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -592,6 +611,11 @@ pub struct EarnEnabledVault {
     pub claimable_client_fee_display: ::core::option::Option<EarnValueDisplay>,
     #[serde(default)]
     pub client_fee_wallet: ::core::option::Option<::prost::alloc::string::String>,
+    pub liquidity: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub liquidity_display: ::core::option::Option<EarnValueDisplay>,
+    #[serde(default)]
+    pub exposures: ::prost::alloc::vec::Vec<EarnVaultExposure>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -606,6 +630,8 @@ pub struct AssetMetadata {
     pub name: ::prost::alloc::string::String,
     #[serde(default)]
     pub stable: bool,
+    #[serde(default)]
+    pub earn_providers: Vec<super::super::super::immutable::data::v1::EarnProvider>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -821,6 +847,50 @@ pub struct LogLine {
     #[serde(default)]
     pub ts: ::core::option::Option<Timestamp>,
 }
+/// ProvisioningState describes the observed quorum-key provisioning progress of
+/// a TVC deployment.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum ProvisioningState {
+    /// The provisioning state was not reported. This value supports responses
+    /// produced before provisioning state reporting was introduced.
+    #[serde(rename = "PROVISIONING_STATE_UNSPECIFIED")]
+    Unspecified = 0,
+    /// The deployment is starting up and provisioning details are not yet
+    /// available.
+    #[serde(rename = "PROVISIONING_STATE_PENDING")]
+    Pending = 1,
+    /// A deployment replica is ready to accept quorum key provisioning.
+    #[serde(rename = "PROVISIONING_STATE_AWAITING_PROVISION")]
+    AwaitingProvision = 2,
+    /// At least one deployment replica has a provisioned quorum key.
+    #[serde(rename = "PROVISIONING_STATE_PROVISIONED")]
+    Provisioned = 3,
+}
+impl ProvisioningState {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "PROVISIONING_STATE_UNSPECIFIED",
+            Self::Pending => "PROVISIONING_STATE_PENDING",
+            Self::AwaitingProvision => "PROVISIONING_STATE_AWAITING_PROVISION",
+            Self::Provisioned => "PROVISIONING_STATE_PROVISIONED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "PROVISIONING_STATE_UNSPECIFIED" => Some(Self::Unspecified),
+            "PROVISIONING_STATE_PENDING" => Some(Self::Pending),
+            "PROVISIONING_STATE_AWAITING_PROVISION" => Some(Self::AwaitingProvision),
+            "PROVISIONING_STATE_PROVISIONED" => Some(Self::Provisioned),
+            _ => None,
+        }
+    }
+}
 #[derive(Debug)]
 /// An account derived from a Wallet
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -843,11 +913,13 @@ pub struct WalletAccount {
     pub public_key: ::core::option::Option<::prost::alloc::string::String>,
     #[serde(default)]
     pub wallet_details: ::core::option::Option<Wallet>,
+    #[serde(default)]
+    pub name: ::core::option::Option<::prost::alloc::string::String>,
     /// TODO(tim): temporarily removing this since it's always "false"
     /// bool exported = 12 [
     ///   (google.api.field_behavior) = REQUIRED,
     ///   (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "True when a given Account is exported, false otherwise."}
     /// ];
     #[serde(default)]
-    pub name: ::core::option::Option<::prost::alloc::string::String>,
+    pub caip2_prefix: ::core::option::Option<::prost::alloc::string::String>,
 }

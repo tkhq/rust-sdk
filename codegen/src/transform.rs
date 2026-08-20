@@ -273,7 +273,7 @@ fn strip_prost_derive_from_attr(attr: &syn::Attribute) -> Option<proc_macro2::To
     })
 }
 
-/// Adds base64 serialization for Vec<u8> fields listed in BASE64_FIELDS.
+/// Adds base64 serialization for Vec<u8> (and Option<Vec<u8>>) fields listed in BASE64_FIELDS.
 /// Returns true if the field was mutated.
 pub fn add_serde_as_for_base64(field: &mut Field, struct_name: &str) -> bool {
     let field_name = match &field.ident {
@@ -289,15 +289,20 @@ pub fn add_serde_as_for_base64(field: &mut Field, struct_name: &str) -> bool {
         return false;
     }
 
-    // Verify the field type is Vec<u8>
-    if !is_vec_u8(&field.ty) {
-        return false;
+    // Verify the field type is Vec<u8> or Option<Vec<u8>>
+    if is_vec_u8(&field.ty) {
+        field
+            .attrs
+            .push(syn::parse_quote!(#[serde_as(as = "serde_with::base64::Base64")]));
+        return true;
     }
-
-    field
-        .attrs
-        .push(syn::parse_quote!(#[serde_as(as = "serde_with::base64::Base64")]));
-    true
+    if is_option_vec_u8(&field.ty) {
+        field
+            .attrs
+            .push(syn::parse_quote!(#[serde_as(as = "Option<serde_with::base64::Base64>")]));
+        return true;
+    }
+    false
 }
 
 fn is_vec_u8(ty: &Type) -> bool {
@@ -316,6 +321,27 @@ fn is_vec_u8(ty: &Type) -> bool {
                     }))) = ab.args.first()
                     {
                         return inner.segments.len() == 1 && inner.segments[0].ident == "u8";
+                    }
+                }
+            }
+            false
+        }
+        _ => false,
+    }
+}
+
+fn is_option_vec_u8(ty: &Type) -> bool {
+    match ty {
+        Type::Path(TypePath { qself: None, path }) => {
+            let seg = match path.segments.last() {
+                Some(s) => s,
+                None => return false,
+            };
+
+            if seg.ident == "Option" {
+                if let PathArguments::AngleBracketed(ab) = &seg.arguments {
+                    if let Some(GenericArgument::Type(inner)) = ab.args.first() {
+                        return is_vec_u8(inner);
                     }
                 }
             }
