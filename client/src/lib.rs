@@ -64,6 +64,7 @@ pub struct ActivityResult<T> {
 pub use turnkey_api_key_stamper::{TurnkeyP256ApiKey, TurnkeySecp256k1ApiKey};
 
 pub mod generated;
+pub mod secrets;
 
 pub mod retry;
 pub mod well_known;
@@ -130,6 +131,24 @@ pub enum TurnkeyClientError {
 
     #[error("Stamper error")]
     StamperError(#[from] StamperError),
+
+    #[error("Enclave encryption failed: {0}")]
+    EnclaveEncrypt(#[from] turnkey_enclave_encrypt::errors::EnclaveEncryptError),
+
+    #[error("Malformed export secrets proposal: {0}")]
+    MalformedSecretsProposal(String),
+
+    #[error("Missing secret export result: {0}")]
+    MissingSecretResult(String),
+
+    #[error("Secret export payload count mismatch: expected {expected}, received {actual}")]
+    SecretPayloadCountMismatch { expected: usize, actual: usize },
+
+    #[error("Secret export fingerprint mismatch: expected {expected}, received {actual}")]
+    SecretFingerprintMismatch { expected: String, actual: String },
+
+    #[error("Exported secret is not valid UTF-8: {0}")]
+    InvalidSecretUtf8(String),
 }
 
 /// Builder for [`TurnkeyClient<S>`].
@@ -369,14 +388,23 @@ impl<S: Stamp> TurnkeyClient<S> {
         Request: Serialize,
         Response: DeserializeOwned,
     {
+        let post_body = serde_json::to_vec(&request)?;
+        self.process_serialized_request(&post_body, path).await
+    }
+
+    /// Stamps and posts an already-serialized JSON request without changing its bytes.
+    pub(crate) async fn process_serialized_request<Response: DeserializeOwned>(
+        &self,
+        post_body: &[u8],
+        path: String,
+    ) -> Result<Response, TurnkeyClientError> {
         let url = format!("{}{}", self.base_url, path);
-        let post_body = serde_json::to_string(&request)?;
-        let StampHeader { name, value } = self.api_key.stamp(post_body.as_bytes())?;
+        let StampHeader { name, value } = self.api_key.stamp(post_body)?;
         let res = self
             .http
             .post(url)
             .header(name, value)
-            .body(post_body)
+            .body(post_body.to_vec())
             .send()
             .await?;
 

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- Added high-level secret import, metadata listing, unilateral export, and multi-party export proposal APIs.
+
 ## [0.14.0](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.13.1...turnkey_client-v0.14.0) - 2026-08-05
 
 ### Other

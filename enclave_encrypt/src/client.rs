@@ -1,9 +1,9 @@
 //! Enclave Encrypt Client
 use crate::{
-    ClientSendMsg, DATA_VERSION, Kem, P256Public, ServerSendData, ServerSendMsg, ServerSendMsgV0,
-    ServerSendMsgV1, ServerTargetData, ServerTargetMsg, ServerTargetMsgV0, ServerTargetMsgV1,
-    TURNKEY_HPKE_INFO, decompress_p256_public, decrypt, encrypt, errors::EnclaveEncryptError,
-    quorum_public_key::QuorumPublicKey,
+    ClientSendMsg, DATA_VERSION, Kem, P256Public, ServerSecretTargetData, ServerSendData,
+    ServerSendMsg, ServerSendMsgV0, ServerSendMsgV1, ServerTargetData, ServerTargetMsg,
+    ServerTargetMsgV0, ServerTargetMsgV1, TURNKEY_HPKE_INFO, decompress_p256_public, decrypt,
+    encrypt, errors::EnclaveEncryptError, quorum_public_key::QuorumPublicKey,
 };
 use hpke::{Deserializable, Kem as KemTrait, Serializable};
 use p256::elliptic_curve::sec1::ToEncodedPoint;
@@ -16,6 +16,15 @@ use std::str::from_utf8;
 
 /// Expected length (in bytes) for imported private keys
 const EXPECTED_PRIVATE_KEY_BYTE_LENGTH: usize = 32;
+
+/// The encrypted payload and verified enclave target key for one imported secret.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EncryptedSecret {
+    /// JSON-encoded enclave-encrypt payload sent to the import activity.
+    pub secret_payload: String,
+    /// Verified target public key from the signed ingress bundle.
+    pub target_public_key: String,
+}
 
 /// Abstraction over `EnclaveEncryptClient` for authentication flows.
 pub struct AuthenticationClient {
@@ -121,6 +130,30 @@ impl ExportClient {
         Self { encrypt_client }
     }
 
+    /// Creates an export client from the raw private scalar of an existing target key.
+    ///
+    /// This is compatible with external P-256 key generators that persist the scalar directly.
+    /// Prefer [`Self::new`] when the recipient state does not need to cross a process boundary.
+    pub fn dangerous_from_private_key_bytes<B: AsRef<[u8]>>(
+        private: B,
+        quorum_public_key: &QuorumPublicKey,
+    ) -> Result<Self, EnclaveEncryptError> {
+        let target_private = <Kem as KemTrait>::PrivateKey::from_bytes(private.as_ref())
+            .map_err(EnclaveEncryptError::InvalidTargetPrivateKey)?;
+        let secret_key = p256::SecretKey::from_slice(private.as_ref())
+            .map_err(|_| EnclaveEncryptError::InvalidP256PrivateKey)?;
+        let target_public_bytes = secret_key.public_key().to_encoded_point(false);
+        let target_public =
+            <Kem as KemTrait>::PublicKey::from_bytes(target_public_bytes.as_bytes())
+                .map_err(EnclaveEncryptError::InvalidClientTarget)?;
+        let encrypt_client = EnclaveEncryptClient::from_enclave_auth_key_and_target_key(
+            quorum_public_key.verifying_key()?,
+            target_public,
+            target_private,
+        );
+        Ok(Self { encrypt_client })
+    }
+
     /// Returns the target public key bytes, encoded as SEC1 bytes (04 || X || Y)
     ///
     /// This value is returned as a string, ready to be inserted in `EXPORT_WALLET` or `EXPORT_PRIVATE_KEY` activity params.
@@ -163,6 +196,29 @@ impl ExportClient {
         let phrase = from_utf8(&decrypted_bytes)
             .map_err(|e| EnclaveEncryptError::InvalidUtf8Bytes(e.to_string()))?;
         Ok(phrase.to_string())
+    }
+
+    /// Decrypts a batch of secret payloads with this client's one-shot recipient key.
+    ///
+    /// The recipient key remains available only for this call and is consumed even when
+    /// validation or decryption fails part way through the batch.
+    pub fn decrypt_secret_payloads<S: AsRef<str>, T: AsRef<str>>(
+        &mut self,
+        payloads: &[S],
+        organization_id: T,
+    ) -> Result<Vec<String>, EnclaveEncryptError> {
+        let decrypted = self.encrypt_client.decrypt_batch(
+            payloads.iter().map(|payload| payload.as_ref().as_bytes()),
+            organization_id.as_ref(),
+        )?;
+
+        decrypted
+            .into_iter()
+            .map(|bytes| {
+                String::from_utf8(bytes)
+                    .map_err(|error| EnclaveEncryptError::InvalidUtf8Bytes(error.to_string()))
+            })
+            .collect()
     }
 }
 
@@ -277,6 +333,29 @@ impl ImportClient {
 
         serde_json::to_string(&encrypted)
             .map_err(|e| EnclaveEncryptError::CannotSerializeBundle(e.to_string()))
+    }
+
+    /// Encrypts UTF-8 secret material to a signed organization-scoped ingress target.
+    ///
+    /// Unlike wallet import bundles, secret ingress targets are not scoped to a user.
+    pub fn encrypt_secret_with_bundle<S: AsRef<str>, T: AsRef<str>, U: AsRef<str>>(
+        &mut self,
+        secret: S,
+        import_bundle: T,
+        organization_id: U,
+    ) -> Result<EncryptedSecret, EnclaveEncryptError> {
+        let (encrypted, target_public_key) = self.encrypt_client.encrypt_secret(
+            secret.as_ref().as_bytes(),
+            import_bundle.as_ref().as_bytes(),
+            organization_id.as_ref(),
+        )?;
+        let secret_payload = serde_json::to_string(&encrypted)
+            .map_err(|e| EnclaveEncryptError::CannotSerializeBundle(e.to_string()))?;
+
+        Ok(EncryptedSecret {
+            secret_payload,
+            target_public_key,
+        })
     }
 }
 
@@ -395,7 +474,7 @@ impl EnclaveEncryptClient {
                     return Err(EnclaveEncryptError::InvalidOrganization);
                 }
 
-                if !parsed_data.user_id.eq(user_id) {
+                if parsed_data.user_id != user_id {
                     return Err(EnclaveEncryptError::InvalidUser);
                 }
 
@@ -414,12 +493,102 @@ impl EnclaveEncryptClient {
         })
     }
 
+    fn encrypt_secret(
+        &self,
+        plaintext: &[u8],
+        msg_bytes: &[u8],
+        organization_id: &str,
+    ) -> Result<(ClientSendMsg, String), EnclaveEncryptError> {
+        let msg: ServerTargetMsg = serde_json::from_slice(msg_bytes)
+            .map_err(|_| EnclaveEncryptError::FailedToDeserializeData)?;
+        if msg.version.as_deref() != Some(DATA_VERSION) {
+            return Err(EnclaveEncryptError::InvalidDataVersion);
+        }
+
+        let msg_v1: ServerTargetMsgV1 = serde_json::from_slice(msg_bytes)
+            .map_err(|_| EnclaveEncryptError::FailedToDeserializeData)?;
+        let signature = DerSignature::try_from(&msg_v1.data_signature[..])
+            .map_err(|_| EnclaveEncryptError::InvalidServerTargetSignature)?;
+        let public = PublicKey::from_sec1_bytes(&*msg_v1.enclave_quorum_public)
+            .map_err(|_| EnclaveEncryptError::InvalidEnclaveQuorumPublicKey)?;
+        let enclave_quorum_public = VerifyingKey::from(public);
+        if enclave_quorum_public != self.enclave_auth_key {
+            return Err(EnclaveEncryptError::InvalidEnclaveQuorumPublicKey);
+        }
+        enclave_quorum_public
+            .verify(&msg_v1.data, &signature)
+            .map_err(|_| EnclaveEncryptError::ServerTargetSignatureVerificationFail)?;
+        let parsed_data = serde_json::from_slice::<ServerSecretTargetData>(&msg_v1.data)
+            .map_err(|_| EnclaveEncryptError::FailedToDeserializeData)?;
+        if parsed_data.organization_id != organization_id {
+            return Err(EnclaveEncryptError::InvalidOrganization);
+        }
+        let receiver_public = <Kem as KemTrait>::PublicKey::from_bytes(&*parsed_data.target_public)
+            .map_err(EnclaveEncryptError::InvalidServerTarget)?;
+        let (ciphertext, encapped_public) =
+            encrypt(&receiver_public, plaintext, TURNKEY_HPKE_INFO)?;
+        let target_public_key = hex::encode(*parsed_data.target_public);
+
+        Ok((
+            ClientSendMsg {
+                encapped_public: encapped_public.to_bytes().to_vec().try_into()?,
+                ciphertext,
+            },
+            target_public_key,
+        ))
+    }
+
     /// Decrypt a message from the server targeted at this client.
     pub fn decrypt(
         &mut self,
         msg_bytes: &[u8],
         organization_id: &str,
     ) -> Result<Vec<u8>, EnclaveEncryptError> {
+        let result = self.decrypt_batch(std::iter::once(msg_bytes), organization_id);
+        result.and_then(|mut values| {
+            values
+                .pop()
+                .ok_or(EnclaveEncryptError::FailedToDeserializeData)
+        })
+    }
+
+    fn decrypt_batch<'a>(
+        &mut self,
+        messages: impl IntoIterator<Item = &'a [u8]>,
+        organization_id: &str,
+    ) -> Result<Vec<Vec<u8>>, EnclaveEncryptError> {
+        let encrypted = messages
+            .into_iter()
+            .map(|msg_bytes| self.validate_server_message(msg_bytes, organization_id))
+            .collect::<Result<Vec<_>, _>>()?;
+        let target_private = self
+            .target_private
+            .take()
+            .ok_or(EnclaveEncryptError::ClientAlreadyUsedToDecrypt)?;
+        let target_public = self
+            .target_public
+            .take()
+            .ok_or(EnclaveEncryptError::ClientAlreadyUsedToDecrypt)?;
+
+        encrypted
+            .into_iter()
+            .map(|(encapped_public, ciphertext)| {
+                decrypt(
+                    &encapped_public,
+                    &target_private,
+                    &target_public,
+                    &ciphertext,
+                    TURNKEY_HPKE_INFO,
+                )
+            })
+            .collect()
+    }
+
+    fn validate_server_message(
+        &self,
+        msg_bytes: &[u8],
+        organization_id: &str,
+    ) -> Result<(<Kem as KemTrait>::EncappedKey, Vec<u8>), EnclaveEncryptError> {
         let ciphertext;
         let encapped_public: <Kem as KemTrait>::EncappedKey;
 
@@ -480,24 +649,7 @@ impl EnclaveEncryptClient {
             Some(_) => return Err(EnclaveEncryptError::InvalidDataVersion),
         }
 
-        if let (Some(target_private), Some(target_public)) =
-            (self.target_private.as_ref(), self.target_public.as_ref())
-        {
-            let result = decrypt(
-                &encapped_public,
-                target_private,
-                target_public,
-                &ciphertext,
-                TURNKEY_HPKE_INFO,
-            );
-
-            self.target_public = None;
-            self.target_private = None;
-
-            result
-        } else {
-            Err(EnclaveEncryptError::ClientAlreadyUsedToDecrypt)
-        }
+        Ok((encapped_public, ciphertext))
     }
 
     /// Decrypt a base58 serialized email recovery or auth payload.
@@ -743,6 +895,142 @@ mod test {
                 .decrypt_wallet_mnemonic_phrase(encoded_bundle, "org-id")
                 .unwrap(),
             mnemonic
+        );
+    }
+
+    #[test]
+    fn encrypt_secret_to_organization_scoped_target() {
+        let enclave = EnclaveEncryptServer::from_enclave_auth_key(
+            test_quorum_private_key(),
+            "org-id".to_string(),
+            None,
+        );
+        let target_message = enclave.publish_secret_target().unwrap();
+        let target_data: ServerSecretTargetData =
+            serde_json::from_slice(&target_message.data).unwrap();
+        let target = serde_json::to_string(&target_message).unwrap();
+        let mut client = ImportClient::new(&test_quorum_public_key());
+        let encrypted = client
+            .encrypt_secret_with_bundle("super secret", target, "org-id")
+            .unwrap();
+        assert_eq!(
+            encrypted.target_public_key,
+            hex::encode(*target_data.target_public)
+        );
+        let payload: ClientSendMsg = serde_json::from_str(&encrypted.secret_payload).unwrap();
+        assert_eq!(
+            enclave.into_recv().decrypt(&payload).unwrap(),
+            b"super secret"
+        );
+    }
+
+    #[test]
+    fn secret_import_rejects_wrong_organization() {
+        let enclave = EnclaveEncryptServer::from_enclave_auth_key(
+            test_quorum_private_key(),
+            "org-id".to_string(),
+            None,
+        );
+        let target = serde_json::to_string(&enclave.publish_secret_target().unwrap()).unwrap();
+        let error = ImportClient::new(&test_quorum_public_key())
+            .encrypt_secret_with_bundle("secret", target, "wrong-org")
+            .unwrap_err();
+        assert_eq!(error, EnclaveEncryptError::InvalidOrganization);
+    }
+
+    #[test]
+    fn secret_import_rejects_invalid_signature_and_malformed_bundle() {
+        let enclave = EnclaveEncryptServer::from_enclave_auth_key(
+            test_quorum_private_key(),
+            "org-id".to_string(),
+            None,
+        );
+        let mut target = enclave.publish_secret_target().unwrap();
+        target.data_signature.0[0] ^= 1;
+        let error = ImportClient::new(&test_quorum_public_key())
+            .encrypt_secret_with_bundle("secret", serde_json::to_string(&target).unwrap(), "org-id")
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            EnclaveEncryptError::InvalidServerTargetSignature
+                | EnclaveEncryptError::ServerTargetSignatureVerificationFail
+        ));
+        assert_eq!(
+            ImportClient::new(&test_quorum_public_key())
+                .encrypt_secret_with_bundle("secret", "{", "org-id")
+                .unwrap_err(),
+            EnclaveEncryptError::FailedToDeserializeData
+        );
+    }
+
+    #[test]
+    fn decrypts_secret_batch_and_consumes_recipient_key() {
+        let mut client = ExportClient::new(&test_quorum_public_key());
+        let target: P256Public = hex::decode(client.target_public_key().unwrap())
+            .unwrap()
+            .try_into()
+            .unwrap();
+        let enclave = EnclaveEncryptServer::from_enclave_auth_key(
+            test_quorum_private_key(),
+            "org-id".to_string(),
+            None,
+        );
+        let payloads = ["first", "second"].map(|value| {
+            serde_json::to_string(&enclave.encrypt(&target, value.as_bytes()).unwrap()).unwrap()
+        });
+        assert_eq!(
+            client.decrypt_secret_payloads(&payloads, "org-id").unwrap(),
+            vec!["first".to_string(), "second".to_string()]
+        );
+        assert_eq!(
+            client
+                .decrypt_secret_payloads(&payloads, "org-id")
+                .unwrap_err(),
+            EnclaveEncryptError::ClientAlreadyUsedToDecrypt
+        );
+    }
+
+    #[test]
+    fn decrypts_production_secret_payload_fixture() {
+        let private_key =
+            hex::decode("c46dd7f625a34f43f95014fbc45ddd9afd057207cb7260f0a10b7a450fbef272")
+                .unwrap();
+        let payload = r#"{"version":"v1.0.0","data":"7b22656e6361707065645075626c6963223a2230346430656533333965333264636561376134623537356332383030313766663733653733346436323135396266313337336237633266633763333535623037613364666330313036373666363135326138303163373231316464373639343962636434323835616637333438316135663561333661343837643863306364656132222c2263697068657274657874223a226135653034666539353332383831333039313633636366323266316163613262343331363363656335336162616533653963313430363134336336303932316630343261376566316337623862343139222c226f7267616e697a6174696f6e4964223a2261663734656437352d643366392d346364382d616436642d383235343564336366333264227d","dataSignature":"304502202d1f5ae093d33b0cda2f29a8fe7d0a86e948dabc127442d6f6ffda4b28dde7100221008eeb8d459a1cd19e12996b6c621126366b8a2dabfb6210c84f449ebfa62f2a08","enclaveQuorumPublic":"04cf288fe433cc4e1aa0ce1632feac4ea26bf2f5a09dcfe5a42c398e06898710330f0572882f4dbdf0f5304b8fc8703acd69adca9a4bbf7f5d00d20a5e364b2569"}"#;
+        let mut client = ExportClient::dangerous_from_private_key_bytes(
+            private_key,
+            &QuorumPublicKey::production_signer(),
+        )
+        .unwrap();
+        assert_eq!(
+            client
+                .decrypt_secret_payloads(&[payload], "af74ed75-d3f9-4cd8-ad6d-82545d3cf32d")
+                .unwrap(),
+            vec!["fixture-secret-plaintext".to_string()]
+        );
+    }
+
+    #[test]
+    fn secret_export_rejects_invalid_utf8_and_consumes_key() {
+        let mut client = ExportClient::new(&test_quorum_public_key());
+        let target: P256Public = hex::decode(client.target_public_key().unwrap())
+            .unwrap()
+            .try_into()
+            .unwrap();
+        let enclave = EnclaveEncryptServer::from_enclave_auth_key(
+            test_quorum_private_key(),
+            "org-id".to_string(),
+            None,
+        );
+        let payload = serde_json::to_string(&enclave.encrypt(&target, &[0xff]).unwrap()).unwrap();
+        assert!(matches!(
+            client.decrypt_secret_payloads(&[payload.as_str()], "org-id"),
+            Err(EnclaveEncryptError::InvalidUtf8Bytes(_))
+        ));
+        assert_eq!(
+            client
+                .decrypt_secret_payloads(&[payload.as_str()], "org-id")
+                .unwrap_err(),
+            EnclaveEncryptError::ClientAlreadyUsedToDecrypt
         );
     }
 

@@ -249,7 +249,13 @@ fn classify_turnkey_client_error(error: &TurnkeyClientError) -> Classification {
         | TurnkeyClientError::MissingActivity
         | TurnkeyClientError::MissingResult
         | TurnkeyClientError::MissingInnerResult
-        | TurnkeyClientError::ExceededRetries(_) => Classification::new(ErrorCode::ApiError, None),
+        | TurnkeyClientError::ExceededRetries(_)
+        | TurnkeyClientError::MissingSecretResult(_)
+        | TurnkeyClientError::SecretPayloadCountMismatch { .. }
+        | TurnkeyClientError::SecretFingerprintMismatch { .. }
+        | TurnkeyClientError::InvalidSecretUtf8(_) => {
+            Classification::new(ErrorCode::ApiError, None)
+        }
         // These failures happen while configuring the client or constructing
         // and signing the request, before a usable API response is available.
         // A reqwest error that is not request/connect/timeout-related also
@@ -258,6 +264,8 @@ fn classify_turnkey_client_error(error: &TurnkeyClientError) -> Classification {
         | TurnkeyClientError::ReqwestBuilder(_)
         | TurnkeyClientError::Http(_)
         | TurnkeyClientError::SerdeJsonFailure(_)
+        | TurnkeyClientError::EnclaveEncrypt(_)
+        | TurnkeyClientError::MalformedSecretsProposal(_)
         | TurnkeyClientError::StamperError(_) => Classification::new(ErrorCode::CommandError, None),
     }
 }

@@ -6,9 +6,9 @@ use rand_core::OsRng;
 use zeroize::Zeroizing;
 
 use crate::{
-    ClientSendMsg, DATA_VERSION, Kem, P256Public, ServerSendData, ServerSendMsgV1,
-    ServerTargetData, ServerTargetMsgV1, TURNKEY_HPKE_INFO, compress_p256_public, decrypt, encrypt,
-    errors::EnclaveEncryptError,
+    ClientSendMsg, DATA_VERSION, Kem, P256Public, ServerSecretTargetData, ServerSendData,
+    ServerSendMsgV1, ServerTargetData, ServerTargetMsgV1, TURNKEY_HPKE_INFO, compress_p256_public,
+    decrypt, encrypt, errors::EnclaveEncryptError,
 };
 
 /// An instance of the server side for `EnclaveEncrypt`. This should only be used for either
@@ -137,6 +137,32 @@ impl EnclaveEncryptServer {
             target_public: self.target_public.to_bytes().to_vec().try_into()?,
             organization_id: self.organization_id.clone(),
             user_id,
+        };
+        let data_bytes = serde_json::to_string(&data)
+            .map_err(|_| EnclaveEncryptError::FailedToSerializeData)?
+            .into_bytes();
+        let data_signature: Signature = self.enclave_auth_key.sign(&data_bytes);
+        let enclave_quorum_public_bytes = self
+            .enclave_auth_key
+            .verifying_key()
+            .to_encoded_point(false)
+            .to_bytes()
+            .to_vec();
+        Ok(ServerTargetMsgV1 {
+            version: DATA_VERSION.to_string(),
+            data: data_bytes,
+            data_signature: data_signature.to_der().to_bytes().to_vec().into(),
+            enclave_quorum_public: enclave_quorum_public_bytes.try_into()?,
+        })
+    }
+
+    /// Return the server encryption target for a secret import.
+    ///
+    /// Secret import targets are scoped to an organization but not to a user.
+    pub fn publish_secret_target(&self) -> Result<ServerTargetMsgV1, EnclaveEncryptError> {
+        let data = ServerSecretTargetData {
+            target_public: self.target_public.to_bytes().to_vec().try_into()?,
+            organization_id: self.organization_id.clone(),
         };
         let data_bytes = serde_json::to_string(&data)
             .map_err(|_| EnclaveEncryptError::FailedToSerializeData)?

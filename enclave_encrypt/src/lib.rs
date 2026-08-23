@@ -18,6 +18,7 @@ mod quorum_public_key;
 pub mod server;
 
 pub use client::AuthenticationClient;
+pub use client::EncryptedSecret;
 pub use client::ExportClient;
 pub use client::ImportClient;
 pub use quorum_public_key::QuorumPublicKey;
@@ -198,8 +199,18 @@ pub struct ServerTargetData {
     pub target_public: P256Public,
     /// Organization making the request
     pub organization_id: String,
-    /// User making the request
+    /// User making the request.
     pub user_id: String,
+}
+
+/// Organization-scoped target data used by secret import ingress bundles.
+#[derive(PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerSecretTargetData {
+    /// Target public key for client encryption.
+    pub target_public: P256Public,
+    /// Organization receiving the secret.
+    pub organization_id: String,
 }
 
 /// Message from the client containing ciphertext and the associated

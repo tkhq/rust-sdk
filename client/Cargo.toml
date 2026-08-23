@@ -14,15 +14,18 @@ categories = ["api-bindings"]
 [dependencies]
 mime.workspace = true
 chrono.workspace = true
+hex.workspace = true
 prost.workspace = true
 prost-types.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_with.workspace = true
+sha2.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 turnkey_api_key_stamper.workspace = true
+turnkey_enclave_encrypt.workspace = true
 
 [features]
 reqwest_native_tls = ["reqwest/native-tls-vendored", "reqwest/native-tls-alpn"]
@@ -34,3 +37,4 @@ reqwest_hickory_dns = ["reqwest/hickory-dns"]
 wiremock.workspace = true
 http.workspace = true
 base64.workspace = true
+p256.workspace = true

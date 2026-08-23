@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- Added organization-scoped secret import encryption and one-shot batch secret export decryption.
+
 ## [0.11.0](https://github.com/tkhq/rust-sdk/compare/turnkey_enclave_encrypt-v0.10.0...turnkey_enclave_encrypt-v0.11.0) - 2026-07-15
 
 ### Other

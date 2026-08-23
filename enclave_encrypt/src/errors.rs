@@ -67,6 +67,9 @@ pub enum EnclaveEncryptError {
     #[error("Could not deserialize P-256 public key: invalid SEC1 encoding")]
     InvalidP256PublicKeySec1Encoding(String),
 
+    #[error("Could not deserialize P-256 private key")]
+    InvalidP256PrivateKey,
+
     #[error("Invalid base58 encoding")]
     FailedToBase58Decode(String),
 
