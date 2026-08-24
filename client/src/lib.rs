@@ -3,7 +3,8 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use reqwest::header::CONTENT_TYPE;
+use reqwest::StatusCode;
+use reqwest::header::{CONTENT_TYPE, LOCATION};
 use thiserror::Error;
 
 use generated::Activity;
@@ -72,6 +73,9 @@ pub use retry::RetryConfig;
 const TURNKEY_RUST_SDK_USER_AGENT: &str =
     concat!("turnkey-rust-client/", env!("CARGO_PKG_VERSION"));
 
+/// Maximum number of redirects followed for a single request.
+const MAX_REDIRECTS: usize = 10;
+
 #[derive(Debug, Error)]
 pub enum TurnkeyClientError {
     #[error("Client builder is missing its API key. Call .api_key(...) to configure it.")]
@@ -128,6 +132,9 @@ pub enum TurnkeyClientError {
     #[error("Maximum number of attempts reached (after {0} retries)")]
     ExceededRetries(usize),
 
+    #[error("Refused to follow redirect (status {0}) to {1}")]
+    RefusedRedirect(u16, String),
+
     #[error("Stamper error")]
     StamperError(#[from] StamperError),
 }
@@ -155,7 +162,7 @@ impl<S: Stamp> TurnkeyClientBuilder<S> {
             api_key: None,
             base_url: None,
             retry_config: None,
-            reqwest_builder: reqwest::Client::builder(),
+            reqwest_builder: reqwest::Client::builder().redirect(same_origin_redirect_policy()),
             timeout: None,
         }
     }
@@ -229,6 +236,40 @@ impl<S: Stamp> Default for TurnkeyClientBuilder<S> {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// The redirect policy applied to every client built by [`TurnkeyClientBuilder`].
+///
+/// Requests carry the API key stamp and the full activity payload. `reqwest` only strips
+/// `Authorization` and `Cookie` when a redirect crosses origins, so without this policy a
+/// redirect could hand a valid stamp and its signed body to another host. Redirects are
+/// therefore only followed back to the origin of the *original* request, which also stops a
+/// server from walking the client off-origin one same-origin-looking hop at a time.
+///
+/// Only 307 and 308 are followed: the other redirect statuses rewrite the POST as a GET and
+/// drop the body, leaving a stamp the server cannot verify.
+///
+/// A redirect that is not followed is returned to the caller as
+/// [`TurnkeyClientError::RefusedRedirect`].
+fn same_origin_redirect_policy() -> reqwest::redirect::Policy {
+    reqwest::redirect::Policy::custom(|attempt| {
+        if attempt.previous().len() > MAX_REDIRECTS {
+            return attempt.error("too many redirects");
+        }
+        let preserves_body = matches!(
+            attempt.status(),
+            StatusCode::TEMPORARY_REDIRECT | StatusCode::PERMANENT_REDIRECT
+        );
+        let same_origin = attempt
+            .previous()
+            .first()
+            .is_some_and(|original| original.origin() == attempt.url().origin());
+        if preserves_body && same_origin {
+            attempt.follow()
+        } else {
+            attempt.stop()
+        }
+    })
 }
 
 /// Base client. To create a new client, see `TurnkeyClient::<S>::builder`.
@@ -381,6 +422,18 @@ impl<S: Stamp> TurnkeyClient<S> {
             .await?;
 
         let status = res.status();
+        if status.is_redirection() {
+            let location = res
+                .headers()
+                .get(LOCATION)
+                .and_then(|location| location.to_str().ok())
+                .unwrap_or("an unreadable location");
+            return Err(TurnkeyClientError::RefusedRedirect(
+                status.as_u16(),
+                location.to_string(),
+            ));
+        }
+
         let content_type = res
             .headers()
             .get(CONTENT_TYPE)
@@ -422,7 +475,7 @@ mod test {
     };
     use std::sync::Arc;
     use std::time::Duration;
-    use wiremock::matchers::{header, method};
+    use wiremock::matchers::{body_string_contains, header, header_exists, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     fn simple_activity_intent() -> SignRawPayloadIntentV2 {
@@ -856,6 +909,94 @@ mod test {
             ).unwrap(),
             "{\"providerName\":\"test provider\",\"oidcClaims\":{\"iss\":\"test-issuer\",\"sub\":\"test-subject\",\"aud\":\"test-audience\"}}".to_string(),
         );
+    }
+
+    #[tokio::test]
+    async fn same_origin_redirects_are_followed() {
+        let (client, server) = setup_client_and_server().await;
+
+        Mock::given(method("POST"))
+            .and(path("/start"))
+            .respond_with(
+                ResponseTemplate::new(307).insert_header("Location", "/finish".to_string()),
+            )
+            .mount(&server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/finish"))
+            .and(header_exists("X-Stamp"))
+            .and(body_string_contains("0x123456"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "activity": {
+                    "type": "ACTIVITY_TYPE_SIGN_RAW_PAYLOAD_V2",
+                    "status": "ACTIVITY_STATUS_COMPLETED",
+                    "id": "redirected-activity-id",
+                    "organizationId": "org-id",
+                    "fingerprint": "fingerprint",
+                }
+            })))
+            .mount(&server)
+            .await;
+
+        let res: ActivityResponse = client
+            .process_request(&simple_activity_intent(), "/start".to_string())
+            .await
+            .unwrap();
+        assert_eq!(res.activity.unwrap().id, "redirected-activity-id");
+    }
+
+    #[tokio::test]
+    async fn cross_origin_redirects_are_not_followed() {
+        let (client, server) = setup_client_and_server().await;
+        let other_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .respond_with(
+                ResponseTemplate::new(307)
+                    .insert_header("Location", format!("{}/elsewhere", other_server.uri()))
+                    .set_body_string("moved"),
+            )
+            .mount(&server)
+            .await;
+
+        let result: Result<ActivityResponse, TurnkeyClientError> = client
+            .process_request(&simple_activity_intent(), "/sign_raw_payload".to_string())
+            .await;
+
+        match result.unwrap_err() {
+            TurnkeyClientError::RefusedRedirect(status, location) => {
+                assert_eq!(status, 307);
+                assert_eq!(location, format!("{}/elsewhere", other_server.uri()));
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+        assert!(other_server.received_requests().await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn body_dropping_redirects_are_not_followed() {
+        let (client, server) = setup_client_and_server().await;
+
+        Mock::given(method("POST"))
+            .and(path("/start"))
+            .respond_with(
+                ResponseTemplate::new(302).insert_header("Location", "/finish".to_string()),
+            )
+            .mount(&server)
+            .await;
+
+        let result: Result<ActivityResponse, TurnkeyClientError> = client
+            .process_request(&simple_activity_intent(), "/start".to_string())
+            .await;
+
+        match result.unwrap_err() {
+            TurnkeyClientError::RefusedRedirect(status, location) => {
+                assert_eq!(status, 302);
+                assert_eq!(location, "/finish");
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
     }
 
     #[tokio::test]
