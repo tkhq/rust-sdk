@@ -26,6 +26,15 @@ pub trait Signer: Send + Sync {
     fn public_key(&self) -> Vec<u8>;
 }
 
+/// A signer whose key material can also decrypt locally — a seed in memory
+/// or a hardware device. Hosted operators sign through the API and can never
+/// implement this.
+pub trait Pair: Signer {
+    /// Decrypt a qos p256 envelope addressed to this operator's
+    /// encryption key.
+    fn decrypt(&self, ciphertext: &[u8]) -> SignerFuture<'_, anyhow::Result<Zeroizing<Vec<u8>>>>;
+}
+
 /// A 32-byte master seed parsed from hex. Accepts surrounding whitespace and
 /// an optional `0x` prefix. Zeroized on drop.
 #[derive(Clone)]
@@ -80,15 +89,6 @@ impl LocalPair {
             pair: Arc::new(pair),
         })
     }
-
-    /// Decrypt the given ciphertext. Decryption needs the private key
-    /// material, so it lives on the concrete local pair rather than
-    /// [`Signer`].
-    pub fn decrypt(&self, ciphertext: &[u8]) -> anyhow::Result<Zeroizing<Vec<u8>>> {
-        self.pair
-            .decrypt(ciphertext)
-            .map_err(|_| anyhow!("failed to decrypt with local signer"))
-    }
 }
 
 impl Signer for LocalPair {
@@ -104,6 +104,19 @@ impl Signer for LocalPair {
 
     fn public_key(&self) -> Vec<u8> {
         self.pair.public_key().to_bytes()
+    }
+}
+
+impl Pair for LocalPair {
+    fn decrypt(&self, ciphertext: &[u8]) -> SignerFuture<'_, anyhow::Result<Zeroizing<Vec<u8>>>> {
+        // Local decryption is CPU-bound and quick; blocking the executor is
+        // fine for the same reason it is in [`Signer::sign`] above.
+        let plaintext = self
+            .pair
+            .decrypt(ciphertext)
+            .map_err(|_| anyhow!("failed to decrypt with local signer"));
+
+        Box::pin(async move { plaintext })
     }
 }
 
