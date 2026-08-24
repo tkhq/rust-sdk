@@ -177,6 +177,7 @@ pub mod intent {
         ExecuteSwapIntentV2(super::ExecuteSwapIntentV2),
         CreateSwapQuoteIntent(super::CreateSwapQuoteIntent),
         ImportSecretsIntent(super::ImportSecretsIntent),
+        ExportSecretsIntent(super::ExportSecretsIntent),
     }
 }
 #[derive(Debug)]
@@ -1802,7 +1803,7 @@ pub struct OtpLoginIntentV2 {
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct InitOtpAuthIntent {
-    /// @inject_tag: validate:"required,oneof=OTP_TYPE_SMS OTP_TYPE_EMAIL"
+    /// @inject_tag: validate:"required,oneof=OTP_TYPE_SMS OTP_TYPE_EMAIL OTP_TYPE_WHATSAPP"
     pub otp_type: ::prost::alloc::string::String,
     pub contact: ::prost::alloc::string::String,
     #[serde(default)]
@@ -1828,7 +1829,7 @@ pub struct InitOtpAuthIntent {
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct InitOtpIntent {
-    /// @inject_tag: validate:"required,oneof=OTP_TYPE_SMS OTP_TYPE_EMAIL"
+    /// @inject_tag: validate:"required,oneof=OTP_TYPE_SMS OTP_TYPE_EMAIL OTP_TYPE_WHATSAPP"
     pub otp_type: ::prost::alloc::string::String,
     pub contact: ::prost::alloc::string::String,
     /// @inject_tag: validate:"omitempty,min=6,max=9"
@@ -1862,7 +1863,7 @@ pub struct InitOtpIntent {
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct InitOtpIntentV2 {
-    /// @inject_tag: validate:"required,oneof=OTP_TYPE_SMS OTP_TYPE_EMAIL"
+    /// @inject_tag: validate:"required,oneof=OTP_TYPE_SMS OTP_TYPE_EMAIL OTP_TYPE_WHATSAPP"
     pub otp_type: ::prost::alloc::string::String,
     pub contact: ::prost::alloc::string::String,
     /// @inject_tag: validate:"omitempty,min=6,max=9"
@@ -1898,7 +1899,7 @@ pub struct InitOtpIntentV2 {
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct InitOtpIntentV3 {
-    /// @inject_tag: validate:"required,oneof=OTP_TYPE_SMS OTP_TYPE_EMAIL"
+    /// @inject_tag: validate:"required,oneof=OTP_TYPE_SMS OTP_TYPE_EMAIL OTP_TYPE_WHATSAPP"
     pub otp_type: ::prost::alloc::string::String,
     pub contact: ::prost::alloc::string::String,
     /// @inject_tag: validate:"tk_label_length,tk_label"
@@ -1934,7 +1935,7 @@ pub struct InitOtpIntentV3 {
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct InitOtpAuthIntentV2 {
-    /// @inject_tag: validate:"required,oneof=OTP_TYPE_SMS OTP_TYPE_EMAIL"
+    /// @inject_tag: validate:"required,oneof=OTP_TYPE_SMS OTP_TYPE_EMAIL OTP_TYPE_WHATSAPP"
     pub otp_type: ::prost::alloc::string::String,
     pub contact: ::prost::alloc::string::String,
     /// @inject_tag: validate:"omitempty,min=6,max=9"
@@ -1965,7 +1966,7 @@ pub struct InitOtpAuthIntentV2 {
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct InitOtpAuthIntentV3 {
-    /// @inject_tag: validate:"required,oneof=OTP_TYPE_SMS OTP_TYPE_EMAIL"
+    /// @inject_tag: validate:"required,oneof=OTP_TYPE_SMS OTP_TYPE_EMAIL OTP_TYPE_WHATSAPP"
     pub otp_type: ::prost::alloc::string::String,
     pub contact: ::prost::alloc::string::String,
     /// @inject_tag: validate:"omitempty,min=6,max=9"
@@ -2797,6 +2798,7 @@ pub mod result {
         EthUndelegate7702Result(super::EthUndelegate7702Result),
         CreateSwapQuoteResult(super::CreateSwapQuoteResult),
         ImportSecretsResult(super::ImportSecretsResult),
+        ExportSecretsResult(super::ExportSecretsResult),
     }
 }
 #[derive(Debug)]
@@ -4547,6 +4549,33 @@ pub struct ImportSecretsResult {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct ExportSecretsIntent {
+    #[serde(default)]
+    pub secrets: ::prost::alloc::vec::Vec<ExportSecretParams>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct ExportSecretParams {
+    /// @inject_tag: validate:"required,uuid"
+    pub secret_id: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"hexadecimal"
+    pub target_public_key: ::prost::alloc::string::String,
+    pub encryption_suite: super::super::models::v1::TransportEncryptionSuite,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct ExportSecretsResult {
+    #[serde(default)]
+    pub secret_payloads: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct ClientSignature {
     pub public_key: ::prost::alloc::string::String,
     pub scheme: super::super::common::v1::ClientSignatureScheme,
@@ -5096,6 +5125,8 @@ pub enum ActivityType {
     CreateSwapQuote = 161,
     #[serde(rename = "ACTIVITY_TYPE_IMPORT_SECRETS")]
     ImportSecrets = 162,
+    #[serde(rename = "ACTIVITY_TYPE_EXPORT_SECRETS")]
+    ExportSecrets = 163,
 }
 impl ActivityType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -5290,6 +5321,7 @@ impl ActivityType {
             Self::ExecuteSwapV2 => "ACTIVITY_TYPE_EXECUTE_SWAP_V2",
             Self::CreateSwapQuote => "ACTIVITY_TYPE_CREATE_SWAP_QUOTE",
             Self::ImportSecrets => "ACTIVITY_TYPE_IMPORT_SECRETS",
+            Self::ExportSecrets => "ACTIVITY_TYPE_EXPORT_SECRETS",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -5517,6 +5549,7 @@ impl ActivityType {
             "ACTIVITY_TYPE_EXECUTE_SWAP_V2" => Some(Self::ExecuteSwapV2),
             "ACTIVITY_TYPE_CREATE_SWAP_QUOTE" => Some(Self::CreateSwapQuote),
             "ACTIVITY_TYPE_IMPORT_SECRETS" => Some(Self::ImportSecrets),
+            "ACTIVITY_TYPE_EXPORT_SECRETS" => Some(Self::ExportSecrets),
             _ => None,
         }
     }

@@ -1801,7 +1801,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// List wallets accounts
+    /// List wallet accounts
     ///
     /// List all accounts within a wallet.
     pub async fn get_wallet_accounts(
@@ -3861,6 +3861,45 @@ impl<S: Stamp> TurnkeyClient<S> {
         )
         .await
     }
+    /// Get swap quote
+    ///
+    /// Get a swap quote. Asset chains are derived from CAIP-19 asset IDs; cross-chain quotes are supported.
+    pub async fn create_swap_quote(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::CreateSwapQuoteIntent,
+    ) -> Result<ActivityResult<immutable_activity::CreateSwapQuoteResult>, TurnkeyClientError> {
+        let request = external_activity::CreateSwapQuoteRequest {
+            r#type: "ACTIVITY_TYPE_CREATE_SWAP_QUOTE".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(&request, "/public/v1/submit/create_swap_quote".to_string())
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::CreateSwapQuoteResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
     /// Get swap status
     ///
     /// Poll the status of a swap by its swap_request_id. Covers same-chain and cross-chain swaps.
@@ -3870,6 +3909,45 @@ impl<S: Stamp> TurnkeyClient<S> {
     ) -> Result<coordinator::GetSwapStatusResponse, TurnkeyClientError> {
         self.process_request(&request, "/public/v1/query/get_swap_status".to_string())
             .await
+    }
+    /// Execute swap
+    ///
+    /// Execute the exact provider quote identified by quote_id through the activity pipeline and Turnkey broadcasting. Requests must use ACTIVITY_TYPE_EXECUTE_SWAP_V2.
+    pub async fn execute_swap(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::ExecuteSwapIntentV2,
+    ) -> Result<ActivityResult<immutable_activity::ExecuteSwapResult>, TurnkeyClientError> {
+        let request = external_activity::ExecuteSwapRequest {
+            r#type: "ACTIVITY_TYPE_EXECUTE_SWAP_V2".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(&request, "/public/v1/submit/execute_swap".to_string())
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::ExecuteSwapResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
     }
     /// Claim swap fees
     ///
@@ -4299,6 +4377,19 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/validate_tvc_image".to_string())
             .await
     }
+    /// Get TVC QOS versions
+    ///
+    /// List QOS versions supported for new TVC deployments and the latest recommended QOS version.
+    pub async fn get_tvc_qos_versions(
+        &self,
+        request: coordinator::GetTvcQosVersionsRequest,
+    ) -> Result<coordinator::GetTvcQosVersionsResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/get_tvc_qos_versions".to_string(),
+        )
+        .await
+    }
     /// List TVC Deployments
     ///
     /// List all deployments for a given TVC App
@@ -4677,6 +4768,54 @@ impl<S: Stamp> TurnkeyClient<S> {
             status: activity.status,
             app_proofs: activity.app_proofs,
         })
+    }
+    /// Export secrets
+    ///
+    /// Export secrets encrypted to client-provided target public keys.
+    pub async fn export_secrets(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::ExportSecretsIntent,
+    ) -> Result<ActivityResult<immutable_activity::ExportSecretsResult>, TurnkeyClientError> {
+        let request = external_activity::ExportSecretsRequest {
+            r#type: "ACTIVITY_TYPE_EXPORT_SECRETS".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(&request, "/public/v1/submit/export_secrets".to_string())
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::ExportSecretsResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// List secrets
+    ///
+    /// List secret metadata for an organization.
+    pub async fn list_secrets(
+        &self,
+        request: coordinator::ListSecretsRequest,
+    ) -> Result<coordinator::ListSecretsResponse, TurnkeyClientError> {
+        self.process_request(&request, "/public/v1/query/list_secrets".to_string())
+            .await
     }
     /// Get IP Allowlist
     ///

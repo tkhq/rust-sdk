@@ -25,6 +25,20 @@ message EarnVault {
   EarnValueDisplay display = 7 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Normalized TVL values for display purposes only (usd + crypto). Do not do arithmetic with these; use tvl instead."}];
   string name = 8 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable vault name from the provider (e.g. 'Steakhouse Prime USDC' for Morpho; the reserve symbol for Aave)."}];
   string curator = 9 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Vault curator name(s), comma-separated when a vault has multiple. Empty for providers without curators (e.g. Aave)."}];
+  string liquidity = 10 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Assets currently withdrawable from the vault without a reallocation, in raw on-chain units of the underlying asset. Empty when the provider does not report it."}];
+  EarnValueDisplay liquidity_display = 11 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Normalized liquidity values for display purposes only (usd + crypto). Do not do arithmetic with these; use liquidity instead."}];
+}
+
+// EarnVaultExposure is one underlying market a vault allocates into, and the
+// share of the vault's assets held there.
+message EarnVaultExposure {
+  string market_id = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Provider-specific identifier for the market (the Morpho Blue market id)."}];
+  string collateral_symbol = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Symbol of the market's collateral asset (e.g. 'cbBTC'). Empty for an idle/uncollateralized market."}];
+  string collateral_caip19 = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-19 asset ID of the market's collateral asset. Empty for an idle/uncollateralized market."}];
+  string lltv_pct = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The market's liquidation loan-to-value, expressed as a decimal fraction (e.g. '0.86' for 86%)."}];
+  string supplied = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Assets the vault supplies to this market, in raw on-chain units of the underlying asset."}];
+  EarnValueDisplay display = 6 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Normalized supplied values for display purposes only (usd + crypto). Do not do arithmetic with these; use supplied instead."}];
+  string share_pct = 7 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "This market's share of the vault's supplied assets, as a decimal fraction (e.g. '0.997' for 99.7%)."}];
 }
 
 message EarnEnabledVault {
@@ -43,6 +57,9 @@ message EarnEnabledVault {
   optional string claimable_client_fee = 13 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The client's claimable fee (releasable now), in raw on-chain units of the underlying asset (the caip19 asset). Turnkey's fee is excluded. Only returned to the parent org; unset when a sub-org queries."}];
   EarnValueDisplay claimable_client_fee_display = 14 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Normalized claimable_client_fee for display only (usd + crypto). Do not do arithmetic with these; use claimable_client_fee. Unset when a sub-org queries."}];
   optional string client_fee_wallet = 15 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The wallet address that receives the client's fee payouts on-chain. Unset when a sub-org queries."}];
+  string liquidity = 16 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Assets currently withdrawable from the underlying vault without a reallocation, in raw on-chain units of the underlying asset. This is the vault's liquidity, not the wrapper's balance. Empty when the provider does not report it."}];
+  EarnValueDisplay liquidity_display = 17 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Normalized liquidity values for display purposes only (usd + crypto). Do not do arithmetic with these; use liquidity instead."}];
+  repeated EarnVaultExposure exposures = 18 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The underlying markets the vault allocates into, ranked by supplied amount descending. Only populated when the request sets include_exposure, and only for providers that expose an allocation breakdown (Morpho)."}];
 }
 
 message AssetMetadata {
@@ -52,4 +69,5 @@ message AssetMetadata {
   string logo_url = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The url of the asset logo"}];
   string name = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The asset name"}];
   bool stable = 6 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether this asset is on Turnkey's stablecoin list (used for stablepair swap fee pricing)."}];
+  repeated immutable.data.v1.EarnProvider earn_providers = 7 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Earn yield providers with vaults denominated in this asset. Empty when the asset is not supported by Earn."}];
 }

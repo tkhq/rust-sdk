@@ -95,14 +95,17 @@ fn provisioning_details_from_response(
     let GetTvcDeploymentProvisioningDetailsResponse {
         attestation_document,
         manifest_envelope,
+        provisioning_state: _,
     } = response;
 
-    if attestation_document.is_empty() {
-        bail!("attestation document missing in provisioning details response");
-    }
-    if manifest_envelope.is_empty() {
-        bail!("manifest envelope missing in provisioning details response");
-    }
+    let attestation_document = match attestation_document {
+        Some(attestation_document) if !attestation_document.is_empty() => attestation_document,
+        _ => bail!("attestation document missing in provisioning details response"),
+    };
+    let manifest_envelope = match manifest_envelope {
+        Some(manifest_envelope) if !manifest_envelope.is_empty() => manifest_envelope,
+        _ => bail!("manifest envelope missing in provisioning details response"),
+    };
 
     let manifest_envelope = VersionedManifestEnvelope::try_from_slice_compat(&manifest_envelope)
         .context("failed to parse manifest envelope from provisioning details")?;
@@ -352,8 +355,9 @@ mod tests {
     fn provisioning_response_parses_complete_details() {
         let manifest_envelope = sample_manifest_envelope();
         let response = GetTvcDeploymentProvisioningDetailsResponse {
-            attestation_document: vec![1, 2, 3],
-            manifest_envelope: manifest_envelope.to_storage_vec().unwrap(),
+            attestation_document: Some(vec![1, 2, 3]),
+            manifest_envelope: Some(manifest_envelope.to_storage_vec().unwrap()),
+            provisioning_state: None,
         };
         let expected = FetchedProvisioningDetails::new(
             deployment_id(),
@@ -371,8 +375,9 @@ mod tests {
     fn provisioning_response_rejects_missing_fields() {
         let manifest_envelope = sample_manifest_envelope().to_storage_vec().unwrap();
         let missing_attestation = GetTvcDeploymentProvisioningDetailsResponse {
-            attestation_document: Vec::new(),
-            manifest_envelope: manifest_envelope.clone(),
+            attestation_document: None,
+            manifest_envelope: Some(manifest_envelope.clone()),
+            provisioning_state: None,
         };
         assert_eq!(
             provisioning_details_from_response(deployment_id(), missing_attestation, 1234)
@@ -382,8 +387,9 @@ mod tests {
         );
 
         let missing_manifest = GetTvcDeploymentProvisioningDetailsResponse {
-            attestation_document: vec![1, 2, 3],
-            manifest_envelope: Vec::new(),
+            attestation_document: Some(vec![1, 2, 3]),
+            manifest_envelope: Some(Vec::new()),
+            provisioning_state: None,
         };
         assert_eq!(
             provisioning_details_from_response(deployment_id(), missing_manifest, 1234)
@@ -396,8 +402,9 @@ mod tests {
     #[test]
     fn provisioning_response_rejects_malformed_manifest_envelope() {
         let response = GetTvcDeploymentProvisioningDetailsResponse {
-            attestation_document: vec![1, 2, 3],
-            manifest_envelope: vec![4, 5, 6],
+            attestation_document: Some(vec![1, 2, 3]),
+            manifest_envelope: Some(vec![4, 5, 6]),
+            provisioning_state: None,
         };
 
         let error =

@@ -212,6 +212,10 @@
       "intentType": "ImportSecretsIntent",
       "resultType": "ImportSecretsResult"
     },
+    "ACTIVITY_TYPE_EXPORT_SECRETS": {
+      "intentType": "ExportSecretsIntent",
+      "resultType": "ExportSecretsResult"
+    },
     "ACTIVITY_TYPE_OAUTH": {
       "intentType": "OauthIntent",
       "resultType": "OauthResult"

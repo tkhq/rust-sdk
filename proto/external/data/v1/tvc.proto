@@ -209,6 +209,24 @@ message TvcManifest {
   Timestamp updated_at = 4 [(google.api.field_behavior) = REQUIRED];
 }
 
+// ProvisioningState describes the observed quorum-key provisioning progress of
+// a TVC deployment.
+enum ProvisioningState {
+  // The provisioning state was not reported. This value supports responses
+  // produced before provisioning state reporting was introduced.
+  PROVISIONING_STATE_UNSPECIFIED = 0;
+
+  // The deployment is starting up and provisioning details are not yet
+  // available.
+  PROVISIONING_STATE_PENDING = 1;
+
+  // A deployment replica is ready to accept quorum key provisioning.
+  PROVISIONING_STATE_AWAITING_PROVISION = 2;
+
+  // At least one deployment replica has a provisioned quorum key.
+  PROVISIONING_STATE_PROVISIONED = 3;
+}
+
 message DeploymentStatus {
   string deployment_id = 1 [
     (google.api.field_behavior) = REQUIRED,
