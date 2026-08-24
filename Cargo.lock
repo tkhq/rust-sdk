@@ -4179,8 +4179,10 @@ version = "0.15.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
+ "hex",
  "http 0.2.12",
  "mime",
+ "p256 0.13.2",
  "prost 0.12.6",
  "prost-types 0.12.6",
  "reqwest",
@@ -4190,6 +4192,7 @@ dependencies = [
  "thiserror 2.0.12",
  "tokio",
  "turnkey_api_key_stamper",
+ "turnkey_enclave_encrypt",
  "wiremock",
 ]
 
