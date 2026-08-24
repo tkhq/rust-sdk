@@ -414,6 +414,8 @@ impl DeviceOps for YubiKey {
     }
 }
 
+pub(crate) mod pair;
+
 #[cfg(test)]
 pub(crate) mod test_support;
 

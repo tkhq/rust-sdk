@@ -387,6 +387,16 @@ pub enum SelectHostedOperatorError {
     MultipleHostedOperators,
 }
 
+/// Failure modes of selecting the sole YubiKey operator of an organization.
+/// Which organization it was is the caller's context to add.
+#[derive(Debug, Error)]
+pub enum SelectYubiKeyOperatorError {
+    #[error("no YubiKey operator is configured")]
+    NoYubiKeyOperator,
+    #[error("multiple YubiKey operators are configured")]
+    MultipleYubiKeyOperators,
+}
+
 impl OrgConfig {
     /// Select the sole local operator registry entry, with its kind-specific
     /// record. Purely a registry query: whether local is the organization's
@@ -432,6 +442,28 @@ impl OrgConfig {
             (Some(sole), None) => Ok(sole),
             (None, _) => Err(SelectHostedOperatorError::NoHostedOperator),
             (Some(_), Some(_)) => Err(SelectHostedOperatorError::MultipleHostedOperators),
+        }
+    }
+
+    /// Select the sole YubiKey operator registry entry, with its
+    /// kind-specific record. Purely a registry query: whether YubiKey is the
+    /// organization's default backend is resolution policy, decided
+    /// elsewhere.
+    pub(crate) fn select_yubikey_operator(
+        &self,
+    ) -> Result<(&OperatorRecord, &YubiKeyOperatorRecord), SelectYubiKeyOperatorError> {
+        let mut yubikeys = self
+            .operators
+            .iter()
+            .filter_map(|operator| match &operator.kind {
+                OperatorRecordKind::Yubikey(yubikey) => Some((operator, yubikey)),
+                OperatorRecordKind::Local(_) | OperatorRecordKind::Hosted(_) => None,
+            });
+
+        match (yubikeys.next(), yubikeys.next()) {
+            (Some(sole), None) => Ok(sole),
+            (None, _) => Err(SelectYubiKeyOperatorError::NoYubiKeyOperator),
+            (Some(_), Some(_)) => Err(SelectYubiKeyOperatorError::MultipleYubiKeyOperators),
         }
     }
 }
