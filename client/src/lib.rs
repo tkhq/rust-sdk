@@ -1,6 +1,7 @@
 #![doc = include_str!("../README.md")]
 use serde::Serialize;
 use serde::de::DeserializeOwned;
+use std::collections::BTreeMap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use reqwest::header::CONTENT_TYPE;
@@ -9,10 +10,21 @@ use thiserror::Error;
 use generated::Activity;
 use generated::ActivityResponse;
 use generated::ActivityStatus;
+use generated::ExportSecretParams;
+use generated::ExportSecretsIntent;
+use generated::ImportSecretParams;
+use generated::ImportSecretsIntent;
+use generated::InitImportSecretsIntent;
 use generated::external::data::v1::AppProof;
 use generated::google::rpc::Status;
+use generated::immutable::models::v1::{KeyValue, TransportEncryptionSuite};
+use generated::result::Inner as ActivityResultInner;
 
 use turnkey_api_key_stamper::{Stamp, StampHeader, StamperError};
+use turnkey_enclave_encrypt::errors::EnclaveEncryptError;
+use turnkey_enclave_encrypt::{
+    ExportClient, ImportClient, QuorumPublicKey, ServerTargetData, ServerTargetMsgV1,
+};
 
 /// Result of an activity request, containing both the typed result and activity metadata.
 ///
@@ -130,6 +142,15 @@ pub enum TurnkeyClientError {
 
     #[error("Stamper error")]
     StamperError(#[from] StamperError),
+
+    #[error("Expected exactly one {0} in the activity result, got {1}")]
+    UnexpectedSingletonCount(&'static str, usize),
+
+    #[error("Expected {1} {0} in the activity result, got {2}")]
+    UnexpectedResultCount(&'static str, usize, usize),
+
+    #[error("Enclave-encrypt failure while handling a secret: {0}")]
+    EnclaveEncrypt(#[from] EnclaveEncryptError),
 }
 
 /// Builder for [`TurnkeyClient<S>`].
@@ -409,6 +430,169 @@ impl<S: Stamp> TurnkeyClient<S> {
 
         Ok(response)
     }
+}
+
+impl<S: Stamp> TurnkeyClient<S> {
+    /// Imports one UTF-8 secret and returns the created secret ID.
+    pub async fn import_secret(
+        &self,
+        organization_id: String,
+        name: Option<String>,
+        plaintext: String,
+        static_properties: BTreeMap<String, String>,
+        signer_quorum_public_key: &QuorumPublicKey,
+    ) -> Result<ActivityResult<String>, TurnkeyClientError> {
+        let timestamp_ms = self.current_timestamp();
+
+        // `init_import_secrets` is marked INTERNAL in the proto and has no
+        // generated client method; submit it directly through `process_activity`.
+        let init_activity = self
+            .process_activity(
+                generated::external::activity::v1::InitImportSecretsRequest {
+                    r#type: "ACTIVITY_TYPE_INIT_IMPORT_SECRETS".to_string(),
+                    timestamp_ms: timestamp_ms.to_string(),
+                    organization_id: organization_id.clone(),
+                    parameters: Some(InitImportSecretsIntent {
+                        encryption_suite: TransportEncryptionSuite::EnclaveEncryptV1,
+                        num_secrets: 1,
+                    }),
+                },
+                "/public/v1/submit/init_import_secrets".to_string(),
+            )
+            .await?;
+        let init_result = match init_activity
+            .result
+            .ok_or(TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or(TurnkeyClientError::MissingInnerResult)?
+        {
+            ActivityResultInner::InitImportSecretsResult(inner) => inner,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        let target = exactly_one(
+            init_result.enclave_target_messages,
+            "init import target message",
+        )?;
+
+        // `encrypt_wallet_with_bundle` verifies the quorum signature over the
+        // target and encrypts to it. The user ID in a secrets ingress target is
+        // always empty: the flow is scoped to the organization, not to a user.
+        let target_data = target_data(&target)?;
+        let secret_payload = ImportClient::new(signer_quorum_public_key)
+            .encrypt_wallet_with_bundle(&plaintext, &target, &organization_id, "")?;
+        let target_public_key = hex::encode(*target_data.target_public);
+
+        let static_properties = static_properties
+            .into_iter()
+            .map(|(key, value)| KeyValue { key, value })
+            .collect();
+
+        let batch = self
+            .import_secrets(
+                organization_id,
+                timestamp_ms,
+                ImportSecretsIntent {
+                    secrets: vec![ImportSecretParams {
+                        name,
+                        secret_payload,
+                        target_public_key,
+                        encryption_suite: TransportEncryptionSuite::EnclaveEncryptV1,
+                        static_properties,
+                    }],
+                },
+            )
+            .await?;
+
+        let secret_id = exactly_one(batch.result.secret_ids, "imported secret ID")?;
+        Ok(ActivityResult {
+            result: secret_id,
+            activity_id: batch.activity_id,
+            status: batch.status,
+            app_proofs: batch.app_proofs,
+        })
+    }
+
+    /// Exports secrets and returns their decrypted UTF-8 plaintexts, in the
+    /// order of `secret_ids`.
+    pub async fn export_secret(
+        &self,
+        organization_id: String,
+        secret_ids: &[impl AsRef<str>],
+        signer_quorum_public_key: &QuorumPublicKey,
+    ) -> Result<ActivityResult<Vec<String>>, TurnkeyClientError> {
+        let timestamp_ms = self.current_timestamp();
+
+        let mut recipients = Vec::with_capacity(secret_ids.len());
+        let mut secrets = Vec::with_capacity(secret_ids.len());
+        for secret_id in secret_ids {
+            let recipient = ExportClient::new(signer_quorum_public_key);
+            secrets.push(ExportSecretParams {
+                secret_id: secret_id.as_ref().to_string(),
+                target_public_key: recipient.target_public_key()?,
+                encryption_suite: TransportEncryptionSuite::EnclaveEncryptV1,
+            });
+            recipients.push(recipient);
+        }
+
+        let batch = self
+            .export_secrets(
+                organization_id.clone(),
+                timestamp_ms,
+                ExportSecretsIntent { secrets },
+            )
+            .await?;
+
+        let secret_payloads = batch.result.secret_payloads;
+        if secret_payloads.len() != secret_ids.len() {
+            return Err(TurnkeyClientError::UnexpectedResultCount(
+                "exported secret payloads",
+                secret_ids.len(),
+                secret_payloads.len(),
+            ));
+        }
+
+        let plaintexts = secret_payloads
+            .into_iter()
+            .zip(&mut recipients)
+            .map(|(payload, recipient)| {
+                // Secret payloads are enclave-signed bundles over UTF-8 bytes,
+                // the same shape a wallet export bundle carries.
+                recipient.decrypt_wallet_mnemonic_phrase(payload, &organization_id)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(ActivityResult {
+            result: plaintexts,
+            activity_id: batch.activity_id,
+            status: batch.status,
+            app_proofs: batch.app_proofs,
+        })
+    }
+}
+
+/// Reads the signed data out of an enclave ingress bundle.
+fn target_data(bundle: &str) -> Result<ServerTargetData, TurnkeyClientError> {
+    let msg: ServerTargetMsgV1 = serde_json::from_str(bundle)?;
+    Ok(serde_json::from_slice(&msg.data)?)
+}
+
+fn exactly_one<T>(items: Vec<T>, label: &'static str) -> Result<T, TurnkeyClientError> {
+    let mut iter = items.into_iter();
+    let value = iter
+        .next()
+        .ok_or(TurnkeyClientError::UnexpectedSingletonCount(label, 0))?;
+    let extra = iter.count();
+    if extra > 0 {
+        return Err(TurnkeyClientError::UnexpectedSingletonCount(
+            label,
+            1 + extra,
+        ));
+    }
+    Ok(value)
 }
 
 #[cfg(test)]
@@ -923,6 +1107,181 @@ mod test {
             .await
             .unwrap();
         assert_eq!(res.activity.unwrap().id, "some-activity-id".to_string());
+    }
+
+    mod secrets {
+        use super::*;
+        use crate::generated::ExportSecretsRequest;
+        use p256::ecdsa::SigningKey;
+        use turnkey_enclave_encrypt::server::EnclaveEncryptServer;
+        use turnkey_enclave_encrypt::{P256Public, QuorumPublicKey};
+        use wiremock::matchers::path;
+
+        fn test_quorum_private_key() -> SigningKey {
+            SigningKey::from_slice(
+                &hex::decode("28ebf311b27f34cdf078489584d336423e09c522342f5b067dea36823c2cc5ed")
+                    .unwrap(),
+            )
+            .unwrap()
+        }
+
+        fn test_quorum_public_key() -> QuorumPublicKey {
+            QuorumPublicKey::from_string(concat!(
+                "04",
+                "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899",
+                "99887766554433221100ffeeddccbbaa99887766554433221100ffeeddccbbaa",
+                "04",
+                "8ee67fa8ae8e5fac0e343c84fa0921ecb3a31a67aee2e6a0880a09072eaaf2ae",
+                "ffa43f73fa021fa4d0b550072ba1f9011ff7cf917e4bf2708670e5ac57a81c78",
+            ))
+            .unwrap()
+        }
+
+        #[tokio::test]
+        async fn import_secret_runs_init_encrypt_and_import() {
+            let (client, server) = setup_client_and_server().await;
+
+            let enclave = EnclaveEncryptServer::from_enclave_auth_key(
+                test_quorum_private_key(),
+                "org-1".to_string(),
+                Some(String::new()),
+            );
+            let target = serde_json::to_string(&enclave.publish_target().unwrap()).unwrap();
+
+            Mock::given(method("POST"))
+                .and(path("/public/v1/submit/init_import_secrets"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                    "activity": {
+                        "type": "ACTIVITY_TYPE_INIT_IMPORT_SECRETS",
+                        "status": "ACTIVITY_STATUS_COMPLETED",
+                        "id": "activity-init",
+                        "organizationId": "org-1",
+                        "fingerprint": "fingerprint",
+                        "result": {
+                            "initImportSecretsResult": {
+                                "enclaveTargetMessages": [target],
+                            }
+                        }
+                    }
+                })))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            Mock::given(method("POST"))
+                .and(path("/public/v1/submit/import_secrets"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                    "activity": {
+                        "type": "ACTIVITY_TYPE_IMPORT_SECRETS",
+                        "status": "ACTIVITY_STATUS_COMPLETED",
+                        "id": "activity-import",
+                        "organizationId": "org-1",
+                        "fingerprint": "fingerprint",
+                        "result": {
+                            "importSecretsResult": {"secretIds": ["secret-abc"]}
+                        }
+                    }
+                })))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let mut static_properties = BTreeMap::new();
+            static_properties.insert("environment".to_string(), "production".to_string());
+
+            let result = client
+                .import_secret(
+                    "org-1".to_string(),
+                    Some("my-secret".to_string()),
+                    "super secret".to_string(),
+                    static_properties,
+                    &test_quorum_public_key(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(result.result, "secret-abc");
+
+            let requests = server.received_requests().await.unwrap();
+            let body: serde_json::Value = serde_json::from_slice(&requests[1].body).unwrap();
+            let secret = &body["parameters"]["secrets"][0];
+            assert_eq!(
+                secret["targetPublicKey"],
+                hex::encode(*target_data(&target).unwrap().target_public)
+            );
+
+            // The enclave can decrypt what we sent it.
+            let payload = secret["secretPayload"].as_str().unwrap();
+            assert_eq!(
+                enclave
+                    .into_recv()
+                    .decrypt(&serde_json::from_str(payload).unwrap())
+                    .unwrap(),
+                b"super secret",
+            );
+        }
+
+        #[tokio::test]
+        async fn export_secret_decrypts_returned_payloads() {
+            let (client, server) = setup_client_and_server().await;
+
+            Mock::given(method("POST"))
+                .and(path("/public/v1/submit/export_secrets"))
+                .respond_with(|request: &wiremock::Request| {
+                    let export_request: ExportSecretsRequest =
+                        serde_json::from_slice(&request.body).unwrap();
+                    let secrets = export_request.parameters.unwrap().secrets;
+                    assert_eq!(secrets[0].secret_id, "secret-abc");
+                    assert_eq!(secrets[1].secret_id, "secret-def");
+                    // Each secret must get its own one-shot target key.
+                    assert_ne!(secrets[0].target_public_key, secrets[1].target_public_key);
+
+                    let payloads: Vec<String> = secrets
+                        .iter()
+                        .zip([b"super secret".as_slice(), b"other secret".as_slice()])
+                        .map(|(secret, plaintext)| {
+                            let target: P256Public = hex::decode(&secret.target_public_key)
+                                .unwrap()
+                                .try_into()
+                                .unwrap();
+                            let enclave = EnclaveEncryptServer::from_enclave_auth_key(
+                                test_quorum_private_key(),
+                                "org-1".to_string(),
+                                None,
+                            );
+                            serde_json::to_string(&enclave.encrypt(&target, plaintext).unwrap())
+                                .unwrap()
+                        })
+                        .collect();
+
+                    ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                        "activity": {
+                            "type": "ACTIVITY_TYPE_EXPORT_SECRETS",
+                            "status": "ACTIVITY_STATUS_COMPLETED",
+                            "id": "activity-export",
+                            "organizationId": "org-1",
+                            "fingerprint": "fingerprint",
+                            "result": {
+                                "exportSecretsResult": {"secretPayloads": payloads},
+                            }
+                        }
+                    }))
+                })
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let result = client
+                .export_secret(
+                    "org-1".to_string(),
+                    &["secret-abc", "secret-def"],
+                    &test_quorum_public_key(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(result.result, vec!["super secret", "other secret"]);
+        }
     }
 
     mod retry {
