@@ -276,6 +276,7 @@ pub enum OperatorKind {
     #[default]
     Local,
     Hosted,
+    Yubikey,
 }
 
 impl Display for OperatorKind {
@@ -283,6 +284,7 @@ impl Display for OperatorKind {
         match self {
             Self::Local => "local".fmt(f),
             Self::Hosted => "hosted".fmt(f),
+            Self::Yubikey => "yubikey".fmt(f),
         }
     }
 }
@@ -734,6 +736,7 @@ future_entry = "keep"
 [orgs.default]
 id = "org-123"
 api_key_path = "/keys/api.json"
+default_operator_kind = "yubikey"
 
 [[orgs.default.operators]]
 name = "yubikey"
@@ -753,6 +756,7 @@ serial = "1C95C1F"
         assert_eq!(entry.public_key.to_string(), "07".repeat(130));
 
         let org = &config.orgs["default"];
+        assert_eq!(org.default_operator_kind, OperatorKind::Yubikey);
         let OperatorRecordKind::Yubikey(record) = &org.operators[0].kind else {
             panic!("operator must be a yubikey record");
         };
@@ -762,6 +766,7 @@ serial = "1C95C1F"
         assert!(saved.contains("serial = \"01c95c1f\""));
         assert!(!saved.contains("1C95C1F"));
         assert!(saved.contains("kind = \"yubikey\""));
+        assert!(saved.contains("default_operator_kind = \"yubikey\""));
         assert!(saved.contains("future_entry = \"keep\""));
         assert_eq!(disk::from_toml(&saved).unwrap(), config);
     }

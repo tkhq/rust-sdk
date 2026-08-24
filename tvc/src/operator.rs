@@ -303,8 +303,9 @@ impl Config {
     /// Best-effort read of the active org's operator public key under its
     /// default backend, as qos composite hex, for prompt and template
     /// defaults. The local backend reads the sole registered key file; the
-    /// hosted backend joins the sole record's stored points. `None` on any
-    /// miss.
+    /// hosted backend joins the sole record's stored points; the yubikey
+    /// backend reads the registry's cached key, so the device need not be
+    /// connected. `None` on any miss.
     pub(crate) async fn default_operator_public_key(&self) -> Option<String> {
         let (_, org) = self.active_org_config()?;
 
@@ -320,6 +321,11 @@ impl Config {
                     "{}{}",
                     hosted.encrypt_public_key, hosted.sign_public_key
                 ))
+            }
+            OperatorKind::Yubikey => {
+                let (_, yubikey) = org.select_yubikey_operator().ok()?;
+                let entry = self.yubikey_registry_entry(yubikey.serial)?;
+                Some(entry.public_key.to_string())
             }
         }
     }
@@ -364,6 +370,7 @@ mod tests {
     use super::*;
     use crate::config::turnkey::{
         HostedOperatorRecord, LocalOperatorRecord, OperatorRecord, OperatorRecordKind, OrgConfig,
+        QosOperatorPublicKey, YubiKeyOperatorRecord, YubiKeySerial,
     };
     use qos_p256::P256Pair;
     use std::{collections::HashMap, path::PathBuf};
@@ -418,6 +425,42 @@ mod tests {
                 extra: toml::Table::new(),
             }),
         }
+    }
+
+    fn yubikey_operator(serial: YubiKeySerial) -> OperatorRecord {
+        OperatorRecord {
+            name: "yubikey".to_string(),
+            kind: OperatorRecordKind::Yubikey(YubiKeyOperatorRecord {
+                serial,
+                extra: toml::Table::new(),
+            }),
+        }
+    }
+
+    fn yubikey_default_config(serial: YubiKeySerial) -> Config {
+        let mut config = config_with_operators(vec![yubikey_operator(serial)]);
+        config.orgs.get_mut("active").unwrap().default_operator_kind = OperatorKind::Yubikey;
+        config
+    }
+
+    #[tokio::test]
+    async fn default_operator_public_key_reads_the_yubikey_registry_cache() {
+        let serial = YubiKeySerial::from(0x01c9_5c1f);
+        let composite = QosOperatorPublicKey::try_from([7u8; 130].as_slice()).unwrap();
+        let mut config = yubikey_default_config(serial);
+        config.register_yubikey(serial, composite);
+
+        assert_eq!(
+            config.default_operator_public_key().await,
+            Some(composite.to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn default_operator_public_key_is_none_for_an_unregistered_yubikey() {
+        let config = yubikey_default_config(YubiKeySerial::from(0x01c9_5c1f));
+
+        assert_eq!(config.default_operator_public_key().await, None);
     }
 
     #[test]
