@@ -17,7 +17,7 @@ use crate::{
     local_operator_key::{
         LocalOperatorSeedSource, resolve_local_operator, resolve_registered_local_operator,
     },
-    pair::Signer,
+    pair::{Pair, Signer},
     yubikey::{DeviceOps, pair::PinAcquisition},
 };
 use anyhow::{Context, Result, anyhow, bail, ensure};
@@ -359,6 +359,57 @@ impl Config {
         }
     }
 
+    /// Resolve the operator key pair for share decryption by the active
+    /// org's default backend. An explicit seed is local, always, and skips
+    /// the config. Hosted operators sign through the API and hold no local
+    /// key material, so a hosted default is redirected to the hosted
+    /// counterpart of the flow.
+    pub(crate) async fn resolve_operator_pair<D: DeviceOps + Send + 'static>(
+        &self,
+        devices: D,
+        explicit: Option<LocalOperatorSeedSource>,
+        pin: PinAcquisition,
+    ) -> Result<Box<dyn Pair>> {
+        if explicit.is_some() {
+            return Ok(Box::new(resolve_local_operator(self, explicit).await?));
+        }
+
+        let (alias, org) = self.active_org_config().ok_or_else(|| {
+            anyhow!(
+                "No active organization. Run `tvc login` first or provide \
+                 --operator-seed or --operator-seed-path."
+            )
+        })?;
+
+        match org.default_operator_kind {
+            OperatorKind::Local => {
+                let (_, local) = org
+                    .select_local_operator()
+                    .with_context(|| format!("org '{alias}'"))?;
+
+                Ok(Box::new(
+                    resolve_registered_local_operator(local.key_path.clone()).await?,
+                ))
+            }
+            OperatorKind::Yubikey => {
+                let (_, yubikey) = org
+                    .select_yubikey_operator()
+                    .with_context(|| format!("org '{alias}'"))?;
+
+                Ok(Box::new(
+                    self.resolve_yubikey(yubikey.serial, devices, pin).await?,
+                ))
+            }
+            // TODO(TVC-202): remove hardcoded user-facing messages mentioning
+            // other commands.
+            OperatorKind::Hosted => bail!(
+                "re-encrypting a local share needs the local operator key the share was \
+                 encrypted to; hosted operators re-encrypt through Turnkey with \
+                 `tvc deploy provision`"
+            ),
+        }
+    }
+
     /// Operator identities known for the active org: registered hosted
     /// operators (config order) then the last `app create`'s manifest-set
     /// operator IDs, deduplicated by ID. Each source keeps one authoritative
@@ -663,6 +714,85 @@ mod tests {
         let rendered = format!("{error:#}");
         assert!(rendered.contains("org 'active'"));
         assert!(rendered.contains("no YubiKey operator is configured"));
+    }
+
+    #[tokio::test]
+    async fn operator_pair_explicit_seed_is_local() {
+        let seed_hex = "ab".repeat(32);
+        let expected = LocalPair::from_hex_seed(&seed_hex).unwrap().public_key();
+
+        // The pair never needs a PIN on the local path, even when none could
+        // be prompted.
+        let pair = Config::default()
+            .resolve_operator_pair(
+                provisioned_fake(),
+                Some(LocalOperatorSeedSource::Value(seed_hex.parse().unwrap())),
+                PinAcquisition::Unavailable,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(pair.public_key(), expected);
+    }
+
+    #[tokio::test]
+    async fn operator_pair_local_default_reads_the_registered_key_file() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let key_path = temp.path().join("operator.json");
+        let private_key = "ab".repeat(32);
+        std::fs::write(
+            &key_path,
+            serde_json::to_string(&StoredQosOperatorKey {
+                public_key: QosOperatorPublicKey::default(),
+                private_key: private_key.clone(),
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        let config = config_with_operators(vec![OperatorRecord {
+            name: "local".to_string(),
+            kind: OperatorRecordKind::Local(LocalOperatorRecord {
+                key_path,
+                operator_id: None,
+                extra: toml::Table::new(),
+            }),
+        }]);
+        let expected = LocalPair::from_hex_seed(&private_key).unwrap().public_key();
+
+        let pair = config
+            .resolve_operator_pair(provisioned_fake(), None, PinAcquisition::Unavailable)
+            .await
+            .unwrap();
+
+        assert_eq!(pair.public_key(), expected);
+    }
+
+    #[tokio::test]
+    async fn operator_pair_yubikey_default_resolves_the_device_pair() {
+        let device = provisioned_fake();
+        let composite = device.operator_public_key();
+        let config = registered_yubikey_config(&device);
+
+        let pair = config
+            .resolve_operator_pair(device, None, fixed_pin())
+            .await
+            .unwrap();
+
+        assert_eq!(pair.public_key(), composite.as_bytes());
+    }
+
+    #[tokio::test]
+    async fn operator_pair_hosted_default_is_redirected() {
+        let mut config = config_with_operators(vec![hosted_operator("hosted")]);
+        config.orgs.get_mut("active").unwrap().default_operator_kind = OperatorKind::Hosted;
+
+        let error = config
+            .resolve_operator_pair(provisioned_fake(), None, PinAcquisition::Unavailable)
+            .await
+            .err()
+            .expect("a hosted default cannot decrypt locally");
+
+        assert!(error.to_string().contains("tvc deploy provision"));
     }
 
     #[tokio::test]
