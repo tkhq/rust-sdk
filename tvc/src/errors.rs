@@ -252,6 +252,8 @@ fn classify_turnkey_client_error(error: &TurnkeyClientError) -> Classification {
         | TurnkeyClientError::ActivityFailed(_)
         | TurnkeyClientError::UnexpectedActivityStatus(_)
         | TurnkeyClientError::UnexpectedInnerActivityResult(_)
+        | TurnkeyClientError::UnexpectedSingletonCount(_, _)
+        | TurnkeyClientError::UnexpectedResultCount(_, _, _)
         | TurnkeyClientError::MissingActivity
         | TurnkeyClientError::MissingResult
         | TurnkeyClientError::MissingInnerResult
@@ -264,7 +266,10 @@ fn classify_turnkey_client_error(error: &TurnkeyClientError) -> Classification {
         | TurnkeyClientError::ReqwestBuilder(_)
         | TurnkeyClientError::Http(_)
         | TurnkeyClientError::SerdeJsonFailure(_)
-        | TurnkeyClientError::StamperError(_) => Classification::new(ErrorCode::CommandError, None),
+        | TurnkeyClientError::StamperError(_)
+        | TurnkeyClientError::EnclaveEncrypt(_) => {
+            Classification::new(ErrorCode::CommandError, None)
+        }
     }
 }
 
