@@ -277,6 +277,7 @@ impl Commands {
                     args.run(ctx, config).await.map(Into::into)
                 }
                 KeysCommands::ProvisionYubikey(args) => args.run(ctx, config).await.map(Into::into),
+                KeysCommands::RefreshYubikey(args) => args.run(ctx, config).await.map(Into::into),
                 KeysCommands::DeleteYubikey(args) => args.run(ctx, config).await.map(Into::into),
                 KeysCommands::CreateQuorumKey(args) => {
                     commands::keys::create_quorum_key::run(ctx, args, config).await
@@ -442,6 +443,8 @@ enum KeysCommands {
     BackupOperatorKey(commands::keys::backup_operator_key::Args),
     /// Provision a YubiKey with the QuorumOS operator key pair and register its serial.
     ProvisionYubikey(commands::keys::provision_yubikey::Args),
+    /// Refresh the registry's cached operator key for a YubiKey from the device.
+    RefreshYubikey(commands::keys::refresh_yubikey::Args),
     /// Delete a registered YubiKey's QuorumOS key material and registry entry.
     DeleteYubikey(commands::keys::delete_yubikey::Args),
     /// Create a hosted quorum key encrypted to hosted operator keys.
@@ -472,6 +475,7 @@ impl KeysCommands {
         match self {
             KeysCommands::BackupOperatorKey(_) => "keys backup-operator-key",
             KeysCommands::ProvisionYubikey(_) => "keys provision-yubikey",
+            KeysCommands::RefreshYubikey(_) => "keys refresh-yubikey",
             KeysCommands::DeleteYubikey(_) => "keys delete-yubikey",
             KeysCommands::CreateQuorumKey(_) => "keys create-quorum-key",
             KeysCommands::GenerateLocalQuorumKey(_) => "keys generate-local-quorum-key",

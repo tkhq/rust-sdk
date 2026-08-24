@@ -14,7 +14,7 @@ use crate::{
     prompts::{self, bail_required_in_non_interactive, stdin_can_prompt},
     shell_print, shell_println,
     util::{read_file_to_string, write_file},
-    yubikey::{PcscDevices, pair::PinAcquisition},
+    yubikey::{self, pair::PinAcquisition},
 };
 use anyhow::{Context, bail};
 use clap::{ArgGroup, Args as ClapArgs};
@@ -524,7 +524,7 @@ async fn run_with_resolved_inputs(
 
     let operator = resolve_operator(
         config,
-        PcscDevices,
+        yubikey::open,
         inputs.operator_seed_source,
         inputs.operator_id,
         requirement,

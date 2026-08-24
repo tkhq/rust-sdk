@@ -55,8 +55,9 @@ pub enum Outcome {
     AppDeleted(app::delete::AppDeleted),
     OperatorKeyBackedUp(keys::backup_operator_key::OperatorKeyBackedUp),
     // Spelled Yubikey, not YubiKey: the variant name IS the reason (see the
-    // module docs), and the wire strings are yubikey_provisioned/_deleted.
+    // module docs), and the wire strings are yubikey_provisioned/_refreshed/_deleted.
     YubikeyProvisioned(keys::provision_yubikey::YubiKeyProvisioned),
+    YubikeyRefreshed(keys::refresh_yubikey::YubiKeyRefreshed),
     YubikeyDeleted(keys::delete_yubikey::YubiKeyDeleted),
     QuorumKeyCreated(keys::create_quorum_key::QuorumKeyCreated),
     QuorumKeyGenerated(keys::generate_local_quorum_key::QuorumKeyGenerated),
@@ -95,6 +96,7 @@ impl Display for Outcome {
             Outcome::AppDeleted(msg) => msg.fmt(f),
             Outcome::OperatorKeyBackedUp(msg) => msg.fmt(f),
             Outcome::YubikeyProvisioned(msg) => msg.fmt(f),
+            Outcome::YubikeyRefreshed(msg) => msg.fmt(f),
             Outcome::YubikeyDeleted(msg) => msg.fmt(f),
             Outcome::QuorumKeyCreated(msg) => msg.fmt(f),
             Outcome::QuorumKeyGenerated(msg) => msg.fmt(f),

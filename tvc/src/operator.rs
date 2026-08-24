@@ -18,7 +18,7 @@ use crate::{
         LocalOperatorSeedSource, resolve_local_operator, resolve_registered_local_operator,
     },
     pair::{Pair, Signer},
-    yubikey::{DeviceOps, pair::PinAcquisition},
+    yubikey::{DeviceError, DeviceOps, pair::PinAcquisition},
 };
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use hosted::HostedSigner;
@@ -183,14 +183,18 @@ pub(crate) enum SignerRequirement {
 /// Config is loaded lazily inside: the explicit-seed path must not depend
 /// on a config file being present or well-formed (pinned by
 /// `explicit_seed_does_not_load_malformed_config`).
-pub(crate) async fn resolve_operator<D: DeviceOps + Send + 'static>(
+pub(crate) async fn resolve_operator<D, O>(
     config: &Config,
-    devices: D,
+    open_device: O,
     explicit: Option<LocalOperatorSeedSource>,
     operator_id: Option<Uuid>,
     requirement: SignerRequirement,
     pin: PinAcquisition,
-) -> Result<ResolvedOperator> {
+) -> Result<ResolvedOperator>
+where
+    D: DeviceOps + Send + 'static,
+    O: FnOnce(crate::config::turnkey::YubiKeySerial) -> Result<D, DeviceError>,
+{
     if let Some(explicit) = explicit {
         if let Some(id) = operator_id {
             ensure!(
@@ -265,7 +269,8 @@ pub(crate) async fn resolve_operator<D: DeviceOps + Send + 'static>(
             let (operator, yubikey) = org
                 .select_yubikey_operator()
                 .with_context(|| format!("org '{alias}'"))?;
-            let pair = config.resolve_yubikey(yubikey.serial, devices, pin).await?;
+            let device = open_device(yubikey.serial)?;
+            let pair = config.resolve_yubikey(yubikey.serial, device, pin).await?;
 
             Ok(ResolvedOperator {
                 name: Some(operator.name.clone()),
@@ -353,7 +358,7 @@ impl Config {
             }
             OperatorKind::Yubikey => {
                 let (_, yubikey) = org.select_yubikey_operator().ok()?;
-                let entry = self.yubikey_registry_entry(yubikey.serial)?;
+                let entry = self.yubikeys.get(yubikey.serial)?;
                 Some(entry.public_key.to_string())
             }
         }
@@ -364,12 +369,16 @@ impl Config {
     /// the config. Hosted operators sign through the API and hold no local
     /// key material, so a hosted default is redirected to the hosted
     /// counterpart of the flow.
-    pub(crate) async fn resolve_operator_pair<D: DeviceOps + Send + 'static>(
+    pub(crate) async fn resolve_operator_pair<D, O>(
         &self,
-        devices: D,
+        open_device: O,
         explicit: Option<LocalOperatorSeedSource>,
         pin: PinAcquisition,
-    ) -> Result<Box<dyn Pair>> {
+    ) -> Result<Box<dyn Pair>>
+    where
+        D: DeviceOps + Send + 'static,
+        O: FnOnce(crate::config::turnkey::YubiKeySerial) -> Result<D, DeviceError>,
+    {
         if explicit.is_some() {
             return Ok(Box::new(resolve_local_operator(self, explicit).await?));
         }
@@ -395,9 +404,10 @@ impl Config {
                 let (_, yubikey) = org
                     .select_yubikey_operator()
                     .with_context(|| format!("org '{alias}'"))?;
+                let device = open_device(yubikey.serial)?;
 
                 Ok(Box::new(
-                    self.resolve_yubikey(yubikey.serial, devices, pin).await?,
+                    self.resolve_yubikey(yubikey.serial, device, pin).await?,
                 ))
             }
             // TODO(TVC-202): remove hardcoded user-facing messages mentioning
@@ -531,7 +541,7 @@ mod tests {
         let serial = YubiKeySerial::from(0x01c9_5c1f);
         let composite = QosOperatorPublicKey::try_from([7u8; 130].as_slice()).unwrap();
         let mut config = yubikey_default_config(serial);
-        config.register_yubikey(serial, composite);
+        config.yubikeys.register(serial, composite);
 
         assert_eq!(
             config.default_operator_public_key().await,
@@ -550,6 +560,18 @@ mod tests {
         FakeDevice::new(SlotStatus::QosProvisioned, SlotStatus::QosProvisioned)
     }
 
+    fn open_fake(
+        device: FakeDevice,
+    ) -> impl FnOnce(YubiKeySerial) -> Result<FakeDevice, DeviceError> {
+        move |serial| {
+            if serial == test_support::serial() {
+                Ok(device)
+            } else {
+                Err(DeviceError::NotFound { serial })
+            }
+        }
+    }
+
     fn fixed_pin() -> PinAcquisition {
         PinAcquisition::Fixed(Pin::from(
             String::from_utf8(test_support::PIN.to_vec()).unwrap(),
@@ -558,7 +580,9 @@ mod tests {
 
     fn registered_yubikey_config(device: &FakeDevice) -> Config {
         let mut config = yubikey_default_config(test_support::serial());
-        config.register_yubikey(test_support::serial(), device.operator_public_key());
+        config
+            .yubikeys
+            .register(test_support::serial(), device.operator_public_key());
         config
     }
 
@@ -570,7 +594,7 @@ mod tests {
 
         let operator = resolve_operator(
             &config,
-            device,
+            open_fake(device),
             None,
             None,
             SignerRequirement::Any,
@@ -591,7 +615,7 @@ mod tests {
 
         let operator = resolve_operator(
             &config,
-            device,
+            open_fake(device),
             None,
             None,
             SignerRequirement::OfflineApproval,
@@ -611,7 +635,7 @@ mod tests {
 
         let operator = resolve_operator(
             &config,
-            device,
+            open_fake(device),
             None,
             Some(requested),
             SignerRequirement::Any,
@@ -633,7 +657,7 @@ mod tests {
 
         let operator = resolve_operator(
             &config,
-            device,
+            open_fake(device),
             Some(LocalOperatorSeedSource::Value(seed)),
             None,
             SignerRequirement::Any,
@@ -659,7 +683,7 @@ mod tests {
 
         let error = resolve_operator(
             &config,
-            device,
+            open_fake(device),
             None,
             Some(HOSTED_ID.parse().unwrap()),
             SignerRequirement::OfflineApproval,
@@ -683,7 +707,7 @@ mod tests {
 
         let error = resolve_operator(
             &config,
-            device,
+            open_fake(device),
             None,
             None,
             SignerRequirement::Any,
@@ -702,7 +726,7 @@ mod tests {
 
         let error = resolve_operator(
             &config,
-            provisioned_fake(),
+            open_fake(provisioned_fake()),
             None,
             None,
             SignerRequirement::Any,
@@ -725,7 +749,7 @@ mod tests {
         // be prompted.
         let pair = Config::default()
             .resolve_operator_pair(
-                provisioned_fake(),
+                open_fake(provisioned_fake()),
                 Some(LocalOperatorSeedSource::Value(seed_hex.parse().unwrap())),
                 PinAcquisition::Unavailable,
             )
@@ -760,7 +784,11 @@ mod tests {
         let expected = LocalPair::from_hex_seed(&private_key).unwrap().public_key();
 
         let pair = config
-            .resolve_operator_pair(provisioned_fake(), None, PinAcquisition::Unavailable)
+            .resolve_operator_pair(
+                open_fake(provisioned_fake()),
+                None,
+                PinAcquisition::Unavailable,
+            )
             .await
             .unwrap();
 
@@ -774,7 +802,7 @@ mod tests {
         let config = registered_yubikey_config(&device);
 
         let pair = config
-            .resolve_operator_pair(device, None, fixed_pin())
+            .resolve_operator_pair(open_fake(device), None, fixed_pin())
             .await
             .unwrap();
 
@@ -787,7 +815,11 @@ mod tests {
         config.orgs.get_mut("active").unwrap().default_operator_kind = OperatorKind::Hosted;
 
         let error = config
-            .resolve_operator_pair(provisioned_fake(), None, PinAcquisition::Unavailable)
+            .resolve_operator_pair(
+                open_fake(provisioned_fake()),
+                None,
+                PinAcquisition::Unavailable,
+            )
             .await
             .err()
             .expect("a hosted default cannot decrypt locally");
@@ -804,7 +836,7 @@ mod tests {
 
         let error = resolve_operator(
             &config,
-            provisioned_fake(),
+            open_fake(provisioned_fake()),
             None,
             None,
             SignerRequirement::Any,

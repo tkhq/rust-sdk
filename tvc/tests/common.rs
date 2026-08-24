@@ -158,7 +158,9 @@ pub fn write_yubikey_only_config(home: &Path, alias: &str, org_id: &str) {
             serial,
             public_key,
             extra: toml::Table::new(),
-        }],
+        }]
+        .try_into()
+        .unwrap(),
         last_created_app_id: HashMap::new(),
         last_operator_ids: HashMap::new(),
         extra: toml::Table::new(),

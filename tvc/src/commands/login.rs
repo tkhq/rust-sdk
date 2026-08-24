@@ -401,17 +401,15 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
             let (operator, yubikey) = org_config
                 .select_yubikey_operator()
                 .with_context(|| format!("org '{alias}'"))?;
-            let entry = config
-                .yubikey_registry_entry(yubikey.serial)
-                .ok_or_else(|| {
-                    anyhow!(
-                        "YubiKey {serial} of operator '{name}' is not in the device registry; \
+            let entry = config.yubikeys.get(yubikey.serial).ok_or_else(|| {
+                anyhow!(
+                    "YubiKey {serial} of operator '{name}' is not in the device registry; \
                          run `tvc keys provision-yubikey --serial {serial}` to provision and \
                          register it",
-                        serial = yubikey.serial,
-                        name = operator.name,
-                    )
-                })?;
+                    serial = yubikey.serial,
+                    name = operator.name,
+                )
+            })?;
             shell_println!(
                 ctx,
                 "Using YubiKey operator '{}' (serial {}).",

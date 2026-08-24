@@ -10,7 +10,7 @@ use crate::provisioning::ProvisionBundle;
 use crate::quorum_key_metadata::QuorumKeyMetadata;
 use crate::shell_eprintln;
 use crate::util::{read_json_file, write_file};
-use crate::yubikey::{PcscDevices, pair::PinAcquisition};
+use crate::yubikey::{self, pair::PinAcquisition};
 use anyhow::{Context, anyhow};
 use clap::Args as ClapArgs;
 use qos_core::protocol::services::boot::{Approval, QuorumMember, VersionedManifestEnvelope};
@@ -126,7 +126,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Result
     };
 
     let operator_pair = config
-        .resolve_operator_pair(PcscDevices, operator_seed_source, pin)
+        .resolve_operator_pair(yubikey::open, operator_seed_source, pin)
         .await?;
 
     let output = build_re_encrypted_share_output(
@@ -536,7 +536,7 @@ mod tests {
         let device = FakeDevice::new(SlotStatus::QosProvisioned, SlotStatus::QosProvisioned);
         let composite = device.operator_public_key();
         let mut config = Config::default();
-        config.register_yubikey(serial(), composite);
+        config.yubikeys.register(serial(), composite);
         let operator_pair = config
             .resolve_yubikey(
                 serial(),
