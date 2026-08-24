@@ -18,13 +18,14 @@ use crate::{
         LocalOperatorSeedSource, resolve_local_operator, resolve_registered_local_operator,
     },
     pair::Signer,
+    yubikey::{DeviceOps, pair::PinAcquisition},
 };
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use hosted::HostedSigner;
 use p256::{PublicKey, elliptic_curve::sec1::ToEncodedPoint};
 use qos_core::protocol::services::boot::Approval;
 use std::{
-    fmt::{self, Display, Formatter},
+    fmt::{self, Debug, Display, Formatter},
     str::FromStr,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -90,6 +91,17 @@ pub(crate) struct ResolvedOperator {
     /// Always present for hosted operators and optional for local operators.
     operator_id: Option<Uuid>,
     signer: Box<dyn Signer>,
+}
+
+// The signer is a trait object with nothing printable, so the derive is off
+// the table; the identity fields keep test failures readable.
+impl Debug for ResolvedOperator {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ResolvedOperator")
+            .field("name", &self.name)
+            .field("operator_id", &self.operator_id)
+            .finish_non_exhaustive()
+    }
 }
 
 impl ResolvedOperator {
@@ -165,16 +177,19 @@ pub(crate) enum SignerRequirement {
 ///    crosses over: `local` resolves the sole local record (reconciling a
 ///    given ID against its configured one); `hosted` resolves the sole
 ///    hosted record when no ID names one, and never falls back to the
-///    local key.
+///    local key; `yubikey` resolves the sole yubikey record's device by
+///    serial, passing a given ID through for posting.
 ///
 /// Config is loaded lazily inside: the explicit-seed path must not depend
 /// on a config file being present or well-formed (pinned by
 /// `explicit_seed_does_not_load_malformed_config`).
-pub(crate) async fn resolve_operator(
+pub(crate) async fn resolve_operator<D: DeviceOps + Send + 'static>(
     config: &Config,
+    devices: D,
     explicit: Option<LocalOperatorSeedSource>,
     operator_id: Option<Uuid>,
     requirement: SignerRequirement,
+    pin: PinAcquisition,
 ) -> Result<ResolvedOperator> {
     if let Some(explicit) = explicit {
         if let Some(id) = operator_id {
@@ -202,7 +217,7 @@ pub(crate) async fn resolve_operator(
         // Hosted operators sign through the API, so an offline requirement
         // is unsatisfiable; refuse before touching credentials.
         if requirement == SignerRequirement::OfflineApproval {
-            bail!("--skip-post is only supported for local operators");
+            bail!("--skip-post is not supported for hosted operators");
         }
 
         let auth = build_client(config).await?;
@@ -222,14 +237,14 @@ pub(crate) async fn resolve_operator(
         )
     })?;
 
-    if org.default_operator_kind == OperatorKind::Hosted {
-        match operator_id {
+    match org.default_operator_kind {
+        OperatorKind::Hosted => match operator_id {
             Some(id) => bail!("hosted operator ID '{id}' was not found in org '{alias}'"),
             None => {
                 // A hosted default cannot satisfy an offline approval;
                 // refuse before selection or credentials.
                 if requirement == SignerRequirement::OfflineApproval {
-                    bail!("--skip-post is only supported for local operators");
+                    bail!("--skip-post is not supported for hosted operators");
                 }
 
                 let (name, hosted) = org
@@ -239,43 +254,57 @@ pub(crate) async fn resolve_operator(
                 let auth = build_client(config).await?;
                 ensure_authenticated_org(&auth.org_id, hosted.organization_id())?;
 
-                return Ok(ResolvedOperator {
+                Ok(ResolvedOperator {
                     name: Some(hosted.name().to_string()),
                     operator_id: Some(hosted.operator_id()),
                     signer: Box::new(HostedSigner::new(hosted, auth)),
-                });
+                })
             }
+        },
+        OperatorKind::Yubikey => {
+            let (operator, yubikey) = org
+                .select_yubikey_operator()
+                .with_context(|| format!("org '{alias}'"))?;
+            let pair = config.resolve_yubikey(yubikey.serial, devices, pin).await?;
+
+            Ok(ResolvedOperator {
+                name: Some(operator.name.clone()),
+                operator_id,
+                signer: Box::new(pair),
+            })
+        }
+        OperatorKind::Local => {
+            let (operator, local) = org
+                .select_local_operator()
+                .with_context(|| format!("org '{alias}'"))?;
+
+            let configured_operator_id = local
+                .operator_id
+                .as_deref()
+                .map(|id| {
+                    Uuid::parse_str(id)
+                        .map_err(|_| anyhow!("configured local operator ID must be a UUID"))
+                })
+                .transpose()?;
+
+            let resolved_operator_id = match (configured_operator_id, operator_id) {
+                (Some(configured), Some(requested)) => {
+                    ensure!(
+                        configured == requested,
+                        "requested operator ID ({requested}) does not match configured local operator ID ({configured})"
+                    );
+                    Some(configured)
+                }
+                (configured, requested) => configured.or(requested),
+            };
+
+            Ok(ResolvedOperator {
+                name: Some(operator.name.clone()),
+                operator_id: resolved_operator_id,
+                signer: Box::new(resolve_registered_local_operator(local.key_path.clone()).await?),
+            })
         }
     }
-
-    let (operator, local) = org
-        .select_local_operator()
-        .with_context(|| format!("org '{alias}'"))?;
-
-    let configured_operator_id = local
-        .operator_id
-        .as_deref()
-        .map(|id| {
-            Uuid::parse_str(id).map_err(|_| anyhow!("configured local operator ID must be a UUID"))
-        })
-        .transpose()?;
-
-    let resolved_operator_id = match (configured_operator_id, operator_id) {
-        (Some(configured), Some(requested)) => {
-            ensure!(
-                configured == requested,
-                "requested operator ID ({requested}) does not match configured local operator ID ({configured})"
-            );
-            Some(configured)
-        }
-        (configured, requested) => configured.or(requested),
-    };
-
-    Ok(ResolvedOperator {
-        name: Some(operator.name.clone()),
-        operator_id: resolved_operator_id,
-        signer: Box::new(resolve_registered_local_operator(local.key_path.clone()).await?),
-    })
 }
 
 /// One operator identity known for the active org, labeled with its registry
@@ -372,6 +401,9 @@ mod tests {
         HostedOperatorRecord, LocalOperatorRecord, OperatorRecord, OperatorRecordKind, OrgConfig,
         QosOperatorPublicKey, YubiKeyOperatorRecord, YubiKeySerial,
     };
+    use crate::pair::{HexSeed, LocalPair};
+    use crate::yubikey::test_support::{self, FakeDevice};
+    use crate::yubikey::{Pin, SlotStatus};
     use qos_p256::P256Pair;
     use std::{collections::HashMap, path::PathBuf};
 
@@ -461,6 +493,197 @@ mod tests {
         let config = yubikey_default_config(YubiKeySerial::from(0x01c9_5c1f));
 
         assert_eq!(config.default_operator_public_key().await, None);
+    }
+
+    fn provisioned_fake() -> FakeDevice {
+        FakeDevice::new(SlotStatus::QosProvisioned, SlotStatus::QosProvisioned)
+    }
+
+    fn fixed_pin() -> PinAcquisition {
+        PinAcquisition::Fixed(Pin::from(
+            String::from_utf8(test_support::PIN.to_vec()).unwrap(),
+        ))
+    }
+
+    fn registered_yubikey_config(device: &FakeDevice) -> Config {
+        let mut config = yubikey_default_config(test_support::serial());
+        config.register_yubikey(test_support::serial(), device.operator_public_key());
+        config
+    }
+
+    #[tokio::test]
+    async fn yubikey_default_resolves_a_device_backed_signer() {
+        let device = provisioned_fake();
+        let composite = device.operator_public_key();
+        let config = registered_yubikey_config(&device);
+
+        let operator = resolve_operator(
+            &config,
+            device,
+            None,
+            None,
+            SignerRequirement::Any,
+            fixed_pin(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(operator.signer.public_key(), composite.as_bytes());
+        assert_eq!(operator.name, Some("yubikey".to_string()));
+        assert_eq!(operator.id(), None);
+    }
+
+    #[tokio::test]
+    async fn yubikey_default_satisfies_an_offline_approval() {
+        let device = provisioned_fake();
+        let config = registered_yubikey_config(&device);
+
+        let operator = resolve_operator(
+            &config,
+            device,
+            None,
+            None,
+            SignerRequirement::OfflineApproval,
+            fixed_pin(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(operator.name, Some("yubikey".to_string()));
+    }
+
+    #[tokio::test]
+    async fn yubikey_default_passes_a_given_operator_id_through() {
+        let device = provisioned_fake();
+        let config = registered_yubikey_config(&device);
+        let requested = Uuid::from_u128(0x22);
+
+        let operator = resolve_operator(
+            &config,
+            device,
+            None,
+            Some(requested),
+            SignerRequirement::Any,
+            fixed_pin(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(operator.id(), Some(requested));
+    }
+
+    #[tokio::test]
+    async fn an_explicit_seed_beats_a_yubikey_default() {
+        let device = provisioned_fake();
+        let config = registered_yubikey_config(&device);
+        let seed_hex = "ab".repeat(32);
+        let seed: HexSeed = seed_hex.parse().unwrap();
+        let expected = LocalPair::from_hex_seed(&seed_hex).unwrap().public_key();
+
+        let operator = resolve_operator(
+            &config,
+            device,
+            Some(LocalOperatorSeedSource::Value(seed)),
+            None,
+            SignerRequirement::Any,
+            fixed_pin(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(operator.signer.public_key(), expected);
+        assert_eq!(operator.name, None);
+    }
+
+    #[tokio::test]
+    async fn a_hosted_operator_id_beats_a_yubikey_default() {
+        let device = provisioned_fake();
+        let mut config = registered_yubikey_config(&device);
+        config
+            .orgs
+            .get_mut("active")
+            .unwrap()
+            .operators
+            .push(hosted_operator("hosted"));
+
+        let error = resolve_operator(
+            &config,
+            device,
+            None,
+            Some(HOSTED_ID.parse().unwrap()),
+            SignerRequirement::OfflineApproval,
+            fixed_pin(),
+        )
+        .await
+        .unwrap_err();
+
+        // The hosted-by-id branch fired (pinning its rewording), so the
+        // yubikey default never resolved.
+        assert_eq!(
+            error.to_string(),
+            "--skip-post is not supported for hosted operators"
+        );
+    }
+
+    #[tokio::test]
+    async fn yubikey_default_without_a_pin_bails_actionably() {
+        let device = provisioned_fake();
+        let config = registered_yubikey_config(&device);
+
+        let error = resolve_operator(
+            &config,
+            device,
+            None,
+            None,
+            SignerRequirement::Any,
+            PinAcquisition::Unavailable,
+        )
+        .await
+        .unwrap_err();
+
+        assert!(format!("{error:#}").contains("interactive prompt"));
+    }
+
+    #[tokio::test]
+    async fn yubikey_default_without_a_record_names_the_org() {
+        let mut config = config_with_operators(Vec::new());
+        config.orgs.get_mut("active").unwrap().default_operator_kind = OperatorKind::Yubikey;
+
+        let error = resolve_operator(
+            &config,
+            provisioned_fake(),
+            None,
+            None,
+            SignerRequirement::Any,
+            fixed_pin(),
+        )
+        .await
+        .unwrap_err();
+
+        let rendered = format!("{error:#}");
+        assert!(rendered.contains("org 'active'"));
+        assert!(rendered.contains("no YubiKey operator is configured"));
+    }
+
+    #[tokio::test]
+    async fn yubikey_default_with_multiple_records_is_refused() {
+        let serial = test_support::serial();
+        let mut config =
+            config_with_operators(vec![yubikey_operator(serial), yubikey_operator(serial)]);
+        config.orgs.get_mut("active").unwrap().default_operator_kind = OperatorKind::Yubikey;
+
+        let error = resolve_operator(
+            &config,
+            provisioned_fake(),
+            None,
+            None,
+            SignerRequirement::Any,
+            fixed_pin(),
+        )
+        .await
+        .unwrap_err();
+
+        assert!(format!("{error:#}").contains("multiple YubiKey operators are configured"));
     }
 
     #[test]

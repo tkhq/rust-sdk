@@ -1,3 +1,5 @@
+mod common;
+
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
 use qos_p256::P256Pair;
@@ -113,7 +115,29 @@ fn hosted_default_rejects_skip_post_without_operator_id() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "--skip-post is only supported for local operators",
+            "--skip-post is not supported for hosted operators",
+        ));
+}
+
+/// A yubikey org in a non-interactive run refuses during resolution: the PIN
+/// can only be typed at a prompt. No device is touched, so this needs no USB.
+#[test]
+fn yubikey_default_without_a_prompt_reports_the_pin_requirement() {
+    let temp = TempDir::new().unwrap();
+    common::write_yubikey_only_config(temp.path(), "test", "org-test");
+
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .arg("deploy")
+        .arg("approve")
+        .arg("--manifest")
+        .arg("fixtures/manifest.json")
+        .arg("--skip-post")
+        .arg("--dangerous-skip-interactive")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "a YubiKey operator needs its PIN typed at an interactive prompt",
         ));
 }
 
@@ -181,7 +205,7 @@ fn hosted_operator_rejects_skip_post_before_api_activity() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "--skip-post is only supported for local operators",
+            "--skip-post is not supported for hosted operators",
         ));
 }
 

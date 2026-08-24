@@ -14,6 +14,7 @@ use crate::{
     prompts::{self, bail_required_in_non_interactive, stdin_can_prompt},
     shell_print, shell_println,
     util::{read_file_to_string, write_file},
+    yubikey::{PcscDevices, pair::PinAcquisition},
 };
 use anyhow::{Context, bail};
 use clap::{ArgGroup, Args as ClapArgs};
@@ -138,6 +139,14 @@ impl Run for Args {
         )
         .await?;
 
+        // The only mode branch: whether a YubiKey PIN prompt is possible is
+        // this endpoint's knowledge; resolution just follows the policy.
+        let pin = if ctx.is_non_interactive() || !stdin_can_prompt() {
+            PinAcquisition::Unavailable
+        } else {
+            PinAcquisition::Prompt
+        };
+
         let inputs = ResolvedApproveInputs {
             manifest,
             operator_seed_source: args.operator_seed_source,
@@ -145,6 +154,7 @@ impl Run for Args {
             approval_out: args.approval_out,
             dry_run: args.dry_run,
             skip_post: args.skip_post,
+            pin,
             post_target,
             posted_approvals: fetched.map(|(_, approvals)| approvals).unwrap_or_default(),
         };
@@ -350,6 +360,7 @@ struct ResolvedApproveInputs<'a> {
     approval_out: Option<PathBuf>,
     dry_run: bool,
     skip_post: bool,
+    pin: PinAcquisition,
     post_target: Option<PostTarget>,
     /// Present only when the manifest came from a deployment fetch: the
     /// already-posted approvals, parsed at that boundary, for validation and
@@ -513,9 +524,11 @@ async fn run_with_resolved_inputs(
 
     let operator = resolve_operator(
         config,
+        PcscDevices,
         inputs.operator_seed_source,
         inputs.operator_id,
         requirement,
+        inputs.pin,
     )
     .await?;
 
