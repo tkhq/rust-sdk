@@ -47,6 +47,8 @@ displaydoc = { workspace = true }
 [dev-dependencies]
 assert_cmd = { workspace = true }
 hpke = { workspace = true }
+# The software ECDH in the yubikey device fake.
+p256 = { workspace = true, features = ["ecdh"] }
 predicates = { workspace = true }
 qos_nsm = { workspace = true, features = ["mock"] }
 rexpect = { workspace = true }
