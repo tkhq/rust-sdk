@@ -2632,9 +2632,9 @@ dependencies = [
 
 [[package]]
 name = "qos_core"
-version = "0.13.0"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e0ae6e3c09abe56a5e93688b97dffc8d8731742460f2c0818fe0bd25d7a980a"
+checksum = "4f64deb87961800f45423d683cb680c72215eadb499fd2dee6741e25e5c4fdc0"
 dependencies = [
  "aws-nitro-enclaves-nsm-api",
  "borsh",
@@ -2657,9 +2657,9 @@ dependencies = [
 
 [[package]]
 name = "qos_crypto"
-version = "0.13.0"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "491a1a215562f2fce94ac9a5222df971da403f28aa905d7ede40b712f1bc1aee"
+checksum = "34febb03890ff59e1f295b68c2d6fd0869ad3fd29f122635437eff4fac08f7c3"
 dependencies = [
  "rand 0.9.2",
  "sha2",
@@ -2670,18 +2670,18 @@ dependencies = [
 
 [[package]]
 name = "qos_hex"
-version = "0.13.0"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b77df1ab33e4d4b0bf2af2a201ebc34821397e1501294ce076e18dab27b43e8d"
+checksum = "8de24e5a01ae2b07a404e19fef4c87f0e89b23b98d8d924083e2ce60f09a8ed4"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "qos_json"
-version = "0.13.0"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f33c2e500bdefcc81778f957ade36c55198c9b07fecaeb0bc6f9c0630df0747"
+checksum = "fb83213f512dc5fd31c1dc62676b38fd924e0f351a3f1244977acf4f2e42b9bb"
 dependencies = [
  "qos_hex",
  "serde",
@@ -2691,9 +2691,9 @@ dependencies = [
 
 [[package]]
 name = "qos_nsm"
-version = "0.13.0"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b3b338a9c8fe461301000adb0f3c700ad19be6ab02a676e6f2912af50f362bb"
+checksum = "89808d7e7d09fdd309dc862a4e3c0ac302b89d4eedce8672f9d0f651d8b88f05"
 dependencies = [
  "aws-nitro-enclaves-cose",
  "aws-nitro-enclaves-nsm-api",
@@ -2710,9 +2710,9 @@ dependencies = [
 
 [[package]]
 name = "qos_p256"
-version = "0.13.0"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e2520ba47ffec6dfa69349903168ecaf8bc8d1c1c29121ecfe9f3ca05784625"
+checksum = "02a4984e535afd52329fb35f067f88b49e78608ef11bbb60834a7ab11721d2dc"
 dependencies = [
  "aes-gcm",
  "borsh",
