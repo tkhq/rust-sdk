@@ -4,17 +4,20 @@ use crate::{
     approvals::{ApprovalVerdict, OperatorApproval, ValidatedManifest},
     client::build_client,
     commands::Run,
-    config::turnkey::{Config, YubiKeySerial},
+    config::turnkey::{
+        Config, OperatorKind, OperatorRecord, SelectYubiKeyOperatorError, YubiKeyOperatorRecord,
+        YubiKeySerial,
+    },
     errors::MissingResource,
     local_operator_key::LocalOperatorSeedSource,
-    operator::{SignerRequirement, YubiKeySelection},
+    operator::{SelectedYubiKey, SignerRequirement},
     outcome::Outcome,
-    output::StdCtx,
+    output::{MissingRequiredInput, StdCtx},
     pair::HexSeed,
     prompts::{self, bail_required_in_non_interactive, stdin_can_prompt},
     shell_print, shell_println,
     util::{read_file_to_string, write_file},
-    yubikey::{self, pair::PinAcquisition},
+    yubikey::{self, Pin},
 };
 use anyhow::{Context, bail};
 use clap::{ArgGroup, Args as ClapArgs};
@@ -129,6 +132,106 @@ impl Run for Args {
             bail_required_in_non_interactive("--dangerous-skip-interactive")?;
         }
 
+        if !args.dry_run && !args.skip_post && args.manifest.is_some() && args.manifest_id.is_none()
+        {
+            return Err(ApproveInputError::MissingManifestId.into());
+        }
+
+        let can_prompt = !ctx.is_non_interactive() && stdin_can_prompt();
+        let operator_id = if args.dry_run || args.skip_post || args.operator_id.is_some() {
+            args.operator_id
+        } else {
+            let candidates = config
+                .known_operator_candidates()
+                .into_iter()
+                .map(|candidate| {
+                    let id = Uuid::parse_str(&candidate.id).with_context(|| {
+                        format!("saved operator ID '{}' is not a UUID", candidate.id)
+                    })?;
+
+                    Ok(ApprovingOperator {
+                        id,
+                        name: candidate.name,
+                    })
+                })
+                .collect::<anyhow::Result<Vec<_>>>()?;
+
+            match candidates.as_slice() {
+                [] => bail!(
+                    "--operator-id is required to post approval to API. \
+                     No registered or saved operator IDs found. \
+                     Use --skip-post to only generate the approval locally."
+                ),
+                [candidate] => Some(candidate.id),
+                _ if !can_prompt => bail!(
+                    "--operator-id is required to post approval to API when multiple operator IDs are available"
+                ),
+                _ => Some(prompts::select("Select approving operator", candidates)?.id),
+            }
+        };
+
+        let hosted_selected = operator_id
+            .map(|id| config.find_hosted_operator(&id))
+            .transpose()?
+            .flatten()
+            .is_some();
+        let selected_yubikey = config
+            .active_org_config()
+            .filter(|(_, org)| {
+                !args.dry_run
+                    && args.operator_seed_source.is_none()
+                    && !hosted_selected
+                    && org.default_operator_kind == OperatorKind::Yubikey
+            })
+            .map(|(alias, org)| {
+                let selected = match args.serial {
+                    Some(serial) => Ok(org.select_yubikey_operator(Some(serial))?),
+                    None => match org.select_yubikey_operator(None) {
+                        Ok(selected) => Ok(selected),
+                        Err(SelectYubiKeyOperatorError::MultipleYubiKeyOperators { .. })
+                            if can_prompt =>
+                        {
+                            struct Choice<'a>(&'a OperatorRecord, &'a YubiKeyOperatorRecord);
+
+                            impl fmt::Display for Choice<'_> {
+                                fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+                                    write!(f, "{} (serial {})", self.0.name, self.1.serial)
+                                }
+                            }
+
+                            let choices = org
+                                .yubikey_operators()
+                                .map(|(operator, yubikey)| Choice(operator, yubikey))
+                                .collect();
+                            let Choice(operator, yubikey) =
+                                prompts::select("Select YubiKey operator", choices)?;
+
+                            Ok((operator, yubikey))
+                        }
+                        Err(
+                            error @ SelectYubiKeyOperatorError::MultipleYubiKeyOperators { .. },
+                        ) => Err(anyhow::Error::new(error)
+                            .context(MissingRequiredInput::new("--serial"))),
+                        Err(error) => Err(error.into()),
+                    },
+                }
+                .with_context(|| format!("org '{alias}'"))?;
+
+                if !can_prompt {
+                    bail!(
+                        "a YubiKey operator needs its PIN typed at an interactive prompt; \
+                         the PIN is never read from config or the environment"
+                    );
+                }
+
+                let pin = Pin::from(prompts::password(
+                    "YubiKey PIV PIN (touch the device each time it blinks)",
+                )?);
+
+                Ok(SelectedYubiKey::new(selected.1.serial, pin))
+            })
+            .transpose()?;
+
         let (manifest, fetched) = load_manifest(ctx, &args, &config).await?;
         let manifest = ValidatedManifest::try_from(&manifest)?;
 
@@ -136,29 +239,19 @@ impl Run for Args {
             interactive_approve(ctx, &manifest)?;
         }
 
-        let (post_target, operator_id) = build_post_target(
-            BuildPostTargetArgs::from(&args),
-            fetched.as_ref().map(|(id, _)| *id),
-            ctx.is_non_interactive(),
-            &config,
-        )
-        .await?;
-
-        // The only mode branch: whether the YubiKey PIN or record-selection
-        // prompts are possible is this endpoint's knowledge; resolution just
-        // follows the policies.
-        let can_prompt = !ctx.is_non_interactive() && stdin_can_prompt();
-
-        let pin = if can_prompt {
-            PinAcquisition::Prompt
+        let post_target = if args.dry_run || args.skip_post {
+            None
         } else {
-            PinAcquisition::Unavailable
-        };
+            let manifest_id = fetched
+                .as_ref()
+                .map(|(id, _)| *id)
+                .or(args.manifest_id)
+                .ok_or(ApproveInputError::MissingManifestId)?;
 
-        let selection = match args.serial {
-            Some(serial) => YubiKeySelection::Explicit(serial),
-            None if can_prompt => YubiKeySelection::Prompt,
-            None => YubiKeySelection::Unavailable,
+            Some(PostTarget {
+                manifest_id,
+                deploy_id: args.deploy_id,
+            })
         };
 
         let inputs = ResolvedApproveInputs {
@@ -168,8 +261,7 @@ impl Run for Args {
             approval_out: args.approval_out,
             dry_run: args.dry_run,
             skip_post: args.skip_post,
-            selection,
-            pin,
+            selected_yubikey,
             post_target,
             posted_approvals: fetched.map(|(_, approvals)| approvals).unwrap_or_default(),
         };
@@ -346,28 +438,6 @@ enum ApproveInputError {
     MissingManifestId,
 }
 
-/// The slice of [`ArgsWithResolvedOperatorSeedSource`] that
-/// [`build_post_target`] observes.
-struct BuildPostTargetArgs {
-    manifest_id: Option<Uuid>,
-    operator_id: Option<Uuid>,
-    deploy_id: Option<Uuid>,
-    dry_run: bool,
-    skip_post: bool,
-}
-
-impl From<&ArgsWithResolvedOperatorSeedSource> for BuildPostTargetArgs {
-    fn from(args: &ArgsWithResolvedOperatorSeedSource) -> Self {
-        Self {
-            manifest_id: args.manifest_id,
-            operator_id: args.operator_id,
-            deploy_id: args.deploy_id,
-            dry_run: args.dry_run,
-            skip_post: args.skip_post,
-        }
-    }
-}
-
 struct ResolvedApproveInputs<'a> {
     manifest: ValidatedManifest<'a>,
     operator_seed_source: Option<LocalOperatorSeedSource>,
@@ -375,8 +445,7 @@ struct ResolvedApproveInputs<'a> {
     approval_out: Option<PathBuf>,
     dry_run: bool,
     skip_post: bool,
-    selection: YubiKeySelection,
-    pin: PinAcquisition,
+    selected_yubikey: Option<SelectedYubiKey>,
     post_target: Option<PostTarget>,
     /// Present only when the manifest came from a deployment fetch: the
     /// already-posted approvals, parsed at that boundary, for validation and
@@ -451,64 +520,6 @@ impl fmt::Display for ApprovingOperator {
     }
 }
 
-/// Resolve where to post and which operator approves. No post target is
-/// built for `--dry-run` or `--skip-post`; without `--operator-id`, a lone
-/// known operator (registered hosted or saved from the last `app create`)
-/// is used and multiple prompt for a choice when possible.
-async fn build_post_target(
-    args: BuildPostTargetArgs,
-    fetched_manifest_id: Option<Uuid>,
-    non_interactive: bool,
-    config: &Config,
-) -> anyhow::Result<(Option<PostTarget>, Option<Uuid>)> {
-    if args.dry_run || args.skip_post {
-        return Ok((None, args.operator_id));
-    }
-
-    let manifest_id = fetched_manifest_id
-        .or(args.manifest_id)
-        .ok_or(ApproveInputError::MissingManifestId)?;
-
-    let operator_id = if let Some(operator_id) = args.operator_id {
-        operator_id
-    } else {
-        let candidates = config
-            .known_operator_candidates()
-            .into_iter()
-            .map(|candidate| {
-                let id = Uuid::parse_str(&candidate.id).with_context(|| {
-                    format!("saved operator ID '{}' is not a UUID", candidate.id)
-                })?;
-
-                Ok(ApprovingOperator {
-                    id,
-                    name: candidate.name,
-                })
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
-
-        match candidates.as_slice() {
-            [] => bail!(
-                "--operator-id is required to post approval to API. \
-                 No registered or saved operator IDs found. \
-                 Use --skip-post to only generate the approval locally."
-            ),
-            [candidate] => candidate.id,
-            _ if non_interactive || !stdin_can_prompt() => bail!(
-                "--operator-id is required to post approval to API when multiple operator IDs are available"
-            ),
-            _ => prompts::select("Select approving operator", candidates)?.id,
-        }
-    };
-
-    let post_target = PostTarget {
-        manifest_id,
-        deploy_id: args.deploy_id,
-    };
-
-    Ok((post_target.into(), operator_id.into()))
-}
-
 async fn run_with_resolved_inputs(
     ctx: &mut StdCtx,
     inputs: ResolvedApproveInputs<'_>,
@@ -547,8 +558,7 @@ async fn run_with_resolved_inputs(
             inputs.operator_seed_source,
             inputs.operator_id,
             requirement,
-            inputs.selection,
-            inputs.pin,
+            inputs.selected_yubikey,
         )
         .await?;
 

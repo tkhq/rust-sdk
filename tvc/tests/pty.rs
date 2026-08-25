@@ -678,12 +678,21 @@ fn write_registry_only_config(home: &Path) -> String {
 /// nothing is provisioned, and the saved config defaults to the yubikey
 /// backend with a serial-only operator record.
 #[test]
-fn login_creates_a_new_org_with_a_registered_yubikey() {
+fn login_creates_a_new_org_with_the_explicit_registered_yubikey() {
     let temp = tempfile::TempDir::new().unwrap();
     let composite = write_registry_only_config(temp.path());
     let (api_base_url, server) = spawn_whoami_server();
 
-    let mut session = spawn_with_home(temp.path(), &["login", "--api-base-url", &api_base_url]);
+    let mut session = spawn_with_home(
+        temp.path(),
+        &[
+            "login",
+            "--api-base-url",
+            &api_base_url,
+            "--serial",
+            "01c95c1f",
+        ],
+    );
 
     session.exp_string("No organization configured.").unwrap();
     session.exp_string("Organization ID").unwrap();
@@ -691,15 +700,10 @@ fn login_creates_a_new_org_with_a_registered_yubikey() {
     session.exp_string("Organization alias").unwrap();
     session.send_line("").unwrap();
 
-    // Down-arrow from "Local key file" to "YubiKey", then pick the
-    // registered serial (the first source option).
+    // Down-arrow from "Local key file" to "YubiKey". The explicit serial
+    // resolves the registered source without another selection prompt.
     session.exp_string("Operator key type").unwrap();
     session.send("\x1b[B").unwrap();
-    session.send_line("").unwrap();
-    session
-        .exp_string("YubiKey to use as the operator")
-        .unwrap();
-    exp_wrapped(&mut session, "01c95c1f (registered)");
     session.send_line("").unwrap();
 
     session.exp_string("Operator public key:").unwrap();
@@ -722,6 +726,10 @@ fn login_creates_a_new_org_with_a_registered_yubikey() {
 
     assert!(output.contains("Successfully logged in!"), "{output}");
     assert!(!output.contains("Generating operator key"), "{output}");
+    assert!(
+        !output.contains("YubiKey to use as the operator"),
+        "{output}"
+    );
     assert!(output.contains("YubiKey operator:"), "{output}");
 
     let saved =

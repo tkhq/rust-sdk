@@ -1,17 +1,20 @@
 //! Re-encrypt local share command.
 
-use crate::config::turnkey::{Config, YubiKeySerial};
+use crate::config::turnkey::{
+    Config, OperatorKind, OperatorRecord, SelectYubiKeyOperatorError, YubiKeyOperatorRecord,
+    YubiKeySerial,
+};
 use crate::local_operator_key::LocalOperatorSeedSource;
-use crate::operator::YubiKeySelection;
+use crate::operator::SelectedYubiKey;
 use crate::outcome::Outcome;
-use crate::output::StdCtx;
+use crate::output::{MissingRequiredInput, StdCtx};
 use crate::pair::{HexSeed, Pair};
-use crate::prompts::stdin_can_prompt;
+use crate::prompts::{self, stdin_can_prompt};
 use crate::provisioning::ProvisionBundle;
 use crate::quorum_key_metadata::QuorumKeyMetadata;
 use crate::shell_eprintln;
 use crate::util::{read_json_file, write_file};
-use crate::yubikey::{self, pair::PinAcquisition};
+use crate::yubikey::{self, Pin};
 use anyhow::{Context, anyhow};
 use clap::Args as ClapArgs;
 use qos_core::protocol::services::boot::{Approval, QuorumMember, VersionedManifestEnvelope};
@@ -118,27 +121,64 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Result
         )?;
     }
 
-    // The only mode branch: whether the YubiKey PIN or record-selection
-    // prompts are possible is this endpoint's knowledge; selection and
-    // resolution just follow the policies.
     let can_prompt = !ctx.is_non_interactive() && stdin_can_prompt();
+    let selected_yubikey = config
+        .active_org_config()
+        .filter(|(_, org)| {
+            operator_seed_source.is_none() && org.default_operator_kind == OperatorKind::Yubikey
+        })
+        .map(|(alias, org)| {
+            let selected = match args.serial {
+                Some(serial) => Ok(org.select_yubikey_operator(Some(serial))?),
+                None => match org.select_yubikey_operator(None) {
+                    Ok(selected) => Ok(selected),
+                    Err(SelectYubiKeyOperatorError::MultipleYubiKeyOperators { .. })
+                        if can_prompt =>
+                    {
+                        struct Choice<'a>(&'a OperatorRecord, &'a YubiKeyOperatorRecord);
 
-    let pin = if can_prompt {
-        PinAcquisition::Prompt
-    } else {
-        PinAcquisition::Unavailable
-    };
+                        impl Display for Choice<'_> {
+                            fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+                                write!(f, "{} (serial {})", self.0.name, self.1.serial)
+                            }
+                        }
 
-    let selection = match args.serial {
-        Some(serial) => YubiKeySelection::Explicit(serial),
-        None if can_prompt => YubiKeySelection::Prompt,
-        None => YubiKeySelection::Unavailable,
-    };
+                        let choices = org
+                            .yubikey_operators()
+                            .map(|(operator, yubikey)| Choice(operator, yubikey))
+                            .collect();
+                        let Choice(operator, yubikey) =
+                            prompts::select("Select YubiKey operator", choices)?;
 
-    // Backend selection settles before the input files are even read: an
-    // impossible run is refused up front. Device access and the PIN prompt
-    // wait until the inputs are valid.
-    let pair_source = config.select_operator_pair_source(operator_seed_source, selection, pin)?;
+                        Ok((operator, yubikey))
+                    }
+                    Err(error @ SelectYubiKeyOperatorError::MultipleYubiKeyOperators { .. }) => {
+                        Err(anyhow::Error::new(error)
+                            .context(MissingRequiredInput::new("--serial")))
+                    }
+                    Err(error) => Err(error.into()),
+                },
+            }
+            .with_context(|| format!("org '{alias}'"))?;
+
+            if !can_prompt {
+                anyhow::bail!(
+                    "a YubiKey operator needs its PIN typed at an interactive prompt; \
+                     the PIN is never read from config or the environment"
+                );
+            }
+
+            let pin = Pin::from(prompts::password(
+                "YubiKey PIV PIN (touch the device each time it blinks)",
+            )?);
+
+            Ok(SelectedYubiKey::new(selected.1.serial, pin))
+        })
+        .transpose()?;
+
+    // Backend selection and any terminal input settle before the input files
+    // are read; device access waits until the files are valid.
+    let pair_source = config.select_operator_pair_source(operator_seed_source, selected_yubikey)?;
 
     let quorum_key_metadata: QuorumKeyMetadata =
         read_json_file(&args.quorum_key_metadata, "quorum key metadata file").await?;
@@ -274,7 +314,6 @@ mod tests {
     use crate::pair::LocalPair;
     use crate::provisioning::ProvisionBundle;
     use crate::quorum_key_metadata::{EncryptedShareMetadata, QuorumKeyMetadata};
-    use crate::yubikey::pair::AvailablePin;
     use crate::yubikey::test_support::{FakeDevice, PIN, serial};
     use crate::yubikey::{Pin, SlotStatus};
     use qos_core::protocol::services::boot::{
@@ -559,7 +598,7 @@ mod tests {
             .resolve_yubikey(
                 serial(),
                 device,
-                AvailablePin::Fixed(Pin::from(String::from_utf8(PIN.to_vec()).unwrap())),
+                Pin::from(String::from_utf8(PIN.to_vec()).unwrap()),
             )
             .await
             .unwrap();

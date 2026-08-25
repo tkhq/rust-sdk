@@ -238,7 +238,7 @@ impl ResolvedHostedOperator {
 impl Config {
     /// Find the hosted registry record with `operator_id` in the active
     /// organization, if any, validated for use.
-    pub(super) fn find_hosted_operator(
+    pub(crate) fn find_hosted_operator(
         &self,
         operator_id: &Uuid,
     ) -> Result<Option<ResolvedHostedOperator>> {

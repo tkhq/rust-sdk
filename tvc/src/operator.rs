@@ -13,20 +13,12 @@ pub(crate) use hosted::{ResolvedHostedOperator, hosted_activity_error};
 use crate::{
     approvals::ValidatedManifest,
     client::build_client,
-    config::turnkey::{
-        Config, OperatorKind, OperatorRecord, OrgConfig, SelectYubiKeyOperatorError,
-        StoredQosOperatorKey, YubiKeyOperatorRecord, YubiKeySerial,
-    },
+    config::turnkey::{Config, OperatorKind, StoredQosOperatorKey, YubiKeySerial},
     local_operator_key::{
         LocalOperatorSeedSource, resolve_local_operator, resolve_registered_local_operator,
     },
-    output::MissingRequiredInput,
     pair::{Pair, Signer},
-    prompts,
-    yubikey::{
-        DeviceError, DeviceOps,
-        pair::{AvailablePin, PinAcquisition},
-    },
+    yubikey::{DeviceError, DeviceOps, Pin},
 };
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use hosted::HostedSigner;
@@ -175,62 +167,16 @@ pub(crate) enum SignerRequirement {
     OfflineApproval,
 }
 
-/// How an organization's YubiKey operator is chosen when several are
-/// registered.
-///
-/// Endpoints decide the policy from their flags and interaction mode; the
-/// shared resolution path only branches on the variant.
-#[derive(Clone, Copy)]
-pub(crate) enum YubiKeySelection {
-    /// An explicit serial from the command line.
-    Explicit(YubiKeySerial),
-    /// Prompt-select among the registered records when several exist.
-    Prompt,
-    /// No selection can be collected: the command runs non-interactively or
-    /// stdin cannot prompt, so several records require an explicit serial.
-    Unavailable,
+/// A YubiKey operator and its already-acquired PIN, resolved at a command
+/// endpoint before shared operator dispatch begins.
+pub(crate) struct SelectedYubiKey {
+    serial: YubiKeySerial,
+    pin: Pin,
 }
 
-impl OrgConfig {
-    /// Choose this organization's YubiKey operator under the endpoint's
-    /// selection policy: an explicit serial must name a registered record;
-    /// otherwise the sole record, with several settled by a prompt under
-    /// [`YubiKeySelection::Prompt`] and refused under
-    /// [`YubiKeySelection::Unavailable`].
-    pub(crate) fn choose_yubikey_operator(
-        &self,
-        selection: YubiKeySelection,
-    ) -> Result<(&OperatorRecord, &YubiKeyOperatorRecord)> {
-        match selection {
-            YubiKeySelection::Explicit(serial) => Ok(self.select_yubikey_operator(Some(serial))?),
-            YubiKeySelection::Prompt => match self.select_yubikey_operator(None) {
-                Err(SelectYubiKeyOperatorError::MultipleYubiKeyOperators { .. }) => {
-                    struct Choice<'a>(&'a OperatorRecord, &'a YubiKeyOperatorRecord);
-
-                    impl Display for Choice<'_> {
-                        fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-                            write!(f, "{} (serial {})", self.0.name, self.1.serial)
-                        }
-                    }
-
-                    let choices = self
-                        .yubikey_operators()
-                        .map(|(operator, yubikey)| Choice(operator, yubikey))
-                        .collect();
-                    let Choice(operator, yubikey) =
-                        prompts::select("Select YubiKey operator", choices)?;
-
-                    Ok((operator, yubikey))
-                }
-                selected => Ok(selected?),
-            },
-            YubiKeySelection::Unavailable => match self.select_yubikey_operator(None) {
-                Err(error @ SelectYubiKeyOperatorError::MultipleYubiKeyOperators { .. }) => {
-                    Err(anyhow::Error::new(error).context(MissingRequiredInput::new("--serial")))
-                }
-                selected => Ok(selected?),
-            },
-        }
+impl SelectedYubiKey {
+    pub(crate) fn new(serial: YubiKeySerial, pin: Pin) -> Self {
+        Self { serial, pin }
     }
 }
 
@@ -253,19 +199,15 @@ impl Display for OperatorCandidate {
 }
 
 /// A share-decryption backend selected by
-/// [`Config::select_operator_pair_source`] from config and interaction mode
-/// alone. [`Self::resolve`] performs the I/O: file reads, device
-/// verification, and the PIN prompt.
+/// [`Config::select_operator_pair_source`] from config and endpoint-resolved
+/// inputs. [`Self::resolve`] performs file reads and device verification.
 pub(crate) enum OperatorPairSource {
     /// An explicit seed from the command line.
     Seed(LocalOperatorSeedSource),
     /// The sole registered local operator's key file.
     RegisteredKeyFile(PathBuf),
     /// The sole registered yubikey operator's device.
-    Yubikey {
-        serial: YubiKeySerial,
-        pin: AvailablePin,
-    },
+    Yubikey { serial: YubiKeySerial, pin: Pin },
 }
 
 impl OperatorPairSource {
@@ -339,10 +281,8 @@ impl Config {
     ///    never crosses over: `local` resolves the sole local record
     ///    (reconciling a given ID against its configured one); `hosted`
     ///    resolves the sole hosted record when no ID names one, and never
-    ///    falls back to the local key; `yubikey` resolves a yubikey record's
-    ///    device by serial — the sole record, or one chosen under the
-    ///    endpoint's selection policy — passing a given ID through for
-    ///    posting.
+    ///    falls back to the local key; `yubikey` resolves the record and PIN
+    ///    selected by the endpoint, passing a given ID through for posting.
     ///
     /// The registry is read lazily inside: the explicit-seed path must not
     /// depend on an org being configured.
@@ -352,8 +292,7 @@ impl Config {
         explicit: Option<LocalOperatorSeedSource>,
         operator_id: Option<Uuid>,
         requirement: SignerRequirement,
-        selection: YubiKeySelection,
-        pin: PinAcquisition,
+        selected_yubikey: Option<SelectedYubiKey>,
     ) -> Result<ResolvedOperator>
     where
         D: DeviceOps + Send + 'static,
@@ -431,12 +370,15 @@ impl Config {
                 }
             },
             OperatorKind::Yubikey => {
+                let selected_yubikey = selected_yubikey
+                    .context("YubiKey operator input must be resolved before dispatch")?;
                 let (operator, yubikey) = org
-                    .choose_yubikey_operator(selection)
+                    .select_yubikey_operator(Some(selected_yubikey.serial))
                     .with_context(|| format!("org '{alias}'"))?;
-                let pin = pin.into_available()?;
                 let device = open_device(yubikey.serial)?;
-                let pair = self.resolve_yubikey(yubikey.serial, device, pin).await?;
+                let pair = self
+                    .resolve_yubikey(yubikey.serial, device, selected_yubikey.pin)
+                    .await?;
 
                 Ok(ResolvedOperator {
                     name: Some(operator.name.clone()),
@@ -480,19 +422,15 @@ impl Config {
         }
     }
 
-    /// Select the share-decryption backend from config and the endpoint's
-    /// policies, so endpoints refuse impossible runs before file or device
-    /// I/O; an ambiguous yubikey default is settled here (explicit serial,
-    /// record prompt, or refusal) while [`OperatorPairSource::resolve`]
-    /// performs the I/O. An explicit seed is local, always, and skips the
-    /// config. Hosted operators sign through the API and hold no local key
-    /// material, so a hosted default is redirected to the hosted counterpart
-    /// of the flow.
+    /// Select the share-decryption backend from config and endpoint-resolved
+    /// inputs before file or device I/O. An explicit seed is local, always,
+    /// and skips the config. Hosted operators sign through the API and hold
+    /// no local key material, so a hosted default is redirected to the hosted
+    /// counterpart of the flow.
     pub(crate) fn select_operator_pair_source(
         &self,
         explicit: Option<LocalOperatorSeedSource>,
-        selection: YubiKeySelection,
-        pin: PinAcquisition,
+        selected_yubikey: Option<SelectedYubiKey>,
     ) -> Result<OperatorPairSource> {
         if let Some(explicit) = explicit {
             return Ok(OperatorPairSource::Seed(explicit));
@@ -516,13 +454,15 @@ impl Config {
                 ))
             }
             OperatorKind::Yubikey => {
+                let selected_yubikey = selected_yubikey
+                    .context("YubiKey operator input must be resolved before dispatch")?;
                 let (_, yubikey) = org
-                    .choose_yubikey_operator(selection)
+                    .select_yubikey_operator(Some(selected_yubikey.serial))
                     .with_context(|| format!("org '{alias}'"))?;
 
                 Ok(OperatorPairSource::Yubikey {
                     serial: yubikey.serial,
-                    pin: pin.into_available()?,
+                    pin: selected_yubikey.pin,
                 })
             }
             // TODO(TVC-202): remove hardcoded user-facing messages mentioning
@@ -687,10 +627,12 @@ mod tests {
         }
     }
 
-    fn fixed_pin() -> PinAcquisition {
-        PinAcquisition::Fixed(Pin::from(
-            String::from_utf8(test_support::PIN.to_vec()).unwrap(),
-        ))
+    fn fixed_pin() -> Pin {
+        Pin::from(String::from_utf8(test_support::PIN.to_vec()).unwrap())
+    }
+
+    fn selected_yubikey() -> SelectedYubiKey {
+        SelectedYubiKey::new(test_support::serial(), fixed_pin())
     }
 
     fn registered_yubikey_config(device: &FakeDevice) -> Config {
@@ -713,8 +655,7 @@ mod tests {
                 None,
                 None,
                 SignerRequirement::Any,
-                YubiKeySelection::Prompt,
-                fixed_pin(),
+                Some(selected_yubikey()),
             )
             .await
             .unwrap();
@@ -735,8 +676,7 @@ mod tests {
                 None,
                 None,
                 SignerRequirement::OfflineApproval,
-                YubiKeySelection::Prompt,
-                fixed_pin(),
+                Some(selected_yubikey()),
             )
             .await
             .unwrap();
@@ -756,8 +696,7 @@ mod tests {
                 None,
                 Some(requested),
                 SignerRequirement::Any,
-                YubiKeySelection::Prompt,
-                fixed_pin(),
+                Some(selected_yubikey()),
             )
             .await
             .unwrap();
@@ -779,8 +718,7 @@ mod tests {
                 Some(LocalOperatorSeedSource::Value(seed)),
                 None,
                 SignerRequirement::Any,
-                YubiKeySelection::Prompt,
-                fixed_pin(),
+                None,
             )
             .await
             .unwrap();
@@ -806,8 +744,7 @@ mod tests {
                 None,
                 Some(HOSTED_ID.parse().unwrap()),
                 SignerRequirement::OfflineApproval,
-                YubiKeySelection::Prompt,
-                fixed_pin(),
+                None,
             )
             .await
             .unwrap_err();
@@ -821,23 +758,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn yubikey_default_without_a_pin_bails_actionably() {
+    async fn yubikey_default_without_resolved_endpoint_input_is_refused() {
         let device = provisioned_fake();
         let config = registered_yubikey_config(&device);
 
         let error = config
-            .resolve_operator(
-                open_fake(device),
-                None,
-                None,
-                SignerRequirement::Any,
-                YubiKeySelection::Prompt,
-                PinAcquisition::Unavailable,
-            )
+            .resolve_operator(open_fake(device), None, None, SignerRequirement::Any, None)
             .await
             .unwrap_err();
 
-        assert!(format!("{error:#}").contains("interactive prompt"));
+        assert!(format!("{error:#}").contains("must be resolved before dispatch"));
     }
 
     #[tokio::test]
@@ -851,15 +781,14 @@ mod tests {
                 None,
                 None,
                 SignerRequirement::Any,
-                YubiKeySelection::Prompt,
-                fixed_pin(),
+                Some(selected_yubikey()),
             )
             .await
             .unwrap_err();
 
         let rendered = format!("{error:#}");
         assert!(rendered.contains("org 'active'"));
-        assert!(rendered.contains("no YubiKey operator is configured"));
+        assert!(rendered.contains("no YubiKey operator has serial 01c95c1f"));
     }
 
     #[tokio::test]
@@ -873,8 +802,7 @@ mod tests {
         let source = config
             .select_operator_pair_source(
                 Some(LocalOperatorSeedSource::Value(seed_hex.parse().unwrap())),
-                YubiKeySelection::Unavailable,
-                PinAcquisition::Unavailable,
+                None,
             )
             .unwrap();
         let pair = source
@@ -909,13 +837,7 @@ mod tests {
         }]);
         let expected = LocalPair::from_hex_seed(&private_key).unwrap().public_key();
 
-        let source = config
-            .select_operator_pair_source(
-                None,
-                YubiKeySelection::Unavailable,
-                PinAcquisition::Unavailable,
-            )
-            .unwrap();
+        let source = config.select_operator_pair_source(None, None).unwrap();
         let pair = source
             .resolve(&config, open_fake(provisioned_fake()))
             .await
@@ -931,7 +853,7 @@ mod tests {
         let config = registered_yubikey_config(&device);
 
         let source = config
-            .select_operator_pair_source(None, YubiKeySelection::Prompt, fixed_pin())
+            .select_operator_pair_source(None, Some(selected_yubikey()))
             .unwrap();
         let pair = source.resolve(&config, open_fake(device)).await.unwrap();
 
@@ -939,20 +861,16 @@ mod tests {
     }
 
     #[test]
-    fn operator_pair_yubikey_default_without_a_pin_is_refused_at_selection() {
+    fn operator_pair_yubikey_default_without_resolved_endpoint_input_is_refused() {
         let device = provisioned_fake();
         let config = registered_yubikey_config(&device);
 
         let error = config
-            .select_operator_pair_source(
-                None,
-                YubiKeySelection::Unavailable,
-                PinAcquisition::Unavailable,
-            )
+            .select_operator_pair_source(None, None)
             .err()
-            .expect("selection must refuse an unavailable PIN");
+            .expect("selection must require resolved YubiKey input");
 
-        assert!(format!("{error:#}").contains("interactive prompt"));
+        assert!(format!("{error:#}").contains("must be resolved before dispatch"));
     }
 
     #[test]
@@ -961,11 +879,7 @@ mod tests {
         config.orgs.get_mut("active").unwrap().default_operator_kind = OperatorKind::Hosted;
 
         let error = config
-            .select_operator_pair_source(
-                None,
-                YubiKeySelection::Unavailable,
-                PinAcquisition::Unavailable,
-            )
+            .select_operator_pair_source(None, None)
             .err()
             .expect("a hosted default cannot decrypt locally");
 
@@ -985,28 +899,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn yubikey_default_with_multiple_records_requires_an_explicit_serial() {
+    async fn yubikey_default_with_multiple_records_requires_resolved_endpoint_input() {
         let device = provisioned_fake();
         let config = multi_yubikey_config(&device);
 
         let error = config
-            .resolve_operator(
-                open_fake(device),
-                None,
-                None,
-                SignerRequirement::Any,
-                YubiKeySelection::Unavailable,
-                fixed_pin(),
-            )
+            .resolve_operator(open_fake(device), None, None, SignerRequirement::Any, None)
             .await
             .unwrap_err();
 
         let rendered = format!("{error:#}");
-        assert!(rendered.contains("--serial is required"));
-        assert!(
-            rendered
-                .contains("multiple YubiKey operators are configured (serials 01c95c1f, deadbeef)")
-        );
+        assert!(rendered.contains("must be resolved before dispatch"));
     }
 
     #[tokio::test]
@@ -1021,8 +924,7 @@ mod tests {
                 None,
                 None,
                 SignerRequirement::Any,
-                YubiKeySelection::Explicit(test_support::serial()),
-                fixed_pin(),
+                Some(selected_yubikey()),
             )
             .await
             .unwrap();
@@ -1036,7 +938,7 @@ mod tests {
         let (_, org) = config.active_org_config().unwrap();
 
         let error = org
-            .choose_yubikey_operator(YubiKeySelection::Explicit(YubiKeySerial::from(0xdead_beef)))
+            .select_yubikey_operator(Some(YubiKeySerial::from(0xdead_beef)))
             .unwrap_err();
 
         assert_eq!(error.to_string(), "no YubiKey operator has serial deadbeef");

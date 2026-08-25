@@ -6,15 +6,15 @@ use crate::commands::keys::backup_operator_key::{
 };
 use crate::config::turnkey::{
     API_BASE_URL_PROD, Config, KeyCurve, LocalOperatorRecord, NewOrgOperator, OperatorKind,
-    OperatorRecordKind, OrgConfig, QosOperatorPublicKey, StoredApiKey, StoredQosOperatorKey,
+    OperatorRecord, OperatorRecordKind, OrgConfig, QosOperatorPublicKey,
+    SelectYubiKeyOperatorError, StoredApiKey, StoredQosOperatorKey, YubiKeyOperatorRecord,
     YubiKeyRegistryEntry, YubiKeySerial, dashboard_base_url, default_api_key_path,
     default_operator_key_path, default_org_dir,
 };
-use crate::operator::YubiKeySelection;
 use crate::outcome::Outcome;
-use crate::output::StdCtx;
+use crate::output::{MissingRequiredInput, StdCtx};
 use crate::prompts::{self, error_required_in_non_interactive};
-use crate::yubikey::{self, Pin, YubiKeySource};
+use crate::yubikey::{self, ConnectedYubiKeys, Pin};
 use crate::{shell_eprintln, shell_print, shell_println};
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Args as ClapArgs;
@@ -71,7 +71,8 @@ enum OrgPlan {
 /// The operator backend chosen for a new organization at plan time.
 enum NewOrgOperatorPlan {
     Local,
-    Yubikey(YubiKeySource),
+    RegisteredYubikey(YubiKeySerial),
+    ProvisionYubikey { serial: YubiKeySerial, pin: Pin },
 }
 
 /// The yubikey leg of a newly created organization: what the coherent save
@@ -93,9 +94,9 @@ struct LoginPlan {
     org: OrgPlan,
     api_base_url_override: Option<String>,
     api_key_policy: ApiKeyPolicy,
-    /// How a yubikey-default org with several YubiKey operators settles which
-    /// one this login reports.
-    yubikey_selection: YubiKeySelection,
+    /// The YubiKey operator selected at the endpoint. `None` remains valid
+    /// for non-interactive runs with a sole record.
+    yubikey_serial: Option<YubiKeySerial>,
 }
 
 #[instrument(skip_all)]
@@ -345,18 +346,56 @@ fn build_login_plan_interactive(
     args: Args,
     config: &Config,
 ) -> Result<LoginPlan> {
-    let org = match args.org {
+    let Args {
+        org,
+        api_base_url,
+        serial,
+    } = args;
+    let org = match org {
         Some(query) => OrgPlan::Existing(query),
-        None => prompt_for_org_plan(ctx, config, args.api_base_url.as_deref())?,
+        None => prompt_for_org_plan(ctx, config, api_base_url.as_deref(), serial)?,
     };
+
+    let yubikey_serial = match &org {
+        OrgPlan::Existing(query) => find_org(config, query)
+            .filter(|(_, org)| org.default_operator_kind == OperatorKind::Yubikey)
+            .map(|(_, org)| -> Result<YubiKeySerial> {
+                if let Some(serial) = serial {
+                    return Ok(org.select_yubikey_operator(Some(serial))?.1.serial);
+                }
+
+                match org.select_yubikey_operator(None) {
+                    Ok((_, yubikey)) => Ok(yubikey.serial),
+                    Err(SelectYubiKeyOperatorError::MultipleYubiKeyOperators { .. }) => {
+                        struct Choice<'a>(&'a OperatorRecord, &'a YubiKeyOperatorRecord);
+
+                        impl Display for Choice<'_> {
+                            fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+                                write!(f, "{} (serial {})", self.0.name, self.1.serial)
+                            }
+                        }
+
+                        let choices = org
+                            .yubikey_operators()
+                            .map(|(operator, yubikey)| Choice(operator, yubikey))
+                            .collect();
+                        let Choice(_, yubikey) =
+                            prompts::select("Select YubiKey operator", choices)?;
+
+                        Ok(yubikey.serial)
+                    }
+                    Err(error) => Err(error.into()),
+                }
+            })
+            .transpose()?,
+        OrgPlan::New { .. } => None,
+    };
+
     Ok(LoginPlan {
         org,
-        api_base_url_override: args.api_base_url,
+        api_base_url_override: api_base_url,
         api_key_policy: ApiKeyPolicy::AllowGenerate,
-        yubikey_selection: args
-            .serial
-            .map(YubiKeySelection::Explicit)
-            .unwrap_or(YubiKeySelection::Prompt),
+        yubikey_serial,
     })
 }
 
@@ -369,10 +408,7 @@ fn build_login_plan_non_interactive(args: Args) -> Result<LoginPlan> {
         org: OrgPlan::Existing(org_query),
         api_base_url_override: args.api_base_url,
         api_key_policy: ApiKeyPolicy::RequireExisting,
-        yubikey_selection: args
-            .serial
-            .map(YubiKeySelection::Explicit)
-            .unwrap_or(YubiKeySelection::Unavailable),
+        yubikey_serial: args.serial,
     })
 }
 
@@ -406,7 +442,7 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
             // reference as one coherent transition.
             let (operator, yubikey) = match operator {
                 NewOrgOperatorPlan::Local => (NewOrgOperator::LocalKeyFile, None),
-                NewOrgOperatorPlan::Yubikey(YubiKeySource::Registered(serial)) => {
+                NewOrgOperatorPlan::RegisteredYubikey(serial) => {
                     let entry = config.yubikeys.get(serial).ok_or_else(|| {
                         anyhow!(
                             "YubiKey {serial} is not in the device registry; run \
@@ -424,10 +460,7 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
                         }),
                     )
                 }
-                NewOrgOperatorPlan::Yubikey(YubiKeySource::Provision(serial)) => {
-                    let pin = Pin::from(prompts::password(
-                        "YubiKey PIV PIN (the factory default is 123456; touch the device each time it blinks)",
-                    )?);
+                NewOrgOperatorPlan::ProvisionYubikey { serial, pin } => {
                     let mut device = yubikey::open(serial)?;
                     let enrolled = config.enroll_yubikey(serial, &mut device, &pin)?;
 
@@ -578,9 +611,17 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
             }
         }
         OperatorKind::Yubikey => {
-            let (operator, yubikey) = org_config
-                .choose_yubikey_operator(plan.yubikey_selection)
-                .with_context(|| format!("org '{alias}'"))?;
+            let selected = org_config.select_yubikey_operator(plan.yubikey_serial);
+            let (operator, yubikey) = match selected {
+                Err(error @ SelectYubiKeyOperatorError::MultipleYubiKeyOperators { .. })
+                    if plan.yubikey_serial.is_none() =>
+                {
+                    return Err(anyhow::Error::new(error)
+                        .context(MissingRequiredInput::new("--serial"))
+                        .context(format!("org '{alias}'")));
+                }
+                selected => selected.with_context(|| format!("org '{alias}'"))?,
+            };
             let entry = config.yubikeys.get(yubikey.serial).ok_or_else(|| {
                 anyhow!(
                     "YubiKey {serial} of operator '{name}' is not in the device registry; \
@@ -624,6 +665,7 @@ fn prompt_for_org_plan(
     ctx: &mut StdCtx,
     config: &Config,
     api_base_url_override: Option<&str>,
+    serial: Option<YubiKeySerial>,
 ) -> Result<OrgPlan> {
     debug!(
         configured_org_count = config.orgs.len(),
@@ -634,7 +676,7 @@ fn prompt_for_org_plan(
     if config.orgs.is_empty() {
         debug!("no organizations configured; prompting for new organization");
         shell_println!(ctx, "No organization configured.")?;
-        return prompt_for_new_org_inputs(ctx, config, api_base_url_override);
+        return prompt_for_new_org_inputs(ctx, config, api_base_url_override, serial);
     }
 
     let mut options: Vec<OrgChoice> = config
@@ -656,7 +698,7 @@ fn prompt_for_org_plan(
 
     match prompts::select("Select organization", options)? {
         OrgChoice::Existing { alias, .. } => Ok(OrgPlan::Existing(alias)),
-        OrgChoice::New => prompt_for_new_org_inputs(ctx, config, api_base_url_override),
+        OrgChoice::New => prompt_for_new_org_inputs(ctx, config, api_base_url_override, serial),
     }
 }
 
@@ -664,6 +706,7 @@ fn prompt_for_new_org_inputs(
     ctx: &mut StdCtx,
     config: &Config,
     api_base_url_override: Option<&str>,
+    serial: Option<YubiKeySerial>,
 ) -> Result<OrgPlan> {
     let dashboard_url = dashboard_base_url(api_base_url_override.unwrap_or(API_BASE_URL_PROD));
     shell_println!(
@@ -701,9 +744,54 @@ fn prompt_for_new_org_inputs(
         )? {
             OperatorKeyChoice::Local => NewOrgOperatorPlan::Local,
             OperatorKeyChoice::Yubikey => {
-                NewOrgOperatorPlan::Yubikey(YubiKeySource::prompt(&config.yubikeys, || {
-                    ctx.connected_yubikeys()
-                })?)
+                enum SourceChoice {
+                    Registered(YubiKeySerial),
+                    Provision(Option<YubiKeySerial>),
+                }
+
+                impl Display for SourceChoice {
+                    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+                        match self {
+                            Self::Registered(serial) => write!(f, "{serial} (registered)"),
+                            Self::Provision(_) => {
+                                f.write_str("[new] Provision a connected YubiKey")
+                            }
+                        }
+                    }
+                }
+
+                let source = match serial {
+                    Some(serial) if config.yubikeys.contains(serial) => {
+                        SourceChoice::Registered(serial)
+                    }
+                    Some(serial) => SourceChoice::Provision(Some(serial)),
+                    None if config.yubikeys.is_empty() => SourceChoice::Provision(None),
+                    None => {
+                        let mut choices = config
+                            .yubikeys
+                            .serials()
+                            .map(SourceChoice::Registered)
+                            .collect::<Vec<_>>();
+                        choices.push(SourceChoice::Provision(None));
+
+                        prompts::select("YubiKey to use as the operator", choices)?
+                    }
+                };
+
+                match source {
+                    SourceChoice::Registered(serial) => {
+                        NewOrgOperatorPlan::RegisteredYubikey(serial)
+                    }
+                    SourceChoice::Provision(explicit) => {
+                        let serial =
+                            ConnectedYubiKeys::from(ctx.connected_yubikeys()?).choose(explicit)?;
+                        let pin = Pin::from(prompts::password(
+                            "YubiKey PIV PIN (the factory default is 123456; touch the device each time it blinks)",
+                        )?);
+
+                        NewOrgOperatorPlan::ProvisionYubikey { serial, pin }
+                    }
+                }
             }
         }
     };

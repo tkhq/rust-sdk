@@ -523,14 +523,15 @@ impl OrgConfig {
         }
     }
 
-    /// Add a YubiKey operator record for the serial, named `yubikey-{serial}`
-    /// unless a name is given. Refuses a serial this organization already
-    /// references; records with distinct serials may coexist.
-    pub(crate) fn add_yubikey_operator(
-        &mut self,
+    /// Produce a YubiKey operator record for the serial, named
+    /// `yubikey-{serial}` unless a name is given. Refuses a serial this
+    /// organization already references, so callers can settle the config
+    /// mutation before performing device I/O.
+    pub(crate) fn new_yubikey_operator(
+        &self,
         serial: YubiKeySerial,
         name: Option<String>,
-    ) -> Result<(), DuplicateYubiKeyOperator> {
+    ) -> Result<OperatorRecord, DuplicateYubiKeyOperator> {
         if self
             .yubikey_operators()
             .any(|(_, yubikey)| yubikey.serial == serial)
@@ -544,8 +545,7 @@ impl OrgConfig {
             record.name = name;
         }
 
-        self.operators.push(record);
-        Ok(())
+        Ok(record)
     }
 }
 
@@ -987,10 +987,10 @@ serial = "01c95c1f"
 
     #[test]
     fn adding_a_duplicate_yubikey_serial_is_refused() {
-        let mut org = yubikey_org(&[0x01c9_5c1f]);
+        let org = yubikey_org(&[0x01c9_5c1f]);
 
         let error = org
-            .add_yubikey_operator(YubiKeySerial::from(0x01c9_5c1f), None)
+            .new_yubikey_operator(YubiKeySerial::from(0x01c9_5c1f), None)
             .unwrap_err();
 
         assert_eq!(
@@ -1022,8 +1022,10 @@ serial = "01c95c1f"
     fn distinct_yubikey_serials_coexist_in_one_org() {
         let mut org = yubikey_org(&[0x01c9_5c1f]);
 
-        org.add_yubikey_operator(YubiKeySerial::from(0xdead_beef), Some("backup".to_string()))
+        let record = org
+            .new_yubikey_operator(YubiKeySerial::from(0xdead_beef), Some("backup".to_string()))
             .unwrap();
+        org.operators.push(record);
 
         let (record, yubikey) = org
             .select_yubikey_operator(Some(YubiKeySerial::from(0xdead_beef)))

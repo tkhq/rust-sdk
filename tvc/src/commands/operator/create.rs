@@ -15,7 +15,7 @@ use crate::{
     outcome::Outcome,
     output::StdCtx,
     prompts,
-    yubikey::{self, ConnectedYubiKeys, DeviceError, DeviceOps, Pin, QosSlot, YubiKeySource},
+    yubikey::{self, ConnectedYubiKeys, DeviceError, DeviceOps, Pin, QosSlot},
 };
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use clap::{ArgGroup, Args as ClapArgs, ValueEnum, builder::NonEmptyStringValueParser};
@@ -189,9 +189,96 @@ impl Run for Args {
     #[instrument(skip_all)]
     async fn run(self, ctx: &mut StdCtx, mut config: Config) -> Result<CreateOutcome> {
         match CreatePlan::try_from(self)? {
-            CreatePlan::Hosted { spec, make_default } => Ok(CreateOutcome::Hosted(
-                create_hosted(&mut config, spec, make_default).await?,
-            )),
+            CreatePlan::Hosted { spec, make_default } => {
+                let (alias, configured_org_id) = config
+                    .active_org_config()
+                    .map(|(alias, org)| (alias.clone(), org.id.as_str()))
+                    .context("No active organization. Run `tvc login` first.")?;
+
+                let auth = build_client(&config).await?;
+                ensure_authenticated_org(&auth.org_id, configured_org_id)?;
+
+                let HostedOperatorSpec { name, wallet, path } = spec;
+
+                let (wallet_name, wallet_id) = match wallet {
+                    HostedOperatorWallet::New(name) => (Some(name), None),
+                    HostedOperatorWallet::Existing(id) => (None, Some(id.to_string())),
+                };
+
+                let intent = CreateTvcOperatorIntent {
+                    wallet_name,
+                    wallet_id,
+                    path: path.clone(),
+                    operator_name: name.clone(),
+                };
+
+                let result = auth
+                    .client
+                    .create_tvc_operator(auth.org_id.clone(), timestamp_ms()?, intent)
+                    .await
+                    .map_err(|error| hosted_activity_error("create hosted TVC operator", error))?;
+
+                let result = CreateOperatorRequestResult {
+                    name,
+                    path,
+                    result: result.result,
+                };
+
+                let record = OperatorRecord::try_from(result)?;
+
+                let org = config.orgs.get_mut(&alias).with_context(|| {
+                    format!("active organization '{alias}' disappeared from config")
+                })?;
+                org.operators.push(record.clone());
+
+                if make_default {
+                    org.default_operator_kind = OperatorKind::Hosted;
+                }
+
+                let OperatorRecord { name, kind } = record;
+                let OperatorRecordKind::Hosted(hosted) = kind else {
+                    return Err(anyhow!("hosted operator creation returned a local record"));
+                };
+
+                if let Err(save_error) = config.save().await {
+                    let record = config
+                        .orgs
+                        .get(&alias)
+                        .and_then(|org| org.operators.last())
+                        .with_context(|| {
+                            format!(
+                                "hosted operator disappeared from active organization '{alias}'"
+                            )
+                        })?;
+                    let recovery = recovery_toml(&alias, record)?;
+                    let default_note = if make_default {
+                        "\n\nAlso set default_operator_kind = \"hosted\" in the organization's table."
+                    } else {
+                        ""
+                    };
+
+                    return Err(anyhow!(
+                        r#"hosted operator {} was created remotely, but saving the local config failed: {save_error}
+Do not retry creation blindly; doing so would create another remote operator. Restore this record under the active organization in tvc.config.toml:
+
+{recovery}{default_note}"#,
+                        hosted.operator_id
+                    ));
+                }
+
+                Ok(CreateOutcome::Hosted(OperatorCreated {
+                    name,
+                    composite_public_key: format!(
+                        "{}{}",
+                        hosted.encrypt_public_key, hosted.sign_public_key
+                    ),
+                    operator_id: hosted.operator_id,
+                    wallet_id: hosted.wallet_id,
+                    encrypt_public_key: hosted.encrypt_public_key,
+                    sign_public_key: hosted.sign_public_key,
+                    saved: true,
+                }))
+            }
             CreatePlan::Yubikey {
                 name,
                 serial,
@@ -199,23 +286,110 @@ impl Run for Args {
             } => {
                 let can_prompt = !ctx.is_non_interactive() && prompts::stdin_can_prompt();
 
-                let source = match serial {
-                    Some(serial) if config.yubikeys.contains(serial) => {
-                        YubiKeySource::Registered(serial)
-                    }
-                    Some(serial) if can_prompt => YubiKeySource::Provision(
-                        ConnectedYubiKeys::from(ctx.connected_yubikeys()?).choose(Some(serial))?,
-                    ),
-                    Some(serial) => bail!(
+                if serial.is_none() && !can_prompt {
+                    return Err(prompts::error_required_in_non_interactive("--serial"));
+                }
+
+                if let Some(serial) = serial
+                    && !can_prompt
+                    && !config.yubikeys.contains(serial)
+                {
+                    bail!(
                         "YubiKey {serial} is not in the device registry, and provisioning it \
                          is interactive (the PIN is prompted and the device must be touched); \
                          run interactively, or `tvc keys provision-yubikey --serial {serial}` \
                          first"
-                    ),
-                    None if can_prompt => {
-                        YubiKeySource::prompt(&config.yubikeys, || ctx.connected_yubikeys())?
+                    );
+                }
+
+                let (org_alias, org) = config
+                    .active_org_config()
+                    .context("No active organization. Run `tvc login` first.")?;
+                let org_alias = org_alias.clone();
+
+                let (source, record) = match serial {
+                    Some(serial) => {
+                        let record = org
+                            .new_yubikey_operator(serial, name)
+                            .with_context(|| format!("org '{org_alias}'"))?;
+
+                        let source = if config.yubikeys.contains(serial) {
+                            YubikeyCreateSource::Registered(serial)
+                        } else if can_prompt {
+                            let serial = ConnectedYubiKeys::from(ctx.connected_yubikeys()?)
+                                .choose(Some(serial))?;
+                            let pin = Pin::from(prompts::password(
+                                "YubiKey PIV PIN (the factory default is 123456; touch the device each time it blinks)",
+                            )?);
+
+                            YubikeyCreateSource::Provision { serial, pin }
+                        } else {
+                            bail!(
+                                "YubiKey {serial} is not in the device registry, and provisioning it \
+                                 is interactive (the PIN is prompted and the device must be touched); \
+                                 run interactively, or `tvc keys provision-yubikey --serial {serial}` \
+                                 first"
+                            );
+                        };
+
+                        (source, record)
                     }
-                    None => return Err(prompts::error_required_in_non_interactive("--serial")),
+                    None => {
+                        enum SourceChoice {
+                            Registered(YubiKeySerial),
+                            Provision,
+                        }
+
+                        impl Display for SourceChoice {
+                            fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+                                match self {
+                                    Self::Registered(serial) => {
+                                        write!(f, "{serial} (registered)")
+                                    }
+                                    Self::Provision => {
+                                        f.write_str("[new] Provision a connected YubiKey")
+                                    }
+                                }
+                            }
+                        }
+
+                        let choice = if config.yubikeys.is_empty() {
+                            SourceChoice::Provision
+                        } else {
+                            let mut choices = config
+                                .yubikeys
+                                .serials()
+                                .map(SourceChoice::Registered)
+                                .collect::<Vec<_>>();
+                            choices.push(SourceChoice::Provision);
+
+                            prompts::select("YubiKey to use as the operator", choices)?
+                        };
+
+                        let (serial, provision) = match choice {
+                            SourceChoice::Registered(serial) => (serial, false),
+                            SourceChoice::Provision => {
+                                let serial = ConnectedYubiKeys::from(ctx.connected_yubikeys()?)
+                                    .choose(None)?;
+
+                                (serial, true)
+                            }
+                        };
+                        let record = org
+                            .new_yubikey_operator(serial, name)
+                            .with_context(|| format!("org '{org_alias}'"))?;
+                        let source = if provision {
+                            let pin = Pin::from(prompts::password(
+                                "YubiKey PIV PIN (the factory default is 123456; touch the device each time it blinks)",
+                            )?);
+
+                            YubikeyCreateSource::Provision { serial, pin }
+                        } else {
+                            YubikeyCreateSource::Registered(serial)
+                        };
+
+                        (source, record)
+                    }
                 };
 
                 let make_default = make_default
@@ -225,19 +399,11 @@ impl Run for Args {
                             false,
                         )?);
 
-                let pin = if matches!(source, YubiKeySource::Provision(_)) {
-                    Some(Pin::from(prompts::password(
-                        "YubiKey PIV PIN (the factory default is 123456; touch the device each time it blinks)",
-                    )?))
-                } else {
-                    None
-                };
-
                 let create = YubikeyCreate {
-                    name,
+                    record,
                     source,
                     make_default,
-                    pin,
+                    org_alias,
                 };
                 let added = create.execute(&mut config, yubikey::open)?;
 
@@ -281,98 +447,18 @@ impl Run for Args {
     }
 }
 
-async fn create_hosted(
-    config: &mut Config,
-    spec: HostedOperatorSpec,
-    make_default: bool,
-) -> Result<OperatorCreated> {
-    let (alias, configured_org_id) = config
-        .active_org_config()
-        .map(|(alias, org)| (alias.clone(), org.id.as_str()))
-        .context("No active organization. Run `tvc login` first.")?;
-
-    let auth = build_client(config).await?;
-    ensure_authenticated_org(&auth.org_id, configured_org_id)?;
-
-    let HostedOperatorSpec { name, wallet, path } = spec;
-
-    let (wallet_name, wallet_id) = match wallet {
-        HostedOperatorWallet::New(name) => (Some(name), None),
-        HostedOperatorWallet::Existing(id) => (None, Some(id.to_string())),
-    };
-
-    let intent = CreateTvcOperatorIntent {
-        wallet_name,
-        wallet_id,
-        path: path.clone(),
-        operator_name: name.clone(),
-    };
-
-    let result = auth
-        .client
-        .create_tvc_operator(auth.org_id.clone(), timestamp_ms()?, intent)
-        .await
-        .map_err(|error| hosted_activity_error("create hosted TVC operator", error))?;
-
-    let result = CreateOperatorRequestResult {
-        name,
-        path,
-        result: result.result,
-    };
-
-    let record = OperatorRecord::try_from(result)?;
-
-    let org = config
-        .orgs
-        .get_mut(&alias)
-        .with_context(|| format!("active organization '{alias}' disappeared from config"))?;
-    org.operators.push(record.clone());
-
-    if make_default {
-        org.default_operator_kind = OperatorKind::Hosted;
-    }
-
-    let OperatorRecord { name, kind } = record;
-    let OperatorRecordKind::Hosted(hosted) = kind else {
-        return Err(anyhow!("hosted operator creation returned a local record"));
-    };
-
-    if let Err(save_error) = config.save().await {
-        let record = config
-            .orgs
-            .get(&alias)
-            .and_then(|org| org.operators.last())
-            .with_context(|| {
-                format!("hosted operator disappeared from active organization '{alias}'")
-            })?;
-        let recovery = recovery_toml(&alias, record)?;
-        return Err(anyhow!(
-            r#"hosted operator {} was created remotely, but saving the local config failed: {save_error}
-Do not retry creation blindly; doing so would create another remote operator. Restore this record under the active organization in tvc.config.toml:
-
-{recovery}"#,
-            hosted.operator_id
-        ));
-    }
-
-    Ok(OperatorCreated {
-        name,
-        composite_public_key: format!("{}{}", hosted.encrypt_public_key, hosted.sign_public_key),
-        operator_id: hosted.operator_id,
-        wallet_id: hosted.wallet_id,
-        encrypt_public_key: hosted.encrypt_public_key,
-        sign_public_key: hosted.sign_public_key,
-        saved: true,
-    })
-}
-
 /// A resolved yubikey create: the device source is settled and the prompt
 /// policies are endpoint decisions already made.
 struct YubikeyCreate {
-    name: Option<String>,
-    source: YubiKeySource,
+    record: OperatorRecord,
+    source: YubikeyCreateSource,
     make_default: bool,
-    pin: Option<Pin>,
+    org_alias: String,
+}
+
+enum YubikeyCreateSource {
+    Registered(YubiKeySerial),
+    Provision { serial: YubiKeySerial, pin: Pin },
 }
 
 impl YubikeyCreate {
@@ -385,22 +471,13 @@ impl YubikeyCreate {
         D: DeviceOps,
         O: FnOnce(YubiKeySerial) -> Result<D, DeviceError>,
     {
-        let alias = config
-            .active_org_config()
-            .map(|(alias, _)| alias.clone())
-            .context("No active organization. Run `tvc login` first.")?;
-
         let (serial, enrolled) = match self.source {
-            YubiKeySource::Registered(serial) => (serial, None),
-            YubiKeySource::Provision(serial) => {
-                let pin = self
-                    .pin
-                    .as_ref()
-                    .context("a PIN must be resolved before provisioning a YubiKey")?;
+            YubikeyCreateSource::Registered(serial) => (serial, None),
+            YubikeyCreateSource::Provision { serial, pin } => {
                 let mut device = open_device(serial)?;
                 (
                     serial,
-                    Some(config.enroll_yubikey(serial, &mut device, pin)?),
+                    Some(config.enroll_yubikey(serial, &mut device, &pin)?),
                 )
             }
         };
@@ -420,24 +497,22 @@ impl YubikeyCreate {
             }
         };
 
-        let org = config
-            .orgs
-            .get_mut(&alias)
-            .with_context(|| format!("active organization '{alias}' disappeared from config"))?;
+        let org = config.orgs.get_mut(&self.org_alias).with_context(|| {
+            format!(
+                "active organization '{}' disappeared from config",
+                self.org_alias
+            )
+        })?;
 
-        org.add_yubikey_operator(serial, self.name)
-            .with_context(|| format!("org '{alias}'"))?;
+        let name = self.record.name.clone();
+        org.operators.push(self.record);
 
         if self.make_default {
             org.default_operator_kind = OperatorKind::Yubikey;
         }
 
-        let (record, _) = org
-            .select_yubikey_operator(Some(serial))
-            .with_context(|| format!("org '{alias}'"))?;
-
         Ok(YubikeyOperatorAdded {
-            name: record.name.clone(),
+            name,
             serial,
             operator_public_key,
             provisioned_slots: enrolled
@@ -445,7 +520,7 @@ impl YubikeyCreate {
                 .unwrap_or_default(),
             registration,
             made_default: self.make_default,
-            org_alias: alias,
+            org_alias: self.org_alias,
         })
     }
 }
@@ -687,12 +762,25 @@ mod tests {
         Pin::from(String::from_utf8(test_support::PIN.to_vec()).unwrap())
     }
 
-    fn yubikey_create(source: YubiKeySource) -> YubikeyCreate {
+    fn yubikey_create(
+        config: &Config,
+        source: YubikeyCreateSource,
+        name: Option<String>,
+        make_default: bool,
+    ) -> YubikeyCreate {
+        let serial = match &source {
+            YubikeyCreateSource::Registered(serial)
+            | YubikeyCreateSource::Provision { serial, .. } => *serial,
+        };
+        let record = config.orgs["default"]
+            .new_yubikey_operator(serial, name)
+            .unwrap();
+
         YubikeyCreate {
-            name: None,
+            record,
             source,
-            make_default: false,
-            pin: None,
+            make_default,
+            org_alias: "default".to_string(),
         }
     }
 
@@ -704,7 +792,13 @@ mod tests {
         let composite = device.operator_public_key();
         config.yubikeys.register(test_support::serial(), composite);
 
-        let added = yubikey_create(YubiKeySource::Registered(test_support::serial()))
+        let create = yubikey_create(
+            &config,
+            YubikeyCreateSource::Registered(test_support::serial()),
+            None,
+            false,
+        );
+        let added = create
             .execute(&mut config, |_| -> Result<FakeDevice, DeviceError> {
                 panic!("a registered source must not open a device")
             })
@@ -731,14 +825,16 @@ mod tests {
         let mut config = config_with_active_org();
         let device = FakeDevice::new(SlotStatus::Empty, SlotStatus::Empty);
 
-        let added = YubikeyCreate {
-            name: Some("signer".to_string()),
-            source: YubiKeySource::Provision(test_support::serial()),
-            make_default: true,
-            pin: Some(fixed_pin()),
-        }
-        .execute(&mut config, |_| Ok(device))
-        .unwrap();
+        let create = yubikey_create(
+            &config,
+            YubikeyCreateSource::Provision {
+                serial: test_support::serial(),
+                pin: fixed_pin(),
+            },
+            Some("signer".to_string()),
+            true,
+        );
+        let added = create.execute(&mut config, |_| Ok(device)).unwrap();
 
         assert_eq!(added.name, "signer");
         assert_eq!(
@@ -762,38 +858,39 @@ mod tests {
     }
 
     #[test]
-    fn a_duplicate_serial_is_refused_with_the_org_named() {
+    fn an_org_reference_missing_from_the_registry_is_refused_before_provisioning() {
         let mut config = config_with_active_org();
         let device = FakeDevice::new(SlotStatus::Empty, SlotStatus::Empty);
         config
-            .yubikeys
-            .register(test_support::serial(), device.operator_public_key());
+            .orgs
+            .get_mut("default")
+            .unwrap()
+            .operators
+            .push(OperatorRecord::yubikey(test_support::serial()));
 
-        yubikey_create(YubiKeySource::Registered(test_support::serial()))
-            .execute(&mut config, |_| -> Result<FakeDevice, DeviceError> {
-                panic!("a registered source must not open a device")
-            })
-            .unwrap();
-        let error = yubikey_create(YubiKeySource::Registered(test_support::serial()))
-            .execute(&mut config, |_| -> Result<FakeDevice, DeviceError> {
-                panic!("a registered source must not open a device")
-            })
+        let error = config.orgs["default"]
+            .new_yubikey_operator(test_support::serial(), None)
             .unwrap_err();
 
-        let rendered = format!("{error:#}");
-        assert!(rendered.contains("org 'default'"), "{rendered}");
-        assert!(
-            rendered.contains("YubiKey 01c95c1f is already an operator of this organization"),
-            "{rendered}"
+        assert_eq!(
+            error.to_string(),
+            "YubiKey 01c95c1f is already an operator of this organization"
         );
+        assert!(config.yubikeys.get(test_support::serial()).is_none());
+        assert_eq!(device.provision_calls, Vec::new());
+        assert_eq!(device.delete_calls, Vec::new());
     }
 
     #[test]
     fn an_unregistered_registered_source_is_refused() {
         let mut config = config_with_active_org();
-        let _device = FakeDevice::new(SlotStatus::Empty, SlotStatus::Empty);
-
-        let error = yubikey_create(YubiKeySource::Registered(test_support::serial()))
+        let create = yubikey_create(
+            &config,
+            YubikeyCreateSource::Registered(test_support::serial()),
+            None,
+            false,
+        );
+        let error = create
             .execute(&mut config, |_| -> Result<FakeDevice, DeviceError> {
                 panic!("a registered source must not open a device")
             })

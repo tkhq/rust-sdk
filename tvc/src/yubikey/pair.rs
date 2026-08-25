@@ -9,68 +9,13 @@
 use super::{DeviceError, DeviceOps, Pin};
 use crate::config::turnkey::{Config, QosOperatorPublicKey, YubiKeySerial};
 use crate::pair::{Pair, QosP256Error, Signer, SignerFuture};
-use crate::prompts;
-use anyhow::{Context, anyhow, bail, ensure};
+use anyhow::{Context, anyhow, ensure};
 use p256::PublicKey;
 use qos_p256::encrypt::{Envelope, P256EncryptPublic};
 use std::fmt::{self, Debug, Formatter};
 use std::sync::{Arc, Mutex, PoisonError};
 use tokio::task::spawn_blocking;
 use zeroize::Zeroizing;
-
-/// How the operator PIN is obtained when a device-backed pair is resolved.
-///
-/// Endpoints decide the policy from their interaction mode; the shared
-/// resolution path only branches on the variant. The PIN is prompt-only by
-/// design: never read from config or the environment.
-pub(crate) enum PinAcquisition {
-    /// Prompt on the terminal at the moment the pair needs its PIN.
-    Prompt,
-    /// No PIN can be collected: the command runs non-interactively or stdin
-    /// cannot prompt.
-    Unavailable,
-    /// A caller-supplied PIN for tests, which cannot prompt.
-    #[cfg(test)]
-    Fixed(Pin),
-}
-
-/// A [`PinAcquisition`] with the [`PinAcquisition::Unavailable`] case
-/// refused: holding one is proof that device I/O can start because a PIN
-/// can definitely follow.
-pub(crate) enum AvailablePin {
-    Prompt,
-    #[cfg(test)]
-    Fixed(Pin),
-}
-
-impl PinAcquisition {
-    /// Refuse the [`PinAcquisition::Unavailable`] case. Deterministic from
-    /// interaction mode alone, so callers convert before starting any other
-    /// work an impossible run would waste.
-    pub(crate) fn into_available(self) -> anyhow::Result<AvailablePin> {
-        match self {
-            Self::Prompt => Ok(AvailablePin::Prompt),
-            Self::Unavailable => bail!(
-                "a YubiKey operator needs its PIN typed at an interactive prompt; \
-                 the PIN is never read from config or the environment"
-            ),
-            #[cfg(test)]
-            Self::Fixed(pin) => Ok(AvailablePin::Fixed(pin)),
-        }
-    }
-}
-
-impl AvailablePin {
-    fn acquire(self) -> anyhow::Result<Pin> {
-        match self {
-            Self::Prompt => Ok(Pin::from(prompts::password(
-                "YubiKey PIV PIN (touch the device each time it blinks)",
-            )?)),
-            #[cfg(test)]
-            Self::Fixed(pin) => Ok(pin),
-        }
-    }
-}
 
 /// A resolved, device-verified YubiKey operator pair.
 pub(crate) struct YubiKeyPair<D> {
@@ -161,15 +106,14 @@ impl<D: DeviceOps + Send + 'static> Pair for YubiKeyPair<D> {
 impl Config {
     /// Resolve a registered serial into a usable operator pair.
     ///
-    /// Refusals come in resolution order: an unregistered serial, an
-    /// unprovisioned device, and a registry cache that no longer matches the
-    /// device. The PIN prompt runs last, after the device checks, so nothing
-    /// is typed at a device that cannot be used.
+    /// Refusals come in resolution order: an unregistered serial, a missing
+    /// or unprovisioned device, and a registry cache that no longer matches
+    /// the device. The endpoint supplies the PIN before dispatch.
     pub(crate) async fn resolve_yubikey<D: DeviceOps + Send + 'static>(
         &self,
         serial: YubiKeySerial,
         device: D,
-        pin: AvailablePin,
+        pin: Pin,
     ) -> anyhow::Result<YubiKeyPair<D>> {
         let cached_public_key = self
             .yubikeys
@@ -207,8 +151,6 @@ impl Config {
             .map_err(QosP256Error)
             .context("the device's operator key is not a valid encryption point")?;
 
-        let pin = pin.acquire()?;
-
         Ok(YubiKeyPair {
             device,
             serial,
@@ -238,12 +180,12 @@ mod tests {
         config
     }
 
-    fn fixed_pin() -> AvailablePin {
-        AvailablePin::Fixed(Pin::from(String::from_utf8(PIN.to_vec()).unwrap()))
+    fn fixed_pin() -> Pin {
+        Pin::from(String::from_utf8(PIN.to_vec()).unwrap())
     }
 
-    fn wrong_pin() -> AvailablePin {
-        AvailablePin::Fixed(Pin::from("999999".to_string()))
+    fn wrong_pin() -> Pin {
+        Pin::from("999999".to_string())
     }
 
     fn rendered(error: &anyhow::Error) -> String {
@@ -320,13 +262,6 @@ mod tests {
             .unwrap_err();
 
         assert!(rendered(&error).contains("refresh-yubikey"));
-    }
-
-    #[test]
-    fn an_unavailable_pin_is_refused_at_conversion() {
-        let error = PinAcquisition::Unavailable.into_available().err().unwrap();
-
-        assert!(rendered(&error).contains("interactive prompt"));
     }
 
     #[tokio::test]
@@ -406,9 +341,7 @@ mod tests {
         let mut config = Config::default();
         config.yubikeys.register(serial, key);
 
-        let pin = AvailablePin::Fixed(Pin::from(
-            String::from_utf8(qos_client::yubikey::DEFAULT_PIN.to_vec()).unwrap(),
-        ));
+        let pin = Pin::from(String::from_utf8(qos_client::yubikey::DEFAULT_PIN.to_vec()).unwrap());
         let pair = config.resolve_yubikey(serial, device, pin).await.unwrap();
 
         let message = b"tvc hardware pair test";

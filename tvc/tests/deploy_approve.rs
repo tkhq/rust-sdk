@@ -141,6 +141,30 @@ fn yubikey_default_without_a_prompt_reports_the_pin_requirement() {
         ));
 }
 
+#[test]
+fn an_unknown_yubikey_serial_is_rejected_before_manifest_io() {
+    let temp = TempDir::new().unwrap();
+    common::write_yubikey_only_config(temp.path(), "test", "org-test");
+
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .args(["deploy", "approve"])
+        .arg("--manifest")
+        .arg(temp.path().join("does-not-exist.json"))
+        .args([
+            "--skip-post",
+            "--dangerous-skip-interactive",
+            "--serial",
+            "deadbeef",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "no YubiKey operator has serial deadbeef",
+        ))
+        .stderr(predicate::str::contains("does-not-exist.json").not());
+}
+
 /// Without `--operator-id` or saved IDs, a registered hosted operator is the
 /// posting candidate: target-building auto-selects it and resolution then
 /// proceeds to credential loading.
