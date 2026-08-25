@@ -26,6 +26,7 @@ use turnkey_enclave_encrypt::errors::EnclaveEncryptError;
 use turnkey_enclave_encrypt::{
     ExportClient, ImportClient, QuorumPublicKey, ServerTargetData, ServerTargetMsgV1,
 };
+use zeroize::Zeroizing;
 
 /// Result of an activity request, containing both the typed result and activity metadata.
 ///
@@ -495,6 +496,10 @@ impl<S: Stamp> TurnkeyClient<S> {
         static_properties: BTreeMap<String, String>,
         signer_quorum_public_key: &QuorumPublicKey,
     ) -> Result<ActivityResult<String>, TurnkeyClientError> {
+        // Take ownership of the caller's plaintext buffer so it is wiped on
+        // every exit path once the encrypted payload has been produced.
+        let plaintext = Zeroizing::new(plaintext);
+
         // `init_import_secrets` is marked INTERNAL in the proto and has no
         // generated client method; submit it directly through `process_activity`.
         let init_activity = self
@@ -533,7 +538,7 @@ impl<S: Stamp> TurnkeyClient<S> {
         // and encrypts to it.
         let target_data = target_data(&target)?;
         let secret_payload = ImportClient::new(signer_quorum_public_key).encrypt_secret_bundle(
-            &plaintext,
+            plaintext.as_str(),
             &target,
             &organization_id,
         )?;
