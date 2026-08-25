@@ -411,6 +411,14 @@ pub enum NewOrgOperator {
     Yubikey(YubiKeySerial),
 }
 
+/// The serial is already referenced by one of the organization's operators.
+/// Which organization it was is the caller's context to add.
+#[derive(Debug, Error)]
+#[error("YubiKey {serial} is already an operator of this organization")]
+pub struct DuplicateYubiKeyOperator {
+    pub serial: YubiKeySerial,
+}
+
 /// Failure modes of selecting an organization's YubiKey operator.
 /// Which organization it was is the caller's context to add.
 #[derive(Debug, Error)]
@@ -513,6 +521,31 @@ impl OrgConfig {
                 }),
             },
         }
+    }
+
+    /// Add a YubiKey operator record for the serial, named `yubikey-{serial}`
+    /// unless a name is given. Refuses a serial this organization already
+    /// references; records with distinct serials may coexist.
+    pub(crate) fn add_yubikey_operator(
+        &mut self,
+        serial: YubiKeySerial,
+        name: Option<String>,
+    ) -> Result<(), DuplicateYubiKeyOperator> {
+        if self
+            .yubikey_operators()
+            .any(|(_, yubikey)| yubikey.serial == serial)
+        {
+            return Err(DuplicateYubiKeyOperator { serial });
+        }
+
+        let mut record = OperatorRecord::yubikey(serial);
+
+        if let Some(name) = name {
+            record.name = name;
+        }
+
+        self.operators.push(record);
+        Ok(())
     }
 }
 
@@ -950,6 +983,35 @@ serial = "01c95c1f"
         let record = OperatorRecord::yubikey(YubiKeySerial::from(0x01c9_5c1f));
 
         assert_eq!(record.name, "yubikey-01c95c1f");
+    }
+
+    #[test]
+    fn adding_a_duplicate_yubikey_serial_is_refused() {
+        let mut org = yubikey_org(&[0x01c9_5c1f]);
+
+        let error = org
+            .add_yubikey_operator(YubiKeySerial::from(0x01c9_5c1f), None)
+            .unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "YubiKey 01c95c1f is already an operator of this organization"
+        );
+        assert_eq!(org.operators.len(), 1);
+    }
+
+    #[test]
+    fn distinct_yubikey_serials_coexist_in_one_org() {
+        let mut org = yubikey_org(&[0x01c9_5c1f]);
+
+        org.add_yubikey_operator(YubiKeySerial::from(0xdead_beef), Some("backup".to_string()))
+            .unwrap();
+
+        let (record, yubikey) = org
+            .select_yubikey_operator(Some(YubiKeySerial::from(0xdead_beef)))
+            .unwrap();
+        assert_eq!(record.name, "backup");
+        assert_eq!(yubikey.serial, YubiKeySerial::from(0xdead_beef));
     }
 
     #[test]

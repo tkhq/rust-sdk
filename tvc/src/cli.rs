@@ -294,9 +294,7 @@ impl Commands {
             },
             Commands::Login(args) => commands::login::run(ctx, args, config).await,
             Commands::Operator { command } => match command {
-                OperatorCommands::Create(args) => {
-                    commands::operator::create::run(ctx, args, config).await
-                }
+                OperatorCommands::Create(args) => args.run(ctx, config).await.map(Into::into),
             },
             Commands::Profile { command } => match command {
                 ProfileCommands::Delete(delete_args) => {
@@ -312,7 +310,7 @@ impl Commands {
 enum Commands {
     /// Authenticate with Turnkey.
     Login(commands::login::Args),
-    /// Manage hosted TVC operators.
+    /// Manage TVC operators.
     Operator {
         #[command(subcommand)]
         command: OperatorCommands,
@@ -361,7 +359,8 @@ impl Commands {
 
 #[derive(Debug, Subcommand)]
 enum OperatorCommands {
-    /// Create a hosted TVC operator and save it to the active organization.
+    /// Create a hosted or YubiKey operator and save it to the active
+    /// organization.
     Create(commands::operator::create::Args),
 }
 
