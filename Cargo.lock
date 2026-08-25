@@ -4286,6 +4286,7 @@ dependencies = [
  "displaydoc",
  "hex",
  "hpke",
+ "indexmap 2.9.0",
  "inquire",
  "p256 0.13.2",
  "predicates",

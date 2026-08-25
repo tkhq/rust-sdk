@@ -74,7 +74,7 @@ impl Run for Args {
                     org.operators.iter().any(|operator| {
                         matches!(
                             &operator.kind,
-                            OperatorRecordKind::YubiKey(record) if record.serial == serial
+                            OperatorRecordKind::Yubikey(record) if record.serial == serial
                         )
                     })
                 })

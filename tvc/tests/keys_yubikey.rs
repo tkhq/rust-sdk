@@ -50,7 +50,7 @@ fn org_with_yubikey_operator() -> OrgConfig {
         default_operator_kind: Default::default(),
         operators: vec![OperatorRecord {
             name: "yubikey".to_string(),
-            kind: OperatorRecordKind::YubiKey(YubiKeyOperatorRecord {
+            kind: OperatorRecordKind::Yubikey(YubiKeyOperatorRecord {
                 serial: SERIAL.parse().unwrap(),
                 extra: toml::Table::new(),
             }),

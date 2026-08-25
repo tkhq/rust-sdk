@@ -216,7 +216,7 @@ impl<W: Write, W2: Write> Ctx<W, W2> {
     }
 
     /// Replace the YubiKey discovery effect, for tests.
-    #[expect(dead_code, reason = "the test seam for scripted discovery")]
+    #[cfg(test)]
     pub(crate) fn with_yubikey_discovery(
         mut self,
         discovery: impl FnMut() -> Result<Vec<YubiKeySerial>, DeviceError> + Send + 'static,
@@ -544,5 +544,14 @@ mod tests {
         let ctx = Ctx::new(TestShell::with_human_formatter(), false);
 
         assert!(!ctx.is_non_interactive());
+    }
+
+    #[test]
+    fn ctx_yubikey_discovery_can_be_scripted() {
+        let serial = YubiKeySerial::from(0x01c9_5c1f);
+        let mut ctx = Ctx::new(TestShell::with_human_formatter(), false)
+            .with_yubikey_discovery(move || Ok(vec![serial]));
+
+        assert_eq!(ctx.connected_yubikeys().unwrap(), vec![serial]);
     }
 }

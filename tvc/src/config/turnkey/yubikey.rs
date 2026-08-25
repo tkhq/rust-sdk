@@ -1,7 +1,8 @@
 //! YubiKey device registry configuration.
 
 use super::QosOperatorPublicKey;
-use serde::{Deserialize, Serialize};
+use indexmap::{IndexMap, map::Entry};
+use serde::{Deserialize, Serialize, Serializer, ser::SerializeSeq};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use std::{
     fmt::{self, Display, Formatter},
@@ -13,7 +14,9 @@ use std::{
 /// String parsing accepts bare hexadecimal input with surrounding whitespace.
 /// Display always emits the canonical form: lowercase hexadecimal, zero-padded
 /// to eight digits.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, SerializeDisplay, DeserializeFromStr)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, SerializeDisplay, DeserializeFromStr,
+)]
 pub struct YubiKeySerial(u32);
 
 /// Error returned when parsing a [`YubiKeySerial`].
@@ -97,10 +100,10 @@ pub struct YubiKeyOperatorRecord {
 ///
 /// Construction is the proof of uniqueness: deserialization funnels through
 /// `TryFrom`, and the mutating methods preserve the invariant.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 #[cfg_attr(test, derive(PartialEq))]
 #[serde(try_from = "Vec<YubiKeyRegistryEntry>")]
-pub struct YubiKeyRegistry(Vec<YubiKeyRegistryEntry>);
+pub struct YubiKeyRegistry(IndexMap<YubiKeySerial, YubiKeyRegistryEntry>);
 
 /// Error returned when parsing a [`YubiKeyRegistry`].
 #[derive(Debug, displaydoc::Display, thiserror::Error)]
@@ -114,16 +117,32 @@ impl TryFrom<Vec<YubiKeyRegistryEntry>> for YubiKeyRegistry {
     type Error = YubiKeyRegistryParseError;
 
     fn try_from(entries: Vec<YubiKeyRegistryEntry>) -> Result<Self, Self::Error> {
-        let duplicate = entries.iter().enumerate().find(|(index, entry)| {
-            entries[..*index]
-                .iter()
-                .any(|earlier| earlier.serial == entry.serial)
-        });
+        let mut registry = IndexMap::with_capacity(entries.len());
 
-        match duplicate {
-            Some((_, entry)) => Err(YubiKeyRegistryParseError::DuplicateSerial(entry.serial)),
-            None => Ok(Self(entries)),
+        for entry in entries {
+            let serial = entry.serial;
+
+            if registry.insert(serial, entry).is_some() {
+                return Err(YubiKeyRegistryParseError::DuplicateSerial(serial));
+            }
         }
+
+        Ok(Self(registry))
+    }
+}
+
+impl Serialize for YubiKeyRegistry {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut entries = serializer.serialize_seq(Some(self.0.len()))?;
+
+        for entry in self.0.values() {
+            entries.serialize_element(entry)?;
+        }
+
+        entries.end()
     }
 }
 
@@ -152,41 +171,42 @@ impl YubiKeyRegistry {
         serial: YubiKeySerial,
         public_key: QosOperatorPublicKey,
     ) -> Registration {
-        let Some(entry) = self.0.iter_mut().find(|entry| entry.serial == serial) else {
-            self.0.push(YubiKeyRegistryEntry {
-                serial,
-                public_key,
-                extra: toml::Table::new(),
-            });
-            return Registration::Added;
-        };
-
-        if entry.public_key == public_key {
-            Registration::Unchanged
-        } else {
-            entry.public_key = public_key;
-            Registration::Updated
+        match self.0.entry(serial) {
+            Entry::Vacant(entry) => {
+                entry.insert(YubiKeyRegistryEntry {
+                    serial,
+                    public_key,
+                    extra: toml::Table::new(),
+                });
+                Registration::Added
+            }
+            Entry::Occupied(mut entry) => {
+                if entry.get().public_key == public_key {
+                    Registration::Unchanged
+                } else {
+                    entry.get_mut().public_key = public_key;
+                    Registration::Updated
+                }
+            }
         }
     }
 
     /// Remove a serial. Returns `false` when it was not registered.
     pub fn deregister(&mut self, serial: YubiKeySerial) -> bool {
-        let count_before = self.0.len();
-        self.0.retain(|entry| entry.serial != serial);
-        self.0.len() < count_before
+        self.0.shift_remove(&serial).is_some()
     }
 
     pub fn get(&self, serial: YubiKeySerial) -> Option<&YubiKeyRegistryEntry> {
-        self.0.iter().find(|entry| entry.serial == serial)
+        self.0.get(&serial)
     }
 
     pub fn contains(&self, serial: YubiKeySerial) -> bool {
-        self.get(serial).is_some()
+        self.0.contains_key(&serial)
     }
 
     /// Registered serials, in config order.
     pub fn serials(&self) -> impl Iterator<Item = YubiKeySerial> + '_ {
-        self.0.iter().map(|entry| entry.serial)
+        self.0.keys().copied()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -273,7 +293,7 @@ mod tests {
             registry.register(serial(), pair_key()),
             Registration::Updated
         );
-        assert_eq!(registry.0[0].public_key, pair_key());
+        assert_eq!(registry.get(serial()).unwrap().public_key, pair_key());
     }
 
     #[test]

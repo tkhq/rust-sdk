@@ -95,27 +95,16 @@ impl Run for Args {
         let operator_public_key = yubikey.pair_public_key()?;
         let registration = config.yubikeys.register(serial, operator_public_key);
 
-        // The manual fallback must mirror what the save would have changed:
-        // appending a fresh table when the entry already exists would leave a
-        // duplicate serial behind.
-        let manual_registration = match registration {
-            Registration::Added => Some(format!(
-                r#"add this to tvc.config.toml:
+        if registration != Registration::Unchanged {
+            let recovery = config.to_toml().context(
+                "the YubiKey is provisioned but the updated config could not be serialized",
+            )?;
 
-[[yubikeys]]
-serial = "{serial}"
-public_key = "{operator_public_key}""#
-            )),
-            Registration::Updated => Some(format!(
-                r#"replace public_key on the existing [[yubikeys]] entry whose serial is {serial} with "{operator_public_key}""#
-            )),
-            Registration::Unchanged => None,
-        };
-
-        if let Some(manual_registration) = manual_registration {
             config.save().await.with_context(|| {
                 format!(
-                    "the YubiKey is provisioned but saving the config failed; {manual_registration}"
+                    r#"the YubiKey is provisioned but saving the config failed; write this complete config to tvc.config.toml:
+
+{recovery}"#
                 )
             })?;
         }

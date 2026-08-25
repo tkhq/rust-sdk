@@ -126,7 +126,7 @@ mod disk {
                 org.operators
                     .iter()
                     .find_map(|operator| match &operator.kind {
-                        OperatorRecordKind::YubiKey(record)
+                        OperatorRecordKind::Yubikey(record)
                             if !config.yubikeys.contains(record.serial) =>
                         {
                             Some((alias, &operator.name, record.serial))
@@ -138,7 +138,8 @@ mod disk {
             if let Some((alias, name, serial)) = dangling {
                 bail!(
                     "organization '{alias}' operator '{name}' references YubiKey {serial}, \
-                     which is not in the yubikeys registry"
+                     which is not in the yubikeys registry; edit tvc.config.toml to add the \
+                     matching [[yubikeys]] entry or remove this operator record"
                 );
             }
 
@@ -316,14 +317,7 @@ impl OperatorRecord {
 pub enum OperatorRecordKind {
     Local(LocalOperatorRecord),
     Hosted(HostedOperatorRecord),
-    // The rename keeps the product spelling on the wire; snake_case would
-    // split it into "yubi_key". Deliberately added within disk schema v1:
-    // older v1 readers reject a config that uses this variant, which is
-    // acceptable because nothing writes it until YubiKey becomes a
-    // selectable backend (TVC-307) — that work owns a version bump if the
-    // incompatibility turns out to matter.
-    #[serde(rename = "yubikey")]
-    YubiKey(YubiKeyOperatorRecord),
+    Yubikey(YubiKeyOperatorRecord),
 }
 
 /// Locator and optional Turnkey identity for a local operator key.
@@ -405,7 +399,7 @@ impl OrgConfig {
             .iter()
             .filter_map(|operator| match &operator.kind {
                 OperatorRecordKind::Local(local) => Some((operator, local)),
-                OperatorRecordKind::Hosted(_) | OperatorRecordKind::YubiKey(_) => None,
+                OperatorRecordKind::Hosted(_) | OperatorRecordKind::Yubikey(_) => None,
             });
 
         match (locals.next(), locals.next()) {
@@ -422,7 +416,7 @@ impl OrgConfig {
             .iter()
             .filter_map(|operator| match &operator.kind {
                 OperatorRecordKind::Hosted(hosted) => Some((operator.name.as_str(), hosted)),
-                OperatorRecordKind::Local(_) | OperatorRecordKind::YubiKey(_) => None,
+                OperatorRecordKind::Local(_) | OperatorRecordKind::Yubikey(_) => None,
             })
     }
 
@@ -480,6 +474,10 @@ pub fn default_operator_key_path(alias: &str) -> Result<PathBuf> {
 impl Config {
     pub fn from_toml(content: &str) -> Result<Self> {
         disk::from_toml(content)
+    }
+
+    pub(crate) fn to_toml(&self) -> Result<String> {
+        disk::to_toml(self)
     }
 
     /// Save config to disk
@@ -723,7 +721,7 @@ serial = "1C95C1F"
         assert_eq!(entry.public_key.to_string(), "07".repeat(130));
 
         let org = &config.orgs["default"];
-        let OperatorRecordKind::YubiKey(record) = &org.operators[0].kind else {
+        let OperatorRecordKind::Yubikey(record) = &org.operators[0].kind else {
             panic!("operator must be a yubikey record");
         };
         assert_eq!(record.serial, serial);
@@ -779,7 +777,8 @@ serial = "01c95c1f"
         assert_eq!(
             error.to_string(),
             "organization 'default' operator 'yubikey' references YubiKey 01c95c1f, \
-             which is not in the yubikeys registry"
+             which is not in the yubikeys registry; edit tvc.config.toml to add the matching \
+             [[yubikeys]] entry or remove this operator record"
         );
     }
 }
