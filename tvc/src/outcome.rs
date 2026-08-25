@@ -17,7 +17,7 @@
 use crate::commands::deploy::approve::{
     ApprovalAlreadyPosted, ApprovalDryRun, ApprovalGenerated, ApprovalPosted,
 };
-use crate::commands::{app, deploy, keys, login, operator, secret, skills, version, yubikey};
+use crate::commands::{app, deploy, keys, login, operator, secrets, skills, version, yubikey};
 use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
 
@@ -65,8 +65,8 @@ pub enum Outcome {
     QuorumKeyConfigCreated(keys::init_local_quorum_key::QuorumKeyConfigCreated),
     ReEncryptedShareGenerated(keys::re_encrypt_local_share::ReEncryptedShareGenerated),
     SkillsSaved(skills::save::SkillsSaved),
-    SecretImported(secret::import::SecretImported),
-    SecretExported(secret::export::SecretExported),
+    SecretImported(secrets::import::SecretImported),
+    SecretExported(secrets::export::SecretExported),
     Version(version::CliVersion),
 }
 

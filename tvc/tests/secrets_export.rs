@@ -2,22 +2,22 @@ use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
 use tempfile::TempDir;
 
-fn secret_cmd() -> (TempDir, assert_cmd::Command) {
+fn secrets_cmd() -> (TempDir, assert_cmd::Command) {
     let temp = TempDir::new().unwrap();
     let mut cmd = cargo_bin_cmd!("tvc");
-    cmd.env_clear().env("HOME", temp.path()).arg("secret");
+    cmd.env_clear().env("HOME", temp.path()).arg("secrets");
     (temp, cmd)
 }
 
-fn secret_export_cmd() -> (TempDir, assert_cmd::Command) {
-    let (temp, mut cmd) = secret_cmd();
+fn secrets_export_cmd() -> (TempDir, assert_cmd::Command) {
+    let (temp, mut cmd) = secrets_cmd();
     cmd.arg("export");
     (temp, cmd)
 }
 
 #[test]
-fn secret_help_lists_export() {
-    let (_temp, mut cmd) = secret_cmd();
+fn secrets_help_lists_export() {
+    let (_temp, mut cmd) = secrets_cmd();
 
     cmd.arg("--help")
         .assert()
@@ -26,20 +26,20 @@ fn secret_help_lists_export() {
 }
 
 #[test]
-fn secret_export_help_lists_expected_flags() {
-    let (_temp, mut cmd) = secret_export_cmd();
+fn secrets_export_help_lists_expected_flags() {
+    let (_temp, mut cmd) = secrets_export_cmd();
 
     cmd.arg("--help")
         .assert()
         .success()
         .stdout(predicate::str::contains("--secret-id <SECRET_ID>"))
         .stdout(predicate::str::contains("--output-file <PATH>"))
-        .stdout(predicate::str::contains("--signer-public-key <HEX>"));
+        .stdout(predicate::str::contains("--signer-quorum-key <HEX>"));
 }
 
 #[test]
-fn secret_export_requires_secret_id() {
-    let (_temp, mut cmd) = secret_export_cmd();
+fn secrets_export_requires_secret_id() {
+    let (_temp, mut cmd) = secrets_export_cmd();
 
     cmd.assert()
         .failure()

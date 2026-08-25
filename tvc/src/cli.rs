@@ -317,12 +317,12 @@ impl Commands {
             Commands::Skills { command } => match command {
                 SkillsCommands::Save(args) => commands::skills::save::run(args),
             },
-            Commands::Secret { command } => match command {
-                SecretCommands::Import(args) => {
-                    commands::secret::import::run(ctx, args, config).await
+            Commands::Secrets { command } => match command {
+                SecretsCommands::Import(args) => {
+                    commands::secrets::import::run(ctx, args, config).await
                 }
-                SecretCommands::Export(args) => {
-                    commands::secret::export::run(ctx, args, config).await
+                SecretsCommands::Export(args) => {
+                    commands::secrets::export::run(ctx, args, config).await
                 }
             },
             Commands::Version => commands::version::run(),
@@ -370,9 +370,9 @@ enum Commands {
         command: SkillsCommands,
     },
     /// Manage secrets in Turnkey secret storage.
-    Secret {
+    Secrets {
         #[command(subcommand)]
-        command: SecretCommands,
+        command: SecretsCommands,
     },
     /// Print the tvc CLI version.
     Version,
@@ -393,7 +393,7 @@ impl Commands {
             Commands::Keys { command } => command.name(),
             Commands::Yubikey { command } => command.name(),
             Commands::Skills { command } => command.name(),
-            Commands::Secret { command } => command.name(),
+            Commands::Secrets { command } => command.name(),
             Commands::Version => "version",
         }
     }
@@ -479,20 +479,20 @@ enum AppCommands {
 }
 
 #[derive(Debug, Subcommand)]
-enum SecretCommands {
+enum SecretsCommands {
     /// Import one secret value into Turnkey secret storage.
-    #[command(long_about = commands::secret::import::LONG_ABOUT)]
-    Import(commands::secret::import::Args),
+    #[command(alias = "set", long_about = commands::secrets::import::LONG_ABOUT)]
+    Import(commands::secrets::import::Args),
     /// Export one secret value from Turnkey secret storage.
-    #[command(long_about = commands::secret::export::LONG_ABOUT)]
-    Export(commands::secret::export::Args),
+    #[command(alias = "get", long_about = commands::secrets::export::LONG_ABOUT)]
+    Export(commands::secrets::export::Args),
 }
 
-impl SecretCommands {
+impl SecretsCommands {
     fn name(&self) -> &'static str {
         match self {
-            SecretCommands::Import(_) => "secret import",
-            SecretCommands::Export(_) => "secret export",
+            SecretsCommands::Import(_) => "secrets import",
+            SecretsCommands::Export(_) => "secrets export",
         }
     }
 }

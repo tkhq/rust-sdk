@@ -1,11 +1,11 @@
 //! Secret import command - imports one secret value into Turnkey secret
 //! storage.
 
-use super::signer_quorum_public_key;
 use crate::client::build_client;
 use crate::config::turnkey::Config;
 use crate::outcome::Outcome;
 use crate::output::StdCtx;
+use crate::signer_quorum::signer_quorum_key;
 use anyhow::{Context, Result, bail, ensure};
 use clap::Args as ClapArgs;
 use serde::Serialize;
@@ -40,16 +40,16 @@ pub struct Args {
 
     /// Plaintext metadata attached to the secret, as KEY=VALUE. Repeatable.
     /// Policies can read these; the value itself stays encrypted end to end.
-    #[arg(long = "static-property", value_name = "KEY=VALUE", value_parser = parse_static_property)]
+    #[arg(long = "property", value_name = "KEY=VALUE", value_parser = parse_static_property)]
     static_properties: Vec<(String, String)>,
 
     /// Hex signer quorum public key override. Defaults to the Turnkey key for
     /// the active org's environment (production or preprod).
-    #[arg(long, value_name = "HEX")]
-    signer_public_key: Option<String>,
+    #[arg(long = "signer-quorum-key", value_name = "HEX")]
+    signer_quorum_key_hex: Option<String>,
 }
 
-/// Parse one `--static-property KEY=VALUE` argument.
+/// Parse one `--property KEY=VALUE` argument.
 fn parse_static_property(raw: &str) -> Result<(String, String), String> {
     match raw.split_once('=') {
         Some((key, value)) if !key.is_empty() => Ok((key.to_string(), value.to_string())),
@@ -65,7 +65,7 @@ fn unique_static_properties(properties: Vec<(String, String)>) -> Result<BTreeMa
     for (key, value) in properties {
         ensure!(
             !unique.contains_key(&key),
-            "duplicate --static-property key '{key}'"
+            "duplicate --property key '{key}'"
         );
         unique.insert(key, value);
     }
@@ -122,13 +122,13 @@ pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcom
         name,
         value_file,
         static_properties,
-        signer_public_key,
+        signer_quorum_key_hex,
     } = args;
     let static_properties = unique_static_properties(static_properties)?;
     let mut value = read_value(&value_file).await?;
 
     let auth = build_client(&config).await?;
-    let signer = signer_quorum_public_key(&auth.api_base_url, signer_public_key.as_deref())?;
+    let signer = signer_quorum_key(&auth.api_base_url, signer_quorum_key_hex.as_deref())?;
 
     // Hand the client the buffer itself; it wipes the plaintext once the
     // encrypted payload has been produced.
@@ -202,7 +202,7 @@ Activity Status: {}"#,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::commands::secret::test_support::{
+    use crate::commands::secrets::test_support::{
         quorum_public_key_hex, test_config, test_ctx, test_signing_key,
     };
     use tempfile::TempDir;
@@ -352,7 +352,7 @@ mod tests {
             name: Some("db-password".to_string()),
             value_file,
             static_properties: vec![("environment".to_string(), "demo".to_string())],
-            signer_public_key: Some(quorum_public_key_hex(&signing)),
+            signer_quorum_key_hex: Some(quorum_public_key_hex(&signing)),
         };
 
         let outcome = run(&mut test_ctx(), args, test_config(&dir, &server.uri()))
