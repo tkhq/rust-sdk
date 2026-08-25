@@ -7,7 +7,7 @@ use crate::{
     outcome::Outcome,
     output::StdCtx,
     prompts, shell_println,
-    yubikey::{self, DeviceOps, Pin, QosSlot, SlotStatus},
+    yubikey::{self, ConnectedYubiKeys, DeviceOps, Pin, QosSlot, SlotStatus},
 };
 use anyhow::{Context, Result, bail};
 use clap::Args as ClapArgs;
@@ -38,34 +38,7 @@ impl Run for Args {
             );
         }
 
-        let connected = ctx.connected_yubikeys()?;
-
-        let serial = match self.serial {
-            Some(serial) if connected.contains(&serial) => serial,
-            Some(serial) => {
-                let connected_list = {
-                    use std::fmt::Write as _;
-
-                    let mut list = String::new();
-                    let mut serials = connected.iter();
-
-                    if let Some(first) = serials.next() {
-                        write!(list, "; connected: {first}")?;
-                    }
-
-                    serials.try_for_each(|next| write!(list, ", {next}"))?;
-
-                    list
-                };
-
-                bail!("YubiKey {serial} is not connected{connected_list}");
-            }
-            None => match connected.as_slice() {
-                [] => bail!("no YubiKey is connected"),
-                [sole] => *sole,
-                _ => prompts::select("YubiKey to provision", connected)?,
-            },
-        };
+        let serial = ConnectedYubiKeys::from(ctx.connected_yubikeys()?).choose(self.serial)?;
 
         // The one open handle: inspection and mutation see the same device.
         let mut yubikey = yubikey::open(serial)?;

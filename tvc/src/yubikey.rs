@@ -56,6 +56,52 @@ pub(crate) fn connected_serials() -> Result<Vec<YubiKeySerial>, DeviceError> {
         .collect())
 }
 
+/// The connected YubiKey serials captured by one discovery pass.
+pub(crate) struct ConnectedYubiKeys(Vec<YubiKeySerial>);
+
+impl From<Vec<YubiKeySerial>> for ConnectedYubiKeys {
+    fn from(serials: Vec<YubiKeySerial>) -> Self {
+        Self(serials)
+    }
+}
+
+impl ConnectedYubiKeys {
+    /// Choose an explicit connected serial or the sole connected device.
+    /// Several devices are refused because a serial-only prompt cannot
+    /// identify which physical stick the user intends to touch.
+    pub(crate) fn choose(&self, explicit: Option<YubiKeySerial>) -> anyhow::Result<YubiKeySerial> {
+        let serials = || {
+            self.0
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+
+        match explicit {
+            Some(serial) if self.0.contains(&serial) => Ok(serial),
+            Some(serial) => {
+                let connected = if self.0.is_empty() {
+                    String::new()
+                } else {
+                    format!("; connected: {}", serials())
+                };
+
+                anyhow::bail!("YubiKey {serial} is not connected{connected}")
+            }
+            None => match self.0.as_slice() {
+                [] => anyhow::bail!("no YubiKey is connected"),
+                [sole] => Ok(*sole),
+                _ => anyhow::bail!(
+                    "multiple YubiKeys are connected (serials {}); unplug all but \
+                     the one to use and try again, or pass --serial",
+                    serials()
+                ),
+            },
+        }
+    }
+}
+
 /// Open the device with the given serial over PC/SC.
 pub(crate) fn open(serial: YubiKeySerial) -> Result<YubiKey, DeviceError> {
     YubiKey::open_by_serial(Serial(serial.number())).map_err(|source| match source {
@@ -432,6 +478,72 @@ mod tests {
 
     fn default_pin() -> Pin {
         Pin::from(String::from_utf8(PIN.to_vec()).unwrap())
+    }
+
+    fn connected(serials: &[u32]) -> ConnectedYubiKeys {
+        ConnectedYubiKeys::from(
+            serials
+                .iter()
+                .map(|&serial| YubiKeySerial::from(serial))
+                .collect::<Vec<_>>(),
+        )
+    }
+
+    #[test]
+    fn chooses_an_explicit_connected_serial() {
+        let chosen = connected(&[0x01c9_5c1f, 0xdead_beef])
+            .choose(Some(YubiKeySerial::from(0xdead_beef)))
+            .unwrap();
+
+        assert_eq!(chosen, YubiKeySerial::from(0xdead_beef));
+    }
+
+    #[test]
+    fn an_unconnected_explicit_serial_is_refused_with_the_connected_list() {
+        let error = connected(&[0x01c9_5c1f])
+            .choose(Some(YubiKeySerial::from(0xdead_beef)))
+            .unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "YubiKey deadbeef is not connected; connected: 01c95c1f"
+        );
+    }
+
+    #[test]
+    fn an_explicit_serial_with_nothing_connected_is_a_bare_refusal() {
+        let error = connected(&[])
+            .choose(Some(YubiKeySerial::from(0xdead_beef)))
+            .unwrap_err();
+
+        assert_eq!(error.to_string(), "YubiKey deadbeef is not connected");
+    }
+
+    #[test]
+    fn chooses_the_sole_connected_device() {
+        let chosen = connected(&[0x01c9_5c1f]).choose(None).unwrap();
+
+        assert_eq!(chosen, YubiKeySerial::from(0x01c9_5c1f));
+    }
+
+    #[test]
+    fn no_connected_device_is_refused() {
+        let error = connected(&[]).choose(None).unwrap_err();
+
+        assert_eq!(error.to_string(), "no YubiKey is connected");
+    }
+
+    #[test]
+    fn several_connected_devices_ask_for_unplugging_or_a_serial() {
+        let error = connected(&[0x01c9_5c1f, 0xdead_beef])
+            .choose(None)
+            .unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "multiple YubiKeys are connected (serials 01c95c1f, deadbeef); \
+             unplug all but the one to use and try again, or pass --serial"
+        );
     }
 
     fn sole_connected_serial() -> YubiKeySerial {
