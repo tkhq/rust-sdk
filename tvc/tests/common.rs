@@ -173,6 +173,67 @@ pub fn write_yubikey_only_config(home: &Path, alias: &str, org_id: &str) {
     .unwrap();
 }
 
+/// Write a v1 `tvc.config.toml` under `home` with one yubikey-default
+/// organization per `(alias, org_id)` pair, every org referencing the SAME
+/// registered serial — the fixture for shared-registry-entry behavior. The
+/// first alias is active.
+pub fn write_yubikey_shared_config(home: &Path, profiles: &[(&str, &str)]) {
+    let turnkey_dir = home.join(".config/turnkey");
+    fs::create_dir_all(&turnkey_dir).unwrap();
+
+    let serial = YubiKeySerial::from(0x01c9_5c1f);
+    let public_key = QosOperatorPublicKey::try_from(
+        qos_p256::P256Pair::generate()
+            .unwrap()
+            .public_key()
+            .to_bytes()
+            .as_slice(),
+    )
+    .unwrap();
+
+    let orgs: HashMap<_, _> = profiles
+        .iter()
+        .map(|(alias, org_id)| {
+            (
+                alias.to_string(),
+                OrgConfig {
+                    id: org_id.to_string(),
+                    api_key_path: turnkey_dir.join(format!("orgs/{alias}/api_key.json")),
+                    api_base_url: LOCAL_API_BASE_URL.to_string(),
+                    default_operator_kind: OperatorKind::Yubikey,
+                    operators: vec![OperatorRecord {
+                        name: "yubikey-op".to_string(),
+                        kind: OperatorRecordKind::Yubikey(YubiKeyOperatorRecord {
+                            serial,
+                            extra: toml::Table::new(),
+                        }),
+                    }],
+                    extra: toml::Table::new(),
+                },
+            )
+        })
+        .collect();
+
+    let config = Config {
+        active_org: profiles.first().map(|(alias, _)| alias.to_string()),
+        orgs,
+        yubikeys: vec![YubiKeyRegistryEntry {
+            serial,
+            public_key,
+            extra: toml::Table::new(),
+        }],
+        last_created_app_id: HashMap::new(),
+        last_operator_ids: HashMap::new(),
+        extra: toml::Table::new(),
+    };
+
+    fs::write(
+        turnkey_dir.join("tvc.config.toml"),
+        format!("version = 1\n{}", toml::to_string_pretty(&config).unwrap()),
+    )
+    .unwrap();
+}
+
 /// Create the default-layout key files for `alias`: a valid generated
 /// `StoredApiKey` (login loads it before its first network step) and a real
 /// generated operator key. Returns the operator public key so tests can

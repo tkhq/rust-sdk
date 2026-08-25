@@ -63,12 +63,14 @@ impl Run for Args {
         let (_, local) = org_config
             .select_local_operator()
             .map_err(|error| match error {
-                // Nothing exportable exists for a hosted-only org; explain
-                // that instead of leaving a bare missing-operator error.
+                // Nothing exportable exists for a hosted- or yubikey-only
+                // org; explain that instead of leaving a bare
+                // missing-operator error.
                 SelectLocalOperatorError::NoLocalOperator => {
                     anyhow::Error::new(error).context(format!(
                         "org '{alias}' has no local operator key file to back up; hosted \
-                         operators' private keys are held by Turnkey and cannot be exported"
+                         operators' private keys are held by Turnkey, and YubiKey operators' \
+                         private keys never leave the device — neither can be exported"
                     ))
                 }
                 SelectLocalOperatorError::MultipleLocalOperators => {

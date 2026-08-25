@@ -45,8 +45,8 @@ pub struct Args {
     pub serial: Option<YubiKeySerial>,
 }
 
-/// Permanently delete a saved login profile, including its API and operator
-/// key files on disk.
+/// Permanently delete a saved login profile, including its API and any local
+/// operator key files on disk.
 #[derive(Debug, ClapArgs)]
 #[command(about, long_about = None)]
 pub struct DeleteArgs {
@@ -117,7 +117,9 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome
 }
 
 /// Permanently delete a saved login profile: its config entry and its API and
-/// operator key files on disk.
+/// any local operator key files on disk. YubiKey operator references vanish
+/// with the profile, but the devices and their shared registry entries are
+/// never touched.
 pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) -> Result<Outcome> {
     let is_non_interactive = ctx.is_non_interactive();
     debug!(
@@ -160,9 +162,12 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) 
         )?;
         shell_eprintln!(
             ctx,
-            "  - Removes the local config entry and deletes the API and operator key"
+            "  - Removes the local config entry and deletes the API and any local"
         )?;
-        shell_eprintln!(ctx, "    files from disk. This cannot be undone.")?;
+        shell_eprintln!(
+            ctx,
+            "    operator key files from disk. This cannot be undone."
+        )?;
         shell_eprintln!(
             ctx,
             "  - It does NOT touch the Turnkey dashboard ({dashboard_url}). If this API"
@@ -172,6 +177,28 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) 
             "    key is registered there, it stays valid until you remove it"
         )?;
         shell_eprintln!(ctx, "    (instructions are printed after deletion).")?;
+
+        let references_yubikeys = config
+            .orgs
+            .get(&alias)
+            .is_some_and(|org| org.yubikey_operators().next().is_some());
+
+        if references_yubikeys {
+            shell_eprintln!(
+                ctx,
+                "  - YubiKey operator references are removed from this profile only: the"
+            )?;
+            shell_eprintln!(
+                ctx,
+                "    devices and their [[yubikeys]] registry entries are NOT touched"
+            )?;
+            shell_eprintln!(
+                ctx,
+                "    (other profiles may share them). Remove device key material with"
+            )?;
+            shell_eprintln!(ctx, "    `tvc keys delete-yubikey`.")?;
+        }
+
         shell_eprintln!(ctx, "")?;
         prompts::confirm_or_bail(
             &format!("Permanently delete profile '{alias}' ({org_id}) and its key files?"),
@@ -251,11 +278,16 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) 
     // A local delete does not touch the dashboard-registered API key, and we
     // can't tell whether it is still there, so hedge with "may" and give steps.
     let dashboard_url = dashboard_base_url(&removed.api_base_url);
+    let retained_yubikey_serials: Vec<YubiKeySerial> = removed
+        .yubikey_operators()
+        .map(|(_, yubikey)| yubikey.serial)
+        .collect();
 
     Ok(Outcome::ProfileDeleted(ProfileDeleted {
         alias,
         organization_id: removed.id,
         removed_key_directory: removed_dir.map(|dir| dir.display().to_string()),
+        retained_yubikey_serials,
         dashboard_url: dashboard_url.to_string(),
         api_public_key,
     }))
@@ -988,6 +1020,10 @@ pub struct ProfileDeleted {
     alias: String,
     organization_id: String,
     removed_key_directory: Option<String>,
+    /// Serials of the YubiKey operators the profile referenced. The devices
+    /// and their registry entries are kept; other profiles may share them.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    retained_yubikey_serials: Vec<YubiKeySerial>,
     dashboard_url: String,
     api_public_key: Option<String>,
 }
@@ -1001,6 +1037,20 @@ impl Display for ProfileDeleted {
 
         if let Some(directory) = &self.removed_key_directory {
             lines.push(format!("Removed key directory: {directory}"));
+        }
+
+        if !self.retained_yubikey_serials.is_empty() {
+            let serials: Vec<String> = self
+                .retained_yubikey_serials
+                .iter()
+                .map(ToString::to_string)
+                .collect();
+
+            lines.push(format!(
+                "Kept the YubiKey registry entries (serials {}); remove device key \
+                 material with `tvc keys delete-yubikey`.",
+                serials.join(", ")
+            ));
         }
 
         lines.extend([

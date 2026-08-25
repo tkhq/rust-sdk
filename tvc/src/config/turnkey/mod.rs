@@ -1001,6 +1001,24 @@ serial = "01c95c1f"
     }
 
     #[test]
+    fn removing_an_org_keeps_the_yubikey_registry() {
+        let mut config = Config::default();
+        config.register_yubikey(
+            YubiKeySerial::from(0x01c9_5c1f),
+            QosOperatorPublicKey::try_from([7u8; 130].as_slice()).unwrap(),
+        );
+        config
+            .orgs
+            .insert("default".to_string(), yubikey_org(&[0x01c9_5c1f]));
+
+        let removed = config.remove_org("default").unwrap();
+
+        assert_eq!(removed.operators.len(), 1);
+        assert!(config.orgs.is_empty());
+        assert_eq!(config.yubikeys.len(), 1);
+    }
+
+    #[test]
     fn distinct_yubikey_serials_coexist_in_one_org() {
         let mut org = yubikey_org(&[0x01c9_5c1f]);
 

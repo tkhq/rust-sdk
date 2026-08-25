@@ -366,7 +366,7 @@ enum OperatorCommands {
 
 #[derive(Debug, Subcommand)]
 enum ProfileCommands {
-    /// Permanently delete a saved login profile and its key files.
+    /// Permanently delete a saved login profile and its local key files.
     Delete(commands::login::DeleteArgs),
 }
 
