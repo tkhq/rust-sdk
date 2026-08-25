@@ -164,6 +164,18 @@ impl ExportClient {
             .map_err(|e| EnclaveEncryptError::InvalidUtf8Bytes(e.to_string()))?;
         Ok(phrase.to_string())
     }
+
+    /// Decrypts a secret export bundle.
+    /// Bundles are JSON encoded strings, e.g. "{\"version\":\"v1.0.0\",\"data\":\"7b22656e63617070656450...\"}"
+    /// This function returns the secret as a string.
+    /// - `organization_id` is the expected organization ID. This will be checked against the content of the bundle.
+    pub fn decrypt_secret<S: AsRef<str>, T: AsRef<str>>(
+        &mut self,
+        export_bundle: S,
+        organization_id: T,
+    ) -> Result<String, EnclaveEncryptError> {
+        self.decrypt_wallet_mnemonic_phrase(export_bundle, organization_id)
+    }
 }
 
 /// Abstraction over `EnclaveEncryptClient` for private key or wallet import flows.
@@ -277,6 +289,26 @@ impl ImportClient {
 
         serde_json::to_string(&encrypted)
             .map_err(|e| EnclaveEncryptError::CannotSerializeBundle(e.to_string()))
+    }
+
+    /// Encrypts a secret to the public key contained in a secrets import bundle.
+    ///
+    /// - `secret` is the secret to import, as a string.
+    /// - `import_bundle` is the import bundle as a string. Bundles are JSON-encoded strings (e.g ""{\"version\":\"v1.0.0\", ....")
+    ///   bundles contain a signed public key. The signature over this public key is from Turnkey's signer enclave.
+    /// - `organization_id` is the expected organization ID. This will be checked against the content of the bundle, which contains the organization ID where the import flow started (`INIT_IMPORT_SECRETS` activity)
+    ///
+    /// Unlike wallet and private key imports, secrets ingress is scoped to the
+    /// organization rather than to the user who initiated it.
+    ///
+    /// Returns a string containing the JSON-encoded value, ready-to-use in an `IMPORT_SECRETS` activity
+    pub fn encrypt_secret_bundle<S: AsRef<str>, T: AsRef<str>, U: AsRef<str>>(
+        &mut self,
+        secret: S,
+        import_bundle: T,
+        organization_id: U,
+    ) -> Result<String, EnclaveEncryptError> {
+        self.encrypt_wallet_with_bundle(secret, import_bundle, organization_id, "")
     }
 }
 

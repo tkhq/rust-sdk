@@ -478,12 +478,11 @@ impl<S: Stamp> TurnkeyClient<S> {
             "init import target message",
         )?;
 
-        // `encrypt_wallet_with_bundle` verifies the quorum signature over the
-        // target and encrypts to it. The user ID in a secrets ingress target is
-        // always empty: the flow is scoped to the organization, not to a user.
+        // `encrypt_secret_bundle` verifies the quorum signature over the target
+        // and encrypts to it.
         let target_data = target_data(&target)?;
         let secret_payload = ImportClient::new(signer_quorum_public_key)
-            .encrypt_wallet_with_bundle(&plaintext, &target, &organization_id, "")?;
+            .encrypt_secret_bundle(&plaintext, &target, &organization_id)?;
         let target_public_key = hex::encode(*target_data.target_public);
 
         let static_properties = static_properties
@@ -558,11 +557,7 @@ impl<S: Stamp> TurnkeyClient<S> {
         let plaintexts = secret_payloads
             .into_iter()
             .zip(&mut recipients)
-            .map(|(payload, recipient)| {
-                // Secret payloads are enclave-signed bundles over UTF-8 bytes,
-                // the same shape a wallet export bundle carries.
-                recipient.decrypt_wallet_mnemonic_phrase(payload, &organization_id)
-            })
+            .map(|(payload, recipient)| recipient.decrypt_secret(payload, &organization_id))
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(ActivityResult {
