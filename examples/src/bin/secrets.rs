@@ -59,6 +59,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     println!("Imported secrets: {api_token_id}, {webhook_secret_id}");
 
+    // List secret metadata: IDs, names, static properties, creation times.
+    // Values never ride this path.
+    let listing = client
+        .list_secrets(turnkey_client::generated::ListSecretsRequest {
+            organization_id: organization_id.clone(),
+            pagination_options: None,
+        })
+        .await?;
+    println!("Organization has {} secrets", listing.secrets.len());
+
     // Export both in one activity. Plaintexts come back in the order the IDs
     // were given, each decrypted with its own single-use transport key.
     let plaintexts = client
