@@ -5,38 +5,40 @@ use crate::client::build_client;
 use crate::config::turnkey::Config;
 use crate::outcome::Outcome;
 use crate::output::StdCtx;
+use crate::prompts;
 use crate::signer_quorum::signer_quorum_key;
 use anyhow::{Context, Result, bail, ensure};
 use clap::Args as ClapArgs;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::fmt::{self, Display, Formatter};
-use std::io::Read;
+use std::io::{IsTerminal, Read};
 use std::mem;
 use std::path::{Path, PathBuf};
 use tracing::instrument;
 use turnkey_client::ActivityResult;
-use turnkey_client::generated::ActivityStatus;
 use zeroize::{Zeroize, Zeroizing};
 
 pub const LONG_ABOUT: &str = r#"Import one secret value into Turnkey secret storage.
 
-The value is read from a file (or stdin with `--value-file -`) so it never
-travels through command-line arguments. One trailing newline is stripped, the
-way shell heredocs and `echo` produce values. The value is encrypted to a
-single-use Turnkey enclave key before it leaves this process."#;
+The value never travels through command-line arguments: it is read from
+--from-file, from piped stdin, or from an interactive hidden prompt, in that
+order of preference. One trailing newline is stripped from file and stdin
+values, the way shell heredocs and `echo` produce them. The value is encrypted
+to a single-use Turnkey enclave key before it leaves this process."#;
 
 /// Import one secret value into Turnkey secret storage.
 #[derive(Debug, ClapArgs)]
 #[command(about, long_about = LONG_ABOUT)]
 pub struct Args {
     /// Name for the secret, unique within the organization.
-    #[arg(long, value_name = "NAME")]
-    name: Option<String>,
+    #[arg(value_name = "NAME")]
+    name: String,
 
-    /// File to read the secret value from; pass `-` to read stdin instead.
+    /// File to read the secret value from. Without it the value comes from
+    /// piped stdin, or an interactive hidden prompt when stdin is a TTY.
     #[arg(long, value_name = "PATH")]
-    value_file: PathBuf,
+    from_file: Option<PathBuf>,
 
     /// Plaintext metadata attached to the secret, as KEY=VALUE. Repeatable.
     /// Policies can read these; the value itself stays encrypted end to end.
@@ -72,32 +74,43 @@ fn unique_static_properties(properties: Vec<(String, String)>) -> Result<BTreeMa
     Ok(unique)
 }
 
-/// Read the secret value from `path` (`-` = stdin) into a zeroized buffer.
-///
-/// The value must be non-empty UTF-8; one trailing newline is stripped.
-async fn read_value(path: &Path) -> Result<Zeroizing<String>> {
-    let mut bytes = if path == Path::new("-") {
+/// Acquire the secret value: `--from-file`, piped stdin, or a hidden prompt.
+async fn read_value(non_interactive: bool, from_file: Option<&Path>) -> Result<Zeroizing<String>> {
+    if let Some(path) = from_file {
+        let bytes = tokio::fs::read(path)
+            .await
+            .with_context(|| format!("failed to read secret value file: {}", path.display()))?;
+        return utf8_value(Zeroizing::new(bytes), &path.display().to_string());
+    }
+
+    if !std::io::stdin().is_terminal() {
         // Blocking is fine here: nothing else runs until the value is read.
         let mut bytes = Vec::new();
         std::io::stdin()
             .read_to_end(&mut bytes)
             .context("failed to read secret value from stdin")?;
-        Zeroizing::new(bytes)
-    } else {
-        Zeroizing::new(
-            tokio::fs::read(path)
-                .await
-                .with_context(|| format!("failed to read secret value file: {}", path.display()))?,
-        )
-    };
+        return utf8_value(Zeroizing::new(bytes), "stdin");
+    }
 
+    if non_interactive {
+        return Err(prompts::error_required_in_non_interactive("--from-file"));
+    }
+
+    let value = Zeroizing::new(prompts::password("Secret value")?);
+    ensure!(!value.is_empty(), "secret value is empty");
+    Ok(value)
+}
+
+/// Convert a raw value buffer into a non-empty UTF-8 string, stripping one
+/// trailing newline.
+fn utf8_value(mut bytes: Zeroizing<Vec<u8>>, source: &str) -> Result<Zeroizing<String>> {
     // Move the bytes into the string without copying. On the error path, wipe
     // the buffer and report the failure without echoing the contents.
     let mut value = match String::from_utf8(mem::take(&mut *bytes)) {
         Ok(value) => Zeroizing::new(value),
         Err(error) => {
             error.into_bytes().zeroize();
-            bail!("secret value in {} is not valid UTF-8", path.display());
+            bail!("secret value from {source} is not valid UTF-8");
         }
     };
 
@@ -107,25 +120,21 @@ async fn read_value(path: &Path) -> Result<Zeroizing<String>> {
             value.pop();
         }
     }
-    ensure!(
-        !value.is_empty(),
-        "secret value in {} is empty",
-        path.display()
-    );
+    ensure!(!value.is_empty(), "secret value from {source} is empty");
     Ok(value)
 }
 
 /// Run the secret import command.
 #[instrument(skip_all)]
-pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome> {
+pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome> {
     let Args {
         name,
-        value_file,
+        from_file,
         static_properties,
         signer_quorum_key_hex,
     } = args;
     let static_properties = unique_static_properties(static_properties)?;
-    let mut value = read_value(&value_file).await?;
+    let mut value = read_value(ctx.is_non_interactive(), from_file.as_deref()).await?;
 
     let auth = build_client(&config).await?;
     let signer = signer_quorum_key(&auth.api_base_url, signer_quorum_key_hex.as_deref())?;
@@ -136,13 +145,13 @@ pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcom
     let ActivityResult {
         result: secret_id,
         activity_id,
-        status,
+        status: _,
         app_proofs: _,
     } = auth
         .client
         .import_secret(
             auth.org_id,
-            name.clone(),
+            Some(name.clone()),
             plaintext,
             static_properties,
             &signer,
@@ -154,31 +163,15 @@ pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcom
         secret_id,
         name,
         activity_id,
-        activity_status: status,
     }))
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct SecretImported {
     secret_id: String,
-    name: Option<String>,
+    name: String,
     activity_id: String,
-    /// Stable proto status name, e.g. `ACTIVITY_STATUS_COMPLETED`.
-    activity_status: ActivityStatus,
-}
-
-/// Manual because the generated `ActivityStatus` does not implement
-/// `Default`; the zero value is the enum's `Unspecified` variant.
-impl Default for SecretImported {
-    fn default() -> Self {
-        Self {
-            secret_id: String::default(),
-            name: None,
-            activity_id: String::default(),
-            activity_status: ActivityStatus::Unspecified,
-        }
-    }
 }
 
 impl Display for SecretImported {
@@ -189,12 +182,8 @@ impl Display for SecretImported {
 
 Secret ID: {}
 Name: {}
-Activity ID: {}
-Activity Status: {}"#,
-            self.secret_id,
-            self.name.as_deref().unwrap_or("(none)"),
-            self.activity_id,
-            self.activity_status.as_str_name()
+Activity ID: {}"#,
+            self.secret_id, self.name, self.activity_id
         )
     }
 }
@@ -256,14 +245,23 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let file = dir.path().join("value");
         tokio::fs::write(&file, "hunter2\n").await.unwrap();
-        assert_eq!(read_value(&file).await.unwrap().as_str(), "hunter2");
+        assert_eq!(
+            read_value(true, Some(&file)).await.unwrap().as_str(),
+            "hunter2"
+        );
 
         tokio::fs::write(&file, "hunter2\r\n").await.unwrap();
-        assert_eq!(read_value(&file).await.unwrap().as_str(), "hunter2");
+        assert_eq!(
+            read_value(true, Some(&file)).await.unwrap().as_str(),
+            "hunter2"
+        );
 
         // Only one newline is stripped; inner whitespace is preserved.
         tokio::fs::write(&file, " hunter2 \n\n").await.unwrap();
-        assert_eq!(read_value(&file).await.unwrap().as_str(), " hunter2 \n");
+        assert_eq!(
+            read_value(true, Some(&file)).await.unwrap().as_str(),
+            " hunter2 \n"
+        );
     }
 
     #[tokio::test]
@@ -271,7 +269,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let file = dir.path().join("value");
         tokio::fs::write(&file, "\n").await.unwrap();
-        let error = read_value(&file).await.unwrap_err();
+        let error = read_value(true, Some(&file)).await.unwrap_err();
         assert!(error.to_string().contains("empty"), "unexpected: {error}");
     }
 
@@ -280,14 +278,16 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let file = dir.path().join("value");
         tokio::fs::write(&file, [0xff, 0xfe, 0x00]).await.unwrap();
-        let error = read_value(&file).await.unwrap_err();
+        let error = read_value(true, Some(&file)).await.unwrap_err();
         assert!(error.to_string().contains("UTF-8"), "unexpected: {error}");
     }
 
     #[tokio::test]
     async fn read_value_reports_missing_files() {
         let dir = TempDir::new().unwrap();
-        let error = read_value(&dir.path().join("nope")).await.unwrap_err();
+        let error = read_value(true, Some(&dir.path().join("nope")))
+            .await
+            .unwrap_err();
         assert!(
             error.to_string().contains("nope"),
             "unexpected error: {error}"
@@ -349,8 +349,8 @@ mod tests {
         tokio::fs::write(&value_file, "hunter2\n").await.unwrap();
 
         let args = Args {
-            name: Some("db-password".to_string()),
-            value_file,
+            name: "db-password".to_string(),
+            from_file: Some(value_file),
             static_properties: vec![("environment".to_string(), "demo".to_string())],
             signer_quorum_key_hex: Some(quorum_public_key_hex(&signing)),
         };
@@ -362,9 +362,8 @@ mod tests {
             panic!("expected SecretImported");
         };
         assert_eq!(imported.secret_id, "secret-abc");
-        assert_eq!(imported.name.as_deref(), Some("db-password"));
+        assert_eq!(imported.name, "db-password");
         assert_eq!(imported.activity_id, "activity-import");
-        assert_eq!(imported.activity_status, ActivityStatus::Completed);
 
         // The import request carried the name and static properties, and the
         // enclave can decrypt exactly the newline-stripped file value.
