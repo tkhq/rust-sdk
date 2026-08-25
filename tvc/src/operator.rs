@@ -13,7 +13,7 @@ pub(crate) use hosted::{ResolvedHostedOperator, hosted_activity_error};
 use crate::{
     approvals::ValidatedManifest,
     client::build_client,
-    config::turnkey::{Config, OperatorKind, StoredQosOperatorKey},
+    config::turnkey::{Config, OperatorKind, StoredQosOperatorKey, YubiKeySerial},
     local_operator_key::{
         LocalOperatorSeedSource, resolve_local_operator, resolve_registered_local_operator,
     },
@@ -166,152 +166,6 @@ pub(crate) enum SignerRequirement {
     OfflineApproval,
 }
 
-/// Resolve the operator for an approval. The precedence is deliberate and
-/// preserved exactly; there is no fallback between backends:
-///
-/// 1. An explicit seed is a local operator, always. A hosted `--operator-id`
-///    alongside it is rejected.
-/// 2. An operator ID naming a hosted registry record selects that hosted
-///    operator — even when the org's default operator kind is local.
-/// 3. Otherwise the active org's `default_operator_kind` decides, and never
-///    crosses over: `local` resolves the sole local record (reconciling a
-///    given ID against its configured one); `hosted` resolves the sole
-///    hosted record when no ID names one, and never falls back to the
-///    local key; `yubikey` resolves the sole yubikey record's device by
-///    serial, passing a given ID through for posting.
-///
-/// Config is loaded lazily inside: the explicit-seed path must not depend
-/// on a config file being present or well-formed (pinned by
-/// `explicit_seed_does_not_load_malformed_config`).
-pub(crate) async fn resolve_operator<D, O>(
-    config: &Config,
-    open_device: O,
-    explicit: Option<LocalOperatorSeedSource>,
-    operator_id: Option<Uuid>,
-    requirement: SignerRequirement,
-    pin: PinAcquisition,
-) -> Result<ResolvedOperator>
-where
-    D: DeviceOps + Send + 'static,
-    O: FnOnce(crate::config::turnkey::YubiKeySerial) -> Result<D, DeviceError>,
-{
-    if let Some(explicit) = explicit {
-        if let Some(id) = operator_id {
-            ensure!(
-                config.find_hosted_operator(&id)?.is_none(),
-                "explicit local operator seed cannot be used with a hosted operator ID"
-            );
-        }
-
-        let signer = resolve_local_operator(config, Some(explicit)).await?;
-
-        return Ok(ResolvedOperator {
-            name: None,
-            operator_id,
-            signer: Box::new(signer),
-        });
-    }
-
-    let hosted = operator_id
-        .map(|id| config.find_hosted_operator(&id))
-        .transpose()?
-        .flatten();
-
-    if let Some(hosted) = hosted {
-        // Hosted operators sign through the API, so an offline requirement
-        // is unsatisfiable; refuse before touching credentials.
-        if requirement == SignerRequirement::OfflineApproval {
-            bail!("--skip-post is not supported for hosted operators");
-        }
-
-        let auth = build_client(config).await?;
-        ensure_authenticated_org(&auth.org_id, hosted.organization_id())?;
-
-        return Ok(ResolvedOperator {
-            name: Some(hosted.name().to_string()),
-            operator_id: Some(hosted.operator_id()),
-            signer: Box::new(HostedSigner::new(hosted, auth)),
-        });
-    }
-
-    let (alias, org) = config.active_org_config().ok_or_else(|| {
-        anyhow!(
-            "No active organization. Run `tvc login` first or provide \
-             --operator-seed or --operator-seed-path."
-        )
-    })?;
-
-    match org.default_operator_kind {
-        OperatorKind::Hosted => match operator_id {
-            Some(id) => bail!("hosted operator ID '{id}' was not found in org '{alias}'"),
-            None => {
-                // A hosted default cannot satisfy an offline approval;
-                // refuse before selection or credentials.
-                if requirement == SignerRequirement::OfflineApproval {
-                    bail!("--skip-post is not supported for hosted operators");
-                }
-
-                let (name, hosted) = org
-                    .select_hosted_operator()
-                    .with_context(|| format!("org '{alias}'"))?;
-                let hosted = ResolvedHostedOperator::from_registry(org.id.clone(), name, hosted)?;
-                let auth = build_client(config).await?;
-                ensure_authenticated_org(&auth.org_id, hosted.organization_id())?;
-
-                Ok(ResolvedOperator {
-                    name: Some(hosted.name().to_string()),
-                    operator_id: Some(hosted.operator_id()),
-                    signer: Box::new(HostedSigner::new(hosted, auth)),
-                })
-            }
-        },
-        OperatorKind::Yubikey => {
-            let (operator, yubikey) = org
-                .select_yubikey_operator()
-                .with_context(|| format!("org '{alias}'"))?;
-            let device = open_device(yubikey.serial)?;
-            let pair = config.resolve_yubikey(yubikey.serial, device, pin).await?;
-
-            Ok(ResolvedOperator {
-                name: Some(operator.name.clone()),
-                operator_id,
-                signer: Box::new(pair),
-            })
-        }
-        OperatorKind::Local => {
-            let (operator, local) = org
-                .select_local_operator()
-                .with_context(|| format!("org '{alias}'"))?;
-
-            let configured_operator_id = local
-                .operator_id
-                .as_deref()
-                .map(|id| {
-                    Uuid::parse_str(id)
-                        .map_err(|_| anyhow!("configured local operator ID must be a UUID"))
-                })
-                .transpose()?;
-
-            let resolved_operator_id = match (configured_operator_id, operator_id) {
-                (Some(configured), Some(requested)) => {
-                    ensure!(
-                        configured == requested,
-                        "requested operator ID ({requested}) does not match configured local operator ID ({configured})"
-                    );
-                    Some(configured)
-                }
-                (configured, requested) => configured.or(requested),
-            };
-
-            Ok(ResolvedOperator {
-                name: Some(operator.name.clone()),
-                operator_id: resolved_operator_id,
-                signer: Box::new(resolve_registered_local_operator(local.key_path.clone()).await?),
-            })
-        }
-    }
-}
-
 /// One operator identity known for the active org, labeled with its registry
 /// name when it has one. The ID stays a string: callers that need a UUID
 /// parse at their own boundary.
@@ -364,6 +218,154 @@ impl Config {
         }
     }
 
+    /// Resolve the operator for an approval. The precedence is deliberate
+    /// and preserved exactly; there is no fallback between backends:
+    ///
+    /// 1. An explicit seed is a local operator, always. A hosted
+    ///    `--operator-id` alongside it is rejected.
+    /// 2. An operator ID naming a hosted registry record selects that hosted
+    ///    operator — even when the org's default operator kind is local.
+    /// 3. Otherwise the active org's `default_operator_kind` decides, and
+    ///    never crosses over: `local` resolves the sole local record
+    ///    (reconciling a given ID against its configured one); `hosted`
+    ///    resolves the sole hosted record when no ID names one, and never
+    ///    falls back to the local key; `yubikey` resolves the sole yubikey
+    ///    record's device by serial, passing a given ID through for posting.
+    ///
+    /// The registry is read lazily inside: the explicit-seed path must not
+    /// depend on an org being configured.
+    pub(crate) async fn resolve_operator<D, O>(
+        &self,
+        open_device: O,
+        explicit: Option<LocalOperatorSeedSource>,
+        operator_id: Option<Uuid>,
+        requirement: SignerRequirement,
+        pin: PinAcquisition,
+    ) -> Result<ResolvedOperator>
+    where
+        D: DeviceOps + Send + 'static,
+        O: FnOnce(YubiKeySerial) -> Result<D, DeviceError>,
+    {
+        if let Some(explicit) = explicit {
+            if let Some(id) = operator_id {
+                ensure!(
+                    self.find_hosted_operator(&id)?.is_none(),
+                    "explicit local operator seed cannot be used with a hosted operator ID"
+                );
+            }
+
+            let signer = resolve_local_operator(self, Some(explicit)).await?;
+
+            return Ok(ResolvedOperator {
+                name: None,
+                operator_id,
+                signer: Box::new(signer),
+            });
+        }
+
+        let hosted = operator_id
+            .map(|id| self.find_hosted_operator(&id))
+            .transpose()?
+            .flatten();
+
+        if let Some(hosted) = hosted {
+            // Hosted operators sign through the API, so an offline requirement
+            // is unsatisfiable; refuse before touching credentials.
+            if requirement == SignerRequirement::OfflineApproval {
+                bail!("--skip-post is not supported for hosted operators");
+            }
+
+            let auth = build_client(self).await?;
+            ensure_authenticated_org(&auth.org_id, hosted.organization_id())?;
+
+            return Ok(ResolvedOperator {
+                name: Some(hosted.name().to_string()),
+                operator_id: Some(hosted.operator_id()),
+                signer: Box::new(HostedSigner::new(hosted, auth)),
+            });
+        }
+
+        let (alias, org) = self.active_org_config().ok_or_else(|| {
+            anyhow!(
+                "No active organization. Run `tvc login` first or provide \
+                 --operator-seed or --operator-seed-path."
+            )
+        })?;
+
+        match org.default_operator_kind {
+            OperatorKind::Hosted => match operator_id {
+                Some(id) => bail!("hosted operator ID '{id}' was not found in org '{alias}'"),
+                None => {
+                    // A hosted default cannot satisfy an offline approval;
+                    // refuse before selection or credentials.
+                    if requirement == SignerRequirement::OfflineApproval {
+                        bail!("--skip-post is not supported for hosted operators");
+                    }
+
+                    let (name, hosted) = org
+                        .select_hosted_operator()
+                        .with_context(|| format!("org '{alias}'"))?;
+                    let hosted =
+                        ResolvedHostedOperator::from_registry(org.id.clone(), name, hosted)?;
+                    let auth = build_client(self).await?;
+                    ensure_authenticated_org(&auth.org_id, hosted.organization_id())?;
+
+                    Ok(ResolvedOperator {
+                        name: Some(hosted.name().to_string()),
+                        operator_id: Some(hosted.operator_id()),
+                        signer: Box::new(HostedSigner::new(hosted, auth)),
+                    })
+                }
+            },
+            OperatorKind::Yubikey => {
+                let (operator, yubikey) = org
+                    .select_yubikey_operator()
+                    .with_context(|| format!("org '{alias}'"))?;
+                let device = open_device(yubikey.serial)?;
+                let pair = self.resolve_yubikey(yubikey.serial, device, pin).await?;
+
+                Ok(ResolvedOperator {
+                    name: Some(operator.name.clone()),
+                    operator_id,
+                    signer: Box::new(pair),
+                })
+            }
+            OperatorKind::Local => {
+                let (operator, local) = org
+                    .select_local_operator()
+                    .with_context(|| format!("org '{alias}'"))?;
+
+                let configured_operator_id = local
+                    .operator_id
+                    .as_deref()
+                    .map(|id| {
+                        Uuid::parse_str(id)
+                            .map_err(|_| anyhow!("configured local operator ID must be a UUID"))
+                    })
+                    .transpose()?;
+
+                let resolved_operator_id = match (configured_operator_id, operator_id) {
+                    (Some(configured), Some(requested)) => {
+                        ensure!(
+                            configured == requested,
+                            "requested operator ID ({requested}) does not match configured local operator ID ({configured})"
+                        );
+                        Some(configured)
+                    }
+                    (configured, requested) => configured.or(requested),
+                };
+
+                Ok(ResolvedOperator {
+                    name: Some(operator.name.clone()),
+                    operator_id: resolved_operator_id,
+                    signer: Box::new(
+                        resolve_registered_local_operator(local.key_path.clone()).await?,
+                    ),
+                })
+            }
+        }
+    }
+
     /// Resolve the operator key pair for share decryption by the active
     /// org's default backend. An explicit seed is local, always, and skips
     /// the config. Hosted operators sign through the API and hold no local
@@ -377,7 +379,7 @@ impl Config {
     ) -> Result<Box<dyn Pair>>
     where
         D: DeviceOps + Send + 'static,
-        O: FnOnce(crate::config::turnkey::YubiKeySerial) -> Result<D, DeviceError>,
+        O: FnOnce(YubiKeySerial) -> Result<D, DeviceError>,
     {
         if explicit.is_some() {
             return Ok(Box::new(resolve_local_operator(self, explicit).await?));
@@ -592,16 +594,16 @@ mod tests {
         let composite = device.operator_public_key();
         let config = registered_yubikey_config(&device);
 
-        let operator = resolve_operator(
-            &config,
-            open_fake(device),
-            None,
-            None,
-            SignerRequirement::Any,
-            fixed_pin(),
-        )
-        .await
-        .unwrap();
+        let operator = config
+            .resolve_operator(
+                open_fake(device),
+                None,
+                None,
+                SignerRequirement::Any,
+                fixed_pin(),
+            )
+            .await
+            .unwrap();
 
         assert_eq!(operator.signer.public_key(), composite.as_bytes());
         assert_eq!(operator.name, Some("yubikey".to_string()));
@@ -613,16 +615,16 @@ mod tests {
         let device = provisioned_fake();
         let config = registered_yubikey_config(&device);
 
-        let operator = resolve_operator(
-            &config,
-            open_fake(device),
-            None,
-            None,
-            SignerRequirement::OfflineApproval,
-            fixed_pin(),
-        )
-        .await
-        .unwrap();
+        let operator = config
+            .resolve_operator(
+                open_fake(device),
+                None,
+                None,
+                SignerRequirement::OfflineApproval,
+                fixed_pin(),
+            )
+            .await
+            .unwrap();
 
         assert_eq!(operator.name, Some("yubikey".to_string()));
     }
@@ -633,16 +635,16 @@ mod tests {
         let config = registered_yubikey_config(&device);
         let requested = Uuid::from_u128(0x22);
 
-        let operator = resolve_operator(
-            &config,
-            open_fake(device),
-            None,
-            Some(requested),
-            SignerRequirement::Any,
-            fixed_pin(),
-        )
-        .await
-        .unwrap();
+        let operator = config
+            .resolve_operator(
+                open_fake(device),
+                None,
+                Some(requested),
+                SignerRequirement::Any,
+                fixed_pin(),
+            )
+            .await
+            .unwrap();
 
         assert_eq!(operator.id(), Some(requested));
     }
@@ -655,16 +657,16 @@ mod tests {
         let seed: HexSeed = seed_hex.parse().unwrap();
         let expected = LocalPair::from_hex_seed(&seed_hex).unwrap().public_key();
 
-        let operator = resolve_operator(
-            &config,
-            open_fake(device),
-            Some(LocalOperatorSeedSource::Value(seed)),
-            None,
-            SignerRequirement::Any,
-            fixed_pin(),
-        )
-        .await
-        .unwrap();
+        let operator = config
+            .resolve_operator(
+                open_fake(device),
+                Some(LocalOperatorSeedSource::Value(seed)),
+                None,
+                SignerRequirement::Any,
+                fixed_pin(),
+            )
+            .await
+            .unwrap();
 
         assert_eq!(operator.signer.public_key(), expected);
         assert_eq!(operator.name, None);
@@ -681,16 +683,16 @@ mod tests {
             .operators
             .push(hosted_operator("hosted"));
 
-        let error = resolve_operator(
-            &config,
-            open_fake(device),
-            None,
-            Some(HOSTED_ID.parse().unwrap()),
-            SignerRequirement::OfflineApproval,
-            fixed_pin(),
-        )
-        .await
-        .unwrap_err();
+        let error = config
+            .resolve_operator(
+                open_fake(device),
+                None,
+                Some(HOSTED_ID.parse().unwrap()),
+                SignerRequirement::OfflineApproval,
+                fixed_pin(),
+            )
+            .await
+            .unwrap_err();
 
         // The hosted-by-id branch fired (pinning its rewording), so the
         // yubikey default never resolved.
@@ -705,16 +707,16 @@ mod tests {
         let device = provisioned_fake();
         let config = registered_yubikey_config(&device);
 
-        let error = resolve_operator(
-            &config,
-            open_fake(device),
-            None,
-            None,
-            SignerRequirement::Any,
-            PinAcquisition::Unavailable,
-        )
-        .await
-        .unwrap_err();
+        let error = config
+            .resolve_operator(
+                open_fake(device),
+                None,
+                None,
+                SignerRequirement::Any,
+                PinAcquisition::Unavailable,
+            )
+            .await
+            .unwrap_err();
 
         assert!(format!("{error:#}").contains("interactive prompt"));
     }
@@ -724,16 +726,16 @@ mod tests {
         let mut config = config_with_operators(Vec::new());
         config.orgs.get_mut("active").unwrap().default_operator_kind = OperatorKind::Yubikey;
 
-        let error = resolve_operator(
-            &config,
-            open_fake(provisioned_fake()),
-            None,
-            None,
-            SignerRequirement::Any,
-            fixed_pin(),
-        )
-        .await
-        .unwrap_err();
+        let error = config
+            .resolve_operator(
+                open_fake(provisioned_fake()),
+                None,
+                None,
+                SignerRequirement::Any,
+                fixed_pin(),
+            )
+            .await
+            .unwrap_err();
 
         let rendered = format!("{error:#}");
         assert!(rendered.contains("org 'active'"));
@@ -834,16 +836,16 @@ mod tests {
             config_with_operators(vec![yubikey_operator(serial), yubikey_operator(serial)]);
         config.orgs.get_mut("active").unwrap().default_operator_kind = OperatorKind::Yubikey;
 
-        let error = resolve_operator(
-            &config,
-            open_fake(provisioned_fake()),
-            None,
-            None,
-            SignerRequirement::Any,
-            fixed_pin(),
-        )
-        .await
-        .unwrap_err();
+        let error = config
+            .resolve_operator(
+                open_fake(provisioned_fake()),
+                None,
+                None,
+                SignerRequirement::Any,
+                fixed_pin(),
+            )
+            .await
+            .unwrap_err();
 
         assert!(format!("{error:#}").contains("multiple YubiKey operators are configured"));
     }

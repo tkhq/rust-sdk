@@ -7,7 +7,7 @@ use crate::{
     config::turnkey::Config,
     errors::MissingResource,
     local_operator_key::LocalOperatorSeedSource,
-    operator::{SignerRequirement, resolve_operator},
+    operator::SignerRequirement,
     outcome::Outcome,
     output::StdCtx,
     pair::HexSeed,
@@ -522,15 +522,15 @@ async fn run_with_resolved_inputs(
         SignerRequirement::Any
     };
 
-    let operator = resolve_operator(
-        config,
-        yubikey::open,
-        inputs.operator_seed_source,
-        inputs.operator_id,
-        requirement,
-        inputs.pin,
-    )
-    .await?;
+    let operator = config
+        .resolve_operator(
+            yubikey::open,
+            inputs.operator_seed_source,
+            inputs.operator_id,
+            requirement,
+            inputs.pin,
+        )
+        .await?;
 
     let approval = operator.approve_manifest(&inputs.manifest).await?;
 
