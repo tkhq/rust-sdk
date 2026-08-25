@@ -8,9 +8,10 @@
 
 use super::{DeviceError, DeviceOps, Pin};
 use crate::config::turnkey::{Config, QosOperatorPublicKey, YubiKeySerial};
-use crate::pair::{Pair, Signer, SignerFuture};
+use crate::pair::{Pair, QosP256Error, Signer, SignerFuture};
 use crate::prompts;
 use anyhow::{Context, anyhow, bail, ensure};
+use p256::PublicKey;
 use qos_p256::encrypt::{Envelope, P256EncryptPublic};
 use std::fmt::{self, Debug, Formatter};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -73,6 +74,9 @@ pub(crate) struct YubiKeyPair<D> {
     serial: YubiKeySerial,
     /// The device-verified composite `encrypt_public ‖ sign_public` key.
     public_key: QosOperatorPublicKey,
+    /// The composite's encryption half, parsed once at resolution — holding
+    /// the pair is proof its key is a valid P-256 point.
+    encrypt_public: P256EncryptPublic,
     pin: Arc<Pin>,
 }
 
@@ -124,32 +128,26 @@ impl<D: DeviceOps + Send + 'static> Pair for YubiKeyPair<D> {
     fn decrypt(&self, ciphertext: &[u8]) -> SignerFuture<'_, anyhow::Result<Zeroizing<Vec<u8>>>> {
         let device = Arc::clone(&self.device);
         let pin = Arc::clone(&self.pin);
-        let public_key = self.public_key;
+        let encrypt_public = &self.encrypt_public;
         let ciphertext = ciphertext.to_vec();
 
         Box::pin(async move {
-            // Parse before any device I/O, so a malformed envelope fails
-            // before the device demands its PIN and a touch.
+            // Parse everything before any device I/O, so malformed input
+            // fails before the device demands its PIN and a touch.
             let envelope = borsh::from_slice::<Envelope>(&ciphertext)
                 .context("ciphertext is not a qos p256 encryption envelope")?;
+            let sender_public = PublicKey::from_sec1_bytes(&envelope.ephemeral_sender_public)
+                .context("the envelope's ephemeral sender key is not a valid P-256 point")?;
 
             let shared_secret = Self::device_op(device, move |device| {
-                device.key_agreement(&pin, &envelope.ephemeral_sender_public)
+                device.key_agreement(&pin, sender_public)
             })
             .await?;
 
-            let encrypt_public = P256EncryptPublic::from_bytes(public_key.encrypt_public_bytes())
-                .map_err(|error| {
-                anyhow!("operator key is not a valid encryption point: {error:?}")
-            })?;
-
             encrypt_public
                 .decrypt_from_shared_secret(&ciphertext, &shared_secret)
-                .map_err(|error| {
-                    anyhow!(
-                        "failed to decrypt the envelope with the YubiKey shared secret: {error:?}"
-                    )
-                })
+                .map_err(QosP256Error)
+                .context("failed to decrypt the envelope with the YubiKey shared secret")
         })
     }
 }
@@ -203,12 +201,17 @@ impl Config {
              {cached_public_key}; run `tvc keys refresh-yubikey --serial {serial}` to refresh it"
         );
 
+        let encrypt_public = P256EncryptPublic::from_bytes(public_key.encrypt_public_bytes())
+            .map_err(QosP256Error)
+            .context("the device's operator key is not a valid encryption point")?;
+
         let pin = pin.acquire()?;
 
         Ok(YubiKeyPair {
             device,
             serial,
             public_key,
+            encrypt_public,
             pin: Arc::new(pin),
         })
     }

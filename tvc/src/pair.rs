@@ -1,6 +1,6 @@
 use crate::util::read_file_to_string;
-use anyhow::anyhow;
-use qos_p256::P256Pair;
+use anyhow::{Context, anyhow};
+use qos_p256::{P256Error, P256Pair};
 use std::fmt::{self, Debug, Formatter};
 use std::future::Future;
 use std::path::Path;
@@ -34,6 +34,15 @@ pub trait Pair: Signer {
     /// encryption key.
     fn decrypt(&self, ciphertext: &[u8]) -> SignerFuture<'_, anyhow::Result<Zeroizing<Vec<u8>>>>;
 }
+
+/// A `qos_p256` failure. The inner error implements neither `Display` nor
+/// `Error`, so it is carried by value and rendered from `Debug`; callers
+/// attach the operation context.
+// TODO: derive Display + Error in qos_p256 and chain the inner error as a
+// #[source] instead.
+#[derive(Debug, thiserror::Error)]
+#[error("{0:?}")]
+pub(crate) struct QosP256Error(pub(crate) P256Error);
 
 /// A 32-byte master seed parsed from hex. Accepts surrounding whitespace and
 /// an optional `0x` prefix. Zeroized on drop.
@@ -114,7 +123,8 @@ impl Pair for LocalPair {
         let plaintext = self
             .pair
             .decrypt(ciphertext)
-            .map_err(|_| anyhow!("failed to decrypt with local signer"));
+            .map_err(QosP256Error)
+            .context("failed to decrypt with local signer");
 
         Box::pin(async move { plaintext })
     }
