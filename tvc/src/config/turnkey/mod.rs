@@ -310,6 +310,18 @@ impl OperatorRecord {
             }),
         }
     }
+
+    /// A serial-only YubiKey operator record, named `yubikey-{serial}` so
+    /// several can coexist unambiguously within one organization.
+    pub fn yubikey(serial: YubiKeySerial) -> Self {
+        Self {
+            name: format!("yubikey-{serial}"),
+            kind: OperatorRecordKind::Yubikey(YubiKeyOperatorRecord {
+                serial,
+                extra: toml::Table::new(),
+            }),
+        }
+    }
 }
 
 /// Kind-specific durable operator metadata.
@@ -387,6 +399,16 @@ pub enum SelectHostedOperatorError {
     NoHostedOperator,
     #[error("multiple hosted operators are configured")]
     MultipleHostedOperators,
+}
+
+/// The operator backend a newly added organization starts with.
+pub enum NewOrgOperator {
+    /// A local key file at the alias's default path, generated on first
+    /// login.
+    LocalKeyFile,
+    /// A registered YubiKey, referenced by serial only; the organization
+    /// defaults to the yubikey backend.
+    Yubikey(YubiKeySerial),
 }
 
 /// Failure modes of selecting an organization's YubiKey operator.
@@ -578,15 +600,33 @@ impl Config {
         self.orgs.get(alias).map(|config| (alias, config))
     }
 
-    /// Add or update an organization with default key paths
-    pub fn add_org(&mut self, alias: &str, org_id: String, api_base_url: String) -> Result<()> {
+    /// Add or update an organization with default key paths, starting with
+    /// the given operator backend as its default.
+    pub fn add_org(
+        &mut self,
+        alias: &str,
+        org_id: String,
+        api_base_url: String,
+        operator: NewOrgOperator,
+    ) -> Result<()> {
         debug!(org_alias = alias, %api_base_url, "adding organization config");
+
+        let (default_operator_kind, operators) = match operator {
+            NewOrgOperator::LocalKeyFile => (
+                OperatorKind::Local,
+                vec![OperatorRecord::local(default_operator_key_path(alias)?)],
+            ),
+            NewOrgOperator::Yubikey(serial) => {
+                (OperatorKind::Yubikey, vec![OperatorRecord::yubikey(serial)])
+            }
+        };
+
         let org_config = OrgConfig {
             id: org_id,
             api_key_path: default_api_key_path(alias)?,
             api_base_url,
-            default_operator_kind: OperatorKind::Local,
-            operators: vec![OperatorRecord::local(default_operator_key_path(alias)?)],
+            default_operator_kind,
+            operators,
             extra: toml::Table::new(),
         };
         self.orgs.insert(alias.to_string(), org_config);
@@ -903,5 +943,32 @@ serial = "01c95c1f"
             .unwrap_err();
 
         assert_eq!(error.to_string(), "no YubiKey operator has serial deadbeef");
+    }
+
+    #[test]
+    fn yubikey_records_default_to_a_serial_derived_name() {
+        let record = OperatorRecord::yubikey(YubiKeySerial::from(0x01c9_5c1f));
+
+        assert_eq!(record.name, "yubikey-01c95c1f");
+    }
+
+    #[test]
+    fn add_org_with_a_yubikey_starts_on_the_yubikey_backend() {
+        let mut config = Config::default();
+        config
+            .add_org(
+                "default",
+                "org-123".to_string(),
+                API_BASE_URL_PROD.to_string(),
+                NewOrgOperator::Yubikey(YubiKeySerial::from(0x01c9_5c1f)),
+            )
+            .unwrap();
+
+        let org = &config.orgs["default"];
+        assert_eq!(org.default_operator_kind, OperatorKind::Yubikey);
+        assert_eq!(
+            org.operators,
+            vec![OperatorRecord::yubikey(YubiKeySerial::from(0x01c9_5c1f))]
+        );
     }
 }

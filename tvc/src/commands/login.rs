@@ -5,9 +5,10 @@ use crate::commands::keys::backup_operator_key::{
     OperatorKeyBackedUp, back_up, prompt_for_backup_destination,
 };
 use crate::config::turnkey::{
-    API_BASE_URL_PROD, Config, KeyCurve, LocalOperatorRecord, OperatorKind, OperatorRecordKind,
-    OrgConfig, QosOperatorPublicKey, StoredApiKey, StoredQosOperatorKey, YubiKeySerial,
-    dashboard_base_url, default_api_key_path, default_operator_key_path, default_org_dir,
+    API_BASE_URL_PROD, Config, KeyCurve, LocalOperatorRecord, NewOrgOperator, OperatorKind,
+    OperatorRecordKind, OrgConfig, QosOperatorPublicKey, StoredApiKey, StoredQosOperatorKey,
+    YubiKeySerial, dashboard_base_url, default_api_key_path, default_operator_key_path,
+    default_org_dir,
 };
 use crate::operator::YubiKeySelection;
 use crate::outcome::Outcome;
@@ -553,7 +554,7 @@ fn generate_org(
     api_base_url: String,
 ) -> Result<(String, OrgConfig)> {
     debug!(org_alias = %alias, %api_base_url, "adding organization");
-    config.add_org(&alias, id, api_base_url)?;
+    config.add_org(&alias, id, api_base_url, NewOrgOperator::LocalKeyFile)?;
     let org_config = config.orgs.get(&alias).unwrap().clone();
     Ok((alias, org_config))
 }
