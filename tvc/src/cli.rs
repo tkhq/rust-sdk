@@ -304,6 +304,9 @@ impl Commands {
                 SecretCommands::Import(args) => {
                     commands::secret::import::run(ctx, args, config).await
                 }
+                SecretCommands::Export(args) => {
+                    commands::secret::export::run(ctx, args, config).await
+                }
             },
             Commands::Version => commands::version::run(),
         }
@@ -450,12 +453,16 @@ enum SecretCommands {
     /// Import one secret value into Turnkey secret storage.
     #[command(long_about = commands::secret::import::LONG_ABOUT)]
     Import(commands::secret::import::Args),
+    /// Export one secret value from Turnkey secret storage.
+    #[command(long_about = commands::secret::export::LONG_ABOUT)]
+    Export(commands::secret::export::Args),
 }
 
 impl SecretCommands {
     fn name(&self) -> &'static str {
         match self {
             SecretCommands::Import(_) => "secret import",
+            SecretCommands::Export(_) => "secret export",
         }
     }
 }
