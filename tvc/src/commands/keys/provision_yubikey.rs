@@ -6,8 +6,8 @@ use crate::{
     config::turnkey::{Config, QosOperatorPublicKey, Registration, YubiKeySerial},
     outcome::Outcome,
     output::StdCtx,
-    prompts, shell_println,
-    yubikey::{self, ConnectedYubiKeys, DeviceOps, Pin, QosSlot, SlotStatus},
+    prompts,
+    yubikey::{self, ConnectedYubiKeys, Pin, QosSlot},
 };
 use anyhow::{Context, Result, bail};
 use clap::Args as ClapArgs;
@@ -39,33 +39,15 @@ impl Run for Args {
         }
 
         let serial = ConnectedYubiKeys::from(ctx.connected_yubikeys()?).choose(self.serial)?;
+        let pin = Pin::from(prompts::password(
+            "YubiKey PIV PIN (the factory default is 123456; touch the device each time it blinks)",
+        )?);
 
         // The one open handle: inspection and mutation see the same device.
         let mut yubikey = yubikey::open(serial)?;
-        let status = yubikey.device_status()?;
+        let enrolled = config.enroll_yubikey(serial, &mut yubikey, &pin)?;
 
-        if let Some(refusal) = status.unprovisionable_slot() {
-            return Err(refusal.into());
-        }
-
-        let provisioned_slots = status.slots_with(SlotStatus::Empty);
-
-        if !provisioned_slots.is_empty() {
-            let pin = Pin::from(prompts::password(
-                "YubiKey PIV PIN (the factory default is 123456)",
-            )?);
-
-            shell_println!(ctx, "Touch the YubiKey each time it blinks.")?;
-
-            provisioned_slots
-                .iter()
-                .try_for_each(|slot| yubikey.provision_slot(*slot, &pin))?;
-        }
-
-        let operator_public_key = yubikey.pair_public_key()?;
-        let registration = config.yubikeys.register(serial, operator_public_key);
-
-        if registration != Registration::Unchanged {
+        if enrolled.registration != Registration::Unchanged {
             let recovery = config.to_toml().context(
                 "the YubiKey is provisioned but the updated config could not be serialized",
             )?;
@@ -81,9 +63,9 @@ impl Run for Args {
 
         Ok(YubiKeyProvisioned {
             serial,
-            operator_public_key,
-            provisioned_slots,
-            registration,
+            operator_public_key: enrolled.public_key,
+            provisioned_slots: enrolled.provisioned_slots,
+            registration: enrolled.registration,
         })
     }
 }

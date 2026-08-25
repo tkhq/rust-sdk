@@ -22,7 +22,9 @@
 //! erase credentials TVC does not own — so the key material itself stays
 //! behind until the slot is reprovisioned, and TVC never resets a device.
 
-use crate::config::turnkey::{QosOperatorPublicKey, QosOperatorPublicKeyParseError, YubiKeySerial};
+use crate::config::turnkey::{
+    Config, QosOperatorPublicKey, QosOperatorPublicKeyParseError, Registration, YubiKeySerial,
+};
 use p256::PublicKey;
 use p256::elliptic_curve::sec1::ToEncodedPoint;
 use qos_client::{
@@ -463,6 +465,47 @@ impl DeviceOps for YubiKey {
     }
 }
 
+/// Result of [`Config::enroll_yubikey`]: the device key and changes made to
+/// the device and registry.
+#[cfg_attr(test, derive(Debug))]
+pub(crate) struct EnrolledYubiKey {
+    pub(crate) public_key: QosOperatorPublicKey,
+    pub(crate) provisioned_slots: Vec<QosSlot>,
+    pub(crate) registration: Registration,
+}
+
+impl Config {
+    /// Bring one opened device to the fully provisioned state and make its
+    /// in-memory registry entry authoritative. The caller owns input
+    /// acquisition, device opening, persistence, and save recovery.
+    pub(crate) fn enroll_yubikey<D: DeviceOps>(
+        &mut self,
+        serial: YubiKeySerial,
+        device: &mut D,
+        pin: &Pin,
+    ) -> Result<EnrolledYubiKey, DeviceError> {
+        let status = device.device_status()?;
+
+        if let Some(refusal) = status.unprovisionable_slot() {
+            return Err(refusal);
+        }
+
+        let provisioned_slots = status.slots_with(SlotStatus::Empty);
+        provisioned_slots
+            .iter()
+            .try_for_each(|slot| device.provision_slot(*slot, pin))?;
+
+        let public_key = device.pair_public_key()?;
+        let registration = self.yubikeys.register(serial, public_key);
+
+        Ok(EnrolledYubiKey {
+            public_key,
+            provisioned_slots,
+            registration,
+        })
+    }
+}
+
 pub(crate) mod pair;
 
 #[cfg(test)]
@@ -470,7 +513,7 @@ pub(crate) mod test_support;
 
 #[cfg(test)]
 mod tests {
-    use super::test_support::{FakeDevice, PIN};
+    use super::test_support::{FakeDevice, PIN, serial};
     use super::*;
     use p256::PublicKey;
     use p256::ecdh::diffie_hellman;
@@ -478,6 +521,44 @@ mod tests {
 
     fn default_pin() -> Pin {
         Pin::from(String::from_utf8(PIN.to_vec()).unwrap())
+    }
+
+    #[test]
+    fn enroll_provisions_and_registers_a_fresh_device() {
+        let mut config = Config::default();
+        let mut device = FakeDevice::new(SlotStatus::Empty, SlotStatus::Empty);
+
+        let enrolled = config
+            .enroll_yubikey(serial(), &mut device, &default_pin())
+            .unwrap();
+
+        assert_eq!(enrolled.public_key, device.operator_public_key());
+        assert_eq!(
+            enrolled.provisioned_slots,
+            vec![QosSlot::Signing, QosSlot::KeyAgreement]
+        );
+        assert_eq!(enrolled.registration, Registration::Added);
+        assert_eq!(
+            config.yubikeys.get(serial()).unwrap().public_key,
+            device.operator_public_key()
+        );
+    }
+
+    #[test]
+    fn re_enrolling_a_registered_device_changes_nothing() {
+        let mut config = Config::default();
+        let mut device = FakeDevice::new(SlotStatus::QosProvisioned, SlotStatus::QosProvisioned);
+        config
+            .yubikeys
+            .register(serial(), device.operator_public_key());
+
+        let enrolled = config
+            .enroll_yubikey(serial(), &mut device, &default_pin())
+            .unwrap();
+
+        assert_eq!(enrolled.registration, Registration::Unchanged);
+        assert_eq!(enrolled.provisioned_slots, Vec::new());
+        assert_eq!(device.provision_calls, Vec::new());
     }
 
     fn connected(serials: &[u32]) -> ConnectedYubiKeys {
