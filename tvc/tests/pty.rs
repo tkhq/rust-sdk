@@ -22,7 +22,7 @@ use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use tvc::config::app::KNOWN_QUORUM_KEY;
 use tvc::config::turnkey::{
     Config, HostedOperatorRecord, KeyCurve, OperatorKind, OperatorRecord, OperatorRecordKind,
-    OrgConfig, StoredApiKey,
+    OrgConfig, StoredApiKey, YubiKeySerial,
 };
 
 /// Default per-step timeout. Generous enough for CI-runner cold cargo builds
@@ -650,6 +650,88 @@ fn app_create_prompts_to_pick_among_multiple_reuse_candidates() {
         "Reusing operator 33333333-3333-4333-8333-333333333333",
     );
     session.exp_eof().unwrap();
+}
+
+/// Write a v1 config holding only a YubiKey registry entry (no orgs), so an
+/// interactive login goes straight to new-organization setup with a
+/// registered serial to offer. Returns the cached composite key hex.
+fn write_registry_only_config(home: &Path) -> String {
+    let turnkey_dir = home.join(".config/turnkey");
+    std::fs::create_dir_all(&turnkey_dir).unwrap();
+
+    let composite = hex::encode(P256Pair::generate().unwrap().public_key().to_bytes());
+    let mut config = Config::default();
+    config
+        .yubikeys
+        .register(YubiKeySerial::from(0x01c9_5c1f), composite.parse().unwrap());
+    std::fs::write(
+        turnkey_dir.join("tvc.config.toml"),
+        format!("version = 1\n{}", toml::to_string_pretty(&config).unwrap()),
+    )
+    .unwrap();
+
+    composite
+}
+
+/// A new organization can be set up with an already-registered YubiKey as
+/// its operator, entirely from the registry cache: no device is needed,
+/// nothing is provisioned, and the saved config defaults to the yubikey
+/// backend with a serial-only operator record.
+#[test]
+fn login_creates_a_new_org_with_a_registered_yubikey() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let composite = write_registry_only_config(temp.path());
+    let (api_base_url, server) = spawn_whoami_server();
+
+    let mut session = spawn_with_home(temp.path(), &["login", "--api-base-url", &api_base_url]);
+
+    session.exp_string("No organization configured.").unwrap();
+    session.exp_string("Organization ID").unwrap();
+    session.send_line("org-e2e").unwrap();
+    session.exp_string("Organization alias").unwrap();
+    session.send_line("").unwrap();
+
+    // Down-arrow from "Local key file" to "YubiKey", then pick the
+    // registered serial (the first source option).
+    session.exp_string("Operator key type").unwrap();
+    session.send("\x1b[B").unwrap();
+    session.send_line("").unwrap();
+    session
+        .exp_string("YubiKey to use as the operator")
+        .unwrap();
+    exp_wrapped(&mut session, "01c95c1f (registered)");
+    session.send_line("").unwrap();
+
+    session.exp_string("Operator public key:").unwrap();
+    session
+        .exp_string("Make sure to register this as an operator in your organization.")
+        .unwrap();
+
+    // API key generation, manual dashboard registration, then verification
+    // against the mock server.
+    session.exp_string("API Key Generated!").unwrap();
+    session.exp_string("Press Enter when done...").unwrap();
+    session.send_line("").unwrap();
+
+    exp_wrapped(
+        &mut session,
+        "Using YubiKey operator 'yubikey-01c95c1f' (serial 01c95c1f).",
+    );
+    let output = session.exp_eof().unwrap();
+    server.join().unwrap();
+
+    assert!(output.contains("Successfully logged in!"), "{output}");
+    assert!(!output.contains("Generating operator key"), "{output}");
+    assert!(output.contains("YubiKey operator:"), "{output}");
+
+    let saved =
+        std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
+    assert!(
+        saved.contains("default_operator_kind = \"yubikey\""),
+        "{saved}"
+    );
+    assert!(saved.contains("name = \"yubikey-01c95c1f\""), "{saved}");
+    assert!(saved.contains(&composite), "{saved}");
 }
 
 /// Logging in to an org whose default backend is hosted needs no local key:

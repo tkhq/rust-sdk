@@ -7,19 +7,20 @@ use crate::commands::keys::backup_operator_key::{
 use crate::config::turnkey::{
     API_BASE_URL_PROD, Config, KeyCurve, LocalOperatorRecord, NewOrgOperator, OperatorKind,
     OperatorRecordKind, OrgConfig, QosOperatorPublicKey, StoredApiKey, StoredQosOperatorKey,
-    YubiKeySerial, dashboard_base_url, default_api_key_path, default_operator_key_path,
-    default_org_dir,
+    YubiKeyRegistryEntry, YubiKeySerial, dashboard_base_url, default_api_key_path,
+    default_operator_key_path, default_org_dir,
 };
 use crate::operator::YubiKeySelection;
 use crate::outcome::Outcome;
 use crate::output::StdCtx;
 use crate::prompts::{self, error_required_in_non_interactive};
+use crate::yubikey::{self, Pin, YubiKeySource};
 use crate::{shell_eprintln, shell_print, shell_println};
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Args as ClapArgs;
 use qos_p256::P256Pair;
 use serde::Serialize;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::fmt::{self, Display, Formatter};
 use std::io::BufRead;
 use tracing::{debug, instrument};
@@ -60,7 +61,27 @@ pub struct DeleteArgs {
 
 enum OrgPlan {
     Existing(String),
-    New { id: String, alias: String },
+    New {
+        id: String,
+        alias: String,
+        operator: NewOrgOperatorPlan,
+    },
+}
+
+/// The operator backend chosen for a new organization at plan time.
+enum NewOrgOperatorPlan {
+    Local,
+    Yubikey(YubiKeySource),
+}
+
+/// The yubikey leg of a newly created organization: what the coherent save
+/// must be able to recover, and what the post-save guidance surfaces.
+struct NewOrgYubiKey {
+    serial: YubiKeySerial,
+    public_key: QosOperatorPublicKey,
+    /// Whether this login provisioned the device: hardware success precedes
+    /// the save, so a failed save needs recovery instructions.
+    provisioned: bool,
 }
 
 enum ApiKeyPolicy {
@@ -324,7 +345,7 @@ fn build_login_plan_non_interactive(args: Args) -> Result<LoginPlan> {
 }
 
 async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) -> Result<Outcome> {
-    let (alias, org_config) = match plan.org {
+    let (alias, org_config, yubikey) = match plan.org {
         OrgPlan::Existing(query) => {
             let alias = match find_org(&config, &query) {
                 Some((alias, _)) => alias.clone(),
@@ -339,18 +360,128 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
                 plan.api_base_url_override.as_deref(),
             );
             let org_config = config.orgs.get(&alias).unwrap().clone();
-            (alias, org_config)
+            (alias, org_config, None)
         }
-        OrgPlan::New { id, alias } => {
+        OrgPlan::New {
+            id,
+            alias,
+            operator,
+        } => {
             let api_base_url = new_org_api_base_url(plan.api_base_url_override.as_deref());
-            generate_org(&mut config, id, alias, api_base_url)?
+
+            // The hardware leg runs before the org is added, so the single
+            // save below persists the registry entry and the organization
+            // reference as one coherent transition.
+            let (operator, yubikey) = match operator {
+                NewOrgOperatorPlan::Local => (NewOrgOperator::LocalKeyFile, None),
+                NewOrgOperatorPlan::Yubikey(YubiKeySource::Registered(serial)) => {
+                    let entry = config.yubikeys.get(serial).ok_or_else(|| {
+                        anyhow!(
+                            "YubiKey {serial} is not in the device registry; run \
+                             `tvc keys provision-yubikey --serial {serial}` to provision \
+                             and register it"
+                        )
+                    })?;
+
+                    (
+                        NewOrgOperator::Yubikey(serial),
+                        Some(NewOrgYubiKey {
+                            serial,
+                            public_key: entry.public_key,
+                            provisioned: false,
+                        }),
+                    )
+                }
+                NewOrgOperatorPlan::Yubikey(YubiKeySource::Provision(serial)) => {
+                    let pin = Pin::from(prompts::password(
+                        "YubiKey PIV PIN (the factory default is 123456; touch the device each time it blinks)",
+                    )?);
+                    let mut device = yubikey::open(serial)?;
+                    let enrolled = config.enroll_yubikey(serial, &mut device, &pin)?;
+
+                    if enrolled.provisioned_slots.is_empty() {
+                        shell_println!(
+                            ctx,
+                            "YubiKey {serial} already provisioned - keeping the existing key pair."
+                        )?;
+                    } else {
+                        shell_println!(ctx, "YubiKey {serial} provisioned.")?;
+                    }
+
+                    (
+                        NewOrgOperator::Yubikey(serial),
+                        Some(NewOrgYubiKey {
+                            serial,
+                            public_key: enrolled.public_key,
+                            provisioned: true,
+                        }),
+                    )
+                }
+            };
+
+            let (alias, org_config) = generate_org(&mut config, id, alias, api_base_url, operator)?;
+            (alias, org_config, yubikey)
         }
     };
 
     shell_println!(ctx, "Selected org: {} ({})", alias, org_config.id)?;
 
     config.set_active_org(&alias)?;
-    config.save().await?;
+
+    // A provisioned device is irreversible state the config must catch up
+    // with: a failed save gets paste-able recovery covering both the registry
+    // entry and the organization reference.
+    let recovery = yubikey
+        .as_ref()
+        .filter(|yubikey| yubikey.provisioned)
+        .map(|yubikey| {
+            #[derive(Serialize)]
+            struct Recovery<'a> {
+                yubikeys: [YubiKeyRegistryEntry; 1],
+                orgs: HashMap<&'a str, &'a OrgConfig>,
+            }
+
+            toml::to_string_pretty(&Recovery {
+                yubikeys: [YubiKeyRegistryEntry {
+                    serial: yubikey.serial,
+                    public_key: yubikey.public_key,
+                    extra: toml::Table::new(),
+                }],
+                orgs: HashMap::from([(alias.as_str(), &org_config)]),
+            })
+            .context("failed to serialize recovery config for the new organization")
+        })
+        .transpose()?;
+
+    match recovery {
+        Some(recovery) => {
+            let config_path = crate::config::turnkey::config_file_path()?;
+
+            config.save().await.with_context(|| {
+                format!(
+                    r#"the YubiKey is provisioned but saving the config failed; the device keeps its keys, so rerunning `tvc login` is safe (provisioning is idempotent), or add this to {} manually:
+
+{recovery}"#,
+                    config_path.display()
+                )
+            })?;
+        }
+        None => config.save().await?,
+    }
+
+    if let Some(yubikey) = &yubikey {
+        shell_println!(ctx)?;
+        shell_println!(ctx, "Operator public key: {}", yubikey.public_key)?;
+        shell_println!(ctx)?;
+        shell_println!(
+            ctx,
+            "This key will be used for approving deployment manifests."
+        )?;
+        shell_println!(
+            ctx,
+            "Make sure to register this as an operator in your organization."
+        )?;
+    }
 
     let api_key = match StoredApiKey::load(&org_config).await? {
         Some(api_key) => {
@@ -471,7 +602,7 @@ fn prompt_for_org_plan(
     if config.orgs.is_empty() {
         debug!("no organizations configured; prompting for new organization");
         shell_println!(ctx, "No organization configured.")?;
-        return prompt_for_new_org_inputs(ctx, api_base_url_override);
+        return prompt_for_new_org_inputs(ctx, config, api_base_url_override);
     }
 
     let mut options: Vec<OrgChoice> = config
@@ -493,12 +624,13 @@ fn prompt_for_org_plan(
 
     match prompts::select("Select organization", options)? {
         OrgChoice::Existing { alias, .. } => Ok(OrgPlan::Existing(alias)),
-        OrgChoice::New => prompt_for_new_org_inputs(ctx, api_base_url_override),
+        OrgChoice::New => prompt_for_new_org_inputs(ctx, config, api_base_url_override),
     }
 }
 
 fn prompt_for_new_org_inputs(
     ctx: &mut StdCtx,
+    config: &Config,
     api_base_url_override: Option<&str>,
 ) -> Result<OrgPlan> {
     let dashboard_url = dashboard_base_url(api_base_url_override.unwrap_or(API_BASE_URL_PROD));
@@ -516,7 +648,39 @@ fn prompt_for_new_org_inputs(
     let alias = prompts::text("Organization alias", Some("default"))?;
     debug!(org_alias = %alias, "user entered new organization inputs");
 
-    Ok(OrgPlan::New { id, alias })
+    let operator = {
+        enum OperatorKeyChoice {
+            Local,
+            Yubikey,
+        }
+
+        impl Display for OperatorKeyChoice {
+            fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+                match self {
+                    Self::Local => f.write_str("Local key file"),
+                    Self::Yubikey => f.write_str("YubiKey"),
+                }
+            }
+        }
+
+        match prompts::select(
+            "Operator key type",
+            vec![OperatorKeyChoice::Local, OperatorKeyChoice::Yubikey],
+        )? {
+            OperatorKeyChoice::Local => NewOrgOperatorPlan::Local,
+            OperatorKeyChoice::Yubikey => {
+                NewOrgOperatorPlan::Yubikey(YubiKeySource::prompt(&config.yubikeys, || {
+                    ctx.connected_yubikeys()
+                })?)
+            }
+        }
+    };
+
+    Ok(OrgPlan::New {
+        id,
+        alias,
+        operator,
+    })
 }
 
 enum OrgChoice {
@@ -552,10 +716,15 @@ fn generate_org(
     id: String,
     alias: String,
     api_base_url: String,
+    operator: NewOrgOperator,
 ) -> Result<(String, OrgConfig)> {
     debug!(org_alias = %alias, %api_base_url, "adding organization");
-    config.add_org(&alias, id, api_base_url, NewOrgOperator::LocalKeyFile)?;
-    let org_config = config.orgs.get(&alias).unwrap().clone();
+    config.add_org(&alias, id, api_base_url, operator)?;
+    let org_config = config
+        .orgs
+        .get(&alias)
+        .with_context(|| format!("organization '{alias}' disappeared from config"))?
+        .clone();
     Ok((alias, org_config))
 }
 

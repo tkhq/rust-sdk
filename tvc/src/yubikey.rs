@@ -23,8 +23,10 @@
 //! behind until the slot is reprovisioned, and TVC never resets a device.
 
 use crate::config::turnkey::{
-    Config, QosOperatorPublicKey, QosOperatorPublicKeyParseError, Registration, YubiKeySerial,
+    Config, QosOperatorPublicKey, QosOperatorPublicKeyParseError, Registration, YubiKeyRegistry,
+    YubiKeySerial,
 };
+use crate::prompts;
 use p256::PublicKey;
 use p256::elliptic_curve::sec1::ToEncodedPoint;
 use qos_client::{
@@ -100,6 +102,55 @@ impl ConnectedYubiKeys {
                     serials()
                 ),
             },
+        }
+    }
+}
+
+/// Source selected for a new YubiKey operator record.
+#[cfg_attr(test, derive(Debug, PartialEq))]
+pub(crate) enum YubiKeySource {
+    Registered(YubiKeySerial),
+    Provision(YubiKeySerial),
+}
+
+impl YubiKeySource {
+    /// Choose an existing registry entry or lazily discover the connected
+    /// device to provision. Selecting a registered serial performs no
+    /// hardware discovery.
+    pub(crate) fn prompt<F>(yubikeys: &YubiKeyRegistry, discover: F) -> anyhow::Result<Self>
+    where
+        F: FnOnce() -> Result<Vec<YubiKeySerial>, DeviceError>,
+    {
+        enum Choice {
+            Registered(YubiKeySerial),
+            New,
+        }
+
+        impl Display for Choice {
+            fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+                match self {
+                    Self::Registered(serial) => write!(f, "{serial} (registered)"),
+                    Self::New => f.write_str("[new] Provision a connected YubiKey"),
+                }
+            }
+        }
+
+        let choice = if yubikeys.is_empty() {
+            Choice::New
+        } else {
+            let mut choices = yubikeys
+                .serials()
+                .map(Choice::Registered)
+                .collect::<Vec<_>>();
+            choices.push(Choice::New);
+            prompts::select("YubiKey to use as the operator", choices)?
+        };
+
+        match choice {
+            Choice::Registered(serial) => Ok(Self::Registered(serial)),
+            Choice::New => Ok(Self::Provision(
+                ConnectedYubiKeys::from(discover()?).choose(None)?,
+            )),
         }
     }
 }
@@ -559,6 +610,13 @@ mod tests {
         assert_eq!(enrolled.registration, Registration::Unchanged);
         assert_eq!(enrolled.provisioned_slots, Vec::new());
         assert_eq!(device.provision_calls, Vec::new());
+    }
+
+    #[test]
+    fn an_empty_registry_provisions_the_connected_device_without_prompting() {
+        let source = YubiKeySource::prompt(&Default::default(), || Ok(vec![serial()])).unwrap();
+
+        assert_eq!(source, YubiKeySource::Provision(serial()));
     }
 
     fn connected(serials: &[u32]) -> ConnectedYubiKeys {
