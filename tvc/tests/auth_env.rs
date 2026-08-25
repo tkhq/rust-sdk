@@ -113,7 +113,7 @@ fn auth_falls_back_to_disk_config_when_required_env_vars_are_unset() {
                 extra: toml::Table::new(),
             },
         )]),
-        yubikeys: Vec::new(),
+        yubikeys: Default::default(),
         last_created_app_id: HashMap::new(),
         last_operator_ids: HashMap::new(),
         extra: toml::Table::new(),

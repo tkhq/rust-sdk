@@ -93,6 +93,107 @@ pub struct YubiKeyOperatorRecord {
     pub extra: toml::Table,
 }
 
+/// The registered YubiKey devices, at most one entry per serial.
+///
+/// Construction is the proof of uniqueness: deserialization funnels through
+/// `TryFrom`, and the mutating methods preserve the invariant.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(test, derive(PartialEq))]
+#[serde(try_from = "Vec<YubiKeyRegistryEntry>")]
+pub struct YubiKeyRegistry(Vec<YubiKeyRegistryEntry>);
+
+/// Error returned when parsing a [`YubiKeyRegistry`].
+#[derive(Debug, displaydoc::Display, thiserror::Error)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
+pub enum YubiKeyRegistryParseError {
+    /// duplicate YubiKey registry entry for serial {0}
+    DuplicateSerial(YubiKeySerial),
+}
+
+impl TryFrom<Vec<YubiKeyRegistryEntry>> for YubiKeyRegistry {
+    type Error = YubiKeyRegistryParseError;
+
+    fn try_from(entries: Vec<YubiKeyRegistryEntry>) -> Result<Self, Self::Error> {
+        let duplicate = entries.iter().enumerate().find(|(index, entry)| {
+            entries[..*index]
+                .iter()
+                .any(|earlier| earlier.serial == entry.serial)
+        });
+
+        match duplicate {
+            Some((_, entry)) => Err(YubiKeyRegistryParseError::DuplicateSerial(entry.serial)),
+            None => Ok(Self(entries)),
+        }
+    }
+}
+
+/// How [`YubiKeyRegistry::register`] changed the registry.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Registration {
+    /// The serial was newly registered.
+    Added,
+    /// The serial was registered with a stale public key; the cache now
+    /// matches the device.
+    Updated,
+    /// The registry already matched the device.
+    #[default]
+    Unchanged,
+}
+
+impl YubiKeyRegistry {
+    /// Record a device and its operator public key.
+    ///
+    /// The device is authoritative: when the serial is already registered
+    /// with a different key (reprovisioned outside tvc, or a hand-edited
+    /// config), the cached key is replaced.
+    pub fn register(
+        &mut self,
+        serial: YubiKeySerial,
+        public_key: QosOperatorPublicKey,
+    ) -> Registration {
+        let Some(entry) = self.0.iter_mut().find(|entry| entry.serial == serial) else {
+            self.0.push(YubiKeyRegistryEntry {
+                serial,
+                public_key,
+                extra: toml::Table::new(),
+            });
+            return Registration::Added;
+        };
+
+        if entry.public_key == public_key {
+            Registration::Unchanged
+        } else {
+            entry.public_key = public_key;
+            Registration::Updated
+        }
+    }
+
+    /// Remove a serial. Returns `false` when it was not registered.
+    pub fn deregister(&mut self, serial: YubiKeySerial) -> bool {
+        let count_before = self.0.len();
+        self.0.retain(|entry| entry.serial != serial);
+        self.0.len() < count_before
+    }
+
+    pub fn get(&self, serial: YubiKeySerial) -> Option<&YubiKeyRegistryEntry> {
+        self.0.iter().find(|entry| entry.serial == serial)
+    }
+
+    pub fn contains(&self, serial: YubiKeySerial) -> bool {
+        self.get(serial).is_some()
+    }
+
+    /// Registered serials, in config order.
+    pub fn serials(&self) -> impl Iterator<Item = YubiKeySerial> + '_ {
+        self.0.iter().map(|entry| entry.serial)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -140,5 +241,62 @@ mod tests {
         let round_tripped: YubiKeyRegistryEntry = toml::from_str(&reserialized).unwrap();
 
         assert_eq!(round_tripped, entry);
+    }
+
+    fn serial() -> YubiKeySerial {
+        YubiKeySerial::from(0x01c9_5c1f)
+    }
+
+    fn pair_key() -> QosOperatorPublicKey {
+        QosOperatorPublicKey::try_from([7u8; 130].as_slice()).unwrap()
+    }
+
+    #[test]
+    fn registration_is_idempotent() {
+        let mut registry = YubiKeyRegistry::default();
+
+        assert_eq!(registry.register(serial(), pair_key()), Registration::Added);
+        assert_eq!(
+            registry.register(serial(), pair_key()),
+            Registration::Unchanged
+        );
+        assert_eq!(registry.serials().collect::<Vec<_>>(), vec![serial()]);
+    }
+
+    #[test]
+    fn registration_refreshes_a_stale_cached_key() {
+        let mut registry = YubiKeyRegistry::default();
+        let stale = QosOperatorPublicKey::try_from([9u8; 130].as_slice()).unwrap();
+        registry.register(serial(), stale);
+
+        assert_eq!(
+            registry.register(serial(), pair_key()),
+            Registration::Updated
+        );
+        assert_eq!(registry.0[0].public_key, pair_key());
+    }
+
+    #[test]
+    fn deregistration_removes_the_entry() {
+        let mut registry = YubiKeyRegistry::default();
+        registry.register(serial(), pair_key());
+
+        assert!(registry.deregister(serial()));
+        assert!(!registry.deregister(serial()));
+        assert!(registry.is_empty());
+        assert!(!registry.contains(serial()));
+    }
+
+    #[test]
+    fn deserialization_rejects_duplicate_serials() {
+        let entry = YubiKeyRegistryEntry {
+            serial: serial(),
+            public_key: pair_key(),
+            extra: toml::Table::new(),
+        };
+
+        let error = YubiKeyRegistry::try_from(vec![entry.clone(), entry]).unwrap_err();
+
+        assert_eq!(error, YubiKeyRegistryParseError::DuplicateSerial(serial()));
     }
 }

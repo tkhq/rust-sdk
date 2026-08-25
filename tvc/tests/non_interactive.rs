@@ -50,7 +50,7 @@ fn write_config(
                 extra: toml::Table::new(),
             },
         )]),
-        yubikeys: Vec::new(),
+        yubikeys: Default::default(),
         last_created_app_id: HashMap::new(),
         last_operator_ids: HashMap::from([("test".to_string(), last_operator_ids)]),
         extra: toml::Table::new(),

@@ -49,7 +49,7 @@ pub fn write_profiles_config(home: &Path, profiles: &[(&str, &str)], active_org:
     let config = Config {
         active_org: active_org.map(String::from),
         orgs,
-        yubikeys: Vec::new(),
+        yubikeys: Default::default(),
         last_created_app_id: HashMap::new(),
         last_operator_ids: HashMap::new(),
         extra: toml::Table::new(),
@@ -102,7 +102,7 @@ pub fn write_hosted_only_config(home: &Path, alias: &str, org_id: &str) {
                 extra: toml::Table::new(),
             },
         )]),
-        yubikeys: Vec::new(),
+        yubikeys: Default::default(),
         last_created_app_id: HashMap::new(),
         last_operator_ids: HashMap::new(),
         extra: toml::Table::new(),

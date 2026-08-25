@@ -3,13 +3,13 @@
 
 use crate::{
     commands::Run,
-    config::turnkey::{Config, QosOperatorPublicKey, YubiKeySerial, config_file_path},
+    config::turnkey::{Config, QosOperatorPublicKey, Registration, YubiKeySerial},
     outcome::Outcome,
     output::StdCtx,
     prompts, shell_println,
-    yubikey::{DeviceOps, PcscDevices, Pin, QosSlot, Registration},
+    yubikey::{self, DeviceOps, Pin, QosSlot, SlotStatus},
 };
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, bail};
 use clap::Args as ClapArgs;
 use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
@@ -26,9 +26,9 @@ pub struct Args {
 }
 
 impl Run for Args {
-    type Outcome = YubikeyProvisioned;
+    type Outcome = YubiKeyProvisioned;
 
-    async fn run(self, ctx: &mut StdCtx, mut config: Config) -> Result<YubikeyProvisioned> {
+    async fn run(self, ctx: &mut StdCtx, mut config: Config) -> Result<YubiKeyProvisioned> {
         // No non-interactive fallback exists: the PIN is prompted and the
         // QuorumOS touch policy demands physical touches during generation.
         if ctx.is_non_interactive() || !prompts::stdin_can_prompt() {
@@ -38,17 +38,30 @@ impl Run for Args {
             );
         }
 
-        let mut devices = PcscDevices;
-        let connected = devices.connected_serials()?;
+        let connected = ctx.connected_yubikeys()?;
 
         let serial = match self.serial {
+            Some(serial) if connected.contains(&serial) => serial,
             Some(serial) => {
-                ensure!(
-                    connected.contains(&serial),
-                    "YubiKey {serial} is not connected{}",
-                    connected_list(&connected)
-                );
-                serial
+                let connected_list = {
+                    use std::fmt::Write as _;
+
+                    let mut list = String::new();
+                    let mut serials = connected.iter();
+
+                    if let Some(first) = serials.next() {
+                        write!(list, "; connected: {first}")
+                            .expect("writing to a String cannot fail");
+                    }
+
+                    serials
+                        .try_for_each(|next| write!(list, ", {next}"))
+                        .expect("writing to a String cannot fail");
+
+                    list
+                };
+
+                bail!("YubiKey {serial} is not connected{connected_list}");
             }
             None => match connected.as_slice() {
                 [] => bail!("no YubiKey is connected"),
@@ -57,54 +70,69 @@ impl Run for Args {
             },
         };
 
-        let pin = Pin::from(prompts::password(
-            "YubiKey PIV PIN (the factory default is 123456)",
-        )?);
+        // The one open handle: inspection and mutation see the same device.
+        let mut yubikey = yubikey::open(serial)?;
+        let status = yubikey.device_status()?;
 
-        shell_println!(ctx, "Touch the YubiKey each time it blinks.")?;
+        if let Some(refusal) = status.unprovisionable_slot() {
+            return Err(refusal.into());
+        }
 
-        let provisioned = devices.ensure_provisioned(serial, &pin)?;
-        let registration = config.register_yubikey(serial, provisioned.pair_public_key);
+        let provisioned_slots = status.slots_with(SlotStatus::Empty);
 
-        if registration != Registration::Unchanged {
-            let config_path = config_file_path()?;
-            config.save().await.with_context(|| {
-                format!(
-                    r#"the YubiKey is provisioned but saving the config failed; register it manually by adding this to {}:
+        if !provisioned_slots.is_empty() {
+            let pin = Pin::from(prompts::password(
+                "YubiKey PIV PIN (the factory default is 123456)",
+            )?);
+
+            shell_println!(ctx, "Touch the YubiKey each time it blinks.")?;
+
+            provisioned_slots
+                .iter()
+                .try_for_each(|slot| yubikey.provision_slot(*slot, &pin))?;
+        }
+
+        let operator_public_key = yubikey.pair_public_key()?;
+        let registration = config.yubikeys.register(serial, operator_public_key);
+
+        // The manual fallback must mirror what the save would have changed:
+        // appending a fresh table when the entry already exists would leave a
+        // duplicate serial behind.
+        let manual_registration = match registration {
+            Registration::Added => Some(format!(
+                r#"add this to tvc.config.toml:
 
 [[yubikeys]]
 serial = "{serial}"
-public_key = "{}""#,
-                    config_path.display(),
-                    provisioned.pair_public_key
+public_key = "{operator_public_key}""#
+            )),
+            Registration::Updated => Some(format!(
+                r#"replace public_key on the existing [[yubikeys]] entry whose serial is {serial} with "{operator_public_key}""#
+            )),
+            Registration::Unchanged => None,
+        };
+
+        if let Some(manual_registration) = manual_registration {
+            config.save().await.with_context(|| {
+                format!(
+                    "the YubiKey is provisioned but saving the config failed; {manual_registration}"
                 )
             })?;
         }
 
-        Ok(YubikeyProvisioned {
+        Ok(YubiKeyProvisioned {
             serial,
-            operator_public_key: provisioned.pair_public_key,
-            provisioned_slots: provisioned.provisioned_slots,
+            operator_public_key,
+            provisioned_slots,
             registration,
         })
     }
 }
 
-/// Renders `; connected: a, b` for a mismatch error, or nothing when no
-/// device is present (the bare message already says it all).
-fn connected_list(connected: &[YubiKeySerial]) -> String {
-    if connected.is_empty() {
-        return String::new();
-    }
-
-    let serials: Vec<String> = connected.iter().map(ToString::to_string).collect();
-    format!("; connected: {}", serials.join(", "))
-}
-
 #[derive(Default, Serialize)]
 #[cfg_attr(test, derive(Debug))]
 #[serde(rename_all = "camelCase")]
-pub struct YubikeyProvisioned {
+pub struct YubiKeyProvisioned {
     serial: YubiKeySerial,
     /// The composite `encrypt_public ‖ sign_public` operator key.
     operator_public_key: QosOperatorPublicKey,
@@ -116,19 +144,20 @@ pub struct YubikeyProvisioned {
     registration: Registration,
 }
 
-impl From<YubikeyProvisioned> for Outcome {
-    fn from(provisioned: YubikeyProvisioned) -> Self {
+impl From<YubiKeyProvisioned> for Outcome {
+    fn from(provisioned: YubiKeyProvisioned) -> Self {
         Outcome::YubikeyProvisioned(provisioned)
     }
 }
 
-impl Display for YubikeyProvisioned {
+impl Display for YubiKeyProvisioned {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let summary = if self.provisioned_slots.is_empty() {
             "YubiKey already provisioned - keeping the existing key pair."
         } else {
             "YubiKey provisioned!"
         };
+
         let registry = match self.registration {
             Registration::Added => "Serial registered in the tvc config.",
             Registration::Updated => "Registry entry refreshed - its cached public key was stale.",
@@ -146,5 +175,49 @@ Operator public key: {}
 protected by its PIN and touch policies."#,
             self.serial, self.operator_public_key
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn provisioned() -> YubiKeyProvisioned {
+        YubiKeyProvisioned {
+            serial: YubiKeySerial::from(0x01c9_5c1f),
+            operator_public_key: QosOperatorPublicKey::try_from([7u8; 130].as_slice()).unwrap(),
+            provisioned_slots: vec![QosSlot::Signing, QosSlot::KeyAgreement],
+            registration: Registration::Added,
+        }
+    }
+
+    #[test]
+    fn outcome_serializes_expected_json() {
+        assert_eq!(
+            serde_json::to_value(Outcome::from(provisioned())).unwrap(),
+            serde_json::json!({
+                "reason": "yubikey_provisioned",
+                "serial": "01c95c1f",
+                "operatorPublicKey": "07".repeat(130),
+                "provisionedSlots": ["signing", "key_agreement"],
+                "registration": "added",
+            })
+        );
+    }
+
+    #[test]
+    fn rendering_distinguishes_fresh_and_existing_provisioning() {
+        let fresh = provisioned().to_string();
+        assert!(fresh.starts_with("YubiKey provisioned!"));
+        assert!(fresh.contains("Serial registered in the tvc config."));
+
+        let existing = YubiKeyProvisioned {
+            provisioned_slots: Vec::new(),
+            registration: Registration::Unchanged,
+            ..provisioned()
+        };
+        let existing = existing.to_string();
+        assert!(existing.starts_with("YubiKey already provisioned"));
+        assert!(existing.contains("was already registered"));
     }
 }

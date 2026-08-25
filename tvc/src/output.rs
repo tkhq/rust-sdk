@@ -1,6 +1,8 @@
 //! User-facing output primitives for TVC.
 
+use crate::config::turnkey::YubiKeySerial;
 use crate::errors::{Classification, ErrorCode, binary_name, classify, hint, render_error_chain};
+use crate::yubikey::DeviceError;
 use anstyle::{AnsiColor, Color, Style};
 use anyhow::Result;
 use clap::ValueEnum;
@@ -188,10 +190,14 @@ impl<W: Write, W2: Write> Human<'_, W, W2> {
     }
 }
 
-/// Bundles the `Shell` with cross-cutting CLI flags
+/// Bundles the `Shell` with cross-cutting CLI flags and external effects.
 pub struct Ctx<W, W2> {
     shell: Shell<W, W2>,
     non_interactive: bool,
+    /// YubiKey discovery is an effect of the environment, so it lives here
+    /// where a test context can script serials or failures instead of
+    /// touching PC/SC.
+    connected_yubikeys: Box<dyn FnMut() -> Result<Vec<YubiKeySerial>, DeviceError> + Send>,
 }
 
 pub type StdCtx = Ctx<Stdout, Stderr>;
@@ -205,7 +211,23 @@ impl<W: Write, W2: Write> Ctx<W, W2> {
         Self {
             shell,
             non_interactive,
+            connected_yubikeys: Box::new(crate::yubikey::connected_serials),
         }
+    }
+
+    /// Replace the YubiKey discovery effect, for tests.
+    #[expect(dead_code, reason = "the test seam for scripted discovery")]
+    pub(crate) fn with_yubikey_discovery(
+        mut self,
+        discovery: impl FnMut() -> Result<Vec<YubiKeySerial>, DeviceError> + Send + 'static,
+    ) -> Self {
+        self.connected_yubikeys = Box::new(discovery);
+        self
+    }
+
+    /// Serials of the connected YubiKeys.
+    pub(crate) fn connected_yubikeys(&mut self) -> Result<Vec<YubiKeySerial>, DeviceError> {
+        (self.connected_yubikeys)()
     }
 
     pub fn shell(&mut self) -> &mut Shell<W, W2> {
