@@ -60,6 +60,7 @@ pub enum Outcome {
     ReEncryptedShareGenerated(keys::re_encrypt_local_share::ReEncryptedShareGenerated),
     SecretImported(secrets::import::SecretImported),
     SecretExported(secrets::export::SecretExported),
+    SecretsListed(secrets::list::SecretsListed),
     Version(version::CliVersion),
 }
 
@@ -98,6 +99,7 @@ impl Display for Outcome {
             Outcome::ReEncryptedShareGenerated(msg) => msg.fmt(f),
             Outcome::SecretImported(msg) => msg.fmt(f),
             Outcome::SecretExported(msg) => msg.fmt(f),
+            Outcome::SecretsListed(msg) => msg.fmt(f),
             Outcome::Version(msg) => msg.fmt(f),
         }
     }

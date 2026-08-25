@@ -307,6 +307,9 @@ impl Commands {
                 SecretsCommands::Export(args) => {
                     commands::secrets::export::run(ctx, args, config).await
                 }
+                SecretsCommands::List(args) => {
+                    commands::secrets::list::run(ctx, args, config).await
+                }
             },
             Commands::Version => commands::version::run(),
         }
@@ -456,6 +459,9 @@ enum SecretsCommands {
     /// Export one secret value from Turnkey secret storage.
     #[command(alias = "get", long_about = commands::secrets::export::LONG_ABOUT)]
     Export(commands::secrets::export::Args),
+    /// List secret metadata for the active organization.
+    #[command(alias = "ls", long_about = commands::secrets::list::LONG_ABOUT)]
+    List(commands::secrets::list::Args),
 }
 
 impl SecretsCommands {
@@ -463,6 +469,7 @@ impl SecretsCommands {
         match self {
             SecretsCommands::Import(_) => "secrets import",
             SecretsCommands::Export(_) => "secrets export",
+            SecretsCommands::List(_) => "secrets list",
         }
     }
 }
