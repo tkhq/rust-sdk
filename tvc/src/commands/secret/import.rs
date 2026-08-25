@@ -202,13 +202,10 @@ Activity Status: {}"#,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::turnkey::{KeyCurve, OperatorKind, OperatorRecord, OrgConfig, StoredApiKey};
-    use crate::output::{ColorChoice, Ctx, MessageFormat, Shell};
-    use p256::ecdsa::SigningKey;
-    use std::collections::HashMap;
+    use crate::commands::secret::test_support::{
+        quorum_public_key_hex, test_config, test_ctx, test_signing_key,
+    };
     use tempfile::TempDir;
-    use turnkey_api_key_stamper::TurnkeyP256ApiKey;
-    use turnkey_enclave_encrypt::QuorumPublicKey;
     use turnkey_enclave_encrypt::server::EnclaveEncryptServer;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -297,73 +294,9 @@ mod tests {
         );
     }
 
-    /// A signing key plus a quorum public key whose signing half matches it.
-    /// The encryption half is unused by the secrets flow.
-    fn test_quorum_keypair() -> (SigningKey, QuorumPublicKey) {
-        let signing = SigningKey::from_slice(&[7u8; 32]).unwrap();
-        let verifying = signing
-            .verifying_key()
-            .to_encoded_point(false)
-            .as_bytes()
-            .to_vec();
-        let public = QuorumPublicKey::from_bytes([verifying.clone(), verifying].concat()).unwrap();
-        (signing, public)
-    }
-
-    fn quorum_public_key_hex(key_bytes_half: &SigningKey) -> String {
-        let verifying = key_bytes_half
-            .verifying_key()
-            .to_encoded_point(false)
-            .as_bytes()
-            .to_vec();
-        hex::encode([verifying.clone(), verifying].concat())
-    }
-
-    /// A config whose single active org points at `api_base_url` with a
-    /// freshly generated API key on disk.
-    fn test_config(dir: &TempDir, api_base_url: &str) -> Config {
-        let api_key_path = dir.path().join("api_key.json");
-        let stamper = TurnkeyP256ApiKey::generate();
-        std::fs::write(
-            &api_key_path,
-            serde_json::to_string(&StoredApiKey {
-                public_key: hex::encode(stamper.compressed_public_key()),
-                private_key: hex::encode(stamper.private_key()),
-                curve: KeyCurve::P256,
-            })
-            .unwrap(),
-        )
-        .unwrap();
-
-        Config {
-            active_org: Some("test".to_string()),
-            orgs: HashMap::from([(
-                "test".to_string(),
-                OrgConfig {
-                    id: "org-1".to_string(),
-                    api_key_path,
-                    api_base_url: api_base_url.to_string(),
-                    default_operator_kind: OperatorKind::Local,
-                    operators: vec![OperatorRecord::local(dir.path().join("operator.json"))],
-                    extra: toml::Table::new(),
-                },
-            )]),
-            last_created_app_id: HashMap::new(),
-            last_operator_ids: HashMap::new(),
-            extra: toml::Table::new(),
-        }
-    }
-
-    fn test_ctx() -> StdCtx {
-        Ctx::new(
-            Shell::standard(MessageFormat::Human, ColorChoice::Never),
-            true,
-        )
-    }
-
     #[tokio::test]
     async fn run_imports_the_file_value_end_to_end() {
-        let (signing, _public) = test_quorum_keypair();
+        let signing = test_signing_key();
         let server = MockServer::start().await;
 
         let enclave = EnclaveEncryptServer::from_enclave_auth_key(
