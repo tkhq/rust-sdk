@@ -221,7 +221,9 @@ pub fn write_yubikey_shared_config(home: &Path, profiles: &[(&str, &str)]) {
             serial,
             public_key,
             extra: toml::Table::new(),
-        }],
+        }]
+        .try_into()
+        .unwrap(),
         last_created_app_id: HashMap::new(),
         last_operator_ids: HashMap::new(),
         extra: toml::Table::new(),

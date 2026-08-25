@@ -6,7 +6,7 @@ use crate::{
     commands::Run,
     config::turnkey::{
         Config, OperatorKind, OperatorRecord, OperatorRecordKind, QosOperatorPublicKey,
-        YubiKeyOperatorRecord, YubiKeySerial,
+        Registration, YubiKeyOperatorRecord, YubiKeySerial,
     },
     operator::{
         DEFAULT_HOSTED_OPERATOR_BASE_PATH, ensure_authenticated_org,
@@ -15,10 +15,7 @@ use crate::{
     outcome::Outcome,
     output::StdCtx,
     prompts,
-    yubikey::{
-        ConnectedYubiKeys, DeviceOps, PcscDevices, QosSlot, Registration, YubiKeySource,
-        pair::PinAcquisition,
-    },
+    yubikey::{self, ConnectedYubiKeys, DeviceError, DeviceOps, Pin, QosSlot, YubiKeySource},
 };
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use clap::{ArgGroup, Args as ClapArgs, ValueEnum, builder::NonEmptyStringValueParser};
@@ -203,17 +200,12 @@ impl Run for Args {
                 let can_prompt = !ctx.is_non_interactive() && prompts::stdin_can_prompt();
 
                 let source = match serial {
-                    Some(serial) if config.yubikey_registry_entry(serial).is_some() => {
+                    Some(serial) if config.yubikeys.contains(serial) => {
                         YubiKeySource::Registered(serial)
                     }
-                    Some(serial) if can_prompt => {
-                        let mut devices = PcscDevices;
-
-                        YubiKeySource::Provision(
-                            ConnectedYubiKeys::from(devices.connected_serials()?)
-                                .choose(Some(serial))?,
-                        )
-                    }
+                    Some(serial) if can_prompt => YubiKeySource::Provision(
+                        ConnectedYubiKeys::from(ctx.connected_yubikeys()?).choose(Some(serial))?,
+                    ),
                     Some(serial) => bail!(
                         "YubiKey {serial} is not in the device registry, and provisioning it \
                          is interactive (the PIN is prompted and the device must be touched); \
@@ -221,7 +213,7 @@ impl Run for Args {
                          first"
                     ),
                     None if can_prompt => {
-                        YubiKeySource::prompt(&config.yubikeys, &mut PcscDevices)?
+                        YubiKeySource::prompt(&config.yubikeys, || ctx.connected_yubikeys())?
                     }
                     None => return Err(prompts::error_required_in_non_interactive("--serial")),
                 };
@@ -233,10 +225,12 @@ impl Run for Args {
                             false,
                         )?);
 
-                let pin = if can_prompt {
-                    PinAcquisition::Prompt
+                let pin = if matches!(source, YubiKeySource::Provision(_)) {
+                    Some(Pin::from(prompts::password(
+                        "YubiKey PIV PIN (the factory default is 123456; touch the device each time it blinks)",
+                    )?))
                 } else {
-                    PinAcquisition::Unavailable
+                    None
                 };
 
                 let create = YubikeyCreate {
@@ -245,7 +239,7 @@ impl Run for Args {
                     make_default,
                     pin,
                 };
-                let added = create.execute(&mut config, &mut PcscDevices)?;
+                let added = create.execute(&mut config, yubikey::open)?;
 
                 // Nothing is persisted yet; the remediation renders from the
                 // typed outcome, and re-running is safe (provisioning is
@@ -378,7 +372,7 @@ struct YubikeyCreate {
     name: Option<String>,
     source: YubiKeySource,
     make_default: bool,
-    pin: PinAcquisition,
+    pin: Option<Pin>,
 }
 
 impl YubikeyCreate {
@@ -386,11 +380,11 @@ impl YubikeyCreate {
     /// the serial-only org record, and optionally flip the default backend.
     /// Mutates only the in-memory config; [`Run::run`] supplies PC/SC and
     /// persists everything as one save.
-    fn execute<D: DeviceOps>(
-        self,
-        config: &mut Config,
-        devices: &mut D,
-    ) -> Result<YubikeyOperatorAdded> {
+    fn execute<D, O>(self, config: &mut Config, open_device: O) -> Result<YubikeyOperatorAdded>
+    where
+        D: DeviceOps,
+        O: FnOnce(YubiKeySerial) -> Result<D, DeviceError>,
+    {
         let alias = config
             .active_org_config()
             .map(|(alias, _)| alias.clone())
@@ -398,16 +392,23 @@ impl YubikeyCreate {
 
         let (serial, enrolled) = match self.source {
             YubiKeySource::Registered(serial) => (serial, None),
-            YubiKeySource::Provision(serial) => (
-                serial,
-                Some(config.enroll_yubikey(serial, devices, self.pin)?),
-            ),
+            YubiKeySource::Provision(serial) => {
+                let pin = self
+                    .pin
+                    .as_ref()
+                    .context("a PIN must be resolved before provisioning a YubiKey")?;
+                let mut device = open_device(serial)?;
+                (
+                    serial,
+                    Some(config.enroll_yubikey(serial, &mut device, pin)?),
+                )
+            }
         };
 
         let (operator_public_key, registration) = match &enrolled {
             Some(enrolled) => (enrolled.public_key, enrolled.registration),
             None => {
-                let entry = config.yubikey_registry_entry(serial).ok_or_else(|| {
+                let entry = config.yubikeys.get(serial).ok_or_else(|| {
                     anyhow!(
                         "YubiKey {serial} is not in the device registry; run \
                          `tvc keys provision-yubikey --serial {serial}` to provision and \
@@ -682,10 +683,8 @@ mod tests {
         }
     }
 
-    fn fixed_pin() -> PinAcquisition {
-        PinAcquisition::Fixed(Pin::from(
-            String::from_utf8(test_support::PIN.to_vec()).unwrap(),
-        ))
+    fn fixed_pin() -> Pin {
+        Pin::from(String::from_utf8(test_support::PIN.to_vec()).unwrap())
     }
 
     fn yubikey_create(source: YubiKeySource) -> YubikeyCreate {
@@ -693,7 +692,7 @@ mod tests {
             name: None,
             source,
             make_default: false,
-            pin: fixed_pin(),
+            pin: None,
         }
     }
 
@@ -701,12 +700,14 @@ mod tests {
     fn a_registered_serial_is_added_without_any_device_operation() {
         let mut config = config_with_active_org();
         // Both slots empty: any device operation would fail loudly.
-        let mut device = FakeDevice::new(SlotStatus::Empty, SlotStatus::Empty);
+        let device = FakeDevice::new(SlotStatus::Empty, SlotStatus::Empty);
         let composite = device.operator_public_key();
-        config.register_yubikey(test_support::serial(), composite);
+        config.yubikeys.register(test_support::serial(), composite);
 
         let added = yubikey_create(YubiKeySource::Registered(test_support::serial()))
-            .execute(&mut config, &mut device)
+            .execute(&mut config, |_| -> Result<FakeDevice, DeviceError> {
+                panic!("a registered source must not open a device")
+            })
             .unwrap();
 
         assert_eq!(added.name, "yubikey-01c95c1f");
@@ -728,15 +729,15 @@ mod tests {
     #[test]
     fn a_provisioned_source_enrolls_and_adds_the_record() {
         let mut config = config_with_active_org();
-        let mut device = FakeDevice::new(SlotStatus::Empty, SlotStatus::Empty);
+        let device = FakeDevice::new(SlotStatus::Empty, SlotStatus::Empty);
 
         let added = YubikeyCreate {
             name: Some("signer".to_string()),
             source: YubiKeySource::Provision(test_support::serial()),
             make_default: true,
-            pin: fixed_pin(),
+            pin: Some(fixed_pin()),
         }
-        .execute(&mut config, &mut device)
+        .execute(&mut config, |_| Ok(device))
         .unwrap();
 
         assert_eq!(added.name, "signer");
@@ -748,10 +749,11 @@ mod tests {
         assert!(added.made_default);
         assert_eq!(
             config
-                .yubikey_registry_entry(test_support::serial())
+                .yubikeys
+                .get(test_support::serial())
                 .unwrap()
                 .public_key,
-            device.operator_public_key()
+            added.operator_public_key
         );
 
         let org = &config.orgs["default"];
@@ -762,14 +764,20 @@ mod tests {
     #[test]
     fn a_duplicate_serial_is_refused_with_the_org_named() {
         let mut config = config_with_active_org();
-        let mut device = FakeDevice::new(SlotStatus::Empty, SlotStatus::Empty);
-        config.register_yubikey(test_support::serial(), device.operator_public_key());
+        let device = FakeDevice::new(SlotStatus::Empty, SlotStatus::Empty);
+        config
+            .yubikeys
+            .register(test_support::serial(), device.operator_public_key());
 
         yubikey_create(YubiKeySource::Registered(test_support::serial()))
-            .execute(&mut config, &mut device)
+            .execute(&mut config, |_| -> Result<FakeDevice, DeviceError> {
+                panic!("a registered source must not open a device")
+            })
             .unwrap();
         let error = yubikey_create(YubiKeySource::Registered(test_support::serial()))
-            .execute(&mut config, &mut device)
+            .execute(&mut config, |_| -> Result<FakeDevice, DeviceError> {
+                panic!("a registered source must not open a device")
+            })
             .unwrap_err();
 
         let rendered = format!("{error:#}");
@@ -783,10 +791,12 @@ mod tests {
     #[test]
     fn an_unregistered_registered_source_is_refused() {
         let mut config = config_with_active_org();
-        let mut device = FakeDevice::new(SlotStatus::Empty, SlotStatus::Empty);
+        let _device = FakeDevice::new(SlotStatus::Empty, SlotStatus::Empty);
 
         let error = yubikey_create(YubiKeySource::Registered(test_support::serial()))
-            .execute(&mut config, &mut device)
+            .execute(&mut config, |_| -> Result<FakeDevice, DeviceError> {
+                panic!("a registered source must not open a device")
+            })
             .unwrap_err();
 
         assert!(

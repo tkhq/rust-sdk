@@ -1003,7 +1003,7 @@ serial = "01c95c1f"
     #[test]
     fn removing_an_org_keeps_the_yubikey_registry() {
         let mut config = Config::default();
-        config.register_yubikey(
+        config.yubikeys.register(
             YubiKeySerial::from(0x01c9_5c1f),
             QosOperatorPublicKey::try_from([7u8; 130].as_slice()).unwrap(),
         );
@@ -1015,7 +1015,7 @@ serial = "01c95c1f"
 
         assert_eq!(removed.operators.len(), 1);
         assert!(config.orgs.is_empty());
-        assert_eq!(config.yubikeys.len(), 1);
+        assert_eq!(config.yubikeys.serials().count(), 1);
     }
 
     #[test]

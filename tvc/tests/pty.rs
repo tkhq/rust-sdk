@@ -22,7 +22,7 @@ use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use tvc::config::app::KNOWN_QUORUM_KEY;
 use tvc::config::turnkey::{
     Config, HostedOperatorRecord, KeyCurve, OperatorKind, OperatorRecord, OperatorRecordKind,
-    OrgConfig, StoredApiKey, YubiKeySerial,
+    OrgConfig, StoredApiKey, YubiKeyOperatorRecord, YubiKeySerial,
 };
 
 /// Default per-step timeout. Generous enough for CI-runner cold cargo builds
@@ -732,6 +732,101 @@ fn login_creates_a_new_org_with_a_registered_yubikey() {
     );
     assert!(saved.contains("name = \"yubikey-01c95c1f\""), "{saved}");
     assert!(saved.contains(&composite), "{saved}");
+}
+
+/// A yubikey-default org with several YubiKey operators makes an interactive
+/// login select one; the record prompt is a config-level choice served
+/// entirely from the registry cache, so no device is needed.
+#[test]
+fn login_selects_among_multiple_yubikey_operators() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let turnkey_dir = temp.path().join(".config/turnkey");
+    std::fs::create_dir_all(&turnkey_dir).unwrap();
+
+    let yubikey_record = |name: &str, serial: u32| OperatorRecord {
+        name: name.to_string(),
+        kind: OperatorRecordKind::Yubikey(YubiKeyOperatorRecord {
+            serial: YubiKeySerial::from(serial),
+            extra: toml::Table::new(),
+        }),
+    };
+    let registry_key = || {
+        hex::encode(P256Pair::generate().unwrap().public_key().to_bytes())
+            .parse()
+            .unwrap()
+    };
+    let mut config = Config {
+        active_org: Some("yk-org".to_string()),
+        orgs: HashMap::from([(
+            "yk-org".to_string(),
+            OrgConfig {
+                id: "org-e2e".to_string(),
+                api_key_path: turnkey_dir.join("orgs/yk-org/api_key.json"),
+                api_base_url: common::LOCAL_API_BASE_URL.to_string(),
+                default_operator_kind: OperatorKind::Yubikey,
+                operators: vec![
+                    yubikey_record("first", 0x01c9_5c1f),
+                    yubikey_record("second", 0xdead_beef),
+                ],
+                extra: toml::Table::new(),
+            },
+        )]),
+        yubikeys: Default::default(),
+        last_created_app_id: HashMap::new(),
+        last_operator_ids: HashMap::new(),
+        extra: toml::Table::new(),
+    };
+    config
+        .yubikeys
+        .register(YubiKeySerial::from(0x01c9_5c1f), registry_key());
+    config
+        .yubikeys
+        .register(YubiKeySerial::from(0xdead_beef), registry_key());
+    std::fs::write(
+        turnkey_dir.join("tvc.config.toml"),
+        format!("version = 1\n{}", toml::to_string_pretty(&config).unwrap()),
+    )
+    .unwrap();
+
+    // An existing API key so login skips generation and goes straight to
+    // verification.
+    let api_key_dir = temp.path().join(".config/turnkey/orgs/yk-org");
+    std::fs::create_dir_all(&api_key_dir).unwrap();
+    let stamper = TurnkeyP256ApiKey::generate();
+    let api_key = StoredApiKey {
+        public_key: hex::encode(stamper.compressed_public_key()),
+        private_key: hex::encode(stamper.private_key()),
+        curve: KeyCurve::P256,
+    };
+    std::fs::write(
+        api_key_dir.join("api_key.json"),
+        serde_json::to_string_pretty(&api_key).unwrap(),
+    )
+    .unwrap();
+
+    let (api_base_url, server) = spawn_whoami_server();
+
+    let mut session = spawn_with_home(
+        temp.path(),
+        &["login", "--org", "yk-org", "--api-base-url", &api_base_url],
+    );
+
+    session.exp_string("Select YubiKey operator").unwrap();
+    exp_wrapped(&mut session, "first (serial 01c95c1f)");
+    exp_wrapped(&mut session, "second (serial deadbeef)");
+
+    // Down-arrow to the second record, Enter to confirm.
+    session.send("\x1b[B").unwrap();
+    session.send_line("").unwrap();
+
+    exp_wrapped(
+        &mut session,
+        "Using YubiKey operator 'second' (serial deadbeef).",
+    );
+    let output = session.exp_eof().unwrap();
+    server.join().unwrap();
+
+    assert!(output.contains("Successfully logged in!"), "{output}");
 }
 
 /// Logging in to an org whose default backend is hosted needs no local key:
