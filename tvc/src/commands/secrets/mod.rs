@@ -3,6 +3,45 @@
 pub mod export;
 pub mod import;
 
+use crate::client::AuthenticatedClient;
+use anyhow::{Context, Result};
+use turnkey_client::generated::external::options::v1::Pagination;
+use turnkey_client::generated::{ListSecretsRequest, ListSecretsResponse, SecretMetadata};
+
+/// Page size for metadata listings.
+const LIST_PAGE_LIMIT: usize = 100;
+
+/// Fetch all secret metadata for the active organization, following
+/// pagination until a short page.
+async fn list_all_secrets(auth: &AuthenticatedClient) -> Result<Vec<SecretMetadata>> {
+    let mut all = Vec::new();
+    let mut after = String::new();
+    loop {
+        let ListSecretsResponse { secrets } = auth
+            .client
+            .list_secrets(ListSecretsRequest {
+                organization_id: auth.org_id.clone(),
+                pagination_options: Some(Pagination {
+                    limit: LIST_PAGE_LIMIT.to_string(),
+                    before: String::new(),
+                    after,
+                }),
+            })
+            .await
+            .context("failed to list secrets")?;
+
+        let page_len = secrets.len();
+        after = secrets
+            .last()
+            .map(|secret| secret.secret_id.clone())
+            .unwrap_or_default();
+        all.extend(secrets);
+        if page_len < LIST_PAGE_LIMIT {
+            return Ok(all);
+        }
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod test_support {
     use crate::config::turnkey::{
@@ -68,6 +107,13 @@ pub(crate) mod test_support {
     pub fn test_ctx() -> StdCtx {
         Ctx::new(
             Shell::standard(MessageFormat::Human, ColorChoice::Never),
+            true,
+        )
+    }
+
+    pub fn test_json_ctx() -> StdCtx {
+        Ctx::new(
+            Shell::standard(MessageFormat::Json, ColorChoice::Never),
             true,
         )
     }

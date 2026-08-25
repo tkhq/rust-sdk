@@ -723,3 +723,20 @@ fn secrets_import_prompts_hidden_for_the_value() {
         "the secret value leaked to the terminal: {output}"
     );
 }
+
+/// `secrets export` refuses to print the value to an interactive terminal
+/// without `--plain`, and does so before any config or network work.
+#[test]
+fn secrets_export_refuses_bare_interactive_stdout() {
+    let temp = tempfile::TempDir::new().unwrap();
+    common::write_profiles_config(temp.path(), &[("alias-a", "org-e2e")], Some("alias-a"));
+    common::write_profile_key_files(temp.path(), "alias-a");
+
+    let mut session = spawn_with_home(temp.path(), &["secrets", "export", "--id", "secret-abc"]);
+
+    exp_wrapped(
+        &mut session,
+        "refusing to print the secret value to an interactive terminal",
+    );
+    session.exp_eof().unwrap();
+}

@@ -1,45 +1,111 @@
 //! Secret export command - exports one secret value from Turnkey secret
 //! storage.
 
-use crate::client::build_client;
+use super::list_all_secrets;
+use crate::client::{AuthenticatedClient, build_client};
 use crate::config::turnkey::Config;
+use crate::errors::MissingResource;
 use crate::outcome::Outcome;
 use crate::output::StdCtx;
 use crate::signer_quorum::signer_quorum_key;
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use clap::Args as ClapArgs;
-use serde::{Serialize, Serializer};
+use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
+use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use tokio::io::AsyncWriteExt;
 use tracing::instrument;
 use turnkey_client::ActivityResult;
-use turnkey_client::generated::ActivityStatus;
+use turnkey_client::generated::SecretMetadata;
 use zeroize::Zeroizing;
 
 pub const LONG_ABOUT: &str = r#"Export one secret value from Turnkey secret storage.
 
 The value is decrypted with a single-use transport key inside this process.
-By default it is included in the command output; pass --output-file to write
-it to a new file readable only by the current user instead."#;
+Pass --out to write it to a new file readable only by the current user, or
+pipe stdout to receive the exact value bytes. Printing to an interactive
+terminal requires --plain. JSON output carries metadata only, never the
+value, so --message-format json requires --out."#;
 
 /// Export one secret value from Turnkey secret storage.
 #[derive(Debug, ClapArgs)]
 #[command(about, long_about = LONG_ABOUT)]
+#[command(group(clap::ArgGroup::new("selector").required(true)))]
 pub struct Args {
     /// ID of the secret to export.
-    #[arg(long, value_name = "SECRET_ID")]
-    secret_id: String,
+    #[arg(long, value_name = "SECRET_ID", group = "selector")]
+    id: Option<String>,
+
+    /// Name of the secret to export. Fails if the name does not resolve to
+    /// exactly one secret.
+    #[arg(long, value_name = "NAME", group = "selector")]
+    name: Option<String>,
 
     /// Write the value to this new file (created with mode 0600) instead of
-    /// including it in the command output. Fails if the file already exists.
+    /// printing it. Fails if the file already exists.
     #[arg(long, value_name = "PATH")]
-    output_file: Option<PathBuf>,
+    out: Option<PathBuf>,
+
+    /// Print the value to an interactive terminal. Without it, printing is
+    /// only allowed when stdout is piped.
+    #[arg(long)]
+    plain: bool,
 
     /// Hex signer quorum public key override. Defaults to the Turnkey key for
     /// the active org's environment (production or preprod).
     #[arg(long = "signer-quorum-key", value_name = "HEX")]
     signer_quorum_key_hex: Option<String>,
+}
+
+/// Where the decrypted value goes. Decided from parsed arguments and terminal
+/// state before any config, credential, or network work.
+enum Delivery {
+    File(PathBuf),
+    Stdout,
+}
+
+impl Delivery {
+    fn decide(ctx: &mut StdCtx, out: Option<PathBuf>, plain: bool) -> Result<Self> {
+        if let Some(path) = out {
+            return Ok(Delivery::File(path));
+        }
+        if ctx.shell().message_format().is_json() {
+            bail!("JSON output carries metadata only, never the value; pass --out FILE");
+        }
+        if std::io::stdout().is_terminal() && !plain {
+            bail!(
+                "refusing to print the secret value to an interactive terminal; \
+                 pass --plain to print it anyway, or --out FILE to write it to a file"
+            );
+        }
+        Ok(Delivery::Stdout)
+    }
+}
+
+/// Resolve `--name` to exactly one secret ID via the metadata listing.
+async fn resolve_secret_id(auth: &AuthenticatedClient, name: &str) -> Result<String> {
+    let mut matches = Vec::new();
+    for metadata in list_all_secrets(auth).await? {
+        let SecretMetadata {
+            secret_id,
+            name: secret_name,
+            static_properties: _,
+            created_at_unix_ms: _,
+        } = metadata;
+        if secret_name.as_deref() == Some(name) {
+            matches.push(secret_id);
+        }
+    }
+    match matches.len() {
+        0 => Err(MissingResource::new("secret", name).into()),
+        1 => Ok(matches.swap_remove(0)),
+        _ => bail!(
+            "secret name '{name}' is ambiguous; it matches {} secrets ({}). Use --id instead",
+            matches.len(),
+            matches.join(", ")
+        ),
+    }
 }
 
 /// Write the exported value to a new file readable only by the current user.
@@ -62,20 +128,30 @@ async fn write_value_file(path: &Path, value: &str) -> Result<()> {
 
 /// Run the secret export command.
 #[instrument(skip_all)]
-pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome> {
+pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome> {
     let Args {
-        secret_id,
-        output_file,
+        id,
+        name,
+        out,
+        plain,
         signer_quorum_key_hex,
     } = args;
+    let delivery = Delivery::decide(ctx, out, plain)?;
 
     let auth = build_client(&config).await?;
     let signer = signer_quorum_key(&auth.api_base_url, signer_quorum_key_hex.as_deref())?;
 
+    let secret_id = match (id, name) {
+        (Some(id), None) => id,
+        (None, Some(name)) => resolve_secret_id(&auth, &name).await?,
+        // Clap's argument group guarantees exactly one is present.
+        _ => bail!("pass exactly one of --id or --name"),
+    };
+
     let ActivityResult {
         result: plaintexts,
         activity_id,
-        status,
+        status: _,
         app_proofs: _,
     } = auth
         .client
@@ -94,80 +170,60 @@ pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcom
     );
     let value = values.swap_remove(0);
 
-    let value = match &output_file {
-        Some(path) => {
-            write_value_file(path, &value).await?;
-            None
+    let destination = match delivery {
+        Delivery::File(path) => {
+            write_value_file(&path, &value).await?;
+            path.display().to_string()
         }
-        None => Some(value),
+        Delivery::Stdout => {
+            // Exact bytes when piped; a trailing newline for terminal reads.
+            if std::io::stdout().is_terminal() {
+                ctx.shell().human().line(value.as_str())?;
+            } else {
+                ctx.shell().human().print(value.as_str())?;
+            }
+            "stdout".to_string()
+        }
     };
 
     Ok(Outcome::SecretExported(SecretExported {
         secret_id,
-        value,
-        output_file,
+        value_length: value.len(),
+        destination,
         activity_id,
-        activity_status: status,
     }))
 }
 
-#[derive(Serialize)]
+/// Metadata only - the value itself is delivered via `destination` and never
+/// rides the outcome.
+#[derive(Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct SecretExported {
     secret_id: String,
-    /// The decrypted value; absent when it was written to `output_file`.
-    #[serde(serialize_with = "serialize_plaintext")]
-    value: Option<Zeroizing<String>>,
-    output_file: Option<PathBuf>,
+    /// Decrypted value size in bytes.
+    value_length: usize,
+    /// Where the value went: a file path, or `stdout`.
+    destination: String,
     activity_id: String,
-    /// Stable proto status name, e.g. `ACTIVITY_STATUS_COMPLETED`.
-    activity_status: ActivityStatus,
-}
-
-/// `Zeroizing` intentionally implements no serde traits; the exported value
-/// serializes through its borrowed contents.
-fn serialize_plaintext<S: Serializer>(
-    value: &Option<Zeroizing<String>>,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    match value {
-        Some(value) => serializer.serialize_some(value.as_str()),
-        None => serializer.serialize_none(),
-    }
-}
-
-/// Manual because the generated `ActivityStatus` does not implement
-/// `Default`; the zero value is the enum's `Unspecified` variant.
-impl Default for SecretExported {
-    fn default() -> Self {
-        Self {
-            secret_id: String::default(),
-            value: None,
-            output_file: None,
-            activity_id: String::default(),
-            activity_status: ActivityStatus::Unspecified,
-        }
-    }
 }
 
 impl Display for SecretExported {
+    /// Renders empty (machine-only) when the value went to stdout: the value
+    /// itself is the command's human output there, and trailing metadata
+    /// would pollute pipes.
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        if self.destination == "stdout" {
+            return Ok(());
+        }
         write!(
             f,
             r#"Secret exported.
 
 Secret ID: {}
-Activity ID: {}
-Activity Status: {}"#,
-            self.secret_id,
-            self.activity_id,
-            self.activity_status.as_str_name()
-        )?;
-        match (&self.output_file, &self.value) {
-            (Some(path), _) => write!(f, "\nValue written to: {}", path.display()),
-            (None, Some(value)) => write!(f, "\n\n{}", value.as_str()),
-            (None, None) => Ok(()),
-        }
+Value ({} bytes) written to: {}
+Activity ID: {}"#,
+            self.secret_id, self.value_length, self.destination, self.activity_id
+        )
     }
 }
 
@@ -175,7 +231,7 @@ Activity Status: {}"#,
 mod tests {
     use super::*;
     use crate::commands::secrets::test_support::{
-        quorum_public_key_hex, test_config, test_ctx, test_signing_key,
+        quorum_public_key_hex, test_config, test_ctx, test_json_ctx, test_signing_key,
     };
     use p256::ecdsa::SigningKey;
     use tempfile::TempDir;
@@ -228,16 +284,35 @@ mod tests {
             .await;
     }
 
-    fn args(secret_id: &str, output_file: Option<PathBuf>, signing: &SigningKey) -> Args {
+    /// Respond to `list_secrets` with one fixed page of metadata.
+    async fn mount_list_mock(server: &MockServer, secrets: serde_json::Value) {
+        Mock::given(method("POST"))
+            .and(path("/public/v1/query/list_secrets"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"secrets": secrets})),
+            )
+            .expect(1)
+            .mount(server)
+            .await;
+    }
+
+    fn args(
+        id: Option<&str>,
+        name: Option<&str>,
+        out: Option<PathBuf>,
+        signing: &SigningKey,
+    ) -> Args {
         Args {
-            secret_id: secret_id.to_string(),
-            output_file,
+            id: id.map(String::from),
+            name: name.map(String::from),
+            out,
+            plain: false,
             signer_quorum_key_hex: Some(quorum_public_key_hex(signing)),
         }
     }
 
     #[tokio::test]
-    async fn run_exports_and_returns_the_decrypted_value() {
+    async fn run_exports_by_id_to_piped_stdout_with_metadata_only_outcome() {
         let signing = test_signing_key();
         let server = MockServer::start().await;
         mount_export_mock(&server, signing.clone(), "hunter2").await;
@@ -245,7 +320,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let outcome = run(
             &mut test_ctx(),
-            args("secret-abc", None, &signing),
+            args(Some("secret-abc"), None, None, &signing),
             test_config(&dir, &server.uri()),
         )
         .await
@@ -255,10 +330,11 @@ mod tests {
             panic!("expected SecretExported");
         };
         assert_eq!(exported.secret_id, "secret-abc");
-        assert_eq!(exported.value.as_ref().unwrap().as_str(), "hunter2");
-        assert_eq!(exported.output_file, None);
+        assert_eq!(exported.value_length, "hunter2".len());
+        assert_eq!(exported.destination, "stdout");
         assert_eq!(exported.activity_id, "activity-export");
-        assert_eq!(exported.activity_status, ActivityStatus::Completed);
+        // Machine-only rendering: the value itself was the stdout payload.
+        assert_eq!(exported.to_string(), "");
     }
 
     #[tokio::test]
@@ -268,10 +344,10 @@ mod tests {
         mount_export_mock(&server, signing.clone(), "hunter2").await;
 
         let dir = TempDir::new().unwrap();
-        let output_file = dir.path().join("exported");
+        let out = dir.path().join("exported");
         let outcome = run(
             &mut test_ctx(),
-            args("secret-abc", Some(output_file.clone()), &signing),
+            args(Some("secret-abc"), None, Some(out.clone()), &signing),
             test_config(&dir, &server.uri()),
         )
         .await
@@ -280,74 +356,139 @@ mod tests {
         let Outcome::SecretExported(exported) = outcome else {
             panic!("expected SecretExported");
         };
-        assert!(exported.value.is_none());
-        assert_eq!(exported.output_file, Some(output_file.clone()));
+        assert_eq!(exported.destination, out.display().to_string());
+        assert_eq!(exported.value_length, "hunter2".len());
 
-        assert_eq!(
-            tokio::fs::read_to_string(&output_file).await.unwrap(),
-            "hunter2"
-        );
+        assert_eq!(tokio::fs::read_to_string(&out).await.unwrap(), "hunter2");
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mode = std::fs::metadata(&output_file)
-                .unwrap()
-                .permissions()
-                .mode();
+            let mode = std::fs::metadata(&out).unwrap().permissions().mode();
             assert_eq!(mode & 0o777, 0o600);
         }
     }
 
     #[tokio::test]
-    async fn run_refuses_to_overwrite_an_existing_output_file() {
+    async fn run_resolves_a_unique_name_to_its_id() {
         let signing = test_signing_key();
         let server = MockServer::start().await;
+        mount_list_mock(
+            &server,
+            serde_json::json!([
+                {"secretId": "secret-other", "name": "other", "createdAtUnixMs": "1"},
+                {"secretId": "secret-abc", "name": "db-password", "createdAtUnixMs": "2"},
+            ]),
+        )
+        .await;
         mount_export_mock(&server, signing.clone(), "hunter2").await;
 
         let dir = TempDir::new().unwrap();
-        let output_file = dir.path().join("exported");
-        tokio::fs::write(&output_file, "already here")
-            .await
-            .unwrap();
+        let outcome = run(
+            &mut test_ctx(),
+            args(None, Some("db-password"), None, &signing),
+            test_config(&dir, &server.uri()),
+        )
+        .await
+        .unwrap();
 
+        let Outcome::SecretExported(exported) = outcome else {
+            panic!("expected SecretExported");
+        };
+        assert_eq!(exported.secret_id, "secret-abc");
+    }
+
+    #[tokio::test]
+    async fn run_rejects_an_unknown_name() {
+        let signing = test_signing_key();
+        let server = MockServer::start().await;
+        mount_list_mock(&server, serde_json::json!([])).await;
+
+        let dir = TempDir::new().unwrap();
         let error = match run(
             &mut test_ctx(),
-            args("secret-abc", Some(output_file.clone()), &signing),
+            args(None, Some("db-password"), None, &signing),
             test_config(&dir, &server.uri()),
         )
         .await
         {
             Err(error) => error,
-            Ok(_) => panic!("expected the existing file to be refused"),
+            Ok(_) => panic!("expected an unknown name to fail"),
         };
-
         assert!(
-            error.to_string().contains("exported"),
+            error.to_string().contains("db-password"),
             "unexpected error: {error}"
         );
-        assert_eq!(
-            tokio::fs::read_to_string(&output_file).await.unwrap(),
-            "already here"
+    }
+
+    #[tokio::test]
+    async fn run_rejects_an_ambiguous_name() {
+        let signing = test_signing_key();
+        let server = MockServer::start().await;
+        mount_list_mock(
+            &server,
+            serde_json::json!([
+                {"secretId": "secret-abc", "name": "db-password", "createdAtUnixMs": "1"},
+                {"secretId": "secret-def", "name": "db-password", "createdAtUnixMs": "2"},
+            ]),
+        )
+        .await;
+
+        let dir = TempDir::new().unwrap();
+        let error = match run(
+            &mut test_ctx(),
+            args(None, Some("db-password"), None, &signing),
+            test_config(&dir, &server.uri()),
+        )
+        .await
+        {
+            Err(error) => error,
+            Ok(_) => panic!("expected an ambiguous name to fail"),
+        };
+        let message = error.to_string();
+        assert!(message.contains("ambiguous"), "unexpected error: {message}");
+        assert!(
+            message.contains("secret-abc") && message.contains("secret-def"),
+            "unexpected error: {message}"
+        );
+    }
+
+    #[tokio::test]
+    async fn run_requires_out_in_json_mode_before_any_network_work() {
+        let signing = test_signing_key();
+        let dir = TempDir::new().unwrap();
+
+        // A dead-port config proves the guard fires before network access.
+        let error = match run(
+            &mut test_json_ctx(),
+            args(Some("secret-abc"), None, None, &signing),
+            test_config(&dir, "http://127.0.0.1:1"),
+        )
+        .await
+        {
+            Err(error) => error,
+            Ok(_) => panic!("expected JSON mode without --out to fail"),
+        };
+        assert!(
+            error.to_string().contains("--out"),
+            "unexpected error: {error}"
         );
     }
 
     #[test]
-    fn exported_value_serializes_as_a_plain_string() {
+    fn exported_outcome_serializes_metadata_only() {
         let exported = SecretExported {
             secret_id: "secret-abc".to_string(),
-            value: Some(Zeroizing::new("hunter2".to_string())),
-            output_file: None,
+            value_length: 7,
+            destination: "stdout".to_string(),
             activity_id: "activity-export".to_string(),
-            activity_status: ActivityStatus::Completed,
         };
         assert_eq!(
             serde_json::to_value(&exported).unwrap(),
             serde_json::json!({
                 "secretId": "secret-abc",
-                "value": "hunter2",
-                "outputFile": null,
+                "valueLength": 7,
+                "destination": "stdout",
                 "activityId": "activity-export",
-                "activityStatus": "ACTIVITY_STATUS_COMPLETED",
             })
         );
     }
