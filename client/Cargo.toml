@@ -25,6 +25,7 @@ thiserror.workspace = true
 tokio.workspace = true
 turnkey_api_key_stamper.workspace = true
 turnkey_enclave_encrypt.workspace = true
+zeroize.workspace = true
 
 [features]
 reqwest_native_tls = ["reqwest/native-tls-vendored", "reqwest/native-tls-alpn"]
