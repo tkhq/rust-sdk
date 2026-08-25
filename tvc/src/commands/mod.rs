@@ -15,6 +15,7 @@ pub mod display;
 pub mod keys;
 pub mod login;
 pub mod operator;
+pub mod secret;
 pub mod version;
 
 /// A command: consumes its parsed `Args`, returns its typed terminal outcome.
