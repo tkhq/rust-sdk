@@ -2,11 +2,11 @@
 
 This crate contains primitives to encrypt and decrypt data, sent to and from Turnkey secure enclaves (see Enclave to [end-user secure channels](https://docs.turnkey.com/security/enclave-secure-channels)).
 
-Encryption and decryption are "one-shot" using the HPKE standard ([RFC 9180](https://datatracker.ietf.org/doc/rfc9180/)).  Neither the client or the server should ever be reused to send/receive more than one message. We want to avoid the recipient target key being used more then once in order to improve forward secrecy; see [security profile](#security-profile) section for important details and caveats.
+Encryption and decryption are "one-shot" using the HPKE standard ([RFC 9180](https://datatracker.ietf.org/doc/rfc9180/)).  Neither the client or the server should ever be reused to send/receive more than one message. We want to avoid the recipient target key being used more than once in order to improve forward secrecy; see [security profile](#security-profile) section for important details and caveats.
 
 The flows where encryption and decryption are relevant are:
 * Authentication: [Email](https://docs.turnkey.com/authentication/email), [SMS](https://docs.turnkey.com/authentication/sms), or [Social](https://docs.turnkey.com/authentication/social-logins) logins return encrypted authentication bundles produced by Turnkey secure enclaves
-* Key or Wallet export: key material (private key or wallet mnemonic phase) are encrypted by Turnkey enclaves to end-user public keys. See [Export Wallets and Keys](https://docs.turnkey.com/wallets/export-wallets#export-wallets-and-keys).
+* Key or Wallet export: key material (private key or wallet mnemonic phrase) are encrypted by Turnkey enclaves to end-user public keys. See [Export Wallets and Keys](https://docs.turnkey.com/wallets/export-wallets#export-wallets-and-keys).
 * Key or Wallet import: Turnkey enclaves send a bundle containing a signed public key, to which end-users encrypt their key material (private key or wallet mnemonic phrase). See [Import Wallets and Keys](https://docs.turnkey.com/wallets/import-wallets).
 
 ## Usage
