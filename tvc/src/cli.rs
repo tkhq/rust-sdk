@@ -317,6 +317,11 @@ impl Commands {
             Commands::Skills { command } => match command {
                 SkillsCommands::Save(args) => commands::skills::save::run(args),
             },
+            Commands::Secret { command } => match command {
+                SecretCommands::Import(args) => {
+                    commands::secret::import::run(ctx, args, config).await
+                }
+            },
             Commands::Version => commands::version::run(),
         }
     }
@@ -361,6 +366,11 @@ enum Commands {
         #[command(subcommand)]
         command: SkillsCommands,
     },
+    /// Manage secrets in Turnkey secret storage.
+    Secret {
+        #[command(subcommand)]
+        command: SecretCommands,
+    },
     /// Print the tvc CLI version.
     Version,
 }
@@ -380,6 +390,7 @@ impl Commands {
             Commands::Keys { command } => command.name(),
             Commands::Yubikey { command } => command.name(),
             Commands::Skills { command } => command.name(),
+            Commands::Secret { command } => command.name(),
             Commands::Version => "version",
         }
     }
@@ -462,6 +473,21 @@ enum AppCommands {
     SetLiveDeploy(commands::app::set_live_deploy::Args),
     /// Delete an app and all of its deployments.
     Delete(commands::app::delete::Args),
+}
+
+#[derive(Debug, Subcommand)]
+enum SecretCommands {
+    /// Import one secret value into Turnkey secret storage.
+    #[command(long_about = commands::secret::import::LONG_ABOUT)]
+    Import(commands::secret::import::Args),
+}
+
+impl SecretCommands {
+    fn name(&self) -> &'static str {
+        match self {
+            SecretCommands::Import(_) => "secret import",
+        }
+    }
 }
 
 #[derive(Debug, Subcommand)]
