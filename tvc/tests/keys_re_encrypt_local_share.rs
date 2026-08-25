@@ -121,7 +121,8 @@ fn re_encrypt_local_share_requires_metadata_and_provision_bundle() {
 
 /// Without explicit seed flags the operator comes from the active org's
 /// registry, and a hosted-only org has no local key to decrypt with: the
-/// failure explains that and points at the hosted counterpart.
+/// refusal fires during backend selection, before the input files are even
+/// read (they do not exist here), and points at the hosted counterpart.
 #[test]
 fn hosted_only_org_is_pointed_at_deploy_provision() {
     let temp = TempDir::new().unwrap();
@@ -131,44 +132,15 @@ fn hosted_only_org_is_pointed_at_deploy_provision() {
         "88888888-8888-4888-8888-888888888888",
     );
 
-    // Parseable metadata and bundle: both are read before the operator is
-    // resolved, which is where this run must fail.
-    let metadata_path = temp.path().join("quorum_key_metadata.json");
-    let provision_bundle_path = temp.path().join("provision_bundle.json");
-    let quorum_pair = P256Pair::generate().unwrap();
-    let manifest_envelope = sample_manifest_envelope(quorum_pair.public_key().to_bytes(), vec![]);
-    fs::write(
-        &metadata_path,
-        serde_json::to_vec_pretty(&json!({
-            "quorumKeyPublic": hex::encode(quorum_pair.public_key().to_bytes()),
-            "threshold": 1,
-            "shares": [],
-        }))
-        .unwrap(),
-    )
-    .unwrap();
-    fs::write(
-        &provision_bundle_path,
-        serde_json::to_vec_pretty(&json!({
-            "attestationDocumentCoseSign1Base64": "not parsed before operator resolution",
-            "manifestEnvelope": manifest_envelope,
-            "fetchedAtUnixMs": 1_712_345_678_901_u64,
-            "deploymentId": "deploy-123",
-            "ephemeralPublicKeyHex": hex::encode(quorum_pair.public_key().to_bytes()),
-        }))
-        .unwrap(),
-    )
-    .unwrap();
-
     cargo_bin_cmd!("tvc")
         .env("HOME", temp.path())
         .env_remove("TVC_OPERATOR_SEED")
         .arg("keys")
         .arg("re-encrypt-local-share")
         .arg("--quorum-key-metadata")
-        .arg(&metadata_path)
+        .arg(temp.path().join("does_not_exist_metadata.json"))
         .arg("--provision-bundle")
-        .arg(&provision_bundle_path)
+        .arg(temp.path().join("does_not_exist_bundle.json"))
         .arg("--dangerous-skip-verification")
         .assert()
         .failure()
@@ -178,9 +150,10 @@ fn hosted_only_org_is_pointed_at_deploy_provision() {
         .stderr(predicate::str::contains("tvc deploy provision"));
 }
 
-/// A yubikey org in a non-interactive run refuses during operator
-/// resolution: the PIN can only be typed at a prompt. No device is touched,
-/// so this needs no USB.
+/// A yubikey org in a non-interactive run refuses during backend selection:
+/// the PIN can only be typed at a prompt. The refusal fires before the input
+/// files are even read (they do not exist here) and no device is touched, so
+/// this needs no USB.
 #[test]
 fn yubikey_org_without_a_prompt_reports_the_pin_requirement() {
     let temp = TempDir::new().unwrap();
@@ -190,44 +163,15 @@ fn yubikey_org_without_a_prompt_reports_the_pin_requirement() {
         "99999999-9999-4999-8999-999999999999",
     );
 
-    // Parseable metadata and bundle: both are read before the operator is
-    // resolved, which is where this run must fail.
-    let metadata_path = temp.path().join("quorum_key_metadata.json");
-    let provision_bundle_path = temp.path().join("provision_bundle.json");
-    let quorum_pair = P256Pair::generate().unwrap();
-    let manifest_envelope = sample_manifest_envelope(quorum_pair.public_key().to_bytes(), vec![]);
-    fs::write(
-        &metadata_path,
-        serde_json::to_vec_pretty(&json!({
-            "quorumKeyPublic": hex::encode(quorum_pair.public_key().to_bytes()),
-            "threshold": 1,
-            "shares": [],
-        }))
-        .unwrap(),
-    )
-    .unwrap();
-    fs::write(
-        &provision_bundle_path,
-        serde_json::to_vec_pretty(&json!({
-            "attestationDocumentCoseSign1Base64": "not parsed before operator resolution",
-            "manifestEnvelope": manifest_envelope,
-            "fetchedAtUnixMs": 1_712_345_678_901_u64,
-            "deploymentId": "deploy-123",
-            "ephemeralPublicKeyHex": hex::encode(quorum_pair.public_key().to_bytes()),
-        }))
-        .unwrap(),
-    )
-    .unwrap();
-
     cargo_bin_cmd!("tvc")
         .env("HOME", temp.path())
         .env_remove("TVC_OPERATOR_SEED")
         .arg("keys")
         .arg("re-encrypt-local-share")
         .arg("--quorum-key-metadata")
-        .arg(&metadata_path)
+        .arg(temp.path().join("does_not_exist_metadata.json"))
         .arg("--provision-bundle")
-        .arg(&provision_bundle_path)
+        .arg(temp.path().join("does_not_exist_bundle.json"))
         .arg("--dangerous-skip-verification")
         .assert()
         .failure()

@@ -35,15 +35,19 @@ pub(crate) enum PinAcquisition {
 }
 
 /// A [`PinAcquisition`] with the [`PinAcquisition::Unavailable`] case
-/// refused, so device I/O only starts once a PIN can definitely follow.
-enum AvailablePin {
+/// refused: holding one is proof that device I/O can start because a PIN
+/// can definitely follow.
+pub(crate) enum AvailablePin {
     Prompt,
     #[cfg(test)]
     Fixed(Pin),
 }
 
 impl PinAcquisition {
-    fn into_available(self) -> anyhow::Result<AvailablePin> {
+    /// Refuse the [`PinAcquisition::Unavailable`] case. Deterministic from
+    /// interaction mode alone, so callers convert before starting any other
+    /// work an impossible run would waste.
+    pub(crate) fn into_available(self) -> anyhow::Result<AvailablePin> {
         match self {
             Self::Prompt => Ok(AvailablePin::Prompt),
             Self::Unavailable => bail!(
@@ -157,18 +161,16 @@ impl<D: DeviceOps + Send + 'static> Pair for YubiKeyPair<D> {
 impl Config {
     /// Resolve a registered serial into a usable operator pair.
     ///
-    /// Refusals come in resolution order: a PIN that can never be collected,
-    /// an unregistered serial, an unprovisioned device, and a registry cache
-    /// that no longer matches the device. The PIN prompt runs last, after the
-    /// device checks, so nothing is typed at a device that cannot be used.
+    /// Refusals come in resolution order: an unregistered serial, an
+    /// unprovisioned device, and a registry cache that no longer matches the
+    /// device. The PIN prompt runs last, after the device checks, so nothing
+    /// is typed at a device that cannot be used.
     pub(crate) async fn resolve_yubikey<D: DeviceOps + Send + 'static>(
         &self,
         serial: YubiKeySerial,
         device: D,
-        pin: PinAcquisition,
+        pin: AvailablePin,
     ) -> anyhow::Result<YubiKeyPair<D>> {
-        let pin = pin.into_available()?;
-
         let cached_public_key = self
             .yubikeys
             .get(serial)
@@ -236,12 +238,12 @@ mod tests {
         config
     }
 
-    fn fixed_pin() -> PinAcquisition {
-        PinAcquisition::Fixed(Pin::from(String::from_utf8(PIN.to_vec()).unwrap()))
+    fn fixed_pin() -> AvailablePin {
+        AvailablePin::Fixed(Pin::from(String::from_utf8(PIN.to_vec()).unwrap()))
     }
 
-    fn wrong_pin() -> PinAcquisition {
-        PinAcquisition::Fixed(Pin::from("999999".to_string()))
+    fn wrong_pin() -> AvailablePin {
+        AvailablePin::Fixed(Pin::from("999999".to_string()))
     }
 
     fn rendered(error: &anyhow::Error) -> String {
@@ -320,19 +322,9 @@ mod tests {
         assert!(rendered(&error).contains("refresh-yubikey"));
     }
 
-    #[tokio::test]
-    async fn an_unavailable_pin_is_refused_before_anything_else() {
-        // The registry is empty and the device is unprovisioned: reaching
-        // either would produce a different error, so the PIN message proves
-        // the refusal came first.
-        let error = Config::default()
-            .resolve_yubikey(
-                serial(),
-                FakeDevice::new(SlotStatus::Empty, SlotStatus::Empty),
-                PinAcquisition::Unavailable,
-            )
-            .await
-            .unwrap_err();
+    #[test]
+    fn an_unavailable_pin_is_refused_at_conversion() {
+        let error = PinAcquisition::Unavailable.into_available().err().unwrap();
 
         assert!(rendered(&error).contains("interactive prompt"));
     }
@@ -414,7 +406,7 @@ mod tests {
         let mut config = Config::default();
         config.yubikeys.register(serial, key);
 
-        let pin = PinAcquisition::Fixed(Pin::from(
+        let pin = AvailablePin::Fixed(Pin::from(
             String::from_utf8(qos_client::yubikey::DEFAULT_PIN.to_vec()).unwrap(),
         ));
         let pair = config.resolve_yubikey(serial, device, pin).await.unwrap();

@@ -112,22 +112,25 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Result
         )?;
     }
 
-    let quorum_key_metadata: QuorumKeyMetadata =
-        read_json_file(&args.quorum_key_metadata, "quorum key metadata file").await?;
-    let provision_bundle: ProvisionBundle =
-        read_json_file(&args.provision_bundle, "provision bundle").await?;
-
     // The only mode branch: whether a YubiKey PIN prompt is possible is this
-    // endpoint's knowledge; resolution just follows the policy.
+    // endpoint's knowledge; selection and resolution just follow the policy.
     let pin = if ctx.is_non_interactive() || !stdin_can_prompt() {
         PinAcquisition::Unavailable
     } else {
         PinAcquisition::Prompt
     };
 
-    let operator_pair = config
-        .resolve_operator_pair(yubikey::open, operator_seed_source, pin)
-        .await?;
+    // Backend selection is deterministic from config and mode: an impossible
+    // run is refused before the input files are even read. Device access and
+    // the PIN prompt wait until the inputs are valid.
+    let pair_source = config.select_operator_pair_source(operator_seed_source, pin)?;
+
+    let quorum_key_metadata: QuorumKeyMetadata =
+        read_json_file(&args.quorum_key_metadata, "quorum key metadata file").await?;
+    let provision_bundle: ProvisionBundle =
+        read_json_file(&args.provision_bundle, "provision bundle").await?;
+
+    let operator_pair = pair_source.resolve(&config, yubikey::open).await?;
 
     let output = build_re_encrypted_share_output(
         &quorum_key_metadata,
@@ -256,7 +259,7 @@ mod tests {
     use crate::pair::LocalPair;
     use crate::provisioning::ProvisionBundle;
     use crate::quorum_key_metadata::{EncryptedShareMetadata, QuorumKeyMetadata};
-    use crate::yubikey::pair::PinAcquisition;
+    use crate::yubikey::pair::AvailablePin;
     use crate::yubikey::test_support::{FakeDevice, PIN, serial};
     use crate::yubikey::{Pin, SlotStatus};
     use qos_core::protocol::services::boot::{
@@ -541,7 +544,7 @@ mod tests {
             .resolve_yubikey(
                 serial(),
                 device,
-                PinAcquisition::Fixed(Pin::from(String::from_utf8(PIN.to_vec()).unwrap())),
+                AvailablePin::Fixed(Pin::from(String::from_utf8(PIN.to_vec()).unwrap())),
             )
             .await
             .unwrap();
