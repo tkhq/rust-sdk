@@ -50,13 +50,10 @@ impl Run for Args {
                     let mut serials = connected.iter();
 
                     if let Some(first) = serials.next() {
-                        write!(list, "; connected: {first}")
-                            .expect("writing to a String cannot fail");
+                        write!(list, "; connected: {first}")?;
                     }
 
-                    serials
-                        .try_for_each(|next| write!(list, ", {next}"))
-                        .expect("writing to a String cannot fail");
+                    serials.try_for_each(|next| write!(list, ", {next}"))?;
 
                     list
                 };
