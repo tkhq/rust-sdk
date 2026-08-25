@@ -83,15 +83,16 @@ pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcom
         .await
         .with_context(|| format!("failed to export secret {secret_id}"))?;
 
-    // The client already errors when the payload count does not match the
-    // requested IDs, so exactly one value is expected here.
+    // Wrap every returned value before any other handling so each is wiped
+    // even on error paths. The client already errors when the payload count
+    // does not match the requested IDs, so exactly one value is expected.
+    let mut values: Vec<Zeroizing<String>> = plaintexts.into_iter().map(Zeroizing::new).collect();
     ensure!(
-        plaintexts.len() == 1,
+        values.len() == 1,
         "expected exactly one exported value, got {}",
-        plaintexts.len()
+        values.len()
     );
-    let mut plaintexts = plaintexts;
-    let value = Zeroizing::new(plaintexts.swap_remove(0));
+    let value = values.swap_remove(0);
 
     let value = match &output_file {
         Some(path) => {
