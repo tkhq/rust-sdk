@@ -389,14 +389,19 @@ pub enum SelectHostedOperatorError {
     MultipleHostedOperators,
 }
 
-/// Failure modes of selecting the sole YubiKey operator of an organization.
+/// Failure modes of selecting an organization's YubiKey operator.
 /// Which organization it was is the caller's context to add.
 #[derive(Debug, Error)]
 pub enum SelectYubiKeyOperatorError {
     #[error("no YubiKey operator is configured")]
     NoYubiKeyOperator,
-    #[error("multiple YubiKey operators are configured")]
-    MultipleYubiKeyOperators,
+    #[error(
+        "multiple YubiKey operators are configured (serials {})",
+        serials.iter().map(ToString::to_string).collect::<Vec<_>>().join(", ")
+    )]
+    MultipleYubiKeyOperators { serials: Vec<YubiKeySerial> },
+    #[error("no YubiKey operator has serial {serial}")]
+    SerialNotAnOperator { serial: YubiKeySerial },
 }
 
 impl OrgConfig {
@@ -447,25 +452,44 @@ impl OrgConfig {
         }
     }
 
-    /// Select the sole YubiKey operator registry entry, with its
-    /// kind-specific record. Purely a registry query: whether YubiKey is the
-    /// organization's default backend is resolution policy, decided
-    /// elsewhere.
-    pub(crate) fn select_yubikey_operator(
+    /// The YubiKey operator registry entries, each with its kind-specific
+    /// record, in config order.
+    pub(crate) fn yubikey_operators(
         &self,
-    ) -> Result<(&OperatorRecord, &YubiKeyOperatorRecord), SelectYubiKeyOperatorError> {
-        let mut yubikeys = self
-            .operators
+    ) -> impl Iterator<Item = (&OperatorRecord, &YubiKeyOperatorRecord)> {
+        self.operators
             .iter()
             .filter_map(|operator| match &operator.kind {
                 OperatorRecordKind::Yubikey(yubikey) => Some((operator, yubikey)),
                 OperatorRecordKind::Local(_) | OperatorRecordKind::Hosted(_) => None,
-            });
+            })
+    }
 
-        match (yubikeys.next(), yubikeys.next()) {
-            (Some(sole), None) => Ok(sole),
-            (None, _) => Err(SelectYubiKeyOperatorError::NoYubiKeyOperator),
-            (Some(_), Some(_)) => Err(SelectYubiKeyOperatorError::MultipleYubiKeyOperators),
+    /// Select the organization's YubiKey operator registry entry, with its
+    /// kind-specific record: the one with the given serial, or the sole one
+    /// when no serial narrows it. Purely a registry query: whether YubiKey
+    /// is the organization's default backend — and how an ambiguous
+    /// selection is settled — is resolution policy, decided elsewhere.
+    pub(crate) fn select_yubikey_operator(
+        &self,
+        serial: Option<YubiKeySerial>,
+    ) -> Result<(&OperatorRecord, &YubiKeyOperatorRecord), SelectYubiKeyOperatorError> {
+        let mut yubikeys = self.yubikey_operators();
+
+        match serial {
+            Some(serial) => yubikeys
+                .find(|(_, yubikey)| yubikey.serial == serial)
+                .ok_or(SelectYubiKeyOperatorError::SerialNotAnOperator { serial }),
+            None => match (yubikeys.next(), yubikeys.next()) {
+                (Some(sole), None) => Ok(sole),
+                (None, _) => Err(SelectYubiKeyOperatorError::NoYubiKeyOperator),
+                (Some(_), Some(_)) => Err(SelectYubiKeyOperatorError::MultipleYubiKeyOperators {
+                    serials: self
+                        .yubikey_operators()
+                        .map(|(_, yubikey)| yubikey.serial)
+                        .collect(),
+                }),
+            },
         }
     }
 }
@@ -817,5 +841,67 @@ serial = "01c95c1f"
              which is not in the yubikeys registry; edit tvc.config.toml to add the matching \
              [[yubikeys]] entry or remove this operator record"
         );
+    }
+    fn yubikey_org(serials: &[u32]) -> OrgConfig {
+        OrgConfig {
+            id: "org-123".to_string(),
+            api_key_path: PathBuf::from("/keys/api.json"),
+            api_base_url: default_api_base_url(),
+            default_operator_kind: OperatorKind::Yubikey,
+            operators: serials
+                .iter()
+                .map(|&serial| OperatorRecord {
+                    name: "yubikey".to_string(),
+                    kind: OperatorRecordKind::Yubikey(YubiKeyOperatorRecord {
+                        serial: YubiKeySerial::from(serial),
+                        extra: toml::Table::new(),
+                    }),
+                })
+                .collect(),
+            extra: toml::Table::new(),
+        }
+    }
+
+    #[test]
+    fn selects_the_sole_yubikey_operator_without_a_serial() {
+        let org = yubikey_org(&[0x01c9_5c1f]);
+
+        let (_, record) = org.select_yubikey_operator(None).unwrap();
+
+        assert_eq!(record.serial, YubiKeySerial::from(0x01c9_5c1f));
+    }
+
+    #[test]
+    fn selecting_among_multiple_yubikey_operators_lists_their_serials() {
+        let org = yubikey_org(&[0x01c9_5c1f, 0xdead_beef]);
+
+        let error = org.select_yubikey_operator(None).unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "multiple YubiKey operators are configured (serials 01c95c1f, deadbeef)"
+        );
+    }
+
+    #[test]
+    fn selects_a_yubikey_operator_by_serial() {
+        let org = yubikey_org(&[0x01c9_5c1f, 0xdead_beef]);
+
+        let (_, record) = org
+            .select_yubikey_operator(Some(YubiKeySerial::from(0xdead_beef)))
+            .unwrap();
+
+        assert_eq!(record.serial, YubiKeySerial::from(0xdead_beef));
+    }
+
+    #[test]
+    fn selecting_an_unknown_serial_is_refused() {
+        let org = yubikey_org(&[0x01c9_5c1f]);
+
+        let error = org
+            .select_yubikey_operator(Some(YubiKeySerial::from(0xdead_beef)))
+            .unwrap_err();
+
+        assert_eq!(error.to_string(), "no YubiKey operator has serial deadbeef");
     }
 }

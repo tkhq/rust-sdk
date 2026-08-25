@@ -9,6 +9,7 @@ use crate::config::turnkey::{
     OrgConfig, QosOperatorPublicKey, StoredApiKey, StoredQosOperatorKey, YubiKeySerial,
     dashboard_base_url, default_api_key_path, default_operator_key_path, default_org_dir,
 };
+use crate::operator::YubiKeySelection;
 use crate::outcome::Outcome;
 use crate::output::StdCtx;
 use crate::prompts::{self, error_required_in_non_interactive};
@@ -36,6 +37,10 @@ pub struct Args {
     /// Turnkey API base URL. Defaults to production for newly configured orgs.
     #[arg(long, env = "TVC_API_BASE_URL", value_name = "URL")]
     pub api_base_url: Option<String>,
+    /// Serial (hex) of the YubiKey operator to log in with, when the
+    /// organization registers several. Unused for other operator kinds.
+    #[arg(long, value_name = "SERIAL")]
+    pub serial: Option<YubiKeySerial>,
 }
 
 /// Permanently delete a saved login profile, including its API and operator
@@ -66,6 +71,9 @@ struct LoginPlan {
     org: OrgPlan,
     api_base_url_override: Option<String>,
     api_key_policy: ApiKeyPolicy,
+    /// How a yubikey-default org with several YubiKey operators settles which
+    /// one this login reports.
+    yubikey_selection: YubiKeySelection,
 }
 
 #[instrument(skip_all)]
@@ -291,6 +299,10 @@ fn build_login_plan_interactive(
         org,
         api_base_url_override: args.api_base_url,
         api_key_policy: ApiKeyPolicy::AllowGenerate,
+        yubikey_selection: args
+            .serial
+            .map(YubiKeySelection::Explicit)
+            .unwrap_or(YubiKeySelection::Prompt),
     })
 }
 
@@ -303,6 +315,10 @@ fn build_login_plan_non_interactive(args: Args) -> Result<LoginPlan> {
         org: OrgPlan::Existing(org_query),
         api_base_url_override: args.api_base_url,
         api_key_policy: ApiKeyPolicy::RequireExisting,
+        yubikey_selection: args
+            .serial
+            .map(YubiKeySelection::Explicit)
+            .unwrap_or(YubiKeySelection::Unavailable),
     })
 }
 
@@ -399,7 +415,7 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
         }
         OperatorKind::Yubikey => {
             let (operator, yubikey) = org_config
-                .select_yubikey_operator()
+                .choose_yubikey_operator(plan.yubikey_selection)
                 .with_context(|| format!("org '{alias}'"))?;
             let entry = config.yubikeys.get(yubikey.serial).ok_or_else(|| {
                 anyhow!(

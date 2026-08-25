@@ -4,10 +4,10 @@ use crate::{
     approvals::{ApprovalVerdict, OperatorApproval, ValidatedManifest},
     client::build_client,
     commands::Run,
-    config::turnkey::Config,
+    config::turnkey::{Config, YubiKeySerial},
     errors::MissingResource,
     local_operator_key::LocalOperatorSeedSource,
-    operator::SignerRequirement,
+    operator::{SignerRequirement, YubiKeySelection},
     outcome::Outcome,
     output::StdCtx,
     pair::HexSeed,
@@ -74,6 +74,11 @@ pub struct Args {
     #[arg(long, env = "TVC_OPERATOR_ID")]
     pub operator_id: Option<Uuid>,
 
+    /// Serial (hex) of the YubiKey operator to approve with, when the
+    /// organization registers several. Unused for other operator kinds.
+    #[arg(long, value_name = "SERIAL")]
+    pub serial: Option<YubiKeySerial>,
+
     /// Hex-encoded 32-byte master seed for the operator key.
     /// If no seed flag is provided, uses the operator key from the logged-in org config.
     #[arg(
@@ -139,12 +144,21 @@ impl Run for Args {
         )
         .await?;
 
-        // The only mode branch: whether a YubiKey PIN prompt is possible is
-        // this endpoint's knowledge; resolution just follows the policy.
-        let pin = if ctx.is_non_interactive() || !stdin_can_prompt() {
-            PinAcquisition::Unavailable
-        } else {
+        // The only mode branch: whether the YubiKey PIN or record-selection
+        // prompts are possible is this endpoint's knowledge; resolution just
+        // follows the policies.
+        let can_prompt = !ctx.is_non_interactive() && stdin_can_prompt();
+
+        let pin = if can_prompt {
             PinAcquisition::Prompt
+        } else {
+            PinAcquisition::Unavailable
+        };
+
+        let selection = match args.serial {
+            Some(serial) => YubiKeySelection::Explicit(serial),
+            None if can_prompt => YubiKeySelection::Prompt,
+            None => YubiKeySelection::Unavailable,
         };
 
         let inputs = ResolvedApproveInputs {
@@ -154,6 +168,7 @@ impl Run for Args {
             approval_out: args.approval_out,
             dry_run: args.dry_run,
             skip_post: args.skip_post,
+            selection,
             pin,
             post_target,
             posted_approvals: fetched.map(|(_, approvals)| approvals).unwrap_or_default(),
@@ -360,6 +375,7 @@ struct ResolvedApproveInputs<'a> {
     approval_out: Option<PathBuf>,
     dry_run: bool,
     skip_post: bool,
+    selection: YubiKeySelection,
     pin: PinAcquisition,
     post_target: Option<PostTarget>,
     /// Present only when the manifest came from a deployment fetch: the
@@ -375,6 +391,7 @@ struct ArgsWithResolvedOperatorSeedSource {
     deploy_id: Option<Uuid>,
     manifest_id: Option<Uuid>,
     operator_id: Option<Uuid>,
+    serial: Option<YubiKeySerial>,
     operator_seed_source: Option<LocalOperatorSeedSource>,
     dry_run: bool,
     dangerous_skip_interactive: bool,
@@ -393,6 +410,7 @@ impl TryFrom<Args> for ArgsWithResolvedOperatorSeedSource {
             deploy_id,
             manifest_id,
             operator_id,
+            serial,
             dry_run,
             dangerous_skip_interactive,
             approval_out,
@@ -407,6 +425,7 @@ impl TryFrom<Args> for ArgsWithResolvedOperatorSeedSource {
             deploy_id,
             manifest_id,
             operator_id,
+            serial,
             operator_seed_source,
             dry_run,
             dangerous_skip_interactive,
@@ -528,6 +547,7 @@ async fn run_with_resolved_inputs(
             inputs.operator_seed_source,
             inputs.operator_id,
             requirement,
+            inputs.selection,
             inputs.pin,
         )
         .await?;

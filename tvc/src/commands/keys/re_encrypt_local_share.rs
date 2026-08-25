@@ -1,7 +1,8 @@
 //! Re-encrypt local share command.
 
-use crate::config::turnkey::Config;
+use crate::config::turnkey::{Config, YubiKeySerial};
 use crate::local_operator_key::LocalOperatorSeedSource;
+use crate::operator::YubiKeySelection;
 use crate::outcome::Outcome;
 use crate::output::StdCtx;
 use crate::pair::{HexSeed, Pair};
@@ -51,6 +52,11 @@ pub struct Args {
         help_heading = "Operator seed (pick one)"
     )]
     pub operator_seed_path: Option<PathBuf>,
+
+    /// Serial (hex) of the YubiKey operator to decrypt with, when the
+    /// organization registers several. Unused for other operator kinds.
+    #[arg(long, value_name = "SERIAL")]
+    pub serial: Option<YubiKeySerial>,
 
     /// Never use for sensitive applications! Skip attestation, PCR, and manifest approval verification.
     #[arg(long, env = "TVC_DANGEROUS_SKIP_VERIFICATION")]
@@ -112,18 +118,27 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Result
         )?;
     }
 
-    // The only mode branch: whether a YubiKey PIN prompt is possible is this
-    // endpoint's knowledge; selection and resolution just follow the policy.
-    let pin = if ctx.is_non_interactive() || !stdin_can_prompt() {
-        PinAcquisition::Unavailable
-    } else {
+    // The only mode branch: whether the YubiKey PIN or record-selection
+    // prompts are possible is this endpoint's knowledge; selection and
+    // resolution just follow the policies.
+    let can_prompt = !ctx.is_non_interactive() && stdin_can_prompt();
+
+    let pin = if can_prompt {
         PinAcquisition::Prompt
+    } else {
+        PinAcquisition::Unavailable
     };
 
-    // Backend selection is deterministic from config and mode: an impossible
-    // run is refused before the input files are even read. Device access and
-    // the PIN prompt wait until the inputs are valid.
-    let pair_source = config.select_operator_pair_source(operator_seed_source, pin)?;
+    let selection = match args.serial {
+        Some(serial) => YubiKeySelection::Explicit(serial),
+        None if can_prompt => YubiKeySelection::Prompt,
+        None => YubiKeySelection::Unavailable,
+    };
+
+    // Backend selection settles before the input files are even read: an
+    // impossible run is refused up front. Device access and the PIN prompt
+    // wait until the inputs are valid.
+    let pair_source = config.select_operator_pair_source(operator_seed_source, selection, pin)?;
 
     let quorum_key_metadata: QuorumKeyMetadata =
         read_json_file(&args.quorum_key_metadata, "quorum key metadata file").await?;
