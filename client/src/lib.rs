@@ -495,15 +495,13 @@ impl<S: Stamp> TurnkeyClient<S> {
         static_properties: BTreeMap<String, String>,
         signer_quorum_public_key: &QuorumPublicKey,
     ) -> Result<ActivityResult<String>, TurnkeyClientError> {
-        let timestamp_ms = self.current_timestamp();
-
         // `init_import_secrets` is marked INTERNAL in the proto and has no
         // generated client method; submit it directly through `process_activity`.
         let init_activity = self
             .process_activity(
                 generated::external::activity::v1::InitImportSecretsRequest {
                     r#type: "ACTIVITY_TYPE_INIT_IMPORT_SECRETS".to_string(),
-                    timestamp_ms: timestamp_ms.to_string(),
+                    timestamp_ms: self.current_timestamp().to_string(),
                     organization_id: organization_id.clone(),
                     parameters: Some(InitImportSecretsIntent {
                         encryption_suite: TransportEncryptionSuite::EnclaveEncryptV1,
@@ -534,8 +532,11 @@ impl<S: Stamp> TurnkeyClient<S> {
         // `encrypt_secret_bundle` verifies the quorum signature over the target
         // and encrypts to it.
         let target_data = target_data(&target)?;
-        let secret_payload = ImportClient::new(signer_quorum_public_key)
-            .encrypt_secret_bundle(&plaintext, &target, &organization_id)?;
+        let secret_payload = ImportClient::new(signer_quorum_public_key).encrypt_secret_bundle(
+            &plaintext,
+            &target,
+            &organization_id,
+        )?;
         let target_public_key = hex::encode(*target_data.target_public);
 
         let static_properties = static_properties
@@ -546,7 +547,7 @@ impl<S: Stamp> TurnkeyClient<S> {
         let batch = self
             .import_secrets(
                 organization_id,
-                timestamp_ms,
+                self.current_timestamp(),
                 ImportSecretsIntent {
                     secrets: vec![ImportSecretParams {
                         name,
@@ -570,6 +571,10 @@ impl<S: Stamp> TurnkeyClient<S> {
 
     /// Exports secrets and returns their decrypted UTF-8 plaintexts, in the
     /// order of `secret_ids`.
+    ///
+    /// Takes a slice so that any number of secrets exports in a single
+    /// activity. The singular name is only because `export_secrets` is the
+    /// generated method this one is built on.
     pub async fn export_secret(
         &self,
         organization_id: String,
