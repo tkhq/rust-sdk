@@ -1,11 +1,11 @@
 //! Secret export command - exports one secret value from Turnkey secret
 //! storage.
 
-use super::signer_quorum_public_key;
 use crate::client::build_client;
 use crate::config::turnkey::Config;
 use crate::outcome::Outcome;
 use crate::output::StdCtx;
+use crate::signer_quorum::signer_quorum_key;
 use anyhow::{Context, Result, ensure};
 use clap::Args as ClapArgs;
 use serde::{Serialize, Serializer};
@@ -38,8 +38,8 @@ pub struct Args {
 
     /// Hex signer quorum public key override. Defaults to the Turnkey key for
     /// the active org's environment (production or preprod).
-    #[arg(long, value_name = "HEX")]
-    signer_public_key: Option<String>,
+    #[arg(long = "signer-quorum-key", value_name = "HEX")]
+    signer_quorum_key_hex: Option<String>,
 }
 
 /// Write the exported value to a new file readable only by the current user.
@@ -66,11 +66,11 @@ pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcom
     let Args {
         secret_id,
         output_file,
-        signer_public_key,
+        signer_quorum_key_hex,
     } = args;
 
     let auth = build_client(&config).await?;
-    let signer = signer_quorum_public_key(&auth.api_base_url, signer_public_key.as_deref())?;
+    let signer = signer_quorum_key(&auth.api_base_url, signer_quorum_key_hex.as_deref())?;
 
     let ActivityResult {
         result: plaintexts,
@@ -174,7 +174,7 @@ Activity Status: {}"#,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::commands::secret::test_support::{
+    use crate::commands::secrets::test_support::{
         quorum_public_key_hex, test_config, test_ctx, test_signing_key,
     };
     use p256::ecdsa::SigningKey;
@@ -232,7 +232,7 @@ mod tests {
         Args {
             secret_id: secret_id.to_string(),
             output_file,
-            signer_public_key: Some(quorum_public_key_hex(signing)),
+            signer_quorum_key_hex: Some(quorum_public_key_hex(signing)),
         }
     }
 
