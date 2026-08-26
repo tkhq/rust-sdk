@@ -540,6 +540,368 @@ impl AppProofType {
     }
 }
 #[derive(Debug)]
+/// A Velocity Control aggregates data and compares the result to a threshold. Policies use the boolean result.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct VelocityControl {
+    /// Unique identifier for the Velocity Control.
+    pub velocity_control_id: ::prost::alloc::string::String,
+    /// Identifier of the Organization that owns the Velocity Control.
+    pub organization_id: ::prost::alloc::string::String,
+    /// Human-readable name for the Velocity Control.
+    pub name: ::prost::alloc::string::String,
+    /// Data source for the Velocity Control.
+    #[serde(default)]
+    pub data_source: ::core::option::Option<VelocityControlDataSource>,
+    /// Aggregation expression that the Velocity Control evaluates.
+    #[serde(default)]
+    pub aggregation: ::core::option::Option<VelocityControlAggregation>,
+    /// Time when the Velocity Control was created.
+    #[serde(default)]
+    pub created_at: ::core::option::Option<Timestamp>,
+    /// Time when the Velocity Control was last updated.
+    #[serde(default)]
+    pub updated_at: ::core::option::Option<Timestamp>,
+    /// Identifier for the Velocity Control. Policies reference it as `controls.<identifier>`. It must be unique within the Organization.
+    pub identifier: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+/// Data source for a Velocity Control. Set exactly one definition.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct VelocityControlDataSource {
+    #[serde(default)]
+    pub definition: ::core::option::Option<velocity_control_data_source::Definition>,
+}
+/// Nested message and enum types in `VelocityControlDataSource`.
+pub mod velocity_control_data_source {
+    #[derive(::serde::Serialize, ::serde::Deserialize)]
+    #[derive(Clone, PartialEq)]
+    #[derive(Debug)]
+    pub enum Definition {
+        /// Uses transfers of the listed on-chain assets as input data.
+        #[serde(rename = "DEFINITION_CHAIN_ASSET_TRANSFER")]
+        ChainAssetTransfer(super::VelocityControlDataSourceChainAssetTransfer),
+        /// Uses executed Turnkey activities as input data.
+        #[serde(rename = "DEFINITION_ACTIVITY_EXECUTION")]
+        ActivityExecution(super::VelocityControlDataSourceActivityExecution),
+    }
+}
+#[derive(Debug)]
+/// Uses transfers of the listed on-chain assets as input data.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct VelocityControlDataSourceChainAssetTransfer {
+    /// Assets whose transfers are included in the data source.
+    #[serde(default)]
+    pub definition: ::prost::alloc::vec::Vec<
+        VelocityControlDataSourceChainAssetTransferDefinition,
+    >,
+    /// Filters asset transfers by activity type.
+    #[serde(default)]
+    pub filter: ::core::option::Option<
+        VelocityControlDataSourceChainAssetTransferFilter,
+    >,
+    /// Selects when to measure an asset transfer.
+    #[serde(default)]
+    pub phase: ::core::option::Option<VelocityControlDataSourcePhase>,
+}
+#[derive(Debug)]
+/// A chain asset that provides transfer data.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct VelocityControlDataSourceChainAssetTransferDefinition {
+    /// CAIP-19 identifier for the asset.
+    pub caip19: ::prost::alloc::string::String,
+    /// Base-10 integer string from 0 through 255 that specifies the number of decimal places for the asset.
+    pub decimals: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+/// Filters chain asset transfers by activity type.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct VelocityControlDataSourceChainAssetTransferFilter {
+    /// Activity types whose asset transfers are included.
+    #[serde(default)]
+    pub activity: ::prost::alloc::vec::Vec<VelocityControlDataSourceFilterActivity>,
+}
+#[derive(Debug)]
+/// Uses executed Turnkey activities as input data.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct VelocityControlDataSourceActivityExecution {
+    /// Filters activity executions by type.
+    #[serde(default)]
+    pub filter: ::core::option::Option<VelocityControlDataSourceActivityExecutionFilter>,
+}
+#[derive(Debug)]
+/// Filters activity executions by type.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct VelocityControlDataSourceActivityExecutionFilter {
+    /// Activity types whose executions are included.
+    #[serde(default)]
+    pub activity: ::prost::alloc::vec::Vec<VelocityControlDataSourceFilterActivity>,
+}
+#[derive(Debug)]
+/// An activity type filter.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct VelocityControlDataSourceFilterActivity {
+    /// Name of an activity type to include, such as `ACTIVITY_TYPE_SOL_SEND_TRANSACTION`.
+    pub activity_type: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+/// Selects when to measure an asset transfer. Set exactly one definition.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, Copy, PartialEq)]
+pub struct VelocityControlDataSourcePhase {
+    #[serde(default)]
+    pub definition: ::core::option::Option<
+        velocity_control_data_source_phase::Definition,
+    >,
+}
+/// Nested message and enum types in `VelocityControlDataSourcePhase`.
+pub mod velocity_control_data_source_phase {
+    #[derive(::serde::Serialize, ::serde::Deserialize)]
+    #[derive(Clone, Copy, PartialEq)]
+    #[derive(Debug)]
+    pub enum Definition {
+        /// Measures the transfer when Turnkey signs the transaction and returns it to the user.
+        #[serde(rename = "DEFINITION_SIGNATURE")]
+        Signature(super::VelocityControlDataSourcePhaseSignature),
+        /// Reserved for future use. Measures the transfer after the transaction lands on chain.
+        #[serde(rename = "DEFINITION_SUBMISSION")]
+        Submission(super::VelocityControlDataSourcePhaseSubmission),
+    }
+}
+#[derive(Debug)]
+/// Measures a transfer when Turnkey signs the transaction.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, Copy, PartialEq)]
+pub struct VelocityControlDataSourcePhaseSignature {}
+#[derive(Debug)]
+/// Reserved for future measurement after a transaction lands on chain.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, Copy, PartialEq)]
+pub struct VelocityControlDataSourcePhaseSubmission {}
+#[derive(Debug)]
+/// Defines how the control aggregates data and compares the result to a threshold.
+/// The expression has the form `<method>(<scoped data>) <operator> <threshold>`.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct VelocityControlAggregation {
+    /// Method that aggregates matching data points.
+    pub method: VelocityControlAggregationMethod,
+    /// Comparison between the aggregate and the threshold.
+    pub operator: VelocityControlAggregationOperator,
+    /// Non-negative base-10 decimal string with at most 38 total digits and 18 fractional digits.
+    pub threshold: ::prost::alloc::string::String,
+    /// Time window for the aggregation.
+    #[serde(default)]
+    pub window: ::core::option::Option<VelocityControlAggregationWindow>,
+    /// Scope that partitions matching data before aggregation.
+    #[serde(default)]
+    pub group_by: ::core::option::Option<VelocityControlAggregationGroupBy>,
+}
+#[derive(Debug)]
+/// Time window for aggregation. Set exactly one definition.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct VelocityControlAggregationWindow {
+    #[serde(default)]
+    pub definition: ::core::option::Option<
+        velocity_control_aggregation_window::Definition,
+    >,
+}
+/// Nested message and enum types in `VelocityControlAggregationWindow`.
+pub mod velocity_control_aggregation_window {
+    #[derive(::serde::Serialize, ::serde::Deserialize)]
+    #[derive(Clone, PartialEq)]
+    #[derive(Debug)]
+    pub enum Definition {
+        /// Uses a rolling time window.
+        #[serde(rename = "DEFINITION_ROLLING")]
+        Rolling(super::VelocityControlAggregationWindowRolling),
+        /// Uses all matching data without a time limit.
+        #[serde(rename = "DEFINITION_INFINITE")]
+        Infinite(super::VelocityControlAggregationWindowInfinite),
+    }
+}
+#[derive(Debug)]
+/// A rolling time window.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct VelocityControlAggregationWindowRolling {
+    /// Duration of the rolling window, in seconds, as a base-10 integer string.
+    pub duration: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+/// An aggregation window without a time limit.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, Copy, PartialEq)]
+pub struct VelocityControlAggregationWindowInfinite {}
+#[derive(Debug)]
+/// Scope that partitions matching data before aggregation. Set exactly one definition.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, Copy, PartialEq)]
+pub struct VelocityControlAggregationGroupBy {
+    #[serde(default)]
+    pub definition: ::core::option::Option<
+        velocity_control_aggregation_group_by::Definition,
+    >,
+}
+/// Nested message and enum types in `VelocityControlAggregationGroupBy`.
+pub mod velocity_control_aggregation_group_by {
+    #[derive(::serde::Serialize, ::serde::Deserialize)]
+    #[derive(Clone, Copy, PartialEq)]
+    #[derive(Debug)]
+    pub enum Definition {
+        /// Uses one shared bucket for the Organization.
+        #[serde(rename = "DEFINITION_ORGANIZATION")]
+        Organization(super::VelocityControlAggregationGroupByOrganization),
+        /// Uses one bucket for each User.
+        #[serde(rename = "DEFINITION_USER")]
+        User(super::VelocityControlAggregationGroupByUser),
+        /// Uses one bucket for each Wallet.
+        #[serde(rename = "DEFINITION_WALLET")]
+        Wallet(super::VelocityControlAggregationGroupByWallet),
+    }
+}
+#[derive(Debug)]
+/// Uses one shared bucket for the Organization.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, Copy, PartialEq)]
+pub struct VelocityControlAggregationGroupByOrganization {}
+#[derive(Debug)]
+/// Uses one bucket for each User.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, Copy, PartialEq)]
+pub struct VelocityControlAggregationGroupByUser {}
+#[derive(Debug)]
+/// Uses one bucket for each Wallet.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, Copy, PartialEq)]
+pub struct VelocityControlAggregationGroupByWallet {}
+/// Method used to aggregate control data.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum VelocityControlAggregationMethod {
+    /// The aggregation method is not specified.
+    #[serde(rename = "VELOCITY_CONTROL_AGGREGATION_METHOD_UNSPECIFIED")]
+    Unspecified = 0,
+    /// Sums matching values.
+    #[serde(rename = "VELOCITY_CONTROL_AGGREGATION_METHOD_SUM")]
+    Sum = 1,
+    /// Counts matching data points.
+    #[serde(rename = "VELOCITY_CONTROL_AGGREGATION_METHOD_COUNT")]
+    Count = 2,
+}
+impl VelocityControlAggregationMethod {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "VELOCITY_CONTROL_AGGREGATION_METHOD_UNSPECIFIED",
+            Self::Sum => "VELOCITY_CONTROL_AGGREGATION_METHOD_SUM",
+            Self::Count => "VELOCITY_CONTROL_AGGREGATION_METHOD_COUNT",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "VELOCITY_CONTROL_AGGREGATION_METHOD_UNSPECIFIED" => Some(Self::Unspecified),
+            "VELOCITY_CONTROL_AGGREGATION_METHOD_SUM" => Some(Self::Sum),
+            "VELOCITY_CONTROL_AGGREGATION_METHOD_COUNT" => Some(Self::Count),
+            _ => None,
+        }
+    }
+}
+/// Comparison used to evaluate aggregated data against a threshold.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum VelocityControlAggregationOperator {
+    /// The comparison is not specified.
+    #[serde(rename = "VELOCITY_CONTROL_AGGREGATION_OPERATOR_UNSPECIFIED")]
+    Unspecified = 0,
+    /// Checks whether the aggregate is less than the threshold.
+    #[serde(rename = "VELOCITY_CONTROL_AGGREGATION_OPERATOR_LESS_THAN")]
+    LessThan = 1,
+    /// Checks whether the aggregate is less than or equal to the threshold.
+    #[serde(rename = "VELOCITY_CONTROL_AGGREGATION_OPERATOR_LESS_THAN_OR_EQUAL")]
+    LessThanOrEqual = 2,
+    /// Checks whether the aggregate equals the threshold.
+    #[serde(rename = "VELOCITY_CONTROL_AGGREGATION_OPERATOR_EQUAL")]
+    Equal = 3,
+    /// Checks whether the aggregate is greater than or equal to the threshold.
+    #[serde(rename = "VELOCITY_CONTROL_AGGREGATION_OPERATOR_GREATER_THAN_OR_EQUAL")]
+    GreaterThanOrEqual = 4,
+    /// Checks whether the aggregate is greater than the threshold.
+    #[serde(rename = "VELOCITY_CONTROL_AGGREGATION_OPERATOR_GREATER_THAN")]
+    GreaterThan = 5,
+}
+impl VelocityControlAggregationOperator {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "VELOCITY_CONTROL_AGGREGATION_OPERATOR_UNSPECIFIED",
+            Self::LessThan => "VELOCITY_CONTROL_AGGREGATION_OPERATOR_LESS_THAN",
+            Self::LessThanOrEqual => {
+                "VELOCITY_CONTROL_AGGREGATION_OPERATOR_LESS_THAN_OR_EQUAL"
+            }
+            Self::Equal => "VELOCITY_CONTROL_AGGREGATION_OPERATOR_EQUAL",
+            Self::GreaterThanOrEqual => {
+                "VELOCITY_CONTROL_AGGREGATION_OPERATOR_GREATER_THAN_OR_EQUAL"
+            }
+            Self::GreaterThan => "VELOCITY_CONTROL_AGGREGATION_OPERATOR_GREATER_THAN",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "VELOCITY_CONTROL_AGGREGATION_OPERATOR_UNSPECIFIED" => {
+                Some(Self::Unspecified)
+            }
+            "VELOCITY_CONTROL_AGGREGATION_OPERATOR_LESS_THAN" => Some(Self::LessThan),
+            "VELOCITY_CONTROL_AGGREGATION_OPERATOR_LESS_THAN_OR_EQUAL" => {
+                Some(Self::LessThanOrEqual)
+            }
+            "VELOCITY_CONTROL_AGGREGATION_OPERATOR_EQUAL" => Some(Self::Equal),
+            "VELOCITY_CONTROL_AGGREGATION_OPERATOR_GREATER_THAN_OR_EQUAL" => {
+                Some(Self::GreaterThanOrEqual)
+            }
+            "VELOCITY_CONTROL_AGGREGATION_OPERATOR_GREATER_THAN" => {
+                Some(Self::GreaterThan)
+            }
+            _ => None,
+        }
+    }
+}
+#[derive(Debug)]
 /// EarnValueDisplay holds normalized, display-only representations of an on-chain
 /// amount. Values are for presentation only — do not do arithmetic with them;
 /// use the corresponding raw atomic field instead.
@@ -827,6 +1189,8 @@ pub struct DeploymentStatus {
     pub desired_replicas: i32,
     #[serde(default)]
     pub last_updated_time: ::core::option::Option<Timestamp>,
+    #[serde(default)]
+    pub provisioning_state: Option<ProvisioningState>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]

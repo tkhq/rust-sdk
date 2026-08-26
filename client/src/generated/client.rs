@@ -370,6 +370,118 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/get_policy".to_string())
             .await
     }
+    /// Create velocity control
+    ///
+    /// Create a new velocity control.
+    pub async fn create_velocity_control(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::CreateVelocityControlIntent,
+    ) -> Result<ActivityResult<immutable_activity::CreateVelocityControlResult>, TurnkeyClientError>
+    {
+        let request = external_activity::CreateVelocityControlRequest {
+            r#type: "ACTIVITY_TYPE_CREATE_VELOCITY_CONTROL".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/create_velocity_control".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::CreateVelocityControlResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Delete velocity control
+    ///
+    /// Delete an existing velocity control.
+    pub async fn delete_velocity_control(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::DeleteVelocityControlIntent,
+    ) -> Result<ActivityResult<immutable_activity::DeleteVelocityControlResult>, TurnkeyClientError>
+    {
+        let request = external_activity::DeleteVelocityControlRequest {
+            r#type: "ACTIVITY_TYPE_DELETE_VELOCITY_CONTROL".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/delete_velocity_control".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::DeleteVelocityControlResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Get velocity control
+    ///
+    /// Get details about a velocity control.
+    pub async fn get_velocity_control(
+        &self,
+        request: coordinator::GetVelocityControlRequest,
+    ) -> Result<coordinator::GetVelocityControlResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/get_velocity_control".to_string(),
+        )
+        .await
+    }
+    /// List velocity controls
+    ///
+    /// List all velocity controls within an organization.
+    pub async fn list_velocity_controls(
+        &self,
+        request: coordinator::ListVelocityControlsRequest,
+    ) -> Result<coordinator::ListVelocityControlsResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/list_velocity_controls".to_string(),
+        )
+        .await
+    }
     /// Create read only session
     ///
     /// Create a read only session for a user (valid for 1 hour).
@@ -4731,6 +4843,48 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
+    /// Init import secrets
+    ///
+    /// Initialize secret imports by generating Ingress Encryption Target Keys.
+    pub async fn init_import_secrets(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::InitImportSecretsIntent,
+    ) -> Result<ActivityResult<immutable_activity::InitImportSecretsResult>, TurnkeyClientError>
+    {
+        let request = external_activity::InitImportSecretsRequest {
+            r#type: "ACTIVITY_TYPE_INIT_IMPORT_SECRETS".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/init_import_secrets".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::InitImportSecretsResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
     /// Import secrets
     ///
     /// Import secrets encrypted to target keys returned from InitImportSecrets.
@@ -4794,6 +4948,44 @@ impl<S: Stamp> TurnkeyClient<S> {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         let result = match inner {
             immutable_activity::result::Inner::ExportSecretsResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Delete secrets
+    ///
+    /// Delete secrets stored within Turnkey.
+    pub async fn delete_secrets(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::DeleteSecretsIntent,
+    ) -> Result<ActivityResult<immutable_activity::DeleteSecretsResult>, TurnkeyClientError> {
+        let request = external_activity::DeleteSecretsRequest {
+            r#type: "ACTIVITY_TYPE_DELETE_SECRETS".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(&request, "/public/v1/submit/delete_secrets".to_string())
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::DeleteSecretsResult(res) => res,
             other => {
                 return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
                     serde_json::to_string(&other)?,

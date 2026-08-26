@@ -1,0 +1,274 @@
+syntax = "proto3";
+
+package external.data.v1;
+
+import "external/data/v1/common.proto";
+import "vendor/google/api/field_behavior.proto";
+import "vendor/protoc-gen-openapiv2/options/annotations.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/external/data/v1";
+
+// A Velocity Control aggregates data and compares the result to a threshold. Policies use the boolean result.
+message VelocityControl {
+  // Unique identifier for the Velocity Control.
+  string velocity_control_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for the Velocity Control."}
+  ];
+  // Identifier of the Organization that owns the Velocity Control.
+  string organization_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Identifier of the Organization that owns the Velocity Control."}
+  ];
+  // Human-readable name for the Velocity Control.
+  string name = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable name for the Velocity Control."}
+  ];
+  // Data source for the Velocity Control.
+  VelocityControlDataSource data_source = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Data source for the Velocity Control."}
+  ];
+  // Aggregation expression that the Velocity Control evaluates.
+  VelocityControlAggregation aggregation = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Aggregation expression that the Velocity Control evaluates."}
+  ];
+  // Time when the Velocity Control was created.
+  Timestamp created_at = 6 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Time when the Velocity Control was created."}
+  ];
+  // Time when the Velocity Control was last updated.
+  Timestamp updated_at = 7 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Time when the Velocity Control was last updated."}
+  ];
+  // Identifier for the Velocity Control. Policies reference it as `controls.<identifier>`. It must be unique within the Organization.
+  string identifier = 8 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Identifier for the Velocity Control. Policies reference it as `controls.<identifier>`. It must be unique within the Organization."}
+  ];
+}
+
+// Data source for a Velocity Control. Set exactly one definition.
+message VelocityControlDataSource {
+  oneof definition {
+    // Uses transfers of the listed on-chain assets as input data.
+    VelocityControlDataSourceChainAssetTransfer chain_asset_transfer = 1 [
+      (google.api.field_behavior) = OPTIONAL,
+      (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Uses transfers of the listed on-chain assets as input data."}
+    ];
+    // Uses executed Turnkey activities as input data.
+    VelocityControlDataSourceActivityExecution activity_execution = 2 [
+      (google.api.field_behavior) = OPTIONAL,
+      (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Uses executed Turnkey activities as input data."}
+    ];
+  }
+}
+
+// Uses transfers of the listed on-chain assets as input data.
+message VelocityControlDataSourceChainAssetTransfer {
+  // Assets whose transfers are included in the data source.
+  repeated VelocityControlDataSourceChainAssetTransferDefinition definition = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Assets whose transfers are included in the data source."}
+  ];
+  // Filters asset transfers by activity type.
+  optional VelocityControlDataSourceChainAssetTransferFilter filter = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Filters asset transfers by activity type."}
+  ];
+  // Selects when to measure an asset transfer.
+  optional VelocityControlDataSourcePhase phase = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Selects when to measure an asset transfer."}
+  ];
+}
+
+// A chain asset that provides transfer data.
+message VelocityControlDataSourceChainAssetTransferDefinition {
+  // CAIP-19 identifier for the asset.
+  string caip19 = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-19 identifier for the asset."}
+  ];
+  // Base-10 integer string from 0 through 255 that specifies the number of decimal places for the asset.
+  string decimals = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Base-10 integer string from 0 through 255 that specifies the number of decimal places for the asset."}
+  ];
+}
+
+// Filters chain asset transfers by activity type.
+message VelocityControlDataSourceChainAssetTransferFilter {
+  // Activity types whose asset transfers are included.
+  repeated VelocityControlDataSourceFilterActivity activity = 1 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Activity types whose asset transfers are included."}
+  ];
+}
+
+// Uses executed Turnkey activities as input data.
+message VelocityControlDataSourceActivityExecution {
+  // Filters activity executions by type.
+  optional VelocityControlDataSourceActivityExecutionFilter filter = 1 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Filters activity executions by type."}
+  ];
+}
+
+// Filters activity executions by type.
+message VelocityControlDataSourceActivityExecutionFilter {
+  // Activity types whose executions are included.
+  repeated VelocityControlDataSourceFilterActivity activity = 1 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Activity types whose executions are included."}
+  ];
+}
+
+// An activity type filter.
+message VelocityControlDataSourceFilterActivity {
+  // Name of an activity type to include, such as `ACTIVITY_TYPE_SOL_SEND_TRANSACTION`.
+  string activity_type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Name of an activity type to include, such as `ACTIVITY_TYPE_SOL_SEND_TRANSACTION`."}
+  ];
+}
+
+// Selects when to measure an asset transfer. Set exactly one definition.
+message VelocityControlDataSourcePhase {
+  oneof definition {
+    // Measures the transfer when Turnkey signs the transaction and returns it to the user.
+    VelocityControlDataSourcePhaseSignature signature = 1 [
+      (google.api.field_behavior) = OPTIONAL,
+      (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Measures the transfer when Turnkey signs the transaction and returns it to the user."}
+    ];
+    // Reserved for future use. Measures the transfer after the transaction lands on chain.
+    VelocityControlDataSourcePhaseSubmission submission = 2 [
+      (google.api.field_behavior) = OPTIONAL,
+      (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Reserved for future use. Measures the transfer after the transaction lands on chain."}
+    ];
+  }
+}
+
+// Measures a transfer when Turnkey signs the transaction.
+message VelocityControlDataSourcePhaseSignature {}
+
+// Reserved for future measurement after a transaction lands on chain.
+message VelocityControlDataSourcePhaseSubmission {}
+
+// Defines how the control aggregates data and compares the result to a threshold.
+// The expression has the form `<method>(<scoped data>) <operator> <threshold>`.
+message VelocityControlAggregation {
+  // Method that aggregates matching data points.
+  VelocityControlAggregationMethod method = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Method that aggregates matching data points."}
+  ];
+  // Comparison between the aggregate and the threshold.
+  VelocityControlAggregationOperator operator = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Comparison between the aggregate and the threshold."}
+  ];
+  // Non-negative base-10 decimal string with at most 38 total digits and 18 fractional digits.
+  string threshold = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Non-negative base-10 decimal string with at most 38 total digits and 18 fractional digits."}
+  ];
+  // Time window for the aggregation.
+  VelocityControlAggregationWindow window = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Time window for the aggregation."}
+  ];
+  // Scope that partitions matching data before aggregation.
+  VelocityControlAggregationGroupBy group_by = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Scope that partitions matching data before aggregation."}
+  ];
+}
+
+// Method used to aggregate control data.
+enum VelocityControlAggregationMethod {
+  // The aggregation method is not specified.
+  VELOCITY_CONTROL_AGGREGATION_METHOD_UNSPECIFIED = 0;
+  // Sums matching values.
+  VELOCITY_CONTROL_AGGREGATION_METHOD_SUM = 1;
+  // Counts matching data points.
+  VELOCITY_CONTROL_AGGREGATION_METHOD_COUNT = 2;
+}
+
+// Comparison used to evaluate aggregated data against a threshold.
+enum VelocityControlAggregationOperator {
+  // The comparison is not specified.
+  VELOCITY_CONTROL_AGGREGATION_OPERATOR_UNSPECIFIED = 0;
+  // Checks whether the aggregate is less than the threshold.
+  VELOCITY_CONTROL_AGGREGATION_OPERATOR_LESS_THAN = 1;
+  // Checks whether the aggregate is less than or equal to the threshold.
+  VELOCITY_CONTROL_AGGREGATION_OPERATOR_LESS_THAN_OR_EQUAL = 2;
+  // Checks whether the aggregate equals the threshold.
+  VELOCITY_CONTROL_AGGREGATION_OPERATOR_EQUAL = 3;
+  // Checks whether the aggregate is greater than or equal to the threshold.
+  VELOCITY_CONTROL_AGGREGATION_OPERATOR_GREATER_THAN_OR_EQUAL = 4;
+  // Checks whether the aggregate is greater than the threshold.
+  VELOCITY_CONTROL_AGGREGATION_OPERATOR_GREATER_THAN = 5;
+}
+
+// Time window for aggregation. Set exactly one definition.
+message VelocityControlAggregationWindow {
+  oneof definition {
+    // Uses a rolling time window.
+    VelocityControlAggregationWindowRolling rolling = 1 [
+      (google.api.field_behavior) = OPTIONAL,
+      (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Uses a rolling time window."}
+    ];
+    // Uses all matching data without a time limit.
+    VelocityControlAggregationWindowInfinite infinite = 2 [
+      (google.api.field_behavior) = OPTIONAL,
+      (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Uses all matching data without a time limit."}
+    ];
+  }
+}
+
+// A rolling time window.
+message VelocityControlAggregationWindowRolling {
+  // Duration of the rolling window, in seconds, as a base-10 integer string.
+  string duration = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Duration of the rolling window, in seconds, as a base-10 integer string."}
+  ];
+}
+
+// An aggregation window without a time limit.
+message VelocityControlAggregationWindowInfinite {}
+
+// Scope that partitions matching data before aggregation. Set exactly one definition.
+message VelocityControlAggregationGroupBy {
+  oneof definition {
+    // Uses one shared bucket for the Organization.
+    VelocityControlAggregationGroupByOrganization organization = 1 [
+      (google.api.field_behavior) = OPTIONAL,
+      (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Uses one shared bucket for the Organization."}
+    ];
+    // Uses one bucket for each User.
+    VelocityControlAggregationGroupByUser user = 2 [
+      (google.api.field_behavior) = OPTIONAL,
+      (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Uses one bucket for each User."}
+    ];
+    // Uses one bucket for each Wallet.
+    VelocityControlAggregationGroupByWallet wallet = 3 [
+      (google.api.field_behavior) = OPTIONAL,
+      (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Uses one bucket for each Wallet."}
+    ];
+  }
+}
+
+// Uses one shared bucket for the Organization.
+message VelocityControlAggregationGroupByOrganization {}
+
+// Uses one bucket for each User.
+message VelocityControlAggregationGroupByUser {}
+
+// Uses one bucket for each Wallet.
+message VelocityControlAggregationGroupByWallet {}

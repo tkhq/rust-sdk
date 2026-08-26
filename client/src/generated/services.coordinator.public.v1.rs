@@ -230,6 +230,49 @@ pub struct GetPolicyResponse {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct GetVelocityControlRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub velocity_control_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetVelocityControlResponse {
+    #[serde(default)]
+    pub velocity_control: ::core::option::Option<
+        super::super::super::super::external::data::v1::VelocityControl,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct ListVelocityControlsRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub pagination_options: ::core::option::Option<
+        super::super::super::super::external::options::v1::Pagination,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct ListVelocityControlsResponse {
+    #[serde(default)]
+    pub velocity_controls: ::prost::alloc::vec::Vec<
+        super::super::super::super::external::data::v1::VelocityControl,
+    >,
+    #[serde(default)]
+    pub page_info: ::core::option::Option<
+        super::super::super::super::external::options::v1::PageInfo,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct GetSmartContractInterfacesRequest {
     pub organization_id: ::prost::alloc::string::String,
 }

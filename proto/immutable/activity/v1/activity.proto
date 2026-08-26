@@ -4,10 +4,12 @@ syntax = "proto3";
 
 package immutable.activity.v1;
 
+import "external/data/v1/velocity_control.proto";
 import "immutable/activity/api/api_key.proto";
 import "immutable/activity/billing/activate_billing_tier.proto";
 import "immutable/activity/billing/delete_payment_method.proto";
 import "immutable/activity/billing/set_payment_method.proto";
+import "immutable/activity/billing/update_payment_method.proto";
 import "immutable/common/v1/common.proto";
 import "immutable/data/v1/common.proto";
 import "immutable/models/v1/models.proto";
@@ -190,6 +192,10 @@ enum ActivityType {
   ACTIVITY_TYPE_CREATE_SWAP_QUOTE = 161;
   ACTIVITY_TYPE_IMPORT_SECRETS = 162;
   ACTIVITY_TYPE_EXPORT_SECRETS = 163;
+  ACTIVITY_TYPE_CREATE_VELOCITY_CONTROL = 164;
+  ACTIVITY_TYPE_DELETE_VELOCITY_CONTROL = 165;
+  ACTIVITY_TYPE_UPDATE_PAYMENT_METHOD = 166;
+  ACTIVITY_TYPE_DELETE_SECRETS = 167;
 }
 
 // The current processing status of an Activity.
@@ -384,6 +390,10 @@ message Intent {
     CreateSwapQuoteIntent create_swap_quote_intent = 162;
     ImportSecretsIntent import_secrets_intent = 163;
     ExportSecretsIntent export_secrets_intent = 164;
+    CreateVelocityControlIntent create_velocity_control_intent = 165;
+    DeleteVelocityControlIntent delete_velocity_control_intent = 166;
+    immutable.activity.billing.UpdatePaymentMethodIntent update_payment_method_intent = 167;
+    DeleteSecretsIntent delete_secrets_intent = 168;
   }
   reserved 148;
   reserved "upsert_earn_client_fee_config_intent";
@@ -5313,6 +5323,10 @@ message Result {
     CreateSwapQuoteResult create_swap_quote_result = 142;
     ImportSecretsResult import_secrets_result = 143;
     ExportSecretsResult export_secrets_result = 144;
+    CreateVelocityControlResult create_velocity_control_result = 145;
+    DeleteVelocityControlResult delete_velocity_control_result = 146;
+    immutable.activity.billing.UpdatePaymentMethodResult update_payment_method_result = 147;
+    DeleteSecretsResult delete_secrets_result = 148;
   }
   reserved 127;
   reserved "upsert_earn_client_fee_config_result";
@@ -7613,6 +7627,56 @@ message ExportSecretsResult {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Encryption suite specific payload containing each secret ciphertext, in the order the params were specified. For enclave encrypt v1 each entry is a JSON-encoded ServerSendMsg."}
   ];
+}
+
+message DeleteSecretsIntent {
+  // @inject_tag: validate:"required,min=1,max=32,unique,dive,required,uuid"
+  repeated string secret_ids = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifiers for the secrets to delete."}
+  ];
+}
+
+message DeleteSecretsResult {
+  repeated string secret_ids = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifiers for the deleted secrets."}
+  ];
+}
+
+message CreateVelocityControlIntent {
+  // Human-readable name for the Velocity Control.
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable name for the Velocity Control."}
+  ];
+  // Data source for the Velocity Control.
+  external.data.v1.VelocityControlDataSource data_source = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Data source for the Velocity Control."}
+  ];
+  // Aggregation expression that the Velocity Control evaluates.
+  external.data.v1.VelocityControlAggregation aggregation = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Aggregation expression that the Velocity Control evaluates."}
+  ];
+  // Identifier for the Velocity Control. Policies reference it as `controls.<identifier>`. It must be unique within the Organization.
+  string identifier = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Identifier for the Velocity Control. Policies reference it as `controls.<identifier>`. It must be unique within the Organization."}
+  ];
+}
+
+message CreateVelocityControlResult {
+  string velocity_control_id = 1 [(google.api.field_behavior) = REQUIRED];
+}
+
+message DeleteVelocityControlIntent {
+  string velocity_control_id = 1 [(google.api.field_behavior) = REQUIRED];
+}
+
+message DeleteVelocityControlResult {
+  string velocity_control_id = 1 [(google.api.field_behavior) = REQUIRED];
 }
 
 message ClientSignature {

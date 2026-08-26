@@ -244,6 +244,10 @@ message DeploymentStatus {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Last time this deployment was updated"}
   ];
+  optional ProvisioningState provisioning_state = 5 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Current quorum-key provisioning state for this deployment"}
+  ];
 }
 
 message AppStatus {

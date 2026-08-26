@@ -178,6 +178,10 @@ pub mod intent {
         CreateSwapQuoteIntent(super::CreateSwapQuoteIntent),
         ImportSecretsIntent(super::ImportSecretsIntent),
         ExportSecretsIntent(super::ExportSecretsIntent),
+        CreateVelocityControlIntent(super::CreateVelocityControlIntent),
+        DeleteVelocityControlIntent(super::DeleteVelocityControlIntent),
+        UpdatePaymentMethodIntent(super::super::billing::UpdatePaymentMethodIntent),
+        DeleteSecretsIntent(super::DeleteSecretsIntent),
     }
 }
 #[derive(Debug)]
@@ -2799,6 +2803,10 @@ pub mod result {
         CreateSwapQuoteResult(super::CreateSwapQuoteResult),
         ImportSecretsResult(super::ImportSecretsResult),
         ExportSecretsResult(super::ExportSecretsResult),
+        CreateVelocityControlResult(super::CreateVelocityControlResult),
+        DeleteVelocityControlResult(super::DeleteVelocityControlResult),
+        UpdatePaymentMethodResult(super::super::billing::UpdatePaymentMethodResult),
+        DeleteSecretsResult(super::DeleteSecretsResult),
     }
 }
 #[derive(Debug)]
@@ -4576,6 +4584,64 @@ pub struct ExportSecretsResult {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct DeleteSecretsIntent {
+    /// @inject_tag: validate:"required,min=1,max=32,unique,dive,required,uuid"
+    #[serde(default)]
+    pub secret_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeleteSecretsResult {
+    #[serde(default)]
+    pub secret_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateVelocityControlIntent {
+    /// Human-readable name for the Velocity Control.
+    pub name: ::prost::alloc::string::String,
+    /// Data source for the Velocity Control.
+    #[serde(default)]
+    pub data_source: ::core::option::Option<
+        super::super::super::external::data::v1::VelocityControlDataSource,
+    >,
+    /// Aggregation expression that the Velocity Control evaluates.
+    #[serde(default)]
+    pub aggregation: ::core::option::Option<
+        super::super::super::external::data::v1::VelocityControlAggregation,
+    >,
+    /// Identifier for the Velocity Control. Policies reference it as `controls.<identifier>`. It must be unique within the Organization.
+    pub identifier: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateVelocityControlResult {
+    pub velocity_control_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeleteVelocityControlIntent {
+    pub velocity_control_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeleteVelocityControlResult {
+    pub velocity_control_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct ClientSignature {
     pub public_key: ::prost::alloc::string::String,
     pub scheme: super::super::common::v1::ClientSignatureScheme,
@@ -5127,6 +5193,14 @@ pub enum ActivityType {
     ImportSecrets = 162,
     #[serde(rename = "ACTIVITY_TYPE_EXPORT_SECRETS")]
     ExportSecrets = 163,
+    #[serde(rename = "ACTIVITY_TYPE_CREATE_VELOCITY_CONTROL")]
+    CreateVelocityControl = 164,
+    #[serde(rename = "ACTIVITY_TYPE_DELETE_VELOCITY_CONTROL")]
+    DeleteVelocityControl = 165,
+    #[serde(rename = "ACTIVITY_TYPE_UPDATE_PAYMENT_METHOD")]
+    UpdatePaymentMethod = 166,
+    #[serde(rename = "ACTIVITY_TYPE_DELETE_SECRETS")]
+    DeleteSecrets = 167,
 }
 impl ActivityType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -5322,6 +5396,10 @@ impl ActivityType {
             Self::CreateSwapQuote => "ACTIVITY_TYPE_CREATE_SWAP_QUOTE",
             Self::ImportSecrets => "ACTIVITY_TYPE_IMPORT_SECRETS",
             Self::ExportSecrets => "ACTIVITY_TYPE_EXPORT_SECRETS",
+            Self::CreateVelocityControl => "ACTIVITY_TYPE_CREATE_VELOCITY_CONTROL",
+            Self::DeleteVelocityControl => "ACTIVITY_TYPE_DELETE_VELOCITY_CONTROL",
+            Self::UpdatePaymentMethod => "ACTIVITY_TYPE_UPDATE_PAYMENT_METHOD",
+            Self::DeleteSecrets => "ACTIVITY_TYPE_DELETE_SECRETS",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -5550,6 +5628,10 @@ impl ActivityType {
             "ACTIVITY_TYPE_CREATE_SWAP_QUOTE" => Some(Self::CreateSwapQuote),
             "ACTIVITY_TYPE_IMPORT_SECRETS" => Some(Self::ImportSecrets),
             "ACTIVITY_TYPE_EXPORT_SECRETS" => Some(Self::ExportSecrets),
+            "ACTIVITY_TYPE_CREATE_VELOCITY_CONTROL" => Some(Self::CreateVelocityControl),
+            "ACTIVITY_TYPE_DELETE_VELOCITY_CONTROL" => Some(Self::DeleteVelocityControl),
+            "ACTIVITY_TYPE_UPDATE_PAYMENT_METHOD" => Some(Self::UpdatePaymentMethod),
+            "ACTIVITY_TYPE_DELETE_SECRETS" => Some(Self::DeleteSecrets),
             _ => None,
         }
     }

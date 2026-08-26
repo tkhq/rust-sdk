@@ -216,6 +216,10 @@
       "intentType": "ExportSecretsIntent",
       "resultType": "ExportSecretsResult"
     },
+    "ACTIVITY_TYPE_DELETE_SECRETS": {
+      "intentType": "DeleteSecretsIntent",
+      "resultType": "DeleteSecretsResult"
+    },
     "ACTIVITY_TYPE_OAUTH": {
       "intentType": "OauthIntent",
       "resultType": "OauthResult"
@@ -662,6 +666,18 @@
     "ACTIVITY_TYPE_CREATE_SESSION_PROFILE": {
       "intentType": "CreateSessionProfileIntent",
       "resultType": "CreateSessionProfileResult"
+    },
+    "ACTIVITY_TYPE_CREATE_VELOCITY_CONTROL": {
+      "intentType": "CreateVelocityControlIntent",
+      "resultType": "CreateVelocityControlResult"
+    },
+    "ACTIVITY_TYPE_DELETE_VELOCITY_CONTROL": {
+      "intentType": "DeleteVelocityControlIntent",
+      "resultType": "DeleteVelocityControlResult"
+    },
+    "ACTIVITY_TYPE_UPDATE_PAYMENT_METHOD": {
+      "intentType": "UpdatePaymentMethodIntent",
+      "resultType": "UpdatePaymentMethodResult"
     },
     "ACTIVITY_TYPE_UNSPECIFIED": {
       "intentType": "*",

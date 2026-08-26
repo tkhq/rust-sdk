@@ -1209,7 +1209,10 @@ pub enum Outcome {
     Error = 6,
     #[serde(rename = "OUTCOME_REQUIRES_AUTHENTICATORS")]
     RequiresAuthenticators = 7,
-    /// policy would apply (condition + consensus met) but its time window is inactive at the trusted instant
+    /// A policy whose time window is inactive at the trusted instant contributes nothing to the decision.
+    /// It is reported as OUTCOME_TIME_INACTIVE BEFORE its consensus and condition are evaluated; those are
+    /// skipped entirely, so this outcome says nothing about whether they would have been met.
+    /// A policy with no time field (time == None) is not restricted by time and is always active.
     #[serde(rename = "OUTCOME_TIME_INACTIVE")]
     TimeInactive = 8,
 }

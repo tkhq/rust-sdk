@@ -10,6 +10,7 @@ import "external/data/v1/proofs.proto";
 import "external/data/v1/session_profile.proto";
 import "external/data/v1/smart_contract_interface.proto";
 import "external/data/v1/tvc.proto";
+import "external/data/v1/velocity_control.proto";
 import "external/data/v1/wallet_account.proto";
 import "external/options/v1/options.proto";
 import "external/webauthn/v1/webauthn.proto";
@@ -518,6 +519,54 @@ service PublicApiService {
       description: "Get details about a policy."
       summary: "Get policy"
       tags: "Policies"
+    };
+  }
+
+  rpc CreateVelocityControl(external.activity.v1.CreateVelocityControlRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/create_velocity_control"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Create a new velocity control."
+      summary: "Create velocity control"
+      tags: "Velocity Controls"
+    };
+  }
+
+  rpc DeleteVelocityControl(external.activity.v1.DeleteVelocityControlRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/delete_velocity_control"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Delete an existing velocity control."
+      summary: "Delete velocity control"
+      tags: "Velocity Controls"
+    };
+  }
+
+  rpc GetVelocityControl(GetVelocityControlRequest) returns (GetVelocityControlResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_velocity_control"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get details about a velocity control."
+      summary: "Get velocity control"
+      tags: "Velocity Controls"
+    };
+  }
+
+  rpc ListVelocityControls(ListVelocityControlsRequest) returns (ListVelocityControlsResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/list_velocity_controls"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "List all velocity controls within an organization."
+      summary: "List velocity controls"
+      tags: "Velocity Controls"
     };
   }
 
@@ -2225,7 +2274,6 @@ service PublicApiService {
       post: "/public/v1/submit/init_import_secrets"
       body: "*"
     };
-    option (google.api.method_visibility).restriction = "INTERNAL";
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Initialize secret imports by generating Ingress Encryption Target Keys."
       summary: "Init import secrets"
@@ -2253,6 +2301,18 @@ service PublicApiService {
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Export secrets encrypted to client-provided target public keys."
       summary: "Export secrets"
+      tags: "Secrets"
+    };
+  }
+
+  rpc DeleteSecrets(external.activity.v1.DeleteSecretsRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/delete_secrets"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Delete secrets stored within Turnkey."
+      summary: "Delete secrets"
       tags: "Secrets"
     };
   }
@@ -2716,6 +2776,25 @@ message GetPolicyResponse {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Object that codifies rules defining the actions that are permissible within an organization."}
   ];
+}
+
+message GetVelocityControlRequest {
+  string organization_id = 1 [(google.api.field_behavior) = REQUIRED];
+  string velocity_control_id = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+message GetVelocityControlResponse {
+  external.data.v1.VelocityControl velocity_control = 1 [(google.api.field_behavior) = REQUIRED];
+}
+
+message ListVelocityControlsRequest {
+  string organization_id = 1 [(google.api.field_behavior) = REQUIRED];
+  external.options.v1.Pagination pagination_options = 2;
+}
+
+message ListVelocityControlsResponse {
+  repeated external.data.v1.VelocityControl velocity_controls = 1 [(google.api.field_behavior) = REQUIRED];
+  external.options.v1.PageInfo page_info = 2 [(google.api.field_behavior) = REQUIRED];
 }
 
 message GetSmartContractInterfacesRequest {
