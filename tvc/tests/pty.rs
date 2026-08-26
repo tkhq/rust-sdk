@@ -709,7 +709,7 @@ fn secrets_import_prompts_hidden_for_the_value() {
     common::write_profiles_config(temp.path(), &[("alias-a", "org-e2e")], Some("alias-a"));
     common::write_profile_key_files(temp.path(), "alias-a");
 
-    let mut session = spawn_with_home(temp.path(), &["secrets", "import", "db-password"]);
+    let mut session = spawn_with_home(temp.path(), &["secrets", "import", "--name", "db-password"]);
 
     session.exp_string("Secret value").unwrap();
     session.send_line("hunter2").unwrap();

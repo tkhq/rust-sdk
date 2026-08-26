@@ -40,15 +40,15 @@ fn secrets_export_help_lists_expected_flags() {
 }
 
 #[test]
-fn secrets_get_is_an_export_alias() {
+fn secrets_get_alias_is_not_recognized() {
     let (temp, _) = secrets_cmd();
     let mut cmd = cargo_bin_cmd!("tvc");
     cmd.env_clear().env("HOME", temp.path());
 
     cmd.args(["secrets", "get", "--help"])
         .assert()
-        .success()
-        .stdout(predicate::str::contains("--out <PATH>"));
+        .failure()
+        .stderr(predicate::str::contains("unrecognized subcommand"));
 }
 
 #[test]

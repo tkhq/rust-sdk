@@ -454,13 +454,13 @@ enum AppCommands {
 #[derive(Debug, Subcommand)]
 enum SecretsCommands {
     /// Import one secret value into Turnkey secret storage.
-    #[command(alias = "set", long_about = commands::secrets::import::LONG_ABOUT)]
+    #[command(long_about = commands::secrets::import::LONG_ABOUT)]
     Import(commands::secrets::import::Args),
     /// Export one secret value from Turnkey secret storage.
-    #[command(alias = "get", long_about = commands::secrets::export::LONG_ABOUT)]
+    #[command(long_about = commands::secrets::export::LONG_ABOUT)]
     Export(commands::secrets::export::Args),
     /// List secret metadata for the active organization.
-    #[command(alias = "ls", long_about = commands::secrets::list::LONG_ABOUT)]
+    #[command(long_about = commands::secrets::list::LONG_ABOUT)]
     List(commands::secrets::list::Args),
 }
 

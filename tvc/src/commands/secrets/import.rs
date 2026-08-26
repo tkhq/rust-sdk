@@ -32,7 +32,7 @@ to a single-use Turnkey enclave key before it leaves this process."#;
 #[command(about, long_about = LONG_ABOUT)]
 pub struct Args {
     /// Name for the secret, unique within the organization.
-    #[arg(value_name = "NAME")]
+    #[arg(long, value_name = "NAME")]
     name: String,
 
     /// File to read the secret value from. Without it the value comes from
