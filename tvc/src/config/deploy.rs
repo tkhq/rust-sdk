@@ -44,6 +44,10 @@ pub struct DeployConfig {
     pub health_check_type: TvcHealthCheckType,
     pub health_check_port: u16,
     pub public_ingress_port: u16,
+    /// Number of deployment replicas to request. Omitted (`None`) leaves the
+    /// choice to the backend default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replicas: Option<u32>,
 }
 
 /// Build a config seeded from an existing deployment, for use as a template.
@@ -109,6 +113,7 @@ impl TryFrom<TvcDeployment> for DeployConfig {
             health_check_type,
             health_check_port,
             public_ingress_port,
+            replicas: None,
         })
     }
 }
@@ -129,6 +134,7 @@ impl DeployConfig {
             health_check_type: TvcHealthCheckType::Http,
             health_check_port: 3000,
             public_ingress_port: 3000,
+            replicas: None,
         }
     }
 
@@ -386,6 +392,16 @@ mod tests {
         assert!(!config.dangerous_deploy_debug_mode);
         // A seeded config therefore has no remaining placeholder fields.
         assert!(config.missing_required_fields().is_empty());
+    }
+
+    /// The API deployment type carries no configured (desired) replica count —
+    /// only runtime `DeploymentStatus` exposes ready/desired replicas — so a
+    /// seeded config leaves `replicas` unset and the backend default applies on
+    /// the next deploy.
+    #[test]
+    fn from_deployment_leaves_replicas_unset() {
+        let config = DeployConfig::try_from(sample_deployment(false)).unwrap();
+        assert_eq!(config.replicas, None);
     }
 
     #[test]

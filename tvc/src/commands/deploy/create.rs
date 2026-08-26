@@ -142,6 +142,13 @@ struct Overrides {
     /// This is usually the port your server listens on for external requests.
     #[arg(long, env = "TVC_PUBLIC_INGRESS_PORT")]
     pub public_ingress_port: Option<u16>,
+
+    /// Number of deployment replicas to request.
+    ///
+    /// Overrides the config file's `replicas`. Omit both to use the backend
+    /// default.
+    #[arg(long, env = "TVC_REPLICAS")]
+    pub replicas: Option<u32>,
 }
 
 struct ResolvedDeployInputs {
@@ -309,6 +316,10 @@ fn apply_overrides(config: &mut DeployConfig, overrides: &Overrides) {
     if let Some(v) = overrides.public_ingress_port {
         config.public_ingress_port = v;
     }
+    // CLI/env over file, one-way: an absent flag never resets a file value.
+    if let Some(v) = overrides.replicas {
+        config.replicas = Some(v);
+    }
 }
 
 fn invalid_deploy_config_error(errors: DeployConfigValidationErrors) -> anyhow::Error {
@@ -368,8 +379,7 @@ fn build_create_intent(
         health_check_type: deploy_config.health_check_type,
         health_check_port: deploy_config.health_check_port as u32,
         public_ingress_port: deploy_config.public_ingress_port as u32,
-        // Not yet configurable via the CLI; the server applies its default.
-        replicas: None,
+        replicas: deploy_config.replicas,
     }
 }
 
@@ -731,11 +741,116 @@ mod tests {
         assert_eq!(intent.debug_mode, Some(true));
     }
 
-    /// Exercises every override flag via clap parsing so flag renames or
-    /// removals fail this test. The other override tests construct `Args` by
-    /// field name and would silently pass.
+    /// The intent builder forwards the resolved config's `replicas` verbatim,
+    /// so a config file (or CLI override merged into it) that sets replicas
+    /// reaches the outgoing `CreateTvcDeploymentIntent`.
     #[test]
-    fn every_override_flag_changes_template_value() {
+    fn build_intent_forwards_replicas_from_config() {
+        let mut cfg = file_config();
+        cfg.replicas = Some(2);
+        let intent = build_create_intent(&cfg, "image-url".to_string(), None);
+        assert_eq!(intent.replicas, Some(2));
+    }
+
+    /// Omitting replicas in the config leaves the intent's `replicas` as `None`
+    /// so the backend applies its default.
+    #[test]
+    fn build_intent_omits_replicas_when_config_absent() {
+        let mut cfg = file_config();
+        cfg.replicas = None;
+        let intent = build_create_intent(&cfg, "image-url".to_string(), None);
+        assert_eq!(intent.replicas, None);
+    }
+
+    /// `replicas` in the config file resolves through the normal pipeline when
+    /// no CLI flag is given.
+    #[test]
+    fn replicas_file_value_used_when_flag_absent() {
+        let mut cfg = file_config();
+        cfg.replicas = Some(2);
+        let file = write_config(&cfg);
+        let args = Args {
+            config_file: Some(file.path().to_path_buf()),
+            ..Default::default()
+        };
+        let resolved = run_resolve(&args).unwrap();
+        assert_eq!(resolved.replicas, Some(2));
+    }
+
+    /// `--replicas` overrides a replica count set in the config file, matching
+    /// the CLI > env > file precedence used for the other override fields.
+    #[test]
+    fn replicas_flag_overrides_file_value() {
+        let mut cfg = file_config();
+        cfg.replicas = Some(2);
+        let file = write_config(&cfg);
+        let overrides = Overrides {
+            replicas: Some(5),
+            ..Default::default()
+        };
+        let args = Args {
+            config_file: Some(file.path().to_path_buf()),
+            overrides,
+            ..Default::default()
+        };
+        let resolved = run_resolve(&args).unwrap();
+        assert_eq!(resolved.replicas, Some(5));
+    }
+
+    /// Omitting `--replicas` must not clobber a replica count set in the config
+    /// file: the flag only ever sets a value, never resets to the default.
+    #[test]
+    fn absent_replicas_flag_preserves_config_value() {
+        let mut cfg = file_config();
+        cfg.replicas = Some(3);
+        let file = write_config(&cfg);
+        let overrides = Overrides {
+            replicas: None,
+            ..Default::default()
+        };
+        let args = Args {
+            config_file: Some(file.path().to_path_buf()),
+            overrides,
+            ..Default::default()
+        };
+        let resolved = run_resolve(&args).unwrap();
+        assert_eq!(resolved.replicas, Some(3));
+    }
+
+    /// A config file without a `replicas` key parses with `replicas: None`, so
+    /// older config files remain forward-compatible.
+    #[test]
+    fn config_without_replicas_key_defaults_to_none() {
+        let json = r#"{
+            "appId": "651b573c-861b-4f10-a478-cbcfe0c226af",
+            "qosVersion": "file-qos",
+            "pivotContainerImageUrl": "file-image",
+            "pivotPath": "file-path",
+            "pivotArgs": [],
+            "expectedPivotDigest": "file-digest",
+            "healthCheckType": "TVC_HEALTH_CHECK_TYPE_HTTP",
+            "healthCheckPort": 4000,
+            "publicIngressPort": 5000
+        }"#;
+        let cfg: DeployConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(cfg.replicas, None);
+    }
+
+    /// A `None` replica count is omitted from the serialized config so
+    /// `deploy init` templates stay clean and round-trips don't add noise.
+    #[test]
+    fn none_replicas_is_omitted_from_serialized_config() {
+        let mut cfg = file_config();
+        cfg.replicas = None;
+        let json = serde_json::to_value(&cfg).unwrap();
+        assert_eq!(json.get("replicas"), None);
+    }
+
+    /// Exercises every deploy-create flag via clap parsing so flag renames or
+    /// removals fail this test. The other tests construct `Args` by field name
+    /// and would silently pass.
+    #[test]
+    fn every_deploy_create_flag_changes_or_captures_value() {
         use clap::Parser;
 
         #[derive(Parser)]
@@ -763,6 +878,8 @@ mod tests {
             "8080",
             "--public-ingress-port",
             "9090",
+            "--replicas",
+            "2",
             "--pivot-pull-secret",
             pull_secret_path,
             "--dangerous-deploy-debug-mode",
@@ -789,6 +906,7 @@ mod tests {
         assert_ne!(resolved.pivot_args, template.pivot_args);
         assert_ne!(resolved.health_check_port, template.health_check_port);
         assert_ne!(resolved.public_ingress_port, template.public_ingress_port);
+        assert_ne!(resolved.replicas, template.replicas);
         assert_ne!(
             resolved.dangerous_deploy_debug_mode,
             template.dangerous_deploy_debug_mode
@@ -803,6 +921,7 @@ mod tests {
         assert_eq!(resolved.pivot_args, vec!["arg1", "arg2"]);
         assert_eq!(resolved.health_check_port, 8080);
         assert_eq!(resolved.public_ingress_port, 9090);
+        assert_eq!(resolved.replicas, Some(2));
         assert!(resolved.dangerous_deploy_debug_mode);
 
         // pivot_pull_secret isn't part of apply_overrides; verify clap captured the path.

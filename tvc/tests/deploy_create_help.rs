@@ -102,3 +102,17 @@ fn deploy_create_help_documents_non_interactive_global_flag() {
         .stdout(predicate::str::contains("--non-interactive"))
         .stdout(predicate::str::contains("TVC_NON_INTERACTIVE"));
 }
+
+#[test]
+fn deploy_create_help_documents_replica_count_override() {
+    cargo_bin_cmd!("tvc")
+        .arg("deploy")
+        .arg("create")
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--replicas <REPLICAS>"))
+        .stdout(predicate::str::contains(
+            "Number of deployment replicas to request",
+        ));
+}
