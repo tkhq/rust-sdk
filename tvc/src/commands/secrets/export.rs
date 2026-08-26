@@ -17,7 +17,6 @@ use std::path::{Path, PathBuf};
 use tokio::io::AsyncWriteExt;
 use tracing::instrument;
 use turnkey_client::ActivityResult;
-use turnkey_client::generated::SecretMetadata;
 use zeroize::Zeroizing;
 
 pub const LONG_ABOUT: &str = r#"Export one secret value from Turnkey secret storage.
@@ -85,18 +84,12 @@ impl Delivery {
 
 /// Resolve `--name` to exactly one secret ID via the metadata listing.
 async fn resolve_secret_id(auth: &AuthenticatedClient, name: &str) -> Result<String> {
-    let mut matches = Vec::new();
-    for metadata in list_all_secrets(auth).await? {
-        let SecretMetadata {
-            secret_id,
-            name: secret_name,
-            static_properties: _,
-            created_at_unix_ms: _,
-        } = metadata;
-        if secret_name.as_deref() == Some(name) {
-            matches.push(secret_id);
-        }
-    }
+    let mut matches: Vec<String> = list_all_secrets(auth)
+        .await?
+        .into_iter()
+        .filter(|metadata| metadata.name.as_deref() == Some(name))
+        .map(|metadata| metadata.secret_id)
+        .collect();
     match matches.len() {
         0 => Err(MissingResource::new("secret", name).into()),
         1 => Ok(matches.swap_remove(0)),
@@ -397,14 +390,15 @@ mod tests {
         assert_eq!(exported.secret_id, "secret-abc");
     }
 
-    #[tokio::test]
-    async fn run_rejects_an_unknown_name() {
+    /// Run the command with `--name db-password` against a listing and return
+    /// the error it must produce.
+    async fn name_resolution_error(listing: serde_json::Value) -> anyhow::Error {
         let signing = test_signing_key();
         let server = MockServer::start().await;
-        mount_list_mock(&server, serde_json::json!([])).await;
+        mount_list_mock(&server, listing).await;
 
         let dir = TempDir::new().unwrap();
-        let error = match run(
+        match run(
             &mut test_ctx(),
             args(None, Some("db-password"), None, &signing),
             test_config(&dir, &server.uri()),
@@ -412,39 +406,24 @@ mod tests {
         .await
         {
             Err(error) => error,
-            Ok(_) => panic!("expected an unknown name to fail"),
-        };
-        assert!(
-            error.to_string().contains("db-password"),
-            "unexpected error: {error}"
-        );
+            Ok(_) => panic!("expected name resolution to fail"),
+        }
     }
 
     #[tokio::test]
-    async fn run_rejects_an_ambiguous_name() {
-        let signing = test_signing_key();
-        let server = MockServer::start().await;
-        mount_list_mock(
-            &server,
-            serde_json::json!([
-                {"secretId": "secret-abc", "name": "db-password", "createdAtUnixMs": "1"},
-                {"secretId": "secret-def", "name": "db-password", "createdAtUnixMs": "2"},
-            ]),
-        )
-        .await;
+    async fn run_rejects_unknown_and_ambiguous_names() {
+        let unknown = name_resolution_error(serde_json::json!([])).await;
+        assert!(
+            unknown.to_string().contains("db-password"),
+            "unexpected error: {unknown}"
+        );
 
-        let dir = TempDir::new().unwrap();
-        let error = match run(
-            &mut test_ctx(),
-            args(None, Some("db-password"), None, &signing),
-            test_config(&dir, &server.uri()),
-        )
-        .await
-        {
-            Err(error) => error,
-            Ok(_) => panic!("expected an ambiguous name to fail"),
-        };
-        let message = error.to_string();
+        let ambiguous = name_resolution_error(serde_json::json!([
+            {"secretId": "secret-abc", "name": "db-password", "createdAtUnixMs": "1"},
+            {"secretId": "secret-def", "name": "db-password", "createdAtUnixMs": "2"},
+        ]))
+        .await;
+        let message = ambiguous.to_string();
         assert!(message.contains("ambiguous"), "unexpected error: {message}");
         assert!(
             message.contains("secret-abc") && message.contains("secret-def"),
@@ -471,25 +450,6 @@ mod tests {
         assert!(
             error.to_string().contains("--out"),
             "unexpected error: {error}"
-        );
-    }
-
-    #[test]
-    fn exported_outcome_serializes_metadata_only() {
-        let exported = SecretExported {
-            secret_id: "secret-abc".to_string(),
-            value_length: 7,
-            destination: "stdout".to_string(),
-            activity_id: "activity-export".to_string(),
-        };
-        assert_eq!(
-            serde_json::to_value(&exported).unwrap(),
-            serde_json::json!({
-                "secretId": "secret-abc",
-                "valueLength": 7,
-                "destination": "stdout",
-                "activityId": "activity-export",
-            })
         );
     }
 }

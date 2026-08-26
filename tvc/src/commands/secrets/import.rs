@@ -200,43 +200,35 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     #[test]
-    fn static_property_parses_key_and_value() {
+    fn static_properties_parse_and_reject_malformed_or_duplicate_input() {
         assert_eq!(
             parse_static_property("environment=demo").unwrap(),
             ("environment".to_string(), "demo".to_string())
         );
-    }
-
-    #[test]
-    fn static_property_value_may_contain_equals() {
+        // Only the first '=' splits; values may contain more.
         assert_eq!(
             parse_static_property("query=a=b").unwrap(),
             ("query".to_string(), "a=b".to_string())
         );
-    }
+        assert!(
+            parse_static_property("environment")
+                .unwrap_err()
+                .contains("KEY=VALUE")
+        );
+        assert!(
+            parse_static_property("=demo")
+                .unwrap_err()
+                .contains("KEY=VALUE")
+        );
 
-    #[test]
-    fn static_property_without_equals_is_rejected() {
-        let error = parse_static_property("environment").unwrap_err();
-        assert!(error.contains("KEY=VALUE"), "unexpected error: {error}");
-    }
-
-    #[test]
-    fn static_property_with_empty_key_is_rejected() {
-        let error = parse_static_property("=demo").unwrap_err();
-        assert!(error.contains("KEY=VALUE"), "unexpected error: {error}");
-    }
-
-    #[test]
-    fn duplicate_static_property_keys_are_rejected() {
-        let error = unique_static_properties(vec![
+        let duplicate = unique_static_properties(vec![
             ("environment".to_string(), "demo".to_string()),
             ("environment".to_string(), "prod".to_string()),
         ])
         .unwrap_err();
         assert!(
-            error.to_string().contains("environment"),
-            "unexpected error: {error}"
+            duplicate.to_string().contains("environment"),
+            "unexpected error: {duplicate}"
         );
     }
 
@@ -265,33 +257,23 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn read_value_rejects_empty_values() {
+    async fn read_value_rejects_empty_invalid_utf8_and_missing_files() {
         let dir = TempDir::new().unwrap();
         let file = dir.path().join("value");
+
         tokio::fs::write(&file, "\n").await.unwrap();
         let error = read_value(true, Some(&file)).await.unwrap_err();
         assert!(error.to_string().contains("empty"), "unexpected: {error}");
-    }
 
-    #[tokio::test]
-    async fn read_value_rejects_invalid_utf8_without_echoing_it() {
-        let dir = TempDir::new().unwrap();
-        let file = dir.path().join("value");
+        // Invalid UTF-8 is reported without echoing the contents.
         tokio::fs::write(&file, [0xff, 0xfe, 0x00]).await.unwrap();
         let error = read_value(true, Some(&file)).await.unwrap_err();
         assert!(error.to_string().contains("UTF-8"), "unexpected: {error}");
-    }
 
-    #[tokio::test]
-    async fn read_value_reports_missing_files() {
-        let dir = TempDir::new().unwrap();
         let error = read_value(true, Some(&dir.path().join("nope")))
             .await
             .unwrap_err();
-        assert!(
-            error.to_string().contains("nope"),
-            "unexpected error: {error}"
-        );
+        assert!(error.to_string().contains("nope"), "unexpected: {error}");
     }
 
     #[tokio::test]
