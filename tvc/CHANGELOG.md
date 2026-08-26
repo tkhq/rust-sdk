@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- *(tvc)* expose deployment replica count on `tvc deploy create` via the `replicas` config field and `--replicas`/`TVC_REPLICAS` override
+
 ## [0.14.0](https://github.com/tkhq/rust-sdk/compare/tvc-v0.13.1...tvc-v0.14.0) - 2026-08-05
 
 ### Added
