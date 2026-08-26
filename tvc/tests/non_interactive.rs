@@ -332,7 +332,7 @@ fn approve_dangerous_skip_interactive_bypasses_prompts_when_non_interactive_forc
 }
 
 #[test]
-fn approve_non_interactive_requires_operator_id_when_saved_ids_are_ambiguous() {
+fn approve_explicit_seed_does_not_inherit_a_saved_operator_id() {
     let temp = TempDir::new().unwrap();
     let org_dir = temp
         .path()
@@ -367,8 +367,9 @@ fn approve_non_interactive_requires_operator_id_when_saved_ids_are_ambiguous() {
         .arg("11111111-1111-4111-8111-111111111111")
         .assert()
         .failure()
-        .stderr(predicate::str::contains("--operator-id"))
-        .stderr(predicate::str::contains("multiple"));
+        .stderr(predicate::str::contains(
+            "resolved operator ID required to post approval",
+        ));
 }
 
 #[test]

@@ -122,10 +122,6 @@ pub fn write_hosted_only_config(home: &Path, alias: &str, org_id: &str) {
 /// that read the cache need no device; device-touching flows fail at their
 /// first PC/SC step.
 pub fn write_yubikey_only_config(home: &Path, alias: &str, org_id: &str) {
-    let turnkey_dir = home.join(".config/turnkey");
-    fs::create_dir_all(&turnkey_dir).unwrap();
-
-    let serial = YubiKeySerial::from(0x01c9_5c1f);
     let public_key = QosOperatorPublicKey::try_from(
         qos_p256::P256Pair::generate()
             .unwrap()
@@ -134,6 +130,21 @@ pub fn write_yubikey_only_config(home: &Path, alias: &str, org_id: &str) {
             .as_slice(),
     )
     .unwrap();
+
+    write_yubikey_only_config_with_public_key(home, alias, org_id, public_key);
+}
+
+/// Write the single-YubiKey fixture with a caller-selected cached public key.
+pub fn write_yubikey_only_config_with_public_key(
+    home: &Path,
+    alias: &str,
+    org_id: &str,
+    public_key: QosOperatorPublicKey,
+) {
+    let turnkey_dir = home.join(".config/turnkey");
+    fs::create_dir_all(&turnkey_dir).unwrap();
+
+    let serial = YubiKeySerial::from(0x01c9_5c1f);
 
     let config = Config {
         active_org: Some(alias.to_string()),

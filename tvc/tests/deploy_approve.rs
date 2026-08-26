@@ -2,13 +2,21 @@ mod common;
 
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
-use qos_p256::P256Pair;
 use std::collections::HashMap;
 use std::fs;
+use std::io::{BufRead, BufReader, Read, Write};
+use std::net::TcpListener;
+use std::thread::{self, JoinHandle};
 use tempfile::TempDir;
+use turnkey_api_key_stamper::TurnkeyP256ApiKey;
+use turnkey_client::generated::{
+    GetTvcDeploymentResponse,
+    external::data::v1::{TvcDeployment, TvcManifest, TvcOperator, TvcOperatorSet},
+};
 use tvc::config::turnkey::{
     Config, HostedOperatorRecord, LocalOperatorRecord, OperatorKind, OperatorRecord,
     OperatorRecordKind, OrgConfig, QosOperatorPublicKey, StoredQosOperatorKey,
+    YubiKeyOperatorRecord, YubiKeyRegistryEntry, YubiKeySerial,
 };
 use uuid::Uuid;
 
@@ -19,8 +27,22 @@ fn fixture_seed_hex() -> String {
         .to_string()
 }
 
+fn fixture_manifest_member_key(index: usize) -> QosOperatorPublicKey {
+    let manifest: serde_json::Value =
+        serde_json::from_slice(include_bytes!("../fixtures/manifest.json")).unwrap();
+    manifest["manifestSet"]["members"][index]["pubKey"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap()
+}
+
 const HOSTED_OPERATOR_ID: &str = "11111111-1111-4111-8111-111111111111";
 const LOCAL_OPERATOR_ID: &str = "33333333-3333-4333-8333-333333333333";
+const DEPLOYMENT_ID: &str = "bb4c572f-0609-4b1d-b8b5-4dc83dbc89de";
+const MANIFEST_ID: &str = "22222222-2222-4222-8222-222222222222";
+const YUBIKEY_OPERATOR_ID: &str = "44444444-4444-4444-8444-444444444444";
+const GET_DEPLOYMENT_PATH: &str = "/public/v1/query/get_tvc_deployment";
 
 fn write_config(home: &TempDir, config: &Config) {
     let config_dir = home.path().join(".config/turnkey");
@@ -36,8 +58,123 @@ fn write_config(home: &TempDir, config: &Config) {
     .unwrap();
 }
 
+fn authenticated_command(home: &TempDir, api_base_url: &str) -> assert_cmd::Command {
+    let stamper = TurnkeyP256ApiKey::generate();
+    let mut command = cargo_bin_cmd!("tvc");
+    command
+        .env_clear()
+        .env("HOME", home.path())
+        .env("TVC_ORG_ID", "org-test")
+        .env(
+            "TVC_API_KEY_PUBLIC",
+            hex::encode(stamper.compressed_public_key()),
+        )
+        .env("TVC_API_KEY_PRIVATE", hex::encode(stamper.private_key()))
+        .env("TVC_API_BASE_URL", api_base_url);
+    command
+}
+
+fn spawn_json_server(body: String) -> (String, JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let handle = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut reader = BufReader::new(stream.try_clone().unwrap());
+
+        let mut request_line = String::new();
+        reader.read_line(&mut request_line).unwrap();
+        assert_eq!(
+            request_line.split_whitespace().nth(1),
+            Some(GET_DEPLOYMENT_PATH)
+        );
+
+        let mut content_length = 0;
+
+        loop {
+            let mut header = String::new();
+            reader.read_line(&mut header).unwrap();
+
+            if header == "\r\n" {
+                break;
+            }
+
+            if let Some(value) = header
+                .strip_prefix("content-length:")
+                .or_else(|| header.strip_prefix("Content-Length:"))
+            {
+                content_length = value.trim().parse().unwrap();
+            }
+        }
+
+        let mut request_body = vec![0; content_length];
+        reader.read_exact(&mut request_body).unwrap();
+        drop(reader);
+
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        stream.write_all(response.as_bytes()).unwrap();
+        stream.flush().unwrap();
+    });
+
+    (format!("http://{address}"), handle)
+}
+
+fn deployment_response(
+    hosted_key: QosOperatorPublicKey,
+    yubikey_key: QosOperatorPublicKey,
+) -> String {
+    serde_json::to_string(&GetTvcDeploymentResponse {
+        tvc_deployment: Some(TvcDeployment {
+            id: DEPLOYMENT_ID.to_string(),
+            organization_id: "org-test".to_string(),
+            app_id: "app-test".to_string(),
+            manifest_set: Some(TvcOperatorSet {
+                id: "manifest-set-test".to_string(),
+                name: "manifest-set".to_string(),
+                organization_id: "org-test".to_string(),
+                operators: vec![
+                    TvcOperator {
+                        id: HOSTED_OPERATOR_ID.to_string(),
+                        name: "hosted".to_string(),
+                        public_key: hosted_key.to_string(),
+                        created_at: None,
+                        updated_at: None,
+                    },
+                    TvcOperator {
+                        id: YUBIKEY_OPERATOR_ID.to_string(),
+                        name: "yubikey-op".to_string(),
+                        public_key: yubikey_key.to_string(),
+                        created_at: None,
+                        updated_at: None,
+                    },
+                ],
+                threshold: 2,
+                created_at: None,
+                updated_at: None,
+            }),
+            share_set: None,
+            manifest: Some(TvcManifest {
+                id: MANIFEST_ID.to_string(),
+                manifest: fs::read("fixtures/manifest.json").unwrap(),
+                created_at: None,
+                updated_at: None,
+            }),
+            manifest_approvals: Vec::new(),
+            qos_version: "1.0.0".to_string(),
+            pivot_container: None,
+            created_at: None,
+            updated_at: None,
+            delete: false,
+            debug_mode: false,
+        }),
+    })
+    .unwrap()
+}
+
 fn write_hosted_config(home: &TempDir) {
-    let public = P256Pair::generate().unwrap().public_key().to_bytes();
+    let public = fixture_manifest_member_key(0);
     let config = Config {
         active_org: Some("test".to_string()),
         orgs: HashMap::from([(
@@ -53,8 +190,8 @@ fn write_hosted_config(home: &TempDir) {
                         operator_id: Uuid::parse_str(HOSTED_OPERATOR_ID).unwrap(),
                         wallet_id: Uuid::parse_str("22222222-2222-4222-8222-222222222222").unwrap(),
                         path: "m/5527107'/0'/0'".to_string(),
-                        encrypt_public_key: hex::encode(&public[..65]),
-                        sign_public_key: hex::encode(&public[65..]),
+                        encrypt_public_key: hex::encode(&public.as_bytes()[..65]),
+                        sign_public_key: hex::encode(&public.as_bytes()[65..]),
                         extra: toml::Table::new(),
                     }),
                 }],
@@ -96,11 +233,11 @@ fn hosted_dry_run_does_not_require_operator_id() {
         .stdout(predicate::str::contains("Dry run complete"));
 }
 
-/// A hosted default alone cannot satisfy `--skip-post`: the refusal fires
-/// during resolution, before operator selection or credential loading (the
-/// fixture deliberately has no API key on disk).
+/// A selected hosted signer cannot satisfy `--skip-post`: the refusal fires
+/// before credential loading (the fixture deliberately has no API key on
+/// disk).
 #[test]
-fn hosted_default_rejects_skip_post_without_operator_id() {
+fn selected_hosted_operator_rejects_skip_post() {
     let temp = TempDir::new().unwrap();
     write_hosted_config(&temp);
 
@@ -122,9 +259,14 @@ fn hosted_default_rejects_skip_post_without_operator_id() {
 /// A yubikey org in a non-interactive run refuses during resolution: the PIN
 /// can only be typed at a prompt. No device is touched, so this needs no USB.
 #[test]
-fn yubikey_default_without_a_prompt_reports_the_pin_requirement() {
+fn selected_yubikey_without_a_prompt_reports_the_pin_requirement() {
     let temp = TempDir::new().unwrap();
-    common::write_yubikey_only_config(temp.path(), "test", "org-test");
+    common::write_yubikey_only_config_with_public_key(
+        temp.path(),
+        "test",
+        "org-test",
+        fixture_manifest_member_key(0),
+    );
 
     cargo_bin_cmd!("tvc")
         .env("HOME", temp.path())
@@ -139,6 +281,91 @@ fn yubikey_default_without_a_prompt_reports_the_pin_requirement() {
         .stderr(predicate::str::contains(
             "a YubiKey operator needs its PIN typed at an interactive prompt",
         ));
+}
+
+/// The selected serial narrows the locally available signers; its public key
+/// then derives the server operator UUID from the fetched deployment.
+#[test]
+fn deploy_id_and_serial_resolve_one_operator_identity_by_public_key() {
+    let temp = TempDir::new().unwrap();
+    let hosted_key = fixture_manifest_member_key(0);
+    let yubikey_key = fixture_manifest_member_key(2);
+    let serial = YubiKeySerial::from(0x01c9_5c1f);
+    let config = Config {
+        active_org: Some("test".to_string()),
+        orgs: HashMap::from([(
+            "test".to_string(),
+            OrgConfig {
+                id: "org-test".to_string(),
+                api_key_path: temp.path().join("api-key.json"),
+                api_base_url: "http://127.0.0.1:1".to_string(),
+                default_operator_kind: OperatorKind::Hosted,
+                operators: vec![
+                    OperatorRecord {
+                        name: "unrelated-hosted".to_string(),
+                        kind: OperatorRecordKind::Hosted(HostedOperatorRecord {
+                            operator_id: Uuid::parse_str(HOSTED_OPERATOR_ID).unwrap(),
+                            wallet_id: Uuid::parse_str("55555555-5555-4555-8555-555555555555")
+                                .unwrap(),
+                            path: "m/5527107'/0'/0'".to_string(),
+                            encrypt_public_key: hex::encode(&hosted_key.as_bytes()[..65]),
+                            sign_public_key: hex::encode(&hosted_key.as_bytes()[65..]),
+                            extra: toml::Table::new(),
+                        }),
+                    },
+                    OperatorRecord {
+                        name: "yubikey-op".to_string(),
+                        kind: OperatorRecordKind::Yubikey(YubiKeyOperatorRecord {
+                            serial,
+                            extra: toml::Table::new(),
+                        }),
+                    },
+                ],
+                extra: toml::Table::new(),
+            },
+        )]),
+        yubikeys: vec![YubiKeyRegistryEntry {
+            serial,
+            public_key: yubikey_key,
+            extra: toml::Table::new(),
+        }]
+        .try_into()
+        .unwrap(),
+        last_operator_ids: HashMap::from([(
+            "test".to_string(),
+            vec![
+                "66666666-6666-4666-8666-666666666666".to_string(),
+                "77777777-7777-4777-8777-777777777777".to_string(),
+            ],
+        )]),
+        ..Config::default()
+    };
+    write_config(&temp, &config);
+
+    let body = deployment_response(hosted_key, yubikey_key);
+    let (api_base_url, server) = spawn_json_server(body);
+
+    authenticated_command(&temp, &api_base_url)
+        .args([
+            "deploy",
+            "approve",
+            "--deploy-id",
+            DEPLOYMENT_ID,
+            "--serial",
+            "01c95c1f",
+            "--dangerous-skip-interactive",
+        ])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("Fetching deployment"))
+        .stdout(predicate::str::contains("Manifest loaded"))
+        .stdout(predicate::str::contains("Select approving operator").not())
+        .stderr(predicate::str::contains(
+            "a YubiKey operator needs its PIN typed at an interactive prompt",
+        ))
+        .stderr(predicate::str::contains("multiple configured operators").not());
+
+    server.join().unwrap();
 }
 
 #[test]
@@ -165,11 +392,10 @@ fn an_unknown_yubikey_serial_is_rejected_before_manifest_io() {
         .stderr(predicate::str::contains("does-not-exist.json").not());
 }
 
-/// Without `--operator-id` or saved IDs, a registered hosted operator is the
-/// posting candidate: target-building auto-selects it and resolution then
-/// proceeds to credential loading.
+/// The sole configured operator whose public key belongs to the manifest set
+/// is selected without a default or remembered operator ID.
 #[test]
-fn registered_hosted_operator_is_the_post_candidate_without_saved_ids() {
+fn registered_hosted_manifest_member_is_the_post_candidate() {
     let temp = TempDir::new().unwrap();
     write_hosted_config(&temp);
 
@@ -207,7 +433,7 @@ fn explicit_seed_rejects_hosted_operator_id() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "explicit local operator seed cannot be used with a hosted operator ID",
+            "the argument '--operator-seed <HEX_SEED>' cannot be used with '--operator-id <OPERATOR_ID>'",
         ));
 }
 
@@ -259,7 +485,7 @@ fn malformed_config_fails_before_dispatch_even_with_explicit_seed() {
 }
 
 #[test]
-fn malformed_saved_operator_id_is_reported() {
+fn remembered_operator_ids_are_not_approval_candidates() {
     let temp = TempDir::new().unwrap();
     let config = Config {
         active_org: Some("test".to_string()),
@@ -291,7 +517,7 @@ fn malformed_saved_operator_id_is_reported() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "saved operator ID 'not-a-uuid' is not a UUID",
+            "no configured operator public key belongs to this manifest set",
         ));
 }
 
@@ -338,9 +564,9 @@ fn malformed_registered_local_operator_id_is_reported() {
 }
 
 #[test]
-fn auto_selected_hosted_id_controls_signer_resolution_in_mixed_registry() {
+fn manifest_membership_controls_signer_resolution_in_mixed_registry() {
     let temp = TempDir::new().unwrap();
-    let public = P256Pair::generate().unwrap().public_key().to_bytes();
+    let public = fixture_manifest_member_key(0);
     let operator_key_path = temp.path().join("operator.json");
     fs::write(
         &operator_key_path,
@@ -377,8 +603,8 @@ fn auto_selected_hosted_id_controls_signer_resolution_in_mixed_registry() {
                             wallet_id: Uuid::parse_str("22222222-2222-4222-8222-222222222222")
                                 .unwrap(),
                             path: "m/5527107'/0'/0'".to_string(),
-                            encrypt_public_key: hex::encode(&public[..65]),
-                            sign_public_key: hex::encode(&public[65..]),
+                            encrypt_public_key: hex::encode(&public.as_bytes()[..65]),
+                            sign_public_key: hex::encode(&public.as_bytes()[65..]),
                             extra: toml::Table::new(),
                         }),
                     },
@@ -502,7 +728,7 @@ fn operator_seed_flags_are_mutually_exclusive() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "--operator-seed and --operator-seed-path are mutually exclusive",
+            "the argument '--operator-seed <HEX_SEED>' cannot be used with '--operator-seed-path <PATH>'",
         ));
 }
 
@@ -538,6 +764,27 @@ fn manifest_and_deploy_id_are_mutually_exclusive() {
         .failure()
         .stderr(predicate::str::contains(
             "the argument '--manifest <PATH>' cannot be used with '--deploy-id <DEPLOY_ID>'",
+        ));
+}
+
+#[test]
+fn operator_id_and_serial_are_mutually_exclusive() {
+    cargo_bin_cmd!("tvc")
+        .args([
+            "deploy",
+            "approve",
+            "--deploy-id",
+            DEPLOYMENT_ID,
+            "--operator-id",
+            YUBIKEY_OPERATOR_ID,
+            "--serial",
+            "0171f8a4",
+            "--dangerous-skip-interactive",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "the argument '--operator-id <OPERATOR_ID>' cannot be used with '--serial <SERIAL>'",
         ));
 }
 
