@@ -11,6 +11,7 @@ use thiserror::Error;
 use generated::Activity;
 use generated::ActivityResponse;
 use generated::ActivityStatus;
+use generated::DeleteSecretsIntent;
 use generated::ExportSecretParams;
 use generated::ExportSecretsIntent;
 use generated::ImportSecretParams;
@@ -625,6 +626,47 @@ impl<S: Stamp> TurnkeyClient<S> {
 
         Ok(ActivityResult {
             result: plaintexts,
+            activity_id: batch.activity_id,
+            status: batch.status,
+            app_proofs: batch.app_proofs,
+        })
+    }
+
+    /// Deletes secrets and returns the deleted secret IDs.
+    ///
+    /// Takes a slice so that any number of secrets deletes in a single
+    /// activity. The singular name is only because `delete_secrets` is the
+    /// generated method this one is built on.
+    pub async fn delete_secret(
+        &self,
+        organization_id: String,
+        secret_ids: &[impl AsRef<str>],
+    ) -> Result<ActivityResult<Vec<String>>, TurnkeyClientError> {
+        let expected = secret_ids.len();
+        let batch = self
+            .delete_secrets(
+                organization_id,
+                self.current_timestamp(),
+                DeleteSecretsIntent {
+                    secret_ids: secret_ids
+                        .iter()
+                        .map(|secret_id| secret_id.as_ref().to_string())
+                        .collect(),
+                },
+            )
+            .await?;
+
+        let deleted = batch.result.secret_ids;
+        if deleted.len() != expected {
+            return Err(TurnkeyClientError::UnexpectedResultCount(
+                "deleted secret IDs",
+                expected,
+                deleted.len(),
+            ));
+        }
+
+        Ok(ActivityResult {
+            result: deleted,
             activity_id: batch.activity_id,
             status: batch.status,
             app_proofs: batch.app_proofs,
@@ -1427,6 +1469,39 @@ mod test {
                 .unwrap();
 
             assert_eq!(result.result, vec!["super secret", "other secret"]);
+        }
+
+        #[tokio::test]
+        async fn delete_secret_submits_ids_and_returns_deleted_ids() {
+            let (client, server) = setup_client_and_server().await;
+
+            Mock::given(method("POST"))
+                .and(path("/public/v1/submit/delete_secrets"))
+                .and(body_string_contains("ACTIVITY_TYPE_DELETE_SECRETS"))
+                .and(body_string_contains("secret-abc"))
+                .and(body_string_contains("secret-def"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                    "activity": {
+                        "type": "ACTIVITY_TYPE_DELETE_SECRETS",
+                        "status": "ACTIVITY_STATUS_COMPLETED",
+                        "id": "activity-delete",
+                        "organizationId": "org-1",
+                        "fingerprint": "fingerprint",
+                        "result": {
+                            "deleteSecretsResult": {"secretIds": ["secret-abc", "secret-def"]},
+                        }
+                    }
+                })))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let result = client
+                .delete_secret("org-1".to_string(), &["secret-abc", "secret-def"])
+                .await
+                .unwrap();
+
+            assert_eq!(result.result, vec!["secret-abc", "secret-def"]);
         }
     }
 
