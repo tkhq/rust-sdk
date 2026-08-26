@@ -14,7 +14,7 @@ use crate::config::turnkey::{
 use crate::outcome::Outcome;
 use crate::output::{MissingRequiredInput, StdCtx};
 use crate::prompts::{self, error_required_in_non_interactive};
-use crate::yubikey::{self, ConnectedYubiKeys, Pin};
+use crate::yubikey::{self, CertlessSlotOverwrite, ConnectedYubiKeys, Pin};
 use crate::{shell_eprintln, shell_print, shell_println};
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Args as ClapArgs;
@@ -462,7 +462,12 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
                 }
                 NewOrgOperatorPlan::ProvisionYubikey { serial, pin } => {
                     let mut device = yubikey::open(serial)?;
-                    let enrolled = config.enroll_yubikey(serial, &mut device, &pin)?;
+                    let enrolled = config.enroll_yubikey(
+                        serial,
+                        &mut device,
+                        &pin,
+                        CertlessSlotOverwrite::Refuse,
+                    )?;
 
                     if enrolled.provisioned_slots.is_empty() {
                         shell_println!(

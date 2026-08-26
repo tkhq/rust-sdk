@@ -7,12 +7,14 @@ use crate::{
     outcome::Outcome,
     output::StdCtx,
     prompts,
-    yubikey::{self, ConnectedYubiKeys, Pin, QosSlot},
+    yubikey::{self, CertlessSlotOverwrite, ConnectedYubiKeys, DeviceOps, Pin, QosSlot},
 };
 use anyhow::{Context, Result, bail};
 use clap::Args as ClapArgs;
 use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
+
+pub(crate) const LONG_ABOUT: &str = "Provision a YubiKey with the QuorumOS operator key pair and register its serial.\n\nA slot with no readable QuorumOS certificate may still contain a key. TVC shows a destructive confirmation before replacing any key in such a slot.";
 
 /// Provision a YubiKey with the QuorumOS operator key pair and register its
 /// serial in the tvc config.
@@ -39,13 +41,49 @@ impl Run for Args {
         }
 
         let serial = ConnectedYubiKeys::from(ctx.connected_yubikeys()?).choose(self.serial)?;
+        // Inspect before asking for the PIN so an unsafe or unsupported slot
+        // state is explained at the decision point.
+        let mut yubikey = yubikey::open(serial)?;
+        let status = yubikey.device_status()?;
+        if let Some((slot, subject)) = status.foreign_slot() {
+            return Err(yubikey::DeviceError::ForeignSlot {
+                slot,
+                subject: subject.to_string(),
+            }
+            .into());
+        }
+
+        let overwrite_slots = status.slots_requiring_overwrite();
+        let overwrite = if overwrite_slots.is_empty() {
+            CertlessSlotOverwrite::Refuse
+        } else {
+            let slots = overwrite_slots
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(" and ");
+            let (slot_word, have) = if overwrite_slots.len() == 1 {
+                ("slot", "has")
+            } else {
+                ("slots", "have")
+            };
+
+            prompts::confirm_or_bail(
+                &format!(
+                    "YubiKey {serial}'s {slots} {slot_word} {have} no readable QuorumOS \
+                     certificate. Provisioning will permanently replace any keys there. Continue?"
+                ),
+                "YubiKey provisioning",
+            )?;
+
+            CertlessSlotOverwrite::Confirmed
+        };
         let pin = Pin::from(prompts::password(
             "YubiKey PIV PIN (the factory default is 123456; touch the device each time it blinks)",
         )?);
 
         // The one open handle: inspection and mutation see the same device.
-        let mut yubikey = yubikey::open(serial)?;
-        let enrolled = config.enroll_yubikey(serial, &mut yubikey, &pin)?;
+        let enrolled = config.enroll_yubikey(serial, &mut yubikey, &pin, overwrite)?;
 
         if enrolled.registration != Registration::Unchanged {
             let recovery = config.to_toml().context(

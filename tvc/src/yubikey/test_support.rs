@@ -63,6 +63,12 @@ impl FakeDevice {
             SlotStatus::KeyWithoutCertificate => {
                 return Err(DeviceError::OccupiedWithoutCertificate { slot });
             }
+            SlotStatus::UnknownWithoutCertificate { metadata_error } => {
+                return Err(DeviceError::UnknownWithoutCertificate {
+                    slot,
+                    metadata_error,
+                });
+            }
             SlotStatus::Foreign { subject } => {
                 return Err(DeviceError::ForeignSlot { slot, subject });
             }
@@ -150,7 +156,9 @@ impl DeviceOps for FakeDevice {
                 Ok(())
             }
             SlotStatus::Foreign { subject } => Err(DeviceError::ForeignSlot { slot, subject }),
-            SlotStatus::Empty | SlotStatus::KeyWithoutCertificate => {
+            SlotStatus::Empty
+            | SlotStatus::KeyWithoutCertificate
+            | SlotStatus::UnknownWithoutCertificate { .. } => {
                 Err(DeviceError::ChangedSinceInspection { slot })
             }
         }

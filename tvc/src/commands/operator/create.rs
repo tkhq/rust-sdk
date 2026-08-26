@@ -15,7 +15,9 @@ use crate::{
     outcome::Outcome,
     output::StdCtx,
     prompts,
-    yubikey::{self, ConnectedYubiKeys, DeviceError, DeviceOps, Pin, QosSlot},
+    yubikey::{
+        self, CertlessSlotOverwrite, ConnectedYubiKeys, DeviceError, DeviceOps, Pin, QosSlot,
+    },
 };
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use clap::{ArgGroup, Args as ClapArgs, ValueEnum, builder::NonEmptyStringValueParser};
@@ -477,7 +479,12 @@ impl YubikeyCreate {
                 let mut device = open_device(serial)?;
                 (
                     serial,
-                    Some(config.enroll_yubikey(serial, &mut device, &pin)?),
+                    Some(config.enroll_yubikey(
+                        serial,
+                        &mut device,
+                        &pin,
+                        CertlessSlotOverwrite::Refuse,
+                    )?),
                 )
             }
         };

@@ -70,6 +70,17 @@ fn keys_help_lists_the_yubikey_commands() {
 }
 
 #[test]
+fn provision_help_explains_certless_slot_overwrites() {
+    cargo_bin_cmd!("tvc")
+        .args(["keys", "provision-yubikey", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "TVC shows a destructive confirmation before replacing any key",
+        ));
+}
+
+#[test]
 fn serial_arguments_are_typed_hex() {
     cargo_bin_cmd!("tvc")
         .args(["keys", "delete-yubikey", "--serial", "zzzz"])

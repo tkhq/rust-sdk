@@ -441,6 +441,7 @@ enum KeysCommands {
     /// Back up a local operator key by copying its key file to a chosen destination.
     BackupOperatorKey(commands::keys::backup_operator_key::Args),
     /// Provision a YubiKey with the QuorumOS operator key pair and register its serial.
+    #[command(long_about = commands::keys::provision_yubikey::LONG_ABOUT)]
     ProvisionYubikey(commands::keys::provision_yubikey::Args),
     /// Refresh the registry's cached operator key for a YubiKey from the device.
     RefreshYubikey(commands::keys::refresh_yubikey::Args),
