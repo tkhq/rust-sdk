@@ -165,10 +165,8 @@ impl ExportClient {
         Ok(phrase.to_string())
     }
 
-    /// Decrypts a secret export bundle.
-    /// Bundles are JSON encoded strings, e.g. "{\"version\":\"v1.0.0\",\"data\":\"7b22656e63617070656450...\"}"
-    /// This function returns the secret as a string.
-    /// - `organization_id` is the expected organization ID. This will be checked against the content of the bundle.
+    /// Decrypts a JSON-encoded secret export bundle, verifying that it was
+    /// produced for `organization_id`, and returns the secret as a string.
     pub fn decrypt_secret<S: AsRef<str>, T: AsRef<str>>(
         &mut self,
         export_bundle: S,
@@ -291,17 +289,10 @@ impl ImportClient {
             .map_err(|e| EnclaveEncryptError::CannotSerializeBundle(e.to_string()))
     }
 
-    /// Encrypts a secret to the public key contained in a secrets import bundle.
-    ///
-    /// - `secret` is the secret to import, as a string.
-    /// - `import_bundle` is the import bundle as a string. Bundles are JSON-encoded strings (e.g ""{\"version\":\"v1.0.0\", ....")
-    ///   bundles contain a signed public key. The signature over this public key is from Turnkey's signer enclave.
-    /// - `organization_id` is the expected organization ID. This will be checked against the content of the bundle, which contains the organization ID where the import flow started (`INIT_IMPORT_SECRETS` activity)
-    ///
-    /// Unlike wallet and private key imports, secrets ingress is scoped to the
-    /// organization rather than to the user who initiated it.
-    ///
-    /// Returns a string containing the JSON-encoded value, ready-to-use in an `IMPORT_SECRETS` activity
+    /// Encrypts a secret to the signer-signed public key in a JSON-encoded
+    /// import bundle, verifying the bundle was produced for `organization_id`
+    /// (secrets ingress is org-scoped, not user-scoped). Returns the encrypted
+    /// payload for an `IMPORT_SECRETS` activity.
     pub fn encrypt_secret_bundle<S: AsRef<str>, T: AsRef<str>, U: AsRef<str>>(
         &mut self,
         secret: S,

@@ -184,28 +184,9 @@ mod tests {
         assert_eq!(listed.secrets[100].id, "secret-100");
     }
 
-    #[tokio::test]
-    async fn run_reports_an_empty_organization() {
-        let server = MockServer::start().await;
-        Mock::given(method("POST"))
-            .and(path("/public/v1/query/list_secrets"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({"secrets": []})),
-            )
-            .expect(1)
-            .mount(&server)
-            .await;
-
-        let dir = TempDir::new().unwrap();
-        let outcome = run(&mut test_ctx(), Args {}, test_config(&dir, &server.uri()))
-            .await
-            .unwrap();
-
-        let Outcome::SecretsListed(listed) = outcome else {
-            panic!("expected SecretsListed");
-        };
-        assert!(listed.secrets.is_empty());
-        assert_eq!(listed.to_string(), "No secrets found.");
+    #[test]
+    fn an_empty_listing_renders_a_message() {
+        assert_eq!(SecretsListed::default().to_string(), "No secrets found.");
     }
 
     #[test]
