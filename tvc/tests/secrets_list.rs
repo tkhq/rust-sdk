@@ -30,13 +30,13 @@ fn secrets_list_help_explains_metadata_only() {
 }
 
 #[test]
-fn secrets_ls_is_a_list_alias() {
+fn secrets_ls_alias_is_not_recognized() {
     let (temp, _) = secrets_cmd();
     let mut cmd = cargo_bin_cmd!("tvc");
     cmd.env_clear().env("HOME", temp.path());
 
     cmd.args(["secrets", "ls", "--help"])
         .assert()
-        .success()
-        .stdout(predicate::str::contains("metadata"));
+        .failure()
+        .stderr(predicate::str::contains("unrecognized subcommand"));
 }
