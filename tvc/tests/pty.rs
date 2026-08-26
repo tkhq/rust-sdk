@@ -699,3 +699,44 @@ fn login_reports_the_hosted_operator_for_a_hosted_default_org() {
     assert!(!output.contains("Generating operator key"), "{output}");
     assert!(output.contains("Hosted operator:"), "{output}");
 }
+
+/// `secrets import` without `--from-file` or piped stdin prompts for the
+/// value with masked input, consumes it, and only then reaches the (dead)
+/// backend. The typed value must never be echoed back to the terminal.
+#[test]
+fn secrets_import_prompts_hidden_for_the_value() {
+    let temp = tempfile::TempDir::new().unwrap();
+    common::write_profiles_config(temp.path(), &[("alias-a", "org-e2e")], Some("alias-a"));
+    common::write_profile_key_files(temp.path(), "alias-a");
+
+    let mut session = spawn_with_home(temp.path(), &["secrets", "import", "--name", "db-password"]);
+
+    session.exp_string("Secret value").unwrap();
+    session.send_line("hunter2").unwrap();
+
+    // The command consumes the hidden value and proceeds to the (dead-port)
+    // backend. Read everything up to EOF and assert the value never echoed;
+    // the exact error text is allowed to race process exit on slow PTYs.
+    let output = session.exp_eof().unwrap();
+    assert!(
+        !output.contains("hunter2"),
+        "the secret value leaked to the terminal: {output}"
+    );
+}
+
+/// `secrets export` refuses to print the value to an interactive terminal
+/// without `--plain`, and does so before any config or network work.
+#[test]
+fn secrets_export_refuses_bare_interactive_stdout() {
+    let temp = tempfile::TempDir::new().unwrap();
+    common::write_profiles_config(temp.path(), &[("alias-a", "org-e2e")], Some("alias-a"));
+    common::write_profile_key_files(temp.path(), "alias-a");
+
+    let mut session = spawn_with_home(temp.path(), &["secrets", "export", "--id", "secret-abc"]);
+
+    exp_wrapped(
+        &mut session,
+        "refusing to print the secret value to an interactive terminal",
+    );
+    session.exp_eof().unwrap();
+}

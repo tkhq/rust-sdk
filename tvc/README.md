@@ -76,3 +76,24 @@ tvc deploy provisioning-details \
   --deploy-id <DEPLOYMENT_UUID> \
   --provision-bundle-out provisioning-bundle.json
 ```
+
+### Manage Secrets
+
+Secret values never travel through command-line arguments, and only encrypted
+payloads leave the process.
+
+```bash
+# Import a value from a file, piped stdin, or an interactive hidden prompt.
+tvc secrets import --name db-password --from-file value.txt --property environment=prod
+echo -n "hunter2" | tvc secrets import --name db-password
+
+# List metadata only: IDs, names, static properties, creation times.
+tvc secrets list
+
+# Export a value: to an owner-only file, a pipe, or (with --plain) a terminal.
+tvc secrets export --name db-password --out value.txt
+tvc secrets export --id <SECRET_UUID> | my-consumer
+
+# Delete secrets. Asks for confirmation unless --yes is passed.
+tvc secrets delete --id <SECRET_UUID> --id <OTHER_SECRET_UUID> --yes
+```
