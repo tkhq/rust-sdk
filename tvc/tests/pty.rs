@@ -415,17 +415,45 @@ fn login_existing_operator_key_prints_backup_tip() {
     server.join().unwrap();
 }
 
-/// Write a v1 config whose active org's registry holds exactly one operator,
-/// hosted, storing a real composite public key the way `operator create`
-/// stores it: encryption point and signing point as separate hex fields.
-/// `saved_operator_ids` become the org's `last_operator_ids`, making them
-/// additional reuse candidates. Returns the composite.
+/// Write a v1 config whose active org holds one hosted operator plus an
+/// optional additional hosted identity for each ID passed in. All identities
+/// use the same real composite public key, so each is a proven reuse
+/// candidate; the extra IDs are also saved as last-app IDs to exercise
+/// deduplication. Returns the composite.
 fn write_hosted_org_config(home: &Path, saved_operator_ids: &[&str]) -> String {
     let turnkey_dir = home.join(".config/turnkey");
     std::fs::create_dir_all(&turnkey_dir).unwrap();
 
     let composite = hex::encode(P256Pair::generate().unwrap().public_key().to_bytes());
     let (encrypt_public_key, sign_public_key) = composite.split_at(composite.len() / 2);
+
+    let mut operators = vec![OperatorRecord {
+        name: "hosted-op".to_string(),
+        kind: OperatorRecordKind::Hosted(HostedOperatorRecord {
+            operator_id: "11111111-1111-4111-8111-111111111111".parse().unwrap(),
+            wallet_id: "22222222-2222-4222-8222-222222222222".parse().unwrap(),
+            path: "m/5527107'/0'/0'".to_string(),
+            encrypt_public_key: encrypt_public_key.to_string(),
+            sign_public_key: sign_public_key.to_string(),
+            extra: toml::Table::new(),
+        }),
+    }];
+    operators.extend(
+        saved_operator_ids
+            .iter()
+            .enumerate()
+            .map(|(index, id)| OperatorRecord {
+                name: format!("hosted-op-{}", index + 2),
+                kind: OperatorRecordKind::Hosted(HostedOperatorRecord {
+                    operator_id: id.parse().unwrap(),
+                    wallet_id: "55555555-5555-4555-8555-555555555555".parse().unwrap(),
+                    path: "m/5527107'/0'/0'".to_string(),
+                    encrypt_public_key: encrypt_public_key.to_string(),
+                    sign_public_key: sign_public_key.to_string(),
+                    extra: toml::Table::new(),
+                }),
+            }),
+    );
 
     let config = Config {
         active_org: Some("hosted-org".to_string()),
@@ -436,17 +464,7 @@ fn write_hosted_org_config(home: &Path, saved_operator_ids: &[&str]) -> String {
                 api_key_path: turnkey_dir.join("orgs/hosted-org/api_key.json"),
                 api_base_url: common::LOCAL_API_BASE_URL.to_string(),
                 default_operator_kind: OperatorKind::Hosted,
-                operators: vec![OperatorRecord {
-                    name: "hosted-op".to_string(),
-                    kind: OperatorRecordKind::Hosted(HostedOperatorRecord {
-                        operator_id: "11111111-1111-4111-8111-111111111111".parse().unwrap(),
-                        wallet_id: "22222222-2222-4222-8222-222222222222".parse().unwrap(),
-                        path: "m/5527107'/0'/0'".to_string(),
-                        encrypt_public_key: encrypt_public_key.to_string(),
-                        sign_public_key: sign_public_key.to_string(),
-                        extra: toml::Table::new(),
-                    }),
-                }],
+                operators,
                 extra: toml::Table::new(),
             },
         )]),
@@ -587,10 +605,9 @@ fn app_create_reuses_the_registered_hosted_operator_by_default() {
     session.exp_eof().unwrap();
 }
 
-/// With SEVERAL known operators — a registered hosted record plus a saved
-/// manifest-set ID — the default flow prompts to pick one, and the chosen
-/// candidate (here the second, selected with a down-arrow) is what gets
-/// reused.
+/// With several registered identities proven to use the requested key, the
+/// default flow prompts to pick one, and the chosen candidate (here the
+/// second, selected with a down-arrow) is what gets reused.
 ///
 /// The command exits nonzero afterwards — creating the app needs credentials
 /// this fixture doesn't have — but the selection and reuse announcement
@@ -632,14 +649,17 @@ fn app_create_prompts_to_pick_among_multiple_reuse_candidates() {
         ],
     );
 
-    // Both candidates are offered: the registered record with its name, and
-    // the saved ID bare.
+    // Both matching registered identities are offered. The duplicate saved
+    // ID is deduplicated against the second registry record.
     session.exp_string("Select operator to reuse").unwrap();
     exp_wrapped(
         &mut session,
         "hosted-op (11111111-1111-4111-8111-111111111111)",
     );
-    exp_wrapped(&mut session, "33333333-3333-4333-8333-333333333333");
+    exp_wrapped(
+        &mut session,
+        "hosted-op-2 (33333333-3333-4333-8333-333333333333)",
+    );
 
     // Down-arrow to the saved ID, Enter to confirm.
     session.send("\x1b[B").unwrap();
@@ -647,7 +667,7 @@ fn app_create_prompts_to_pick_among_multiple_reuse_candidates() {
 
     exp_wrapped(
         &mut session,
-        "Reusing operator 33333333-3333-4333-8333-333333333333",
+        "Reusing operator hosted-op-2 (33333333-3333-4333-8333-333333333333)",
     );
     session.exp_eof().unwrap();
 }

@@ -11,5 +11,8 @@ fn app_create_help_documents_operator_reuse_opt_out() {
         .success()
         .stdout(predicate::str::contains("--no-operator-reuse"))
         .stdout(predicate::str::contains("TVC_NO_OPERATOR_REUSE"))
-        .stdout(predicate::str::contains("instead of reusing a known one"));
+        .stdout(predicate::str::contains(
+            "instead of reusing a matching known one",
+        ))
+        .stdout(predicate::str::contains("only when its public key matches"));
 }

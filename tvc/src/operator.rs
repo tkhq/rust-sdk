@@ -13,7 +13,9 @@ pub(crate) use hosted::{ResolvedHostedOperator, hosted_activity_error};
 use crate::{
     approvals::ValidatedManifest,
     client::build_client,
-    config::turnkey::{Config, OperatorKind, StoredQosOperatorKey, YubiKeySerial},
+    config::turnkey::{
+        Config, OperatorKind, QosOperatorPublicKey, StoredQosOperatorKey, YubiKeySerial,
+    },
     local_operator_key::{
         LocalOperatorSeedSource, resolve_local_operator, resolve_registered_local_operator,
     },
@@ -187,6 +189,10 @@ impl SelectedYubiKey {
 pub(crate) struct OperatorCandidate {
     pub id: String,
     pub name: Option<String>,
+    /// The key this identity is proven to use. IDs remembered from an app
+    /// response predate key-aware persistence, so they deliberately carry
+    /// `None` and cannot override an app config by inference.
+    pub public_key: Option<QosOperatorPublicKey>,
 }
 
 impl Display for OperatorCandidate {
@@ -490,12 +496,19 @@ impl Config {
             .map(|(name, hosted)| OperatorCandidate {
                 id: hosted.operator_id.to_string(),
                 name: name.to_owned().into(),
+                public_key: format!("{}{}", hosted.encrypt_public_key, hosted.sign_public_key)
+                    .parse()
+                    .ok(),
             })
             .collect();
 
         for id in self.get_last_operator_ids().unwrap_or_default() {
             if candidates.iter().all(|candidate| candidate.id != id) {
-                candidates.push(OperatorCandidate { id, name: None });
+                candidates.push(OperatorCandidate {
+                    id,
+                    name: None,
+                    public_key: None,
+                });
             }
         }
 
@@ -951,18 +964,19 @@ mod tests {
             .set_last_operator_ids(&["44444444-4444-4444-8444-444444444444".to_string()])
             .unwrap();
 
+        let candidates = config.known_operator_candidates();
+
+        assert_eq!(candidates.len(), 2);
+        assert_eq!(candidates[0].id, HOSTED_ID);
+        assert_eq!(candidates[0].name.as_deref(), Some("hosted"));
+        assert!(candidates[0].public_key.is_some());
         assert_eq!(
-            config.known_operator_candidates(),
-            vec![
-                OperatorCandidate {
-                    id: HOSTED_ID.to_string(),
-                    name: Some("hosted".to_string()),
-                },
-                OperatorCandidate {
-                    id: "44444444-4444-4444-8444-444444444444".to_string(),
-                    name: None,
-                },
-            ]
+            candidates[1],
+            OperatorCandidate {
+                id: "44444444-4444-4444-8444-444444444444".to_string(),
+                name: None,
+                public_key: None,
+            }
         );
     }
 
@@ -973,13 +987,12 @@ mod tests {
             .set_last_operator_ids(&[HOSTED_ID.to_string()])
             .unwrap();
 
-        assert_eq!(
-            config.known_operator_candidates(),
-            vec![OperatorCandidate {
-                id: HOSTED_ID.to_string(),
-                name: Some("hosted".to_string()),
-            }]
-        );
+        let candidates = config.known_operator_candidates();
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].id, HOSTED_ID);
+        assert_eq!(candidates[0].name.as_deref(), Some("hosted"));
+        assert!(candidates[0].public_key.is_some());
     }
 
     #[test]
@@ -992,10 +1005,12 @@ mod tests {
         let named = OperatorCandidate {
             id: HOSTED_ID.to_string(),
             name: Some("hosted".to_string()),
+            public_key: None,
         };
         let unnamed = OperatorCandidate {
             id: HOSTED_ID.to_string(),
             name: None,
+            public_key: None,
         };
 
         assert_eq!(named.to_string(), format!("hosted ({HOSTED_ID})"));
