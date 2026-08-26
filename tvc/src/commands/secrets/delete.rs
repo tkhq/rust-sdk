@@ -42,8 +42,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome
     if !args.yes {
         prompts::confirm_or_bail(
             &format!(
-                "Permanently delete {} secret(s) ({})? This cannot be undone.",
-                args.ids.len(),
+                "Permanently delete secrets {}? This cannot be undone.",
                 args.ids.join(", "),
             ),
             "deletion",

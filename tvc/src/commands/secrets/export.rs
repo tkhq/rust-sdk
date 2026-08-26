@@ -57,18 +57,11 @@ pub struct Args {
     signer_quorum_key_hex: Option<String>,
 }
 
-/// Where the decrypted value goes. Decided from parsed arguments and terminal
-/// state before any config, credential, or network work.
-enum Delivery {
-    File(PathBuf),
-    Stdout,
-}
-
-impl Delivery {
-    fn decide(ctx: &mut StdCtx, out: Option<PathBuf>, plain: bool) -> Result<Self> {
-        if let Some(path) = out {
-            return Ok(Delivery::File(path));
-        }
+/// Decide where the decrypted value goes - `Some(path)` for a file, `None`
+/// for stdout - from parsed arguments and terminal state, before any config,
+/// credential, or network work.
+fn decide_delivery(ctx: &mut StdCtx, out: Option<PathBuf>, plain: bool) -> Result<Option<PathBuf>> {
+    if out.is_none() {
         if ctx.shell().message_format().is_json() {
             bail!("JSON output carries metadata only, never the value; pass --out FILE");
         }
@@ -78,8 +71,8 @@ impl Delivery {
                  pass --plain to print it anyway, or --out FILE to write it to a file"
             );
         }
-        Ok(Delivery::Stdout)
     }
+    Ok(out)
 }
 
 /// Resolve `--name` to exactly one secret ID via the metadata listing.
@@ -129,7 +122,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome
         plain,
         signer_quorum_key_hex,
     } = args;
-    let delivery = Delivery::decide(ctx, out, plain)?;
+    let delivery = decide_delivery(ctx, out, plain)?;
 
     let auth = build_client(&config).await?;
     let signer = signer_quorum_key(&auth.api_base_url, signer_quorum_key_hex.as_deref())?;
@@ -164,11 +157,11 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome
     let value = values.swap_remove(0);
 
     let destination = match delivery {
-        Delivery::File(path) => {
+        Some(path) => {
             write_value_file(&path, &value).await?;
             path.display().to_string()
         }
-        Delivery::Stdout => {
+        None => {
             // Exact bytes when piped; a trailing newline for terminal reads.
             if std::io::stdout().is_terminal() {
                 ctx.shell().human().line(value.as_str())?;
