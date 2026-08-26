@@ -93,4 +93,7 @@ tvc secrets list
 # Export a value: to an owner-only file, a pipe, or (with --plain) a terminal.
 tvc secrets export --name db-password --out value.txt
 tvc secrets export --id <SECRET_UUID> | my-consumer
+
+# Delete secrets. Asks for confirmation unless --yes is passed.
+tvc secrets delete --id <SECRET_UUID> --id <OTHER_SECRET_UUID> --yes
 ```

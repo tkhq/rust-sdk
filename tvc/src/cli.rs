@@ -310,6 +310,9 @@ impl Commands {
                 SecretsCommands::List(args) => {
                     commands::secrets::list::run(ctx, args, config).await
                 }
+                SecretsCommands::Delete(args) => {
+                    commands::secrets::delete::run(ctx, args, config).await
+                }
             },
             Commands::Version => commands::version::run(),
         }
@@ -462,6 +465,9 @@ enum SecretsCommands {
     /// List secret metadata for the active organization.
     #[command(long_about = commands::secrets::list::LONG_ABOUT)]
     List(commands::secrets::list::Args),
+    /// Permanently delete secrets from Turnkey secret storage.
+    #[command(long_about = commands::secrets::delete::LONG_ABOUT)]
+    Delete(commands::secrets::delete::Args),
 }
 
 impl SecretsCommands {
@@ -470,6 +476,7 @@ impl SecretsCommands {
             SecretsCommands::Import(_) => "secrets import",
             SecretsCommands::Export(_) => "secrets export",
             SecretsCommands::List(_) => "secrets list",
+            SecretsCommands::Delete(_) => "secrets delete",
         }
     }
 }

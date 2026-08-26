@@ -61,6 +61,7 @@ pub enum Outcome {
     SecretImported(secrets::import::SecretImported),
     SecretExported(secrets::export::SecretExported),
     SecretsListed(secrets::list::SecretsListed),
+    SecretsDeleted(secrets::delete::SecretsDeleted),
     Version(version::CliVersion),
 }
 
@@ -100,6 +101,7 @@ impl Display for Outcome {
             Outcome::SecretImported(msg) => msg.fmt(f),
             Outcome::SecretExported(msg) => msg.fmt(f),
             Outcome::SecretsListed(msg) => msg.fmt(f),
+            Outcome::SecretsDeleted(msg) => msg.fmt(f),
             Outcome::Version(msg) => msg.fmt(f),
         }
     }
