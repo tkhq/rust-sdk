@@ -10,7 +10,8 @@ use std::{
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use tvc::config::turnkey::{
     Config, HostedOperatorRecord, KeyCurve, OperatorKind, OperatorRecord, OperatorRecordKind,
-    OrgConfig, QosOperatorPublicKey, StoredApiKey, StoredQosOperatorKey,
+    OrgConfig, QosOperatorPublicKey, StoredApiKey, StoredQosOperatorKey, YubiKeyOperatorRecord,
+    YubiKeyRegistryEntry, YubiKeySerial,
 };
 
 /// Dead port: connection attempts fail immediately, so commands stop at their
@@ -103,6 +104,63 @@ pub fn write_hosted_only_config(home: &Path, alias: &str, org_id: &str) {
             },
         )]),
         yubikeys: Default::default(),
+        last_created_app_id: HashMap::new(),
+        last_operator_ids: HashMap::new(),
+        extra: toml::Table::new(),
+    };
+
+    fs::write(
+        turnkey_dir.join("tvc.config.toml"),
+        format!("version = 1\n{}", toml::to_string_pretty(&config).unwrap()),
+    )
+    .unwrap();
+}
+
+/// Write a v1 `tvc.config.toml` under `home` whose sole, active organization
+/// defaults to the yubikey backend: one serial-only operator record plus the
+/// top-level registry entry caching a real generated composite key. Flows
+/// that read the cache need no device; device-touching flows fail at their
+/// first PC/SC step.
+pub fn write_yubikey_only_config(home: &Path, alias: &str, org_id: &str) {
+    let turnkey_dir = home.join(".config/turnkey");
+    fs::create_dir_all(&turnkey_dir).unwrap();
+
+    let serial = YubiKeySerial::from(0x01c9_5c1f);
+    let public_key = QosOperatorPublicKey::try_from(
+        qos_p256::P256Pair::generate()
+            .unwrap()
+            .public_key()
+            .to_bytes()
+            .as_slice(),
+    )
+    .unwrap();
+
+    let config = Config {
+        active_org: Some(alias.to_string()),
+        orgs: HashMap::from([(
+            alias.to_string(),
+            OrgConfig {
+                id: org_id.to_string(),
+                api_key_path: turnkey_dir.join(format!("orgs/{alias}/api_key.json")),
+                api_base_url: LOCAL_API_BASE_URL.to_string(),
+                default_operator_kind: OperatorKind::Yubikey,
+                operators: vec![OperatorRecord {
+                    name: "yubikey-op".to_string(),
+                    kind: OperatorRecordKind::Yubikey(YubiKeyOperatorRecord {
+                        serial,
+                        extra: toml::Table::new(),
+                    }),
+                }],
+                extra: toml::Table::new(),
+            },
+        )]),
+        yubikeys: vec![YubiKeyRegistryEntry {
+            serial,
+            public_key,
+            extra: toml::Table::new(),
+        }]
+        .try_into()
+        .unwrap(),
         last_created_app_id: HashMap::new(),
         last_operator_ids: HashMap::new(),
         extra: toml::Table::new(),

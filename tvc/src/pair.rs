@@ -1,6 +1,6 @@
 use crate::util::read_file_to_string;
-use anyhow::anyhow;
-use qos_p256::P256Pair;
+use anyhow::{Context, anyhow};
+use qos_p256::{P256Error, P256Pair};
 use std::fmt::{self, Debug, Formatter};
 use std::future::Future;
 use std::path::Path;
@@ -25,6 +25,24 @@ pub trait Signer: Send + Sync {
     /// (encryption point ‖ signing point).
     fn public_key(&self) -> Vec<u8>;
 }
+
+/// A signer whose key material can also decrypt locally — a seed in memory
+/// or a hardware device. Hosted operators sign through the API and can never
+/// implement this.
+pub trait Pair: Signer {
+    /// Decrypt a qos p256 envelope addressed to this operator's
+    /// encryption key.
+    fn decrypt(&self, ciphertext: &[u8]) -> SignerFuture<'_, anyhow::Result<Zeroizing<Vec<u8>>>>;
+}
+
+/// A `qos_p256` failure. The inner error implements neither `Display` nor
+/// `Error`, so it is carried by value and rendered from `Debug`; callers
+/// attach the operation context.
+// TODO: derive Display + Error in qos_p256 and chain the inner error as a
+// #[source] instead.
+#[derive(Debug, thiserror::Error)]
+#[error("{0:?}")]
+pub(crate) struct QosP256Error(pub(crate) P256Error);
 
 /// A 32-byte master seed parsed from hex. Accepts surrounding whitespace and
 /// an optional `0x` prefix. Zeroized on drop.
@@ -80,15 +98,6 @@ impl LocalPair {
             pair: Arc::new(pair),
         })
     }
-
-    /// Decrypt the given ciphertext. Decryption needs the private key
-    /// material, so it lives on the concrete local pair rather than
-    /// [`Signer`].
-    pub fn decrypt(&self, ciphertext: &[u8]) -> anyhow::Result<Zeroizing<Vec<u8>>> {
-        self.pair
-            .decrypt(ciphertext)
-            .map_err(|_| anyhow!("failed to decrypt with local signer"))
-    }
 }
 
 impl Signer for LocalPair {
@@ -104,6 +113,20 @@ impl Signer for LocalPair {
 
     fn public_key(&self) -> Vec<u8> {
         self.pair.public_key().to_bytes()
+    }
+}
+
+impl Pair for LocalPair {
+    fn decrypt(&self, ciphertext: &[u8]) -> SignerFuture<'_, anyhow::Result<Zeroizing<Vec<u8>>>> {
+        // Local decryption is CPU-bound and quick; blocking the executor is
+        // fine for the same reason it is in [`Signer::sign`] above.
+        let plaintext = self
+            .pair
+            .decrypt(ciphertext)
+            .map_err(QosP256Error)
+            .context("failed to decrypt with local signer");
+
+        Box::pin(async move { plaintext })
     }
 }
 

@@ -14,12 +14,13 @@ use tracing::debug;
 /// SEC1 points.
 const QOS_OPERATOR_PUBLIC_KEY_LEN: usize = 130;
 
-/// A stored QOS operator public key, opaque to tvc.
+/// A stored QOS operator public key, near-opaque to tvc.
 ///
 /// The bytes are `qos_p256::P256Public::to_bytes()`'s composite encoding —
-/// `encrypt_public ‖ sign_public`, two 65-byte uncompressed SEC1 points —
-/// but tvc never reads the halves, so it deliberately doesn't model the
-/// split. Hex is the display and serialization form.
+/// `encrypt_public ‖ sign_public`, two 65-byte uncompressed SEC1 points.
+/// The YubiKey operator backend peels off the encryption half for envelope
+/// decryption ([`Self::encrypt_public_bytes`]); beyond that tvc doesn't
+/// model the split. Hex is the display and serialization form.
 ///
 /// TODO(TVC-270): the proper home for this type is qos_p256, as a bytemuck
 /// repr-backed wire form of `P256Public` (which already holds the two keys
@@ -27,6 +28,18 @@ const QOS_OPERATOR_PUBLIC_KEY_LEN: usize = 130;
 /// and store that type here instead.
 #[derive(Clone, Copy, PartialEq, Eq, SerializeDisplay, DeserializeFromStr)]
 pub struct QosOperatorPublicKey([u8; QOS_OPERATOR_PUBLIC_KEY_LEN]);
+
+impl QosOperatorPublicKey {
+    /// The raw composite bytes.
+    pub fn as_bytes(&self) -> &[u8; QOS_OPERATOR_PUBLIC_KEY_LEN] {
+        &self.0
+    }
+
+    /// The encryption half: the leading uncompressed SEC1 point.
+    pub(crate) fn encrypt_public_bytes(&self) -> &[u8] {
+        &self.0[..QOS_OPERATOR_PUBLIC_KEY_LEN / 2]
+    }
+}
 
 /// Error returned when parsing a [`QosOperatorPublicKey`].
 #[derive(Debug, displaydoc::Display, thiserror::Error)]

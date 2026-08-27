@@ -23,6 +23,8 @@
 //! behind until the slot is reprovisioned, and TVC never resets a device.
 
 use crate::config::turnkey::{QosOperatorPublicKey, QosOperatorPublicKeyParseError, YubiKeySerial};
+use p256::PublicKey;
+use p256::elliptic_curve::sec1::ToEncodedPoint;
 use qos_client::{
     yubikey::{KEY_AGREEMENT_SLOT, SIGNING_SLOT, YubiKeyError},
     yubikey_crate as yubikey,
@@ -159,8 +161,8 @@ impl DeviceStatus {
     }
 }
 
-/// A YubiKey PIV PIN, held only for the duration of a provisioning call and
-/// zeroized on drop. Never persisted.
+/// A YubiKey PIV PIN, held only for the duration of device-backed operations
+/// and zeroized on drop. Never persisted.
 pub(crate) struct Pin(Zeroizing<Vec<u8>>);
 
 impl From<String> for Pin {
@@ -213,10 +215,15 @@ pub(crate) enum DeviceError {
         "the {slot} slot holds a non-QuorumOS certificate ({subject}); refusing to touch this device"
     )]
     ForeignSlot { slot: QosSlot, subject: String },
+    /// The slot holds no key; the device is not fully provisioned.
+    #[error("the {slot} slot holds no QuorumOS key")]
+    EmptySlot { slot: QosSlot },
     #[error(
         "the {slot} slot no longer holds a QuorumOS certificate; the device changed since it was inspected"
     )]
     ChangedSinceInspection { slot: QosSlot },
+    #[error("the YubiKey PIN was rejected; {tries} attempts remain before the PIN locks")]
+    WrongPin { tries: u8 },
     // qos_client's YubiKeyError implements neither Display nor Error, so it
     // is rendered by value instead of chained as a source.
     // TODO: derive those in qos_client and turn these fields into #[source].
@@ -224,6 +231,14 @@ pub(crate) enum DeviceError {
     Provision { slot: QosSlot, error: YubiKeyError },
     #[error("failed to read the operator public key from the device: {error:?}")]
     ReadPairPublicKey { error: YubiKeyError },
+    #[error(
+        "failed to sign with the YubiKey (a missed touch while it blinks times out): {error:?}"
+    )]
+    Sign { error: YubiKeyError },
+    #[error(
+        "failed to compute the YubiKey shared secret (a missed touch while it blinks times out): {error:?}"
+    )]
+    KeyAgreement { error: YubiKeyError },
     #[error("device returned a malformed operator public key")]
     MalformedPairPublicKey(#[source] QosOperatorPublicKeyParseError),
     #[error("failed to authenticate with the default PIV management key")]
@@ -278,6 +293,36 @@ pub(crate) trait DeviceOps {
     /// the two slot certificates.
     fn pair_public_key(&mut self) -> Result<QosOperatorPublicKey, DeviceError>;
 
+    /// Sign `message` with the signing-slot key: the message is SHA-256
+    /// digested on the way in and the signature comes back as raw 64-byte
+    /// `r ‖ s`, verified against the slot certificate before returning.
+    /// Requires the PIN and a physical touch.
+    fn sign(&mut self, pin: &Pin, message: &[u8]) -> Result<Vec<u8>, DeviceError>;
+
+    /// Raw ECDH between the key-agreement slot key and `sender_public`.
+    /// Requires the PIN and a physical touch.
+    fn key_agreement(
+        &mut self,
+        pin: &Pin,
+        sender_public: PublicKey,
+    ) -> Result<Zeroizing<Vec<u8>>, DeviceError>;
+
+    /// Verify both QuorumOS slots hold TVC-provisioned keys and return the
+    /// device's composite operator key. Refuses on foreign or empty slots.
+    fn verified_pair_public_key(&mut self) -> Result<QosOperatorPublicKey, DeviceError> {
+        let status = self.device_status()?;
+
+        if let Some(error) = status.unprovisionable_slot() {
+            return Err(error);
+        }
+
+        if let Some(slot) = status.slots_with(SlotStatus::Empty).into_iter().next() {
+            return Err(DeviceError::EmptySlot { slot });
+        }
+
+        self.pair_public_key()
+    }
+
     /// Delete one slot's certificate.
     ///
     /// Gated on what this handle reads immediately beforehand: the slot must
@@ -327,6 +372,32 @@ impl DeviceOps for YubiKey {
             .map_err(DeviceError::MalformedPairPublicKey)
     }
 
+    fn sign(&mut self, pin: &Pin, message: &[u8]) -> Result<Vec<u8>, DeviceError> {
+        qos_client::yubikey::sign_data(self, message, pin.as_bytes()).map_err(|error| match error {
+            YubiKeyError::FailedToVerifyPin(PivError::WrongPin { tries }) => {
+                DeviceError::WrongPin { tries }
+            }
+            error => DeviceError::Sign { error },
+        })
+    }
+
+    fn key_agreement(
+        &mut self,
+        pin: &Pin,
+        sender_public: PublicKey,
+    ) -> Result<Zeroizing<Vec<u8>>, DeviceError> {
+        let sender_point = sender_public.to_encoded_point(false);
+
+        qos_client::yubikey::key_agreement(self, sender_point.as_bytes(), pin.as_bytes()).map_err(
+            |error| match error {
+                YubiKeyError::FailedToVerifyPin(PivError::WrongPin { tries }) => {
+                    DeviceError::WrongPin { tries }
+                }
+                error => DeviceError::KeyAgreement { error },
+            },
+        )
+    }
+
     fn delete_qos_certificate(&mut self, slot: QosSlot) -> Result<(), DeviceError> {
         match self.slot_status(slot)? {
             SlotStatus::QosProvisioned => {}
@@ -346,9 +417,32 @@ impl DeviceOps for YubiKey {
     }
 }
 
+pub(crate) mod pair;
+
+#[cfg(test)]
+pub(crate) mod test_support;
+
 #[cfg(test)]
 mod tests {
+    use super::test_support::{FakeDevice, PIN};
     use super::*;
+    use p256::PublicKey;
+    use p256::ecdh::diffie_hellman;
+    use qos_p256::{P256Pair, P256Public};
+
+    fn default_pin() -> Pin {
+        Pin::from(String::from_utf8(PIN.to_vec()).unwrap())
+    }
+
+    fn sole_connected_serial() -> YubiKeySerial {
+        let connected = connected_serials().unwrap();
+
+        let [serial] = connected.as_slice() else {
+            panic!("connect exactly one YubiKey; found {connected:?}");
+        };
+
+        *serial
+    }
 
     fn qos_subject() -> Result<String, PivError> {
         Ok(QOS_CERTIFICATE_SUBJECT.to_string())
@@ -494,6 +588,119 @@ mod tests {
         );
     }
 
+    #[test]
+    fn sign_produces_a_signature_verifiable_with_the_composite_key() {
+        let mut device = FakeDevice::new(SlotStatus::QosProvisioned, SlotStatus::QosProvisioned);
+        let message = b"manifest hash stand-in";
+
+        let signature = device.sign(&default_pin(), message).unwrap();
+
+        let composite = hex::decode(device.operator_public_key().to_string()).unwrap();
+        P256Public::from_bytes(&composite)
+            .unwrap()
+            .verify(message, &signature)
+            .unwrap();
+    }
+
+    #[test]
+    fn sign_rejects_a_wrong_pin_with_the_retry_count() {
+        let mut device = FakeDevice::new(SlotStatus::QosProvisioned, SlotStatus::QosProvisioned);
+
+        let error = device
+            .sign(&Pin::from("999999".to_string()), b"message")
+            .unwrap_err();
+
+        assert!(matches!(error, DeviceError::WrongPin { tries: 3 }));
+    }
+
+    #[test]
+    fn sign_requires_a_provisioned_signing_slot() {
+        let mut device = FakeDevice::new(SlotStatus::Empty, SlotStatus::QosProvisioned);
+
+        let error = device.sign(&default_pin(), b"message").unwrap_err();
+
+        assert!(matches!(
+            error,
+            DeviceError::EmptySlot {
+                slot: QosSlot::Signing
+            }
+        ));
+    }
+
+    #[test]
+    fn key_agreement_matches_a_software_shared_secret() {
+        let mut device = FakeDevice::new(SlotStatus::QosProvisioned, SlotStatus::QosProvisioned);
+        let sender = P256Pair::generate().unwrap();
+
+        let secret = device
+            .key_agreement(&default_pin(), sender.encryption_key().public_key())
+            .unwrap();
+
+        let composite = hex::decode(device.operator_public_key().to_string()).unwrap();
+        let device_encrypt_public = PublicKey::from_sec1_bytes(&composite[..65]).unwrap();
+        let expected = diffie_hellman(
+            sender.encryption_key().to_nonzero_scalar(),
+            device_encrypt_public.as_affine(),
+        );
+
+        assert_eq!(secret.as_slice(), expected.raw_secret_bytes().as_slice());
+    }
+
+    #[test]
+    fn key_agreement_requires_a_provisioned_key_agreement_slot() {
+        let mut device = FakeDevice::new(SlotStatus::QosProvisioned, SlotStatus::Empty);
+        let sender = P256Pair::generate().unwrap();
+
+        let error = device
+            .key_agreement(&default_pin(), sender.encryption_key().public_key())
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            DeviceError::EmptySlot {
+                slot: QosSlot::KeyAgreement
+            }
+        ));
+    }
+
+    #[test]
+    fn verified_pair_public_key_returns_the_composite() {
+        let mut device = FakeDevice::new(SlotStatus::QosProvisioned, SlotStatus::QosProvisioned);
+
+        let key = device.verified_pair_public_key().unwrap();
+
+        assert_eq!(key, device.operator_public_key());
+    }
+
+    #[test]
+    fn verified_pair_public_key_refuses_a_foreign_slot() {
+        let mut device = FakeDevice::new(foreign(), SlotStatus::QosProvisioned);
+
+        let error = device.verified_pair_public_key().unwrap_err();
+
+        assert!(matches!(
+            error,
+            DeviceError::ForeignSlot {
+                slot: QosSlot::Signing,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn verified_pair_public_key_refuses_an_empty_slot() {
+        let mut device = FakeDevice::new(SlotStatus::QosProvisioned, SlotStatus::Empty);
+
+        let error = device.verified_pair_public_key().unwrap_err();
+
+        assert!(matches!(
+            error,
+            DeviceError::EmptySlot {
+                slot: QosSlot::KeyAgreement
+            }
+        ));
+    }
+
     /// Full provision-inspect-delete cycle against real hardware.
     ///
     /// DESTRUCTIVE: generates keys in, and deletes the certificates from,
@@ -504,12 +711,8 @@ mod tests {
     #[test]
     #[ignore = "requires a connected YubiKey with default PIN/management key; overwrites its QuorumOS slots"]
     fn hardware_provision_and_delete_cycle() {
-        let connected = connected_serials().unwrap();
-        let [serial] = connected.as_slice() else {
-            panic!("connect exactly one YubiKey; found {connected:?}");
-        };
-        let mut yubikey = open(*serial).unwrap();
-        let pin = Pin::from(String::from_utf8(qos_client::yubikey::DEFAULT_PIN.to_vec()).unwrap());
+        let mut yubikey = open(sole_connected_serial()).unwrap();
+        let pin = default_pin();
 
         let status = yubikey.device_status().unwrap();
 
@@ -543,5 +746,71 @@ mod tests {
                 key_agreement: SlotStatus::KeyWithoutCertificate,
             }
         );
+    }
+
+    /// Signing and key agreement against real hardware.
+    ///
+    /// DESTRUCTIVE: provisions the QuorumOS slots of the sole connected
+    /// YubiKey when they are empty, and leaves them provisioned. Requires
+    /// the factory-default PIN and management key; sign and key agreement
+    /// each need a touch while the device blinks. Run manually:
+    /// `cargo test -p tvc --lib -- --ignored hardware_`
+    #[test]
+    #[ignore = "requires a connected YubiKey with default PIN/management key; provisions its QuorumOS slots"]
+    fn hardware_sign_and_key_agreement() {
+        let mut yubikey = open(sole_connected_serial()).unwrap();
+        let pin = default_pin();
+
+        let absent = YubiKeySerial::from(0x0000_0001);
+        assert!(matches!(open(absent), Err(DeviceError::NotFound { .. })));
+
+        let status = yubikey.device_status().unwrap();
+
+        status
+            .slots_with(SlotStatus::Empty)
+            .iter()
+            .try_for_each(|slot| yubikey.provision_slot(*slot, &pin))
+            .unwrap();
+
+        let verified = yubikey.verified_pair_public_key().unwrap();
+        let composite = hex::decode(verified.to_string()).unwrap();
+
+        let message = b"tvc hardware signing test";
+        let signature = yubikey.sign(&pin, message).unwrap();
+        P256Public::from_bytes(&composite)
+            .unwrap()
+            .verify(message, &signature)
+            .unwrap();
+
+        let sender = P256Pair::generate().unwrap();
+        let secret = yubikey
+            .key_agreement(&pin, sender.encryption_key().public_key())
+            .unwrap();
+        let device_encrypt_public = PublicKey::from_sec1_bytes(&composite[..65]).unwrap();
+        let expected = diffie_hellman(
+            sender.encryption_key().to_nonzero_scalar(),
+            device_encrypt_public.as_affine(),
+        );
+        assert_eq!(secret.as_slice(), expected.raw_secret_bytes().as_slice());
+    }
+
+    /// Wrong-PIN reporting against real hardware.
+    ///
+    /// Burns one PIN retry with a deliberately wrong PIN, then restores the
+    /// counter by signing with the factory-default PIN (one touch). Requires
+    /// a provisioned device — run `hardware_sign_and_key_agreement` first.
+    #[test]
+    #[ignore = "requires a provisioned YubiKey with default PIN; burns and restores one PIN retry"]
+    fn hardware_wrong_pin_reports_retries() {
+        let mut yubikey = open(sole_connected_serial()).unwrap();
+
+        let error = yubikey
+            .sign(&Pin::from("999999".to_string()), b"wrong pin probe")
+            .unwrap_err();
+        assert!(matches!(error, DeviceError::WrongPin { .. }));
+
+        yubikey
+            .sign(&default_pin(), b"restore the retry counter")
+            .unwrap();
     }
 }

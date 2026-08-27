@@ -6,8 +6,8 @@ use crate::commands::keys::backup_operator_key::{
 };
 use crate::config::turnkey::{
     API_BASE_URL_PROD, Config, KeyCurve, LocalOperatorRecord, OperatorKind, OperatorRecordKind,
-    OrgConfig, QosOperatorPublicKey, StoredApiKey, StoredQosOperatorKey, dashboard_base_url,
-    default_api_key_path, default_operator_key_path, default_org_dir,
+    OrgConfig, QosOperatorPublicKey, StoredApiKey, StoredQosOperatorKey, YubiKeySerial,
+    dashboard_base_url, default_api_key_path, default_operator_key_path, default_org_dir,
 };
 use crate::outcome::Outcome;
 use crate::output::StdCtx;
@@ -363,7 +363,8 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
     // Login ensures the org's default backend is usable, and never crosses
     // over: a local default finds or generates the registered key file; a
     // hosted default requires the registered hosted operator and has no key
-    // material to generate.
+    // material to generate; a yubikey default requires the registered device
+    // and reads its cached key, without needing the device connected.
     let operator = match org_config.default_operator_kind {
         OperatorKind::Local => {
             let (_, local) = org_config
@@ -394,6 +395,32 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
                     "{}{}",
                     hosted.encrypt_public_key, hosted.sign_public_key
                 ),
+            }
+        }
+        OperatorKind::Yubikey => {
+            let (operator, yubikey) = org_config
+                .select_yubikey_operator()
+                .with_context(|| format!("org '{alias}'"))?;
+            let entry = config.yubikeys.get(yubikey.serial).ok_or_else(|| {
+                anyhow!(
+                    "YubiKey {serial} of operator '{name}' is not in the device registry; \
+                         run `tvc keys provision-yubikey --serial {serial}` to provision and \
+                         register it",
+                    serial = yubikey.serial,
+                    name = operator.name,
+                )
+            })?;
+            shell_println!(
+                ctx,
+                "Using YubiKey operator '{}' (serial {}).",
+                operator.name,
+                yubikey.serial
+            )?;
+
+            LoggedInOperator::Yubikey {
+                operator_name: operator.name.clone(),
+                serial: yubikey.serial,
+                operator_public_key: entry.public_key,
             }
         }
     };
@@ -733,8 +760,8 @@ pub struct LoggedIn {
 }
 
 /// The operator backend the login landed on: a local login reports its key
-/// file, a hosted login reports the registered identity. Both carry the qos
-/// composite public key.
+/// file, a hosted login reports the registered identity, a yubikey login
+/// reports the device serial. All carry the qos composite public key.
 #[derive(Serialize)]
 #[serde(
     tag = "operatorKind",
@@ -750,6 +777,11 @@ enum LoggedInOperator {
         operator_name: String,
         operator_id: Uuid,
         operator_public_key: String,
+    },
+    Yubikey {
+        operator_name: String,
+        serial: YubiKeySerial,
+        operator_public_key: QosOperatorPublicKey,
     },
 }
 
@@ -858,6 +890,21 @@ Saved to
   API key:        {}"#,
                 self.config_file_path, self.api_key_path,
             ),
+            LoggedInOperator::Yubikey {
+                operator_name,
+                serial,
+                operator_public_key,
+            } => write!(
+                f,
+                r#"
+  Operator public key:   {operator_public_key}
+  YubiKey operator:      {operator_name} (serial {serial})
+
+Saved to
+  Config file:    {}
+  API key:        {}"#,
+                self.config_file_path, self.api_key_path,
+            ),
         }
     }
 }
@@ -940,6 +987,35 @@ mod tests {
                 "operatorKind": "hosted",
                 "operatorName": "hosted-op",
                 "operatorId": Uuid::from_u128(0x11).to_string(),
+                "operatorPublicKey": composite,
+            })
+        );
+    }
+
+    /// The yubikey outcome reports the device serial and no key path.
+    #[test]
+    fn logged_in_yubikey_json_reports_the_device_serial() {
+        let composite = hex::encode(P256Pair::generate().unwrap().public_key().to_bytes());
+        let logged_in = logged_in_with(LoggedInOperator::Yubikey {
+            operator_name: "yubikey-op".to_string(),
+            serial: YubiKeySerial::from(0x01c9_5c1f),
+            operator_public_key: composite.parse().unwrap(),
+        });
+
+        assert_eq!(
+            serde_json::to_value(&logged_in).unwrap(),
+            serde_json::json!({
+                "organizationName": "Org",
+                "organizationId": "org-1",
+                "username": "user",
+                "userId": "user-1",
+                "alias": "prod",
+                "apiPublicKey": "api-key",
+                "configFilePath": "/config/tvc.config.toml",
+                "apiKeyPath": "/keys/api_key.json",
+                "operatorKind": "yubikey",
+                "operatorName": "yubikey-op",
+                "serial": "01c95c1f",
                 "operatorPublicKey": composite,
             })
         );

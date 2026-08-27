@@ -4281,6 +4281,7 @@ dependencies = [
  "assert_cmd",
  "aws-nitro-enclaves-nsm-api",
  "base64 0.22.1",
+ "borsh",
  "chrono",
  "clap",
  "displaydoc",

@@ -276,6 +276,7 @@ pub enum OperatorKind {
     #[default]
     Local,
     Hosted,
+    Yubikey,
 }
 
 impl Display for OperatorKind {
@@ -283,6 +284,7 @@ impl Display for OperatorKind {
         match self {
             Self::Local => "local".fmt(f),
             Self::Hosted => "hosted".fmt(f),
+            Self::Yubikey => "yubikey".fmt(f),
         }
     }
 }
@@ -387,6 +389,16 @@ pub enum SelectHostedOperatorError {
     MultipleHostedOperators,
 }
 
+/// Failure modes of selecting the sole YubiKey operator of an organization.
+/// Which organization it was is the caller's context to add.
+#[derive(Debug, Error)]
+pub enum SelectYubiKeyOperatorError {
+    #[error("no YubiKey operator is configured")]
+    NoYubiKeyOperator,
+    #[error("multiple YubiKey operators are configured")]
+    MultipleYubiKeyOperators,
+}
+
 impl OrgConfig {
     /// Select the sole local operator registry entry, with its kind-specific
     /// record. Purely a registry query: whether local is the organization's
@@ -432,6 +444,28 @@ impl OrgConfig {
             (Some(sole), None) => Ok(sole),
             (None, _) => Err(SelectHostedOperatorError::NoHostedOperator),
             (Some(_), Some(_)) => Err(SelectHostedOperatorError::MultipleHostedOperators),
+        }
+    }
+
+    /// Select the sole YubiKey operator registry entry, with its
+    /// kind-specific record. Purely a registry query: whether YubiKey is the
+    /// organization's default backend is resolution policy, decided
+    /// elsewhere.
+    pub(crate) fn select_yubikey_operator(
+        &self,
+    ) -> Result<(&OperatorRecord, &YubiKeyOperatorRecord), SelectYubiKeyOperatorError> {
+        let mut yubikeys = self
+            .operators
+            .iter()
+            .filter_map(|operator| match &operator.kind {
+                OperatorRecordKind::Yubikey(yubikey) => Some((operator, yubikey)),
+                OperatorRecordKind::Local(_) | OperatorRecordKind::Hosted(_) => None,
+            });
+
+        match (yubikeys.next(), yubikeys.next()) {
+            (Some(sole), None) => Ok(sole),
+            (None, _) => Err(SelectYubiKeyOperatorError::NoYubiKeyOperator),
+            (Some(_), Some(_)) => Err(SelectYubiKeyOperatorError::MultipleYubiKeyOperators),
         }
     }
 }
@@ -702,6 +736,7 @@ future_entry = "keep"
 [orgs.default]
 id = "org-123"
 api_key_path = "/keys/api.json"
+default_operator_kind = "yubikey"
 
 [[orgs.default.operators]]
 name = "yubikey"
@@ -721,6 +756,7 @@ serial = "1C95C1F"
         assert_eq!(entry.public_key.to_string(), "07".repeat(130));
 
         let org = &config.orgs["default"];
+        assert_eq!(org.default_operator_kind, OperatorKind::Yubikey);
         let OperatorRecordKind::Yubikey(record) = &org.operators[0].kind else {
             panic!("operator must be a yubikey record");
         };
@@ -730,6 +766,7 @@ serial = "1C95C1F"
         assert!(saved.contains("serial = \"01c95c1f\""));
         assert!(!saved.contains("1C95C1F"));
         assert!(saved.contains("kind = \"yubikey\""));
+        assert!(saved.contains("default_operator_kind = \"yubikey\""));
         assert!(saved.contains("future_entry = \"keep\""));
         assert_eq!(disk::from_toml(&saved).unwrap(), config);
     }

@@ -1,14 +1,16 @@
 //! Re-encrypt local share command.
 
-use crate::config::turnkey::{Config, SelectLocalOperatorError};
-use crate::local_operator_key::{LocalOperatorSeedSource, resolve_local_operator};
+use crate::config::turnkey::Config;
+use crate::local_operator_key::LocalOperatorSeedSource;
 use crate::outcome::Outcome;
 use crate::output::StdCtx;
-use crate::pair::{HexSeed, LocalPair, Signer};
+use crate::pair::{HexSeed, Pair};
+use crate::prompts::stdin_can_prompt;
 use crate::provisioning::ProvisionBundle;
 use crate::quorum_key_metadata::QuorumKeyMetadata;
 use crate::shell_eprintln;
 use crate::util::{read_json_file, write_file};
+use crate::yubikey::{self, pair::PinAcquisition};
 use anyhow::{Context, anyhow};
 use clap::Args as ClapArgs;
 use qos_core::protocol::services::boot::{Approval, QuorumMember, VersionedManifestEnvelope};
@@ -110,29 +112,30 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Result
         )?;
     }
 
+    // The only mode branch: whether a YubiKey PIN prompt is possible is this
+    // endpoint's knowledge; selection and resolution just follow the policy.
+    let pin = if ctx.is_non_interactive() || !stdin_can_prompt() {
+        PinAcquisition::Unavailable
+    } else {
+        PinAcquisition::Prompt
+    };
+
+    // Backend selection is deterministic from config and mode: an impossible
+    // run is refused before the input files are even read. Device access and
+    // the PIN prompt wait until the inputs are valid.
+    let pair_source = config.select_operator_pair_source(operator_seed_source, pin)?;
+
     let quorum_key_metadata: QuorumKeyMetadata =
         read_json_file(&args.quorum_key_metadata, "quorum key metadata file").await?;
     let provision_bundle: ProvisionBundle =
         read_json_file(&args.provision_bundle, "provision bundle").await?;
-    let operator_pair = resolve_local_operator(&config, operator_seed_source)
-        .await
-        .map_err(|error| {
-            // Decryption needs local key material a hosted-only org does not
-            // have; point at the hosted counterpart of this operation.
-            match error.downcast_ref::<SelectLocalOperatorError>() {
-                Some(SelectLocalOperatorError::NoLocalOperator) => error.context(
-                    "re-encrypting a local share needs the local operator key the share was \
-                     encrypted to; hosted operators re-encrypt through Turnkey with \
-                     `tvc deploy provision`",
-                ),
-                _ => error,
-            }
-        })?;
+
+    let operator_pair = pair_source.resolve(&config, yubikey::open).await?;
 
     let output = build_re_encrypted_share_output(
         &quorum_key_metadata,
         &provision_bundle,
-        &operator_pair,
+        operator_pair.as_ref(),
         args.dangerous_skip_verification,
     )
     .await?;
@@ -143,9 +146,9 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Result
 async fn build_re_encrypted_share_output(
     quorum_key_metadata: &QuorumKeyMetadata,
     provision_bundle: &ProvisionBundle,
-    // Concretely local: re-encryption decrypts the share, and decryption
-    // needs local key material.
-    operator_pair: &LocalPair,
+    // Re-encryption decrypts the share, so a [`Signer`] alone is not enough;
+    // the operator's key material must be able to decrypt.
+    operator_pair: &dyn Pair,
     dangerous_skip_verification: bool,
 ) -> anyhow::Result<ReEncryptedShareOutput> {
     ensure_quorum_key_matches_manifest(quorum_key_metadata, provision_bundle)?;
@@ -159,6 +162,7 @@ async fn build_re_encrypted_share_output(
     let re_encrypted_share = {
         let plaintext_share = operator_pair
             .decrypt(&encrypted_share)
+            .await
             .context("failed to decrypt share with operator key")?;
 
         ephemeral_public_key
@@ -249,11 +253,15 @@ mod tests {
         ReEncryptedShareGenerated, ReEncryptedShareOutput, build_re_encrypted_share_output,
         ensure_quorum_key_matches_manifest, find_share_set_member,
     };
+    use crate::config::turnkey::Config;
     use crate::outcome::Outcome;
 
     use crate::pair::LocalPair;
     use crate::provisioning::ProvisionBundle;
     use crate::quorum_key_metadata::{EncryptedShareMetadata, QuorumKeyMetadata};
+    use crate::yubikey::pair::AvailablePin;
+    use crate::yubikey::test_support::{FakeDevice, PIN, serial};
+    use crate::yubikey::{Pin, SlotStatus};
     use qos_core::protocol::services::boot::{
         Approval, Manifest, ManifestEnvelope, ManifestSet, Namespace, NitroConfig, PatchSet,
         PivotConfig, QuorumMember, RestartPolicy, ShareSet, VersionedManifestEnvelope,
@@ -506,6 +514,67 @@ mod tests {
             output.ephemeral_public_key_hex,
             hex::encode(ephemeral_pair.public_key().to_bytes())
         );
+        let re_encrypted_share = hex::decode(&output.re_encrypted_share).unwrap();
+        let decrypted_share = ephemeral_pair.decrypt(&re_encrypted_share).unwrap();
+        assert_eq!(decrypted_share.as_slice(), plaintext_share);
+        assert_eq!(output.share_approval.member, operator_member);
+
+        let approval_public_key =
+            P256Public::from_bytes(&output.share_approval.member.pub_key).unwrap();
+        approval_public_key
+            .verify(
+                &bundle.manifest_envelope().manifest_hash(),
+                &output.share_approval.signature,
+            )
+            .unwrap();
+    }
+
+    /// The full share flow against the device-backed pair: the share is
+    /// encrypted to the composite key, decrypted through the (fake) device's
+    /// key-agreement path, re-encrypted to the ephemeral key, and the
+    /// approval signed by the (fake) signing slot — pinning crypto-format
+    /// compatibility end to end.
+    #[tokio::test]
+    async fn re_encrypt_round_trip_with_a_yubikey_pair() {
+        let device = FakeDevice::new(SlotStatus::QosProvisioned, SlotStatus::QosProvisioned);
+        let composite = device.operator_public_key();
+        let mut config = Config::default();
+        config.yubikeys.register(serial(), composite);
+        let operator_pair = config
+            .resolve_yubikey(
+                serial(),
+                device,
+                AvailablePin::Fixed(Pin::from(String::from_utf8(PIN.to_vec()).unwrap())),
+            )
+            .await
+            .unwrap();
+
+        let operator_member = QuorumMember {
+            alias: "operator-1".to_string(),
+            pub_key: composite.as_bytes().to_vec(),
+        };
+        let quorum_pair = P256Pair::generate().unwrap();
+        let ephemeral_pair = P256Pair::generate().unwrap();
+        let plaintext_share = b"arbitrary test share bytes";
+        let composite_public = P256Public::from_bytes(composite.as_bytes()).unwrap();
+        let metadata = QuorumKeyMetadata {
+            quorum_key_public: hex::encode(quorum_pair.public_key().to_bytes()),
+            threshold: 1,
+            shares: vec![EncryptedShareMetadata {
+                operator_public_key: composite.to_string(),
+                share: hex::encode(composite_public.encrypt(plaintext_share).unwrap()),
+            }],
+        };
+        let bundle = bundle_with_ephemeral_key(
+            &ephemeral_pair.public_key(),
+            quorum_pair.public_key().to_bytes(),
+            vec![operator_member.clone()],
+        );
+
+        let output = build_re_encrypted_share_output(&metadata, &bundle, &operator_pair, true)
+            .await
+            .unwrap();
+
         let re_encrypted_share = hex::decode(&output.re_encrypted_share).unwrap();
         let decrypted_share = ephemeral_pair.decrypt(&re_encrypted_share).unwrap();
         assert_eq!(decrypted_share.as_slice(), plaintext_share);
