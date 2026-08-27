@@ -12,6 +12,7 @@ keywords = ["turnkey", "tvc", "enclaves", "cli"]
 categories = ["command-line-utilities", "cryptography"]
 
 [dependencies]
+qos_client = { workspace = true }
 qos_core = { workspace = true }
 qos_crypto = { workspace = true }
 qos_nsm = { workspace = true }
@@ -27,6 +28,7 @@ base64 = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["env"] }
 hex = { workspace = true }
+indexmap = { workspace = true }
 inquire = { workspace = true }
 p256 = { workspace = true }
 reqwest = { workspace = true }

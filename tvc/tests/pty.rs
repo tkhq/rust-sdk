@@ -450,6 +450,7 @@ fn write_hosted_org_config(home: &Path, saved_operator_ids: &[&str]) -> String {
                 extra: toml::Table::new(),
             },
         )]),
+        yubikeys: Default::default(),
         last_created_app_id: HashMap::new(),
         last_operator_ids: HashMap::from([(
             "hosted-org".to_string(),

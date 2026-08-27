@@ -9,9 +9,16 @@
 
 mod api_key;
 mod qos_operator_key;
+mod yubikey;
 
 pub use api_key::{KeyCurve, StoredApiKey};
-pub use qos_operator_key::{QosOperatorPublicKey, StoredQosOperatorKey};
+pub use qos_operator_key::{
+    QosOperatorPublicKey, QosOperatorPublicKeyParseError, StoredQosOperatorKey,
+};
+pub use yubikey::{
+    Registration, YubiKeyOperatorRecord, YubiKeyRegistry, YubiKeyRegistryEntry, YubiKeySerial,
+    YubiKeySerialParseError,
+};
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
@@ -45,6 +52,11 @@ pub struct Config {
     /// Map of org alias -> org config
     #[serde(default)]
     pub orgs: HashMap<String, OrgConfig>,
+    /// Registered YubiKey devices, shared across organizations. Absent from
+    /// disk entirely while empty, so configs predating the registry rewrite
+    /// byte-identically.
+    #[serde(default, skip_serializing_if = "YubiKeyRegistry::is_empty")]
+    pub yubikeys: YubiKeyRegistry,
     /// Map of org alias -> last created app ID (for convenience)
     #[serde(default)]
     pub last_created_app_id: HashMap<String, String>,
@@ -58,7 +70,10 @@ pub struct Config {
 
 /// Versioned on-disk schemas and migrations into the current runtime model.
 mod disk {
-    use super::{CONFIG_VERSION, Config, OperatorKind, OperatorRecord, OrgConfig};
+    use super::{
+        CONFIG_VERSION, Config, OperatorKind, OperatorRecord, OperatorRecordKind, OrgConfig,
+        YubiKeyRegistry,
+    };
     use anyhow::{Context, Result, bail};
     use serde::Serialize;
     use std::collections::HashMap;
@@ -99,10 +114,36 @@ mod disk {
 
         /// Convert any supported disk schema into the current runtime model.
         fn into_current(self) -> Result<Config> {
-            match self {
-                Self::V0(config) => migrate_v0(config),
-                Self::V1(config) => Ok(config),
+            let config = match self {
+                Self::V0(config) => migrate_v0(config)?,
+                Self::V1(config) => config,
+            };
+
+            // An organization operator may only reference a registered
+            // device; rejecting a dangling serial here keeps everything
+            // downstream of the parse free of that state.
+            let dangling = config.orgs.iter().find_map(|(alias, org)| {
+                org.operators
+                    .iter()
+                    .find_map(|operator| match &operator.kind {
+                        OperatorRecordKind::Yubikey(record)
+                            if !config.yubikeys.contains(record.serial) =>
+                        {
+                            Some((alias, &operator.name, record.serial))
+                        }
+                        _ => None,
+                    })
+            });
+
+            if let Some((alias, name, serial)) = dangling {
+                bail!(
+                    "organization '{alias}' operator '{name}' references YubiKey {serial}, \
+                     which is not in the yubikeys registry; edit tvc.config.toml to add the \
+                     matching [[yubikeys]] entry or remove this operator record"
+                );
             }
+
+            Ok(config)
         }
     }
 
@@ -157,6 +198,7 @@ mod disk {
         Ok(Config {
             active_org: config.active_org,
             orgs,
+            yubikeys: YubiKeyRegistry::default(),
             last_created_app_id: config.last_created_app_id,
             last_operator_ids: config.last_operator_ids,
             extra: config.extra,
@@ -275,6 +317,7 @@ impl OperatorRecord {
 pub enum OperatorRecordKind {
     Local(LocalOperatorRecord),
     Hosted(HostedOperatorRecord),
+    Yubikey(YubiKeyOperatorRecord),
 }
 
 /// Locator and optional Turnkey identity for a local operator key.
@@ -356,7 +399,7 @@ impl OrgConfig {
             .iter()
             .filter_map(|operator| match &operator.kind {
                 OperatorRecordKind::Local(local) => Some((operator, local)),
-                OperatorRecordKind::Hosted(_) => None,
+                OperatorRecordKind::Hosted(_) | OperatorRecordKind::Yubikey(_) => None,
             });
 
         match (locals.next(), locals.next()) {
@@ -373,7 +416,7 @@ impl OrgConfig {
             .iter()
             .filter_map(|operator| match &operator.kind {
                 OperatorRecordKind::Hosted(hosted) => Some((operator.name.as_str(), hosted)),
-                OperatorRecordKind::Local(_) => None,
+                OperatorRecordKind::Local(_) | OperatorRecordKind::Yubikey(_) => None,
             })
     }
 
@@ -433,9 +476,15 @@ impl Config {
         disk::from_toml(content)
     }
 
+    pub(crate) fn to_toml(&self) -> Result<String> {
+        disk::to_toml(self)
+    }
+
     /// Save config to disk
     pub async fn save(&self) -> Result<()> {
-        let path = config_file_path()?;
+        // Owns its whole failure surface: callers add what only they know
+        // (e.g. recovery guidance), never the file identity.
+        let path = config_file_path().context("failed to resolve the tvc.config.toml path")?;
         debug!(
             config_path = %path.display(),
             active_org = ?self.active_org,
@@ -634,6 +683,102 @@ default = ["operator-123"]
             error
                 .to_string()
                 .contains("config version must be an unsigned 16-bit integer")
+        );
+    }
+
+    /// Serials are deliberately non-canonical (uppercase, unpadded) to pin
+    /// the parse-then-canonicalize behavior on save.
+    fn v1_yubikey_config() -> String {
+        format!(
+            r#"
+version = 1
+active_org = "default"
+
+[[yubikeys]]
+serial = "1C95C1F"
+public_key = "{}"
+future_entry = "keep"
+
+[orgs.default]
+id = "org-123"
+api_key_path = "/keys/api.json"
+
+[[orgs.default.operators]]
+name = "yubikey"
+kind = "yubikey"
+serial = "1C95C1F"
+"#,
+            "07".repeat(130)
+        )
+    }
+
+    #[test]
+    fn round_trips_yubikey_registry_and_operator_records() {
+        let config = disk::from_toml(&v1_yubikey_config()).unwrap();
+
+        let serial = YubiKeySerial::from(0x01c9_5c1f);
+        let entry = config.yubikeys.get(serial).unwrap();
+        assert_eq!(entry.public_key.to_string(), "07".repeat(130));
+
+        let org = &config.orgs["default"];
+        let OperatorRecordKind::Yubikey(record) = &org.operators[0].kind else {
+            panic!("operator must be a yubikey record");
+        };
+        assert_eq!(record.serial, serial);
+
+        let saved = disk::to_toml(&config).unwrap();
+        assert!(saved.contains("serial = \"01c95c1f\""));
+        assert!(!saved.contains("1C95C1F"));
+        assert!(saved.contains("kind = \"yubikey\""));
+        assert!(saved.contains("future_entry = \"keep\""));
+        assert_eq!(disk::from_toml(&saved).unwrap(), config);
+    }
+
+    #[test]
+    fn empty_registry_stays_off_disk() {
+        let config = disk::from_toml(MIGRATED_V1_CONFIG).unwrap();
+
+        assert!(!disk::to_toml(&config).unwrap().contains("yubikeys"));
+    }
+
+    #[test]
+    fn rejects_duplicate_registry_serials() {
+        let entry = format!(
+            "[[yubikeys]]\nserial = \"01c95c1f\"\npublic_key = \"{}\"\n",
+            "07".repeat(130)
+        );
+
+        let error = disk::from_toml(&format!("version = 1\n{entry}{entry}"))
+            .expect_err("duplicate serials must fail");
+
+        assert!(
+            format!("{error:#}").contains("duplicate YubiKey registry entry for serial 01c95c1f")
+        );
+    }
+
+    #[test]
+    fn rejects_a_dangling_yubikey_operator_reference() {
+        let error = disk::from_toml(
+            r#"
+version = 1
+
+[orgs.default]
+id = "org-123"
+api_key_path = "/keys/api.json"
+
+[[orgs.default.operators]]
+name = "yubikey"
+kind = "yubikey"
+serial = "01c95c1f"
+"#,
+        )
+        .expect_err("a reference without a registry entry must fail");
+
+        assert_eq!(
+            error.to_string(),
+            "organization 'default' operator 'yubikey' references YubiKey 01c95c1f, \
+             which is not in the yubikeys registry; edit tvc.config.toml to add the matching \
+             [[yubikeys]] entry or remove this operator record"
         );
     }
 }
