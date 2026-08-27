@@ -4296,6 +4296,7 @@ dependencies = [
  "qos_crypto",
  "qos_nsm",
  "qos_p256",
+ "rand_core 0.6.4",
  "reqwest",
  "rexpect",
  "serde",
@@ -4313,6 +4314,7 @@ dependencies = [
  "turnkey_enclave_encrypt",
  "uuid",
  "wiremock",
+ "x509-cert",
  "zeroize",
 ]
 

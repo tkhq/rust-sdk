@@ -16,6 +16,7 @@ pub mod keys;
 pub mod login;
 pub mod operator;
 pub mod version;
+pub mod yubikey;
 
 /// A command: consumes its parsed `Args`, returns its typed terminal outcome.
 ///

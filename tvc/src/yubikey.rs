@@ -27,17 +27,33 @@
 use crate::config::turnkey::{
     Config, QosOperatorPublicKey, QosOperatorPublicKeyParseError, Registration, YubiKeySerial,
 };
-use p256::PublicKey;
-use p256::elliptic_curve::sec1::ToEncodedPoint;
+use p256::{
+    PublicKey,
+    ecdsa::{DerSignature, VerifyingKey, signature::Verifier},
+    elliptic_curve::sec1::ToEncodedPoint,
+};
 use qos_client::{
     yubikey::{KEY_AGREEMENT_SLOT, SIGNING_SLOT, YubiKeyError},
     yubikey_crate as yubikey,
 };
-use std::fmt::{self, Display, Formatter};
+use rand_core::{OsRng, RngCore};
+use std::{
+    fmt::{self, Display, Formatter},
+    str::FromStr,
+    time::Duration,
+};
+use x509_cert::{
+    builder::{Builder, CertificateBuilder, Profile},
+    der::{Encode, referenced::OwnedToRef},
+    name::Name,
+    serial_number::SerialNumber,
+    spki::SubjectPublicKeyInfoOwned,
+    time::Validity,
+};
 use yubikey::{
-    Error as PivError, MgmKey, Serial, TouchPolicy, YubiKey,
-    certificate::Certificate,
-    piv::{self, SlotId},
+    Error as PivError, MgmKey, PinPolicy, Serial, TouchPolicy, YubiKey,
+    certificate::{Certificate, yubikey_signer::Signer},
+    piv::{self, AlgorithmId, ManagementAlgorithmId, Origin, SlotId, SlotMetadata},
     reader::Context,
 };
 use zeroize::Zeroizing;
@@ -46,6 +62,10 @@ use zeroize::Zeroizing;
 // TODO: qos_client keeps this constant private; have it exported (along with
 // a re-export of the yubikey crate) and use it here.
 const QOS_CERTIFICATE_SUBJECT: &str = "CN=QuorumOS";
+
+/// Equivalent to about ten years, matching the existing QuorumOS YubiKey
+/// certificates.
+const CERTIFICATE_VALIDITY_SECS: u64 = 10 * 60 * 60 * 24 * 365;
 
 /// Serials of the connected YubiKeys, skipping smartcards that are not
 /// YubiKeys. The real implementation behind the discovery effect on
@@ -137,6 +157,151 @@ impl Display for QosSlot {
             Self::Signing => "signing".fmt(f),
             Self::KeyAgreement => "key-agreement".fmt(f),
         }
+    }
+}
+
+/// Metadata proving one slot is suitable for an externally importable
+/// QuorumOS certificate.
+#[cfg_attr(test, derive(Debug))]
+pub(crate) struct CertificateSlot {
+    slot: QosSlot,
+    public_key_info: SubjectPublicKeyInfoOwned,
+    // The parsed projection is retained so post-build verification cannot
+    // accidentally use a certificate-derived key instead of device metadata.
+    verifying_key: VerifyingKey,
+}
+
+impl TryFrom<(QosSlot, SlotMetadata)> for CertificateSlot {
+    type Error = DeviceError;
+
+    fn try_from((slot, metadata): (QosSlot, SlotMetadata)) -> Result<Self, Self::Error> {
+        let SlotMetadata {
+            algorithm,
+            policy,
+            origin,
+            public,
+            default: _,
+            retries: _,
+        } = metadata;
+
+        if algorithm != ManagementAlgorithmId::Asymmetric(AlgorithmId::EccP256) {
+            return Err(DeviceError::UnexpectedSlotAlgorithm { slot, algorithm });
+        }
+
+        let Some((pin_policy, touch_policy)) = policy else {
+            return Err(DeviceError::MissingSlotPolicy { slot });
+        };
+
+        if pin_policy != PinPolicy::Always || touch_policy != TouchPolicy::Always {
+            return Err(DeviceError::UnexpectedSlotPolicy {
+                slot,
+                pin_policy,
+                touch_policy,
+            });
+        }
+
+        let Some(origin) = origin else {
+            return Err(DeviceError::MissingSlotOrigin { slot });
+        };
+
+        if origin != Origin::Generated {
+            return Err(DeviceError::UnexpectedSlotOrigin { slot, origin });
+        }
+
+        let Some(public_key_info) = public else {
+            return Err(DeviceError::MissingSlotPublicKey { slot });
+        };
+        let verifying_key = VerifyingKey::try_from(public_key_info.owned_to_ref())
+            .map_err(|source| DeviceError::MalformedSlotPublicKey { slot, source })?;
+
+        Ok(Self {
+            slot,
+            public_key_info,
+            verifying_key,
+        })
+    }
+}
+
+impl CertificateSlot {
+    /// Build and verify a self-signed certificate in memory. This submits only
+    /// PIN verification and signing APDUs; it never authenticates a management
+    /// key or writes an object to the device.
+    pub(crate) fn create_certificate(
+        self,
+        yubikey: &mut YubiKey,
+        pin: &Pin,
+    ) -> Result<x509_cert::Certificate, DeviceError> {
+        let Self {
+            slot,
+            public_key_info,
+            verifying_key,
+        } = self;
+
+        let mut serial = [0u8; 20];
+        OsRng
+            .try_fill_bytes(&mut serial)
+            .map_err(DeviceError::GenerateCertificateSerial)?;
+        // ASN.1 INTEGERs are signed, so clear the sign bit to prevent this
+        // 20-byte certificate serial from being interpreted as negative.
+        serial[0] &= 0x7f;
+
+        let serial_number = SerialNumber::new(&serial)
+            .map_err(|source| DeviceError::EncodeCertificate { slot, source })?;
+        let validity = Validity::from_now(Duration::from_secs(CERTIFICATE_VALIDITY_SECS))
+            .map_err(|source| DeviceError::EncodeCertificate { slot, source })?;
+        let subject = Name::from_str(QOS_CERTIFICATE_SUBJECT)
+            .map_err(|source| DeviceError::EncodeCertificate { slot, source })?;
+
+        yubikey.verify_pin(pin.as_bytes()).map_err(|source| {
+            if let PivError::WrongPin { tries } = source {
+                DeviceError::WrongPin { tries }
+            } else {
+                DeviceError::VerifyPin { slot, source }
+            }
+        })?;
+
+        let signer =
+            Signer::<p256::NistP256>::new(yubikey, slot.slot_id(), public_key_info.owned_to_ref())
+                .map_err(|source| DeviceError::CreateCertificateSigner { slot, source })?;
+        let builder = CertificateBuilder::new(
+            Profile::Manual { issuer: None },
+            serial_number,
+            validity,
+            subject,
+            public_key_info,
+            &signer,
+        )
+        .map_err(|source| DeviceError::BuildCertificate { slot, source })?;
+        let certificate = builder
+            .build::<DerSignature>()
+            .map_err(|source| DeviceError::BuildCertificate { slot, source })?;
+
+        let signed = certificate
+            .tbs_certificate
+            .to_der()
+            .map_err(|source| DeviceError::EncodeCertificate { slot, source })?;
+        let signature = DerSignature::from_bytes(certificate.signature.raw_bytes())
+            .map_err(|source| DeviceError::InvalidCertificateSignature { slot, source })?;
+        verifying_key
+            .verify(&signed, &signature)
+            .map_err(|source| DeviceError::InvalidCertificateSignature { slot, source })?;
+
+        Ok(certificate)
+    }
+}
+
+/// Read and narrow the PIV metadata needed to build certificates without
+/// changing device state.
+pub(crate) trait CertificateDeviceOps {
+    fn certificate_slot(&mut self, slot: QosSlot) -> Result<CertificateSlot, DeviceError>;
+}
+
+impl CertificateDeviceOps for YubiKey {
+    fn certificate_slot(&mut self, slot: QosSlot) -> Result<CertificateSlot, DeviceError> {
+        let metadata = piv::metadata(self, slot.slot_id())
+            .map_err(|source| DeviceError::ReadSlotMetadata { slot, source })?;
+
+        CertificateSlot::try_from((slot, metadata))
     }
 }
 
@@ -322,6 +487,33 @@ pub(crate) enum DeviceError {
         #[source]
         source: PivError,
     },
+    #[error("the {slot} slot uses {algorithm:?}; expected ECC P-256")]
+    UnexpectedSlotAlgorithm {
+        slot: QosSlot,
+        algorithm: ManagementAlgorithmId,
+    },
+    #[error("the {slot} slot metadata does not report PIN and touch policies")]
+    MissingSlotPolicy { slot: QosSlot },
+    #[error(
+        "the {slot} slot uses PIN policy {pin_policy:?} and touch policy {touch_policy:?}; expected Always for both"
+    )]
+    UnexpectedSlotPolicy {
+        slot: QosSlot,
+        pin_policy: PinPolicy,
+        touch_policy: TouchPolicy,
+    },
+    #[error("the {slot} slot metadata does not report whether its key was generated or imported")]
+    MissingSlotOrigin { slot: QosSlot },
+    #[error("the {slot} slot key is {origin:?}; expected a key generated on the YubiKey")]
+    UnexpectedSlotOrigin { slot: QosSlot, origin: Origin },
+    #[error("the {slot} slot metadata does not include a public key")]
+    MissingSlotPublicKey { slot: QosSlot },
+    #[error("the {slot} slot metadata contains a malformed P-256 public key")]
+    MalformedSlotPublicKey {
+        slot: QosSlot,
+        #[source]
+        source: x509_cert::spki::Error,
+    },
     /// The slot state cannot be attributed: a key exists, but there is no
     /// readable QuorumOS certificate proving TVC manages it.
     #[error(
@@ -356,6 +548,38 @@ pub(crate) enum DeviceError {
     ChangedSinceInspection { slot: QosSlot },
     #[error("the YubiKey PIN was rejected; {tries} attempts remain before the PIN locks")]
     WrongPin { tries: u8 },
+    #[error("failed to verify the YubiKey PIN before signing the {slot} certificate")]
+    VerifyPin {
+        slot: QosSlot,
+        #[source]
+        source: PivError,
+    },
+    #[error("failed to generate a random X.509 certificate serial number")]
+    GenerateCertificateSerial(#[source] rand_core::Error),
+    #[error("failed to encode the {slot} certificate")]
+    EncodeCertificate {
+        slot: QosSlot,
+        #[source]
+        source: x509_cert::der::Error,
+    },
+    #[error("failed to initialize the {slot} certificate signer")]
+    CreateCertificateSigner {
+        slot: QosSlot,
+        #[source]
+        source: PivError,
+    },
+    #[error("failed to build the {slot} certificate")]
+    BuildCertificate {
+        slot: QosSlot,
+        #[source]
+        source: x509_cert::builder::Error,
+    },
+    #[error("the {slot} certificate signature did not verify against its metadata public key")]
+    InvalidCertificateSignature {
+        slot: QosSlot,
+        #[source]
+        source: p256::ecdsa::Error,
+    },
     // qos_client's YubiKeyError implements neither Display nor Error, so it
     // is rendered by value instead of chained as a source.
     // TODO: derive those in qos_client and turn these fields into #[source].
@@ -600,9 +824,111 @@ pub(crate) mod test_support;
 mod tests {
     use super::test_support::{FakeDevice, PIN, serial};
     use super::*;
-    use p256::PublicKey;
     use p256::ecdh::diffie_hellman;
+    use p256::{PublicKey, ecdsa::SigningKey};
     use qos_p256::{P256Pair, P256Public};
+
+    fn certificate_metadata() -> SlotMetadata {
+        let signing_key = SigningKey::from_bytes((&[42u8; 32]).into()).unwrap();
+        let public = SubjectPublicKeyInfoOwned::from_key(*signing_key.verifying_key()).unwrap();
+
+        SlotMetadata {
+            algorithm: ManagementAlgorithmId::Asymmetric(AlgorithmId::EccP256),
+            policy: Some((PinPolicy::Always, TouchPolicy::Always)),
+            origin: Some(Origin::Generated),
+            public: Some(public),
+            default: None,
+            retries: None,
+        }
+    }
+
+    #[test]
+    fn certificate_slot_accepts_required_metadata() {
+        let slot = CertificateSlot::try_from((QosSlot::Signing, certificate_metadata())).unwrap();
+
+        assert_eq!(slot.slot, QosSlot::Signing);
+    }
+
+    #[test]
+    fn certificate_slot_requires_ecc_p256() {
+        let mut metadata = certificate_metadata();
+        metadata.algorithm = ManagementAlgorithmId::Asymmetric(AlgorithmId::EccP384);
+
+        let error = CertificateSlot::try_from((QosSlot::Signing, metadata)).unwrap_err();
+
+        assert!(matches!(
+            error,
+            DeviceError::UnexpectedSlotAlgorithm {
+                slot: QosSlot::Signing,
+                algorithm: ManagementAlgorithmId::Asymmetric(AlgorithmId::EccP384),
+            }
+        ));
+    }
+
+    #[test]
+    fn certificate_slot_requires_pin_and_touch_always() {
+        let mut metadata = certificate_metadata();
+        metadata.policy = Some((PinPolicy::Once, TouchPolicy::Cached));
+
+        let error = CertificateSlot::try_from((QosSlot::KeyAgreement, metadata)).unwrap_err();
+
+        assert!(matches!(
+            error,
+            DeviceError::UnexpectedSlotPolicy {
+                slot: QosSlot::KeyAgreement,
+                pin_policy: PinPolicy::Once,
+                touch_policy: TouchPolicy::Cached,
+            }
+        ));
+    }
+
+    #[test]
+    fn certificate_slot_requires_a_device_generated_key() {
+        let mut metadata = certificate_metadata();
+        metadata.origin = Some(Origin::Imported);
+
+        let error = CertificateSlot::try_from((QosSlot::Signing, metadata)).unwrap_err();
+
+        assert!(matches!(
+            error,
+            DeviceError::UnexpectedSlotOrigin {
+                slot: QosSlot::Signing,
+                origin: Origin::Imported,
+            }
+        ));
+    }
+
+    #[test]
+    fn certificate_slot_requires_the_metadata_public_key() {
+        let mut metadata = certificate_metadata();
+        metadata.public = None;
+
+        let error = CertificateSlot::try_from((QosSlot::KeyAgreement, metadata)).unwrap_err();
+
+        assert!(matches!(
+            error,
+            DeviceError::MissingSlotPublicKey {
+                slot: QosSlot::KeyAgreement,
+            }
+        ));
+    }
+
+    #[test]
+    fn certificate_slot_requires_a_well_formed_p256_public_key() {
+        let mut metadata = certificate_metadata();
+        metadata.public.as_mut().unwrap().subject_public_key =
+            x509_cert::der::asn1::BitString::from_bytes(&[0x04, 0x01, 0x02]).unwrap();
+
+        let error = CertificateSlot::try_from((QosSlot::Signing, metadata)).unwrap_err();
+
+        assert!(matches!(
+            error,
+            DeviceError::MalformedSlotPublicKey {
+                slot: QosSlot::Signing,
+                ..
+            }
+        ));
+    }
 
     fn default_pin() -> Pin {
         Pin::from(String::from_utf8(PIN.to_vec()).unwrap())

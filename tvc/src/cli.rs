@@ -203,6 +203,17 @@ fn args_request_json_output(args: impl IntoIterator<Item = OsString>) -> bool {
 
 impl Commands {
     async fn run(self, ctx: &mut StdCtx) -> anyhow::Result<Outcome> {
+        // Device-local certificate creation must not depend on, or create, a
+        // TVC configuration file.
+        let command = match self {
+            Commands::Yubikey { command } => {
+                return match command {
+                    YubikeyCommands::CreateCerts(args) => args.run(ctx).await.map(Into::into),
+                };
+            }
+            command => command,
+        };
+
         let home = std::env::var("HOME").context("HOME environment variable not set")?;
         let path = PathBuf::from(home).join(CONFIG_DIR).join(CONFIG_FILE);
         debug!(config_path = %path.display(), "loading tvc config");
@@ -230,7 +241,7 @@ impl Commands {
             config
         };
 
-        match self {
+        match command {
             Commands::Deploy { command } => match command {
                 DeployCommands::Approve(args) => args.run(ctx, config).await.map(Into::into),
                 DeployCommands::GetStatus(args) => {
@@ -301,6 +312,9 @@ impl Commands {
                     commands::login::run_delete(ctx, delete_args, config).await
                 }
             },
+            Commands::Yubikey { command } => match command {
+                YubikeyCommands::CreateCerts(args) => args.run(ctx).await.map(Into::into),
+            },
             Commands::Version => commands::version::run(),
         }
     }
@@ -335,6 +349,11 @@ enum Commands {
         #[command(subcommand)]
         command: KeysCommands,
     },
+    /// Manage YubiKey certificate workflows.
+    Yubikey {
+        #[command(subcommand)]
+        command: YubikeyCommands,
+    },
     /// Print the tvc CLI version.
     Version,
 }
@@ -352,6 +371,7 @@ impl Commands {
             Commands::Deploy { command } => command.name(),
             Commands::App { command } => command.name(),
             Commands::Keys { command } => command.name(),
+            Commands::Yubikey { command } => command.name(),
             Commands::Version => "version",
         }
     }
@@ -457,6 +477,12 @@ enum KeysCommands {
     ReEncryptLocalShare(commands::keys::re_encrypt_local_share::Args),
 }
 
+#[derive(Debug, Subcommand)]
+enum YubikeyCommands {
+    /// Create certificates for existing keys without modifying the device.
+    CreateCerts(commands::yubikey::create_certs::Args),
+}
+
 impl AppCommands {
     fn name(&self) -> &'static str {
         match self {
@@ -481,6 +507,14 @@ impl KeysCommands {
             KeysCommands::GenerateLocalQuorumKey(_) => "keys generate-local-quorum-key",
             KeysCommands::InitLocalQuorumKey(_) => "keys init-local-quorum-key",
             KeysCommands::ReEncryptLocalShare(_) => "keys re-encrypt-local-share",
+        }
+    }
+}
+
+impl YubikeyCommands {
+    fn name(&self) -> &'static str {
+        match self {
+            YubikeyCommands::CreateCerts(_) => "yubikey create-certs",
         }
     }
 }
@@ -520,5 +554,26 @@ mod tests {
             "--message-format",
             "json",
         ])));
+    }
+
+    #[test]
+    fn parses_yubikey_create_certs() {
+        let cli = Cli::try_parse_from(["tvc", "yubikey", "create-certs", "--serial", "01c95c1f"])
+            .unwrap();
+
+        assert!(matches!(
+            cli.command,
+            Commands::Yubikey {
+                command: YubikeyCommands::CreateCerts(_),
+            }
+        ));
+    }
+
+    #[test]
+    fn rejects_a_non_hex_yubikey_create_certs_serial() {
+        let error = Cli::try_parse_from(["tvc", "yubikey", "create-certs", "--serial", "not-hex"])
+            .unwrap_err();
+
+        assert_eq!(error.kind(), ErrorKind::ValueValidation);
     }
 }

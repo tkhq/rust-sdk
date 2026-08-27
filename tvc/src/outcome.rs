@@ -17,7 +17,7 @@
 use crate::commands::deploy::approve::{
     ApprovalAlreadyPosted, ApprovalDryRun, ApprovalGenerated, ApprovalPosted,
 };
-use crate::commands::{app, deploy, keys, login, operator, version};
+use crate::commands::{app, deploy, keys, login, operator, version, yubikey};
 use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
 
@@ -60,6 +60,7 @@ pub enum Outcome {
     YubikeyProvisioned(keys::provision_yubikey::YubiKeyProvisioned),
     YubikeyRefreshed(keys::refresh_yubikey::YubiKeyRefreshed),
     YubikeyDeleted(keys::delete_yubikey::YubiKeyDeleted),
+    YubikeyCertificatesCreated(yubikey::create_certs::YubiKeyCertificatesCreated),
     QuorumKeyCreated(keys::create_quorum_key::QuorumKeyCreated),
     QuorumKeyGenerated(keys::generate_local_quorum_key::QuorumKeyGenerated),
     QuorumKeyConfigCreated(keys::init_local_quorum_key::QuorumKeyConfigCreated),
@@ -100,6 +101,7 @@ impl Display for Outcome {
             Outcome::YubikeyProvisioned(msg) => msg.fmt(f),
             Outcome::YubikeyRefreshed(msg) => msg.fmt(f),
             Outcome::YubikeyDeleted(msg) => msg.fmt(f),
+            Outcome::YubikeyCertificatesCreated(msg) => msg.fmt(f),
             Outcome::QuorumKeyCreated(msg) => msg.fmt(f),
             Outcome::QuorumKeyGenerated(msg) => msg.fmt(f),
             Outcome::QuorumKeyConfigCreated(msg) => msg.fmt(f),
