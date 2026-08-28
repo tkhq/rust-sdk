@@ -11,6 +11,9 @@ documentation = "https://docs.rs/tvc"
 keywords = ["turnkey", "tvc", "enclaves", "cli"]
 categories = ["command-line-utilities", "cryptography"]
 
+[lints.clippy]
+mod_module_files = "deny"
+
 [dependencies]
 qos_client = { workspace = true }
 qos_core = { workspace = true }
