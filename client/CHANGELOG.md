@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.15.0](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.14.0...turnkey_client-v0.15.0) - 2026-08-28
+
+### Other
+
+- Merge pull request #250 from tkhq/swag/client-transport
+- sync protos from tkhq/mono fd98e55aa01e (make -C proto sync/rust-sdk)
+
 ## [0.14.0](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.13.1...turnkey_client-v0.14.0) - 2026-08-05
 
 ### Other
