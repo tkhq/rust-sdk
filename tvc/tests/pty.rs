@@ -22,7 +22,7 @@ use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use tvc::config::app::KNOWN_QUORUM_KEY;
 use tvc::config::turnkey::{
     Config, HostedOperatorRecord, KeyCurve, OperatorKind, OperatorRecord, OperatorRecordKind,
-    OrgConfig, StoredApiKey,
+    OrgConfig, StoredApiKey, YubiKeyOperatorRecord, YubiKeySerial,
 };
 
 /// Default per-step timeout. Generous enough for CI-runner cold cargo builds
@@ -415,17 +415,45 @@ fn login_existing_operator_key_prints_backup_tip() {
     server.join().unwrap();
 }
 
-/// Write a v1 config whose active org's registry holds exactly one operator,
-/// hosted, storing a real composite public key the way `operator create`
-/// stores it: encryption point and signing point as separate hex fields.
-/// `saved_operator_ids` become the org's `last_operator_ids`, making them
-/// additional reuse candidates. Returns the composite.
+/// Write a v1 config whose active org holds one hosted operator plus an
+/// optional additional hosted identity for each ID passed in. All identities
+/// use the same real composite public key, so each is a proven reuse
+/// candidate; the extra IDs are also saved as last-app IDs to exercise
+/// deduplication. Returns the composite.
 fn write_hosted_org_config(home: &Path, saved_operator_ids: &[&str]) -> String {
     let turnkey_dir = home.join(".config/turnkey");
     std::fs::create_dir_all(&turnkey_dir).unwrap();
 
     let composite = hex::encode(P256Pair::generate().unwrap().public_key().to_bytes());
     let (encrypt_public_key, sign_public_key) = composite.split_at(composite.len() / 2);
+
+    let mut operators = vec![OperatorRecord {
+        name: "hosted-op".to_string(),
+        kind: OperatorRecordKind::Hosted(HostedOperatorRecord {
+            operator_id: "11111111-1111-4111-8111-111111111111".parse().unwrap(),
+            wallet_id: "22222222-2222-4222-8222-222222222222".parse().unwrap(),
+            path: "m/5527107'/0'/0'".to_string(),
+            encrypt_public_key: encrypt_public_key.to_string(),
+            sign_public_key: sign_public_key.to_string(),
+            extra: toml::Table::new(),
+        }),
+    }];
+    operators.extend(
+        saved_operator_ids
+            .iter()
+            .enumerate()
+            .map(|(index, id)| OperatorRecord {
+                name: format!("hosted-op-{}", index + 2),
+                kind: OperatorRecordKind::Hosted(HostedOperatorRecord {
+                    operator_id: id.parse().unwrap(),
+                    wallet_id: "55555555-5555-4555-8555-555555555555".parse().unwrap(),
+                    path: "m/5527107'/0'/0'".to_string(),
+                    encrypt_public_key: encrypt_public_key.to_string(),
+                    sign_public_key: sign_public_key.to_string(),
+                    extra: toml::Table::new(),
+                }),
+            }),
+    );
 
     let config = Config {
         active_org: Some("hosted-org".to_string()),
@@ -436,17 +464,7 @@ fn write_hosted_org_config(home: &Path, saved_operator_ids: &[&str]) -> String {
                 api_key_path: turnkey_dir.join("orgs/hosted-org/api_key.json"),
                 api_base_url: common::LOCAL_API_BASE_URL.to_string(),
                 default_operator_kind: OperatorKind::Hosted,
-                operators: vec![OperatorRecord {
-                    name: "hosted-op".to_string(),
-                    kind: OperatorRecordKind::Hosted(HostedOperatorRecord {
-                        operator_id: "11111111-1111-4111-8111-111111111111".parse().unwrap(),
-                        wallet_id: "22222222-2222-4222-8222-222222222222".parse().unwrap(),
-                        path: "m/5527107'/0'/0'".to_string(),
-                        encrypt_public_key: encrypt_public_key.to_string(),
-                        sign_public_key: sign_public_key.to_string(),
-                        extra: toml::Table::new(),
-                    }),
-                }],
+                operators,
                 extra: toml::Table::new(),
             },
         )]),
@@ -587,10 +605,9 @@ fn app_create_reuses_the_registered_hosted_operator_by_default() {
     session.exp_eof().unwrap();
 }
 
-/// With SEVERAL known operators — a registered hosted record plus a saved
-/// manifest-set ID — the default flow prompts to pick one, and the chosen
-/// candidate (here the second, selected with a down-arrow) is what gets
-/// reused.
+/// With several registered identities proven to use the requested key, the
+/// default flow prompts to pick one, and the chosen candidate (here the
+/// second, selected with a down-arrow) is what gets reused.
 ///
 /// The command exits nonzero afterwards — creating the app needs credentials
 /// this fixture doesn't have — but the selection and reuse announcement
@@ -632,14 +649,17 @@ fn app_create_prompts_to_pick_among_multiple_reuse_candidates() {
         ],
     );
 
-    // Both candidates are offered: the registered record with its name, and
-    // the saved ID bare.
+    // Both matching registered identities are offered. The duplicate saved
+    // ID is deduplicated against the second registry record.
     session.exp_string("Select operator to reuse").unwrap();
     exp_wrapped(
         &mut session,
         "hosted-op (11111111-1111-4111-8111-111111111111)",
     );
-    exp_wrapped(&mut session, "33333333-3333-4333-8333-333333333333");
+    exp_wrapped(
+        &mut session,
+        "hosted-op-2 (33333333-3333-4333-8333-333333333333)",
+    );
 
     // Down-arrow to the saved ID, Enter to confirm.
     session.send("\x1b[B").unwrap();
@@ -647,9 +667,194 @@ fn app_create_prompts_to_pick_among_multiple_reuse_candidates() {
 
     exp_wrapped(
         &mut session,
-        "Reusing operator 33333333-3333-4333-8333-333333333333",
+        "Reusing operator hosted-op-2 (33333333-3333-4333-8333-333333333333)",
     );
     session.exp_eof().unwrap();
+}
+
+/// Write a v1 config holding only a YubiKey registry entry (no orgs), so an
+/// interactive login goes straight to new-organization setup with a
+/// registered serial to offer. Returns the cached composite key hex.
+fn write_registry_only_config(home: &Path) -> String {
+    let turnkey_dir = home.join(".config/turnkey");
+    std::fs::create_dir_all(&turnkey_dir).unwrap();
+
+    let composite = hex::encode(P256Pair::generate().unwrap().public_key().to_bytes());
+    let mut config = Config::default();
+    config
+        .yubikeys
+        .register(YubiKeySerial::from(0x01c9_5c1f), composite.parse().unwrap());
+    std::fs::write(
+        turnkey_dir.join("tvc.config.toml"),
+        format!("version = 1\n{}", toml::to_string_pretty(&config).unwrap()),
+    )
+    .unwrap();
+
+    composite
+}
+
+/// A new organization can be set up with an already-registered YubiKey as
+/// its operator, entirely from the registry cache: no device is needed,
+/// no device operation occurs, and the saved config defaults to the yubikey
+/// backend with a serial-only operator record.
+#[test]
+fn login_creates_a_new_org_with_the_explicit_registered_yubikey() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let composite = write_registry_only_config(temp.path());
+    let (api_base_url, server) = spawn_whoami_server();
+
+    let mut session = spawn_with_home(
+        temp.path(),
+        &[
+            "login",
+            "--api-base-url",
+            &api_base_url,
+            "--serial",
+            "01c95c1f",
+        ],
+    );
+
+    session.exp_string("No organization configured.").unwrap();
+    session.exp_string("Organization ID").unwrap();
+    session.send_line("org-e2e").unwrap();
+    session.exp_string("Organization alias").unwrap();
+    session.send_line("").unwrap();
+
+    // Down-arrow from "Local key file" to "YubiKey". The explicit serial
+    // resolves the registered source without another selection prompt.
+    session.exp_string("Operator key type").unwrap();
+    session.send("\x1b[B").unwrap();
+    session.send_line("").unwrap();
+
+    session.exp_string("Operator public key:").unwrap();
+    session
+        .exp_string("Make sure to register this as an operator in your organization.")
+        .unwrap();
+
+    // API key generation, manual dashboard registration, then verification
+    // against the mock server.
+    session.exp_string("API Key Generated!").unwrap();
+    session.exp_string("Press Enter when done...").unwrap();
+    session.send_line("").unwrap();
+
+    exp_wrapped(
+        &mut session,
+        "Using YubiKey operator 'yubikey-01c95c1f' (serial 01c95c1f).",
+    );
+    let output = session.exp_eof().unwrap();
+    server.join().unwrap();
+
+    assert!(output.contains("Successfully logged in!"), "{output}");
+    assert!(!output.contains("Generating operator key"), "{output}");
+    assert!(
+        !output.contains("YubiKey to use as the operator"),
+        "{output}"
+    );
+    assert!(output.contains("YubiKey operator:"), "{output}");
+
+    let saved =
+        std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
+    assert!(
+        saved.contains("default_operator_kind = \"yubikey\""),
+        "{saved}"
+    );
+    assert!(saved.contains("name = \"yubikey-01c95c1f\""), "{saved}");
+    assert!(saved.contains(&composite), "{saved}");
+}
+
+/// A yubikey-default org with several YubiKey operators makes an interactive
+/// login select one; the record prompt is a config-level choice served
+/// entirely from the registry cache, so no device is needed.
+#[test]
+fn login_selects_among_multiple_yubikey_operators() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let turnkey_dir = temp.path().join(".config/turnkey");
+    std::fs::create_dir_all(&turnkey_dir).unwrap();
+
+    let yubikey_record = |name: &str, serial: u32| OperatorRecord {
+        name: name.to_string(),
+        kind: OperatorRecordKind::Yubikey(YubiKeyOperatorRecord {
+            serial: YubiKeySerial::from(serial),
+            extra: toml::Table::new(),
+        }),
+    };
+    let registry_key = || {
+        hex::encode(P256Pair::generate().unwrap().public_key().to_bytes())
+            .parse()
+            .unwrap()
+    };
+    let mut config = Config {
+        active_org: Some("yk-org".to_string()),
+        orgs: HashMap::from([(
+            "yk-org".to_string(),
+            OrgConfig {
+                id: "org-e2e".to_string(),
+                api_key_path: turnkey_dir.join("orgs/yk-org/api_key.json"),
+                api_base_url: common::LOCAL_API_BASE_URL.to_string(),
+                default_operator_kind: OperatorKind::Yubikey,
+                operators: vec![
+                    yubikey_record("first", 0x01c9_5c1f),
+                    yubikey_record("second", 0xdead_beef),
+                ],
+                extra: toml::Table::new(),
+            },
+        )]),
+        yubikeys: Default::default(),
+        last_created_app_id: HashMap::new(),
+        last_operator_ids: HashMap::new(),
+        extra: toml::Table::new(),
+    };
+    config
+        .yubikeys
+        .register(YubiKeySerial::from(0x01c9_5c1f), registry_key());
+    config
+        .yubikeys
+        .register(YubiKeySerial::from(0xdead_beef), registry_key());
+    std::fs::write(
+        turnkey_dir.join("tvc.config.toml"),
+        format!("version = 1\n{}", toml::to_string_pretty(&config).unwrap()),
+    )
+    .unwrap();
+
+    // An existing API key so login skips generation and goes straight to
+    // verification.
+    let api_key_dir = temp.path().join(".config/turnkey/orgs/yk-org");
+    std::fs::create_dir_all(&api_key_dir).unwrap();
+    let stamper = TurnkeyP256ApiKey::generate();
+    let api_key = StoredApiKey {
+        public_key: hex::encode(stamper.compressed_public_key()),
+        private_key: hex::encode(stamper.private_key()),
+        curve: KeyCurve::P256,
+    };
+    std::fs::write(
+        api_key_dir.join("api_key.json"),
+        serde_json::to_string_pretty(&api_key).unwrap(),
+    )
+    .unwrap();
+
+    let (api_base_url, server) = spawn_whoami_server();
+
+    let mut session = spawn_with_home(
+        temp.path(),
+        &["login", "--org", "yk-org", "--api-base-url", &api_base_url],
+    );
+
+    session.exp_string("Select YubiKey operator").unwrap();
+    exp_wrapped(&mut session, "first (serial 01c95c1f)");
+    exp_wrapped(&mut session, "second (serial deadbeef)");
+
+    // Down-arrow to the second record, Enter to confirm.
+    session.send("\x1b[B").unwrap();
+    session.send_line("").unwrap();
+
+    exp_wrapped(
+        &mut session,
+        "Using YubiKey operator 'second' (serial deadbeef).",
+    );
+    let output = session.exp_eof().unwrap();
+    server.join().unwrap();
+
+    assert!(output.contains("Successfully logged in!"), "{output}");
 }
 
 /// Logging in to an org whose default backend is hosted needs no local key:

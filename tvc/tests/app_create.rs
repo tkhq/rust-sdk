@@ -13,9 +13,9 @@ use tvc::config::turnkey::{
 
 const NON_INTERACTIVE_ENV: &str = "TVC_NON_INTERACTIVE";
 
-/// Write a config whose active org knows TWO operators — one registered
-/// hosted record and one saved manifest-set ID — so the reuse decision has
-/// multiple candidates. Returns the org's composite public key.
+/// Write a config whose active org has two hosted identities proven to use
+/// the same key plus one saved ID with no persisted key association. Returns
+/// the shared composite public key.
 fn write_two_candidate_config(home: &Path) -> String {
     let turnkey_dir = home.join(".config/turnkey");
     std::fs::create_dir_all(&turnkey_dir).unwrap();
@@ -32,17 +32,30 @@ fn write_two_candidate_config(home: &Path) -> String {
                 api_key_path: turnkey_dir.join("orgs/hosted-org/api_key.json"),
                 api_base_url: "http://127.0.0.1:1".to_string(),
                 default_operator_kind: OperatorKind::Hosted,
-                operators: vec![OperatorRecord {
-                    name: "hosted-op".to_string(),
-                    kind: OperatorRecordKind::Hosted(HostedOperatorRecord {
-                        operator_id: "11111111-1111-4111-8111-111111111111".parse().unwrap(),
-                        wallet_id: "22222222-2222-4222-8222-222222222222".parse().unwrap(),
-                        path: "m/5527107'/0'/0'".to_string(),
-                        encrypt_public_key: encrypt_public_key.to_string(),
-                        sign_public_key: sign_public_key.to_string(),
-                        extra: toml::Table::new(),
-                    }),
-                }],
+                operators: vec![
+                    OperatorRecord {
+                        name: "hosted-op".to_string(),
+                        kind: OperatorRecordKind::Hosted(HostedOperatorRecord {
+                            operator_id: "11111111-1111-4111-8111-111111111111".parse().unwrap(),
+                            wallet_id: "22222222-2222-4222-8222-222222222222".parse().unwrap(),
+                            path: "m/5527107'/0'/0'".to_string(),
+                            encrypt_public_key: encrypt_public_key.to_string(),
+                            sign_public_key: sign_public_key.to_string(),
+                            extra: toml::Table::new(),
+                        }),
+                    },
+                    OperatorRecord {
+                        name: "hosted-op-2".to_string(),
+                        kind: OperatorRecordKind::Hosted(HostedOperatorRecord {
+                            operator_id: "33333333-3333-4333-8333-333333333333".parse().unwrap(),
+                            wallet_id: "55555555-5555-4555-8555-555555555555".parse().unwrap(),
+                            path: "m/5527107'/0'/0'".to_string(),
+                            encrypt_public_key: encrypt_public_key.to_string(),
+                            sign_public_key: sign_public_key.to_string(),
+                            extra: toml::Table::new(),
+                        }),
+                    },
+                ],
                 extra: toml::Table::new(),
             },
         )]),
@@ -50,7 +63,7 @@ fn write_two_candidate_config(home: &Path) -> String {
         last_created_app_id: HashMap::new(),
         last_operator_ids: HashMap::from([(
             "hosted-org".to_string(),
-            vec!["33333333-3333-4333-8333-333333333333".to_string()],
+            vec!["66666666-6666-4666-8666-666666666666".to_string()],
         )]),
         extra: toml::Table::new(),
     };
@@ -105,7 +118,7 @@ fn piped_stdin_with_multiple_reuse_candidates_errors() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "multiple operator IDs are known for the active org",
+            "multiple operator IDs use the requested manifest operator key",
         ));
 }
 
@@ -148,7 +161,12 @@ fn piped_stdin_multiple_candidates_with_explicit_ids_proceeds() {
         .assert()
         .failure()
         .stdout(predicate::str::contains("Creating app 'test-app'"))
-        .stderr(predicate::str::contains("multiple operator IDs are known").not());
+        .stderr(
+            predicate::str::contains(
+                "multiple operator IDs use the requested manifest operator key",
+            )
+            .not(),
+        );
 }
 
 /// The other escape hatch: `--no-operator-reuse` opts out of the decision
@@ -192,5 +210,60 @@ fn piped_stdin_multiple_candidates_with_no_reuse_flag_proceeds() {
         .assert()
         .failure()
         .stdout(predicate::str::contains("Creating app 'test-app'"))
-        .stderr(predicate::str::contains("multiple operator IDs are known").not());
+        .stderr(
+            predicate::str::contains(
+                "multiple operator IDs use the requested manifest operator key",
+            )
+            .not(),
+        );
+}
+
+/// Unrelated registered/saved identities must not override an explicit
+/// newOperators key. This is the local/YubiKey regression: those backends
+/// supply a public key in app.json but do not yet have a reusable server ID.
+#[test]
+fn piped_stdin_preserves_an_unmatched_new_operator_key() {
+    let temp = TempDir::new().unwrap();
+    write_two_candidate_config(temp.path());
+    let requested_key = "07".repeat(130);
+
+    let app_config_path = temp.path().join("app.json");
+    std::fs::write(
+        &app_config_path,
+        format!(
+            r#"{{
+    "name": "test-app",
+    "quorumPublicKey": "{KNOWN_QUORUM_KEY}",
+    "manifestSetParams": {{
+        "name": "manifest-set",
+        "threshold": 1,
+        "newOperators": [{{
+            "name": "self-custody-operator",
+            "publicKey": "{requested_key}"
+        }}]
+    }}
+}}"#
+        ),
+    )
+    .unwrap();
+
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env_remove(NON_INTERACTIVE_ENV)
+        .args([
+            "app",
+            "create",
+            "--config-file",
+            app_config_path.to_str().unwrap(),
+        ])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("Creating app 'test-app'"))
+        .stdout(predicate::str::contains("Reusing operator").not())
+        .stderr(
+            predicate::str::contains(
+                "multiple operator IDs use the requested manifest operator key",
+            )
+            .not(),
+        );
 }

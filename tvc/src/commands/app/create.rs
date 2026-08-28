@@ -32,12 +32,11 @@ pub struct Args {
     #[arg(short = 'c', long, value_name = "PATH", env = "TVC_APP_CONFIG")]
     pub config_file: PathBuf,
 
-    /// Create a new operator instead of reusing a known one.
+    /// Create a new operator instead of reusing a matching known one.
     ///
-    /// By default `app create` reuses a known operator — a registered hosted
-    /// operator, or the one from your last `app create` — rather than minting
-    /// a new operator ID each time. Pass this to force creating a new
-    /// operator.
+    /// By default `app create` reuses a registered operator only when its
+    /// public key matches the sole new manifest operator in the config. Pass
+    /// this to force creating a new operator even when a match exists.
     #[arg(long, env = "TVC_NO_OPERATOR_REUSE")]
     pub no_operator_reuse: bool,
 
@@ -66,10 +65,9 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: turnkey::Config) -> Resul
 
     let mut app_config = apply_overrides(app_config, &args.overrides);
 
-    // Reuse a known operator by default so repeated `app create` runs don't
-    // mint a fresh operator ID for the same key. The decision itself is pure
-    // (`decide_operator_reuse`); this endpoint supplies the candidates and
-    // adapts multi-candidate handling to the mode.
+    // Reuse a known operator only when its key proves it is the identity the
+    // config requested. Bare IDs remembered from older app creation cannot
+    // safely override explicit local or YubiKey public keys.
     let candidates = config.known_operator_candidates();
 
     match decide_operator_reuse(
@@ -86,7 +84,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: turnkey::Config) -> Resul
 
             if !can_prompt {
                 bail!(
-                    "multiple operator IDs are known for the active org; \
+                    "multiple operator IDs use the requested manifest operator key; \
                      set manifestSetParams.existingOperatorIds in your config to reuse one, \
                      or pass --no-operator-reuse to create a new operator"
                 );
@@ -134,10 +132,24 @@ fn decide_operator_reuse(
     if !params.existing_operator_ids.is_empty() {
         return OperatorReuse::KeepConfig;
     }
-    match candidates {
+    // Replacing a set containing several new operators with one existing ID
+    // would silently change both its membership and threshold semantics.
+    let [requested] = params.new_operators.as_slice() else {
+        return OperatorReuse::KeepConfig;
+    };
+    let Ok(requested_key) = requested.public_key.parse() else {
+        return OperatorReuse::KeepConfig;
+    };
+    let matching = candidates
+        .iter()
+        .filter(|candidate| candidate.public_key == Some(requested_key))
+        .cloned()
+        .collect::<Vec<_>>();
+
+    match matching.as_slice() {
         [] => OperatorReuse::KeepConfig,
         [sole] => OperatorReuse::Reuse(sole.clone()),
-        _ => OperatorReuse::MultipleCandidates(candidates.to_vec()),
+        _ => OperatorReuse::MultipleCandidates(matching),
     }
 }
 
@@ -532,16 +544,37 @@ mod tests {
             threshold: 1,
             new_operators: vec![OperatorParams {
                 name: "operator-1".to_string(),
-                public_key: "operator-public-key".to_string(),
+                public_key: operator_public_key(),
             }],
             existing_operator_ids: vec![],
         }
+    }
+
+    fn operator_public_key() -> String {
+        "07".repeat(130)
     }
 
     fn candidate(id: &str) -> OperatorCandidate {
         OperatorCandidate {
             id: id.to_string(),
             name: None,
+            public_key: Some(operator_public_key().parse().unwrap()),
+        }
+    }
+
+    fn unmatched_candidate(id: &str) -> OperatorCandidate {
+        OperatorCandidate {
+            id: id.to_string(),
+            name: None,
+            public_key: Some("08".repeat(130).parse().unwrap()),
+        }
+    }
+
+    fn unknown_key_candidate(id: &str) -> OperatorCandidate {
+        OperatorCandidate {
+            id: id.to_string(),
+            name: None,
+            public_key: None,
         }
     }
 
@@ -561,6 +594,37 @@ mod tests {
         let params = manifest_params_with_new_operator();
         assert_eq!(
             decide_operator_reuse(false, Some(&params), &[]),
+            OperatorReuse::KeepConfig
+        );
+    }
+
+    #[test]
+    fn decide_reuse_keeps_explicit_key_when_candidates_do_not_match() {
+        let params = manifest_params_with_new_operator();
+
+        assert_eq!(
+            decide_operator_reuse(
+                false,
+                Some(&params),
+                &[
+                    unmatched_candidate("hosted"),
+                    unknown_key_candidate("saved")
+                ],
+            ),
+            OperatorReuse::KeepConfig
+        );
+    }
+
+    #[test]
+    fn decide_reuse_keeps_sets_with_several_new_operators() {
+        let mut params = manifest_params_with_new_operator();
+        params.new_operators.push(OperatorParams {
+            name: "operator-2".to_string(),
+            public_key: "09".repeat(130),
+        });
+
+        assert_eq!(
+            decide_operator_reuse(false, Some(&params), &[candidate("op-1")]),
             OperatorReuse::KeepConfig
         );
     }
@@ -589,7 +653,7 @@ mod tests {
         );
     }
 
-    /// The common case: exactly one known operator -> reuse it.
+    /// A sole identity proven to use the requested key is reused.
     #[test]
     fn decide_reuse_reuses_the_sole_candidate() {
         let params = manifest_params_with_new_operator();
@@ -599,14 +663,19 @@ mod tests {
         );
     }
 
-    /// Multiple known operators are surfaced for the endpoint to prompt/bail on.
+    /// Only multiple identities proven to use the requested key are surfaced.
     #[test]
     fn decide_reuse_returns_candidates_for_multiple_known_operators() {
         let params = manifest_params_with_new_operator();
-        let candidates = [candidate("op-1"), candidate("op-2")];
+        let candidates = [
+            candidate("op-1"),
+            unmatched_candidate("unrelated"),
+            candidate("op-2"),
+            unknown_key_candidate("saved"),
+        ];
         assert_eq!(
             decide_operator_reuse(false, Some(&params), &candidates),
-            OperatorReuse::MultipleCandidates(candidates.to_vec())
+            OperatorReuse::MultipleCandidates(vec![candidate("op-1"), candidate("op-2")])
         );
     }
 

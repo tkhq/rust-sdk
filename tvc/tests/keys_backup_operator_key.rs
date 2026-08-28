@@ -35,8 +35,9 @@ fn hosted_only_org_explains_there_is_no_key_file_to_back_up() {
         .stderr(predicate::str::contains(
             "org 'hosted-org' has no local operator key file to back up",
         ))
+        .stderr(predicate::str::contains("held by Turnkey"))
         .stderr(predicate::str::contains(
-            "held by Turnkey and cannot be exported",
+            "never leave the device — neither can be exported",
         ));
 }
 

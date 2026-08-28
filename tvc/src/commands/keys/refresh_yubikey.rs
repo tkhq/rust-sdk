@@ -1,4 +1,4 @@
-//! YubiKey registry refresh command - re-reads a provisioned device's
+//! YubiKey registry refresh command - re-reads a configured device's
 //! operator key and updates the cached registry entry.
 
 use crate::{
@@ -8,10 +8,9 @@ use crate::{
     },
     outcome::Outcome,
     output::{Ctx, StdCtx},
-    prompts,
-    yubikey::{self, DeviceError, DeviceOps},
+    yubikey::{self, ConnectedYubiKeys, DeviceError, DeviceOps},
 };
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use clap::Args as ClapArgs;
 use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
@@ -83,35 +82,7 @@ impl Args {
         D: DeviceOps,
         O: FnOnce(YubiKeySerial) -> Result<D, DeviceError>,
     {
-        let connected = ctx.connected_yubikeys()?;
-
-        let serial = match self.serial {
-            Some(serial) => {
-                if !connected.contains(&serial) {
-                    // Renders `; connected: a, b`, or nothing when no device
-                    // is present (the bare message already says it all).
-                    let connected = if connected.is_empty() {
-                        String::new()
-                    } else {
-                        let serials: Vec<String> =
-                            connected.iter().map(ToString::to_string).collect();
-                        format!("; connected: {}", serials.join(", "))
-                    };
-
-                    bail!("YubiKey {serial} is not connected{connected}");
-                }
-
-                serial
-            }
-            None => match connected.as_slice() {
-                [] => bail!("no YubiKey is connected"),
-                [sole] => *sole,
-                _ if ctx.is_non_interactive() || !prompts::stdin_can_prompt() => {
-                    return Err(prompts::error_required_in_non_interactive("--serial"));
-                }
-                _ => prompts::select("YubiKey to refresh", connected)?,
-            },
-        };
+        let serial = ConnectedYubiKeys::from(ctx.connected_yubikeys()?).choose(self.serial)?;
 
         // Reading the slot certificates needs neither the PIN nor a touch,
         // so the refresh itself also runs non-interactively.

@@ -181,6 +181,32 @@ fn yubikey_org_without_a_prompt_reports_the_pin_requirement() {
 }
 
 #[test]
+fn an_unknown_yubikey_serial_is_rejected_before_share_input_io() {
+    let temp = TempDir::new().unwrap();
+    common::write_yubikey_only_config(
+        temp.path(),
+        "yubikey-org",
+        "99999999-9999-4999-8999-999999999999",
+    );
+
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env_remove("TVC_OPERATOR_SEED")
+        .args(["keys", "re-encrypt-local-share"])
+        .arg("--quorum-key-metadata")
+        .arg(temp.path().join("does-not-exist-metadata.json"))
+        .arg("--provision-bundle")
+        .arg(temp.path().join("does-not-exist-bundle.json"))
+        .args(["--dangerous-skip-verification", "--serial", "deadbeef"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "no YubiKey operator has serial deadbeef",
+        ))
+        .stderr(predicate::str::contains("does-not-exist-metadata.json").not());
+}
+
+#[test]
 fn re_encrypt_local_share_round_trips_metadata_share() {
     let temp = TempDir::new().unwrap();
     let metadata_path = temp.path().join("quorum_key_metadata.json");

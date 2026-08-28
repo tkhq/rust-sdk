@@ -17,7 +17,7 @@
 use crate::commands::deploy::approve::{
     ApprovalAlreadyPosted, ApprovalDryRun, ApprovalGenerated, ApprovalPosted,
 };
-use crate::commands::{app, deploy, keys, login, operator, version};
+use crate::commands::{app, deploy, keys, login, operator, version, yubikey};
 use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
 
@@ -32,6 +32,7 @@ use std::fmt::{self, Display, Formatter};
 pub enum Outcome {
     LoggedIn(login::LoggedIn),
     OperatorCreated(operator::create::OperatorCreated),
+    YubikeyOperatorAdded(operator::create::YubikeyOperatorAdded),
     ProfileDeleted(login::ProfileDeleted),
     ManifestApprovalPosted(ApprovalPosted),
     ManifestApprovalGenerated(ApprovalGenerated),
@@ -55,10 +56,10 @@ pub enum Outcome {
     AppDeleted(app::delete::AppDeleted),
     OperatorKeyBackedUp(keys::backup_operator_key::OperatorKeyBackedUp),
     // Spelled Yubikey, not YubiKey: the variant name IS the reason (see the
-    // module docs), and the wire strings are yubikey_provisioned/_refreshed/_deleted.
-    YubikeyProvisioned(keys::provision_yubikey::YubiKeyProvisioned),
+    // module docs), so these outcomes use the stable `yubikey_*` prefix.
     YubikeyRefreshed(keys::refresh_yubikey::YubiKeyRefreshed),
-    YubikeyDeleted(keys::delete_yubikey::YubiKeyDeleted),
+    YubikeyCertificatesCreated(yubikey::create_certs::YubiKeyCertificatesCreated),
+    YubikeyUnregistered(yubikey::unregister::YubiKeyUnregistered),
     QuorumKeyCreated(keys::create_quorum_key::QuorumKeyCreated),
     QuorumKeyGenerated(keys::generate_local_quorum_key::QuorumKeyGenerated),
     QuorumKeyConfigCreated(keys::init_local_quorum_key::QuorumKeyConfigCreated),
@@ -73,6 +74,7 @@ impl Display for Outcome {
         match self {
             Outcome::LoggedIn(msg) => msg.fmt(f),
             Outcome::OperatorCreated(msg) => msg.fmt(f),
+            Outcome::YubikeyOperatorAdded(msg) => msg.fmt(f),
             Outcome::ProfileDeleted(msg) => msg.fmt(f),
             Outcome::ManifestApprovalPosted(msg) => msg.fmt(f),
             Outcome::ManifestApprovalGenerated(msg) => msg.fmt(f),
@@ -95,9 +97,9 @@ impl Display for Outcome {
             Outcome::LiveDeploymentSet(msg) => msg.fmt(f),
             Outcome::AppDeleted(msg) => msg.fmt(f),
             Outcome::OperatorKeyBackedUp(msg) => msg.fmt(f),
-            Outcome::YubikeyProvisioned(msg) => msg.fmt(f),
             Outcome::YubikeyRefreshed(msg) => msg.fmt(f),
-            Outcome::YubikeyDeleted(msg) => msg.fmt(f),
+            Outcome::YubikeyCertificatesCreated(msg) => msg.fmt(f),
+            Outcome::YubikeyUnregistered(msg) => msg.fmt(f),
             Outcome::QuorumKeyCreated(msg) => msg.fmt(f),
             Outcome::QuorumKeyGenerated(msg) => msg.fmt(f),
             Outcome::QuorumKeyConfigCreated(msg) => msg.fmt(f),

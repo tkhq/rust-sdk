@@ -30,6 +30,12 @@ the supported inputs and precedence for that command.
 
 ## Usage
 
+### Use a YubiKey Operator
+
+See [Use a YubiKey with `tvc`](YUBIKEY.md) for the setup flow that keeps
+management-key operations in `ykman`, including PIV hardening, on-device key
+generation, certificate creation, registration, and daily operator use.
+
 ### Create an App
 
 ```bash

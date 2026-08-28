@@ -5,15 +5,17 @@ use crate::commands::keys::backup_operator_key::{
     OperatorKeyBackedUp, back_up, prompt_for_backup_destination,
 };
 use crate::config::turnkey::{
-    API_BASE_URL_PROD, Config, KeyCurve, LocalOperatorRecord, OperatorKind, OperatorRecordKind,
-    OrgConfig, QosOperatorPublicKey, StoredApiKey, StoredQosOperatorKey, YubiKeySerial,
-    dashboard_base_url, default_api_key_path, default_operator_key_path, default_org_dir,
+    API_BASE_URL_PROD, Config, KeyCurve, LocalOperatorRecord, NewOrgOperator, OperatorKind,
+    OperatorRecord, OperatorRecordKind, OrgConfig, QosOperatorPublicKey,
+    SelectYubiKeyOperatorError, StoredApiKey, StoredQosOperatorKey, YubiKeyOperatorRecord,
+    YubiKeySerial, dashboard_base_url, default_api_key_path, default_operator_key_path,
+    default_org_dir,
 };
 use crate::outcome::Outcome;
-use crate::output::StdCtx;
+use crate::output::{MissingRequiredInput, StdCtx};
 use crate::prompts::{self, error_required_in_non_interactive};
 use crate::{shell_eprintln, shell_print, shell_println};
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow, bail, ensure};
 use clap::Args as ClapArgs;
 use qos_p256::P256Pair;
 use serde::Serialize;
@@ -36,10 +38,14 @@ pub struct Args {
     /// Turnkey API base URL. Defaults to production for newly configured orgs.
     #[arg(long, env = "TVC_API_BASE_URL", value_name = "URL")]
     pub api_base_url: Option<String>,
+    /// Serial (hex) of the YubiKey operator to log in with, when the
+    /// organization registers several. Unused for other operator kinds.
+    #[arg(long, value_name = "SERIAL")]
+    pub serial: Option<YubiKeySerial>,
 }
 
-/// Permanently delete a saved login profile, including its API and operator
-/// key files on disk.
+/// Permanently delete a saved login profile, including its API and any local
+/// operator key files on disk.
 #[derive(Debug, ClapArgs)]
 #[command(about, long_about = None)]
 pub struct DeleteArgs {
@@ -54,7 +60,23 @@ pub struct DeleteArgs {
 
 enum OrgPlan {
     Existing(String),
-    New { id: String, alias: String },
+    New {
+        id: String,
+        alias: String,
+        operator: NewOrgOperatorPlan,
+    },
+}
+
+/// The operator backend chosen for a new organization at plan time.
+enum NewOrgOperatorPlan {
+    Local,
+    RegisteredYubikey(YubiKeySerial),
+}
+
+/// The yubikey leg of a newly created organization: what the coherent save
+/// must be able to recover, and what the post-save guidance surfaces.
+struct NewOrgYubiKey {
+    public_key: QosOperatorPublicKey,
 }
 
 enum ApiKeyPolicy {
@@ -66,6 +88,9 @@ struct LoginPlan {
     org: OrgPlan,
     api_base_url_override: Option<String>,
     api_key_policy: ApiKeyPolicy,
+    /// The YubiKey operator selected at the endpoint. `None` remains valid
+    /// for non-interactive runs with a sole record.
+    yubikey_serial: Option<YubiKeySerial>,
 }
 
 #[instrument(skip_all)]
@@ -87,7 +112,9 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome
 }
 
 /// Permanently delete a saved login profile: its config entry and its API and
-/// operator key files on disk.
+/// any local operator key files on disk. YubiKey operator references vanish
+/// with the profile, but the devices and their shared registry entries are
+/// never touched.
 pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) -> Result<Outcome> {
     let is_non_interactive = ctx.is_non_interactive();
     debug!(
@@ -130,9 +157,12 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) 
         )?;
         shell_eprintln!(
             ctx,
-            "  - Removes the local config entry and deletes the API and operator key"
+            "  - Removes the local config entry and deletes the API and any local"
         )?;
-        shell_eprintln!(ctx, "    files from disk. This cannot be undone.")?;
+        shell_eprintln!(
+            ctx,
+            "    operator key files from disk. This cannot be undone."
+        )?;
         shell_eprintln!(
             ctx,
             "  - It does NOT touch the Turnkey dashboard ({dashboard_url}). If this API"
@@ -142,6 +172,35 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) 
             "    key is registered there, it stays valid until you remove it"
         )?;
         shell_eprintln!(ctx, "    (instructions are printed after deletion).")?;
+
+        let references_yubikeys = config
+            .orgs
+            .get(&alias)
+            .is_some_and(|org| org.yubikey_operators().next().is_some());
+
+        if references_yubikeys {
+            shell_eprintln!(
+                ctx,
+                "  - YubiKey operator references are removed from this profile only: the"
+            )?;
+            shell_eprintln!(
+                ctx,
+                "    devices and their [[yubikeys]] registry entries are NOT touched"
+            )?;
+            shell_eprintln!(
+                ctx,
+                "    (other profiles may share them). After removing every profile reference,"
+            )?;
+            shell_eprintln!(
+                ctx,
+                "    forget a device locally with `tvc yubikey unregister`; this does not"
+            )?;
+            shell_eprintln!(
+                ctx,
+                "    modify the device or revoke it from an organization."
+            )?;
+        }
+
         shell_eprintln!(ctx, "")?;
         prompts::confirm_or_bail(
             &format!("Permanently delete profile '{alias}' ({org_id}) and its key files?"),
@@ -221,11 +280,16 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) 
     // A local delete does not touch the dashboard-registered API key, and we
     // can't tell whether it is still there, so hedge with "may" and give steps.
     let dashboard_url = dashboard_base_url(&removed.api_base_url);
+    let retained_yubikey_serials: Vec<YubiKeySerial> = removed
+        .yubikey_operators()
+        .map(|(_, yubikey)| yubikey.serial)
+        .collect();
 
     Ok(Outcome::ProfileDeleted(ProfileDeleted {
         alias,
         organization_id: removed.id,
         removed_key_directory: removed_dir.map(|dir| dir.display().to_string()),
+        retained_yubikey_serials,
         dashboard_url: dashboard_url.to_string(),
         api_public_key,
     }))
@@ -283,14 +347,56 @@ fn build_login_plan_interactive(
     args: Args,
     config: &Config,
 ) -> Result<LoginPlan> {
-    let org = match args.org {
+    let Args {
+        org,
+        api_base_url,
+        serial,
+    } = args;
+    let org = match org {
         Some(query) => OrgPlan::Existing(query),
-        None => prompt_for_org_plan(ctx, config, args.api_base_url.as_deref())?,
+        None => prompt_for_org_plan(ctx, config, api_base_url.as_deref(), serial)?,
     };
+
+    let yubikey_serial = match &org {
+        OrgPlan::Existing(query) => find_org(config, query)
+            .filter(|(_, org)| org.default_operator_kind == OperatorKind::Yubikey)
+            .map(|(_, org)| -> Result<YubiKeySerial> {
+                if let Some(serial) = serial {
+                    return Ok(org.select_yubikey_operator(Some(serial))?.1.serial);
+                }
+
+                match org.select_yubikey_operator(None) {
+                    Ok((_, yubikey)) => Ok(yubikey.serial),
+                    Err(SelectYubiKeyOperatorError::MultipleYubiKeyOperators { .. }) => {
+                        struct Choice<'a>(&'a OperatorRecord, &'a YubiKeyOperatorRecord);
+
+                        impl Display for Choice<'_> {
+                            fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+                                write!(f, "{} (serial {})", self.0.name, self.1.serial)
+                            }
+                        }
+
+                        let choices = org
+                            .yubikey_operators()
+                            .map(|(operator, yubikey)| Choice(operator, yubikey))
+                            .collect();
+                        let Choice(_, yubikey) =
+                            prompts::select("Select YubiKey operator", choices)?;
+
+                        Ok(yubikey.serial)
+                    }
+                    Err(error) => Err(error.into()),
+                }
+            })
+            .transpose()?,
+        OrgPlan::New { .. } => None,
+    };
+
     Ok(LoginPlan {
         org,
-        api_base_url_override: args.api_base_url,
+        api_base_url_override: api_base_url,
         api_key_policy: ApiKeyPolicy::AllowGenerate,
+        yubikey_serial,
     })
 }
 
@@ -303,11 +409,12 @@ fn build_login_plan_non_interactive(args: Args) -> Result<LoginPlan> {
         org: OrgPlan::Existing(org_query),
         api_base_url_override: args.api_base_url,
         api_key_policy: ApiKeyPolicy::RequireExisting,
+        yubikey_serial: args.serial,
     })
 }
 
 async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) -> Result<Outcome> {
-    let (alias, org_config) = match plan.org {
+    let (alias, org_config, yubikey) = match plan.org {
         OrgPlan::Existing(query) => {
             let alias = match find_org(&config, &query) {
                 Some((alias, _)) => alias.clone(),
@@ -322,18 +429,61 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
                 plan.api_base_url_override.as_deref(),
             );
             let org_config = config.orgs.get(&alias).unwrap().clone();
-            (alias, org_config)
+            (alias, org_config, None)
         }
-        OrgPlan::New { id, alias } => {
+        OrgPlan::New {
+            id,
+            alias,
+            operator,
+        } => {
             let api_base_url = new_org_api_base_url(plan.api_base_url_override.as_deref());
-            generate_org(&mut config, id, alias, api_base_url)?
+
+            // The registry entry already exists; the save below persists only
+            // the new organization and its serial reference.
+            let (operator, yubikey) = match operator {
+                NewOrgOperatorPlan::Local => (NewOrgOperator::LocalKeyFile, None),
+                NewOrgOperatorPlan::RegisteredYubikey(serial) => {
+                    let entry = config.yubikeys.get(serial).ok_or_else(|| {
+                        anyhow!(
+                            "YubiKey {serial} is not in the device registry; install its \
+                             certificates and run `tvc keys refresh-yubikey --serial {serial}` \
+                             first"
+                        )
+                    })?;
+
+                    (
+                        NewOrgOperator::Yubikey(serial),
+                        Some(NewOrgYubiKey {
+                            public_key: entry.public_key,
+                        }),
+                    )
+                }
+            };
+
+            let (alias, org_config) = generate_org(&mut config, id, alias, api_base_url, operator)?;
+            (alias, org_config, yubikey)
         }
     };
 
     shell_println!(ctx, "Selected org: {} ({})", alias, org_config.id)?;
 
     config.set_active_org(&alias)?;
+
     config.save().await?;
+
+    if let Some(yubikey) = &yubikey {
+        shell_println!(ctx)?;
+        shell_println!(ctx, "Operator public key: {}", yubikey.public_key)?;
+        shell_println!(ctx)?;
+        shell_println!(
+            ctx,
+            "This key will be used for approving deployment manifests."
+        )?;
+        shell_println!(
+            ctx,
+            "Make sure to register this as an operator in your organization."
+        )?;
+    }
 
     let api_key = match StoredApiKey::load(&org_config).await? {
         Some(api_key) => {
@@ -398,14 +548,22 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
             }
         }
         OperatorKind::Yubikey => {
-            let (operator, yubikey) = org_config
-                .select_yubikey_operator()
-                .with_context(|| format!("org '{alias}'"))?;
+            let selected = org_config.select_yubikey_operator(plan.yubikey_serial);
+            let (operator, yubikey) = match selected {
+                Err(error @ SelectYubiKeyOperatorError::MultipleYubiKeyOperators { .. })
+                    if plan.yubikey_serial.is_none() =>
+                {
+                    return Err(anyhow::Error::new(error)
+                        .context(MissingRequiredInput::new("--serial"))
+                        .context(format!("org '{alias}'")));
+                }
+                selected => selected.with_context(|| format!("org '{alias}'"))?,
+            };
             let entry = config.yubikeys.get(yubikey.serial).ok_or_else(|| {
                 anyhow!(
                     "YubiKey {serial} of operator '{name}' is not in the device registry; \
-                         run `tvc keys provision-yubikey --serial {serial}` to provision and \
-                         register it",
+                     install its certificates and run \
+                     `tvc keys refresh-yubikey --serial {serial}` first",
                     serial = yubikey.serial,
                     name = operator.name,
                 )
@@ -444,6 +602,7 @@ fn prompt_for_org_plan(
     ctx: &mut StdCtx,
     config: &Config,
     api_base_url_override: Option<&str>,
+    serial: Option<YubiKeySerial>,
 ) -> Result<OrgPlan> {
     debug!(
         configured_org_count = config.orgs.len(),
@@ -454,7 +613,7 @@ fn prompt_for_org_plan(
     if config.orgs.is_empty() {
         debug!("no organizations configured; prompting for new organization");
         shell_println!(ctx, "No organization configured.")?;
-        return prompt_for_new_org_inputs(ctx, api_base_url_override);
+        return prompt_for_new_org_inputs(ctx, config, api_base_url_override, serial);
     }
 
     let mut options: Vec<OrgChoice> = config
@@ -476,13 +635,15 @@ fn prompt_for_org_plan(
 
     match prompts::select("Select organization", options)? {
         OrgChoice::Existing { alias, .. } => Ok(OrgPlan::Existing(alias)),
-        OrgChoice::New => prompt_for_new_org_inputs(ctx, api_base_url_override),
+        OrgChoice::New => prompt_for_new_org_inputs(ctx, config, api_base_url_override, serial),
     }
 }
 
 fn prompt_for_new_org_inputs(
     ctx: &mut StdCtx,
+    config: &Config,
     api_base_url_override: Option<&str>,
+    serial: Option<YubiKeySerial>,
 ) -> Result<OrgPlan> {
     let dashboard_url = dashboard_base_url(api_base_url_override.unwrap_or(API_BASE_URL_PROD));
     shell_println!(
@@ -499,7 +660,60 @@ fn prompt_for_new_org_inputs(
     let alias = prompts::text("Organization alias", Some("default"))?;
     debug!(org_alias = %alias, "user entered new organization inputs");
 
-    Ok(OrgPlan::New { id, alias })
+    let operator = {
+        enum OperatorKeyChoice {
+            Local,
+            Yubikey,
+        }
+
+        impl Display for OperatorKeyChoice {
+            fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+                match self {
+                    Self::Local => f.write_str("Local key file"),
+                    Self::Yubikey => f.write_str("YubiKey"),
+                }
+            }
+        }
+
+        match prompts::select(
+            "Operator key type",
+            vec![OperatorKeyChoice::Local, OperatorKeyChoice::Yubikey],
+        )? {
+            OperatorKeyChoice::Local => NewOrgOperatorPlan::Local,
+            OperatorKeyChoice::Yubikey => {
+                let serial = match serial {
+                    Some(serial) => {
+                        ensure!(
+                            config.yubikeys.contains(serial),
+                            "YubiKey {serial} is not in the device registry; install its \
+                             certificates and run `tvc keys refresh-yubikey --serial {serial}` \
+                             first"
+                        );
+                        serial
+                    }
+                    None => {
+                        let registered = config.yubikeys.serials().collect::<Vec<_>>();
+                        match registered.as_slice() {
+                            [] => bail!(
+                                "no YubiKeys are registered; complete the external setup and run \
+                                 `tvc keys refresh-yubikey` first"
+                            ),
+                            [sole] => *sole,
+                            _ => prompts::select("YubiKey to use as the operator", registered)?,
+                        }
+                    }
+                };
+
+                NewOrgOperatorPlan::RegisteredYubikey(serial)
+            }
+        }
+    };
+
+    Ok(OrgPlan::New {
+        id,
+        alias,
+        operator,
+    })
 }
 
 enum OrgChoice {
@@ -535,10 +749,15 @@ fn generate_org(
     id: String,
     alias: String,
     api_base_url: String,
+    operator: NewOrgOperator,
 ) -> Result<(String, OrgConfig)> {
     debug!(org_alias = %alias, %api_base_url, "adding organization");
-    config.add_org(&alias, id, api_base_url)?;
-    let org_config = config.orgs.get(&alias).unwrap().clone();
+    config.add_org(&alias, id, api_base_url, operator)?;
+    let org_config = config
+        .orgs
+        .get(&alias)
+        .with_context(|| format!("organization '{alias}' disappeared from config"))?
+        .clone();
     Ok((alias, org_config))
 }
 
@@ -802,6 +1021,10 @@ pub struct ProfileDeleted {
     alias: String,
     organization_id: String,
     removed_key_directory: Option<String>,
+    /// Serials of the YubiKey operators the profile referenced. The devices
+    /// and their registry entries are kept; other profiles may share them.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    retained_yubikey_serials: Vec<YubiKeySerial>,
     dashboard_url: String,
     api_public_key: Option<String>,
 }
@@ -815,6 +1038,20 @@ impl Display for ProfileDeleted {
 
         if let Some(directory) = &self.removed_key_directory {
             lines.push(format!("Removed key directory: {directory}"));
+        }
+
+        if !self.retained_yubikey_serials.is_empty() {
+            let serials: Vec<String> = self
+                .retained_yubikey_serials
+                .iter()
+                .map(ToString::to_string)
+                .collect();
+
+            lines.push(format!(
+                "Kept the YubiKey registry entries (serials {}); after removing every \
+                 profile reference, forget them locally with `tvc yubikey unregister`.",
+                serials.join(", ")
+            ));
         }
 
         lines.extend([

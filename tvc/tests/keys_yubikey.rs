@@ -1,10 +1,9 @@
-//! Command-boundary tests for `keys provision-yubikey` and
-//! `keys delete-yubikey`.
+//! Command-boundary tests for local YubiKey registration management.
 //!
 //! Everything here finishes before any hardware access: argument parsing,
 //! non-interactive guards, and the registry and organization-reference rules.
-//! Device flows are covered by the unit tests in the yubikey module and its
-//! ignored hardware cycle.
+//! Device reads and private-key operations are covered by the unit tests in
+//! the yubikey module and its ignored hardware cycle.
 
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
@@ -60,47 +59,39 @@ fn org_with_yubikey_operator() -> OrgConfig {
 }
 
 #[test]
-fn keys_help_lists_the_yubikey_commands() {
+fn help_lists_unregister_and_omits_device_mutation_commands() {
     cargo_bin_cmd!("tvc")
         .args(["keys", "--help"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("provision-yubikey"))
-        .stdout(predicate::str::contains("delete-yubikey"));
+        .stdout(predicate::str::contains("provision-yubikey").not())
+        .stdout(predicate::str::contains("delete-yubikey").not());
+
+    cargo_bin_cmd!("tvc")
+        .args(["yubikey", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("create-certs"))
+        .stdout(predicate::str::contains("unregister"));
 }
 
 #[test]
 fn serial_arguments_are_typed_hex() {
     cargo_bin_cmd!("tvc")
-        .args(["keys", "delete-yubikey", "--serial", "zzzz"])
+        .args(["yubikey", "unregister", "--serial", "zzzz"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("must be bare hex encoded"));
 }
 
 #[test]
-fn provision_refuses_non_interactive_execution() {
+fn unregister_requires_serial_and_yes_non_interactively() {
     let temp = TempDir::new().unwrap();
 
     cargo_bin_cmd!("tvc")
         .env("HOME", temp.path())
         .env(NON_INTERACTIVE_ENV, "1")
-        .args(["keys", "provision-yubikey"])
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains(
-            "provisioning a YubiKey is interactive",
-        ));
-}
-
-#[test]
-fn delete_requires_serial_and_yes_non_interactively() {
-    let temp = TempDir::new().unwrap();
-
-    cargo_bin_cmd!("tvc")
-        .env("HOME", temp.path())
-        .env(NON_INTERACTIVE_ENV, "1")
-        .args(["keys", "delete-yubikey"])
+        .args(["yubikey", "unregister"])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
@@ -110,7 +101,7 @@ fn delete_requires_serial_and_yes_non_interactively() {
     cargo_bin_cmd!("tvc")
         .env("HOME", temp.path())
         .env(NON_INTERACTIVE_ENV, "1")
-        .args(["keys", "delete-yubikey", "--serial", SERIAL])
+        .args(["yubikey", "unregister", "--serial", SERIAL])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
@@ -119,14 +110,14 @@ fn delete_requires_serial_and_yes_non_interactively() {
 }
 
 #[test]
-fn delete_refuses_an_unregistered_serial() {
+fn unregister_refuses_an_unregistered_serial() {
     let temp = TempDir::new().unwrap();
     write_config(&temp, &Config::default());
 
     cargo_bin_cmd!("tvc")
         .env("HOME", temp.path())
         .env(NON_INTERACTIVE_ENV, "1")
-        .args(["keys", "delete-yubikey", "--serial", SERIAL, "--yes"])
+        .args(["yubikey", "unregister", "--serial", SERIAL, "--yes"])
         .assert()
         .failure()
         .stderr(predicate::str::contains(format!(
@@ -135,7 +126,7 @@ fn delete_refuses_an_unregistered_serial() {
 }
 
 #[test]
-fn delete_refuses_a_device_an_organization_references() {
+fn unregister_refuses_a_device_an_organization_references() {
     let temp = TempDir::new().unwrap();
     let config = Config {
         orgs: HashMap::from([("test".to_string(), org_with_yubikey_operator())]),
@@ -146,7 +137,7 @@ fn delete_refuses_a_device_an_organization_references() {
     cargo_bin_cmd!("tvc")
         .env("HOME", temp.path())
         .env(NON_INTERACTIVE_ENV, "1")
-        .args(["keys", "delete-yubikey", "--serial", SERIAL, "--yes"])
+        .args(["yubikey", "unregister", "--serial", SERIAL, "--yes"])
         .assert()
         .failure()
         .stderr(predicate::str::contains(format!(
@@ -167,8 +158,8 @@ fn json_mode_wraps_the_registry_refusal_in_the_error_envelope() {
         .args([
             "--message-format",
             "json",
-            "keys",
-            "delete-yubikey",
+            "yubikey",
+            "unregister",
             "--serial",
             SERIAL,
             "--yes",
@@ -179,4 +170,28 @@ fn json_mode_wraps_the_registry_refusal_in_the_error_envelope() {
         .stdout(predicate::str::contains(format!(
             "YubiKey {SERIAL} is not in the registry"
         )));
+}
+
+#[test]
+fn unregister_removes_only_the_local_registry_entry() {
+    let temp = TempDir::new().unwrap();
+    write_config(&temp, &config_with_registered_device());
+
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env(NON_INTERACTIVE_ENV, "1")
+        .args(["yubikey", "unregister", "--serial", SERIAL, "--yes"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(format!(
+            "YubiKey {SERIAL} was removed from the local TVC configuration"
+        )))
+        .stdout(predicate::str::contains("The device was not modified"))
+        .stdout(predicate::str::contains(
+            "no organization operator was revoked",
+        ));
+
+    let saved = fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
+    let config = Config::from_toml(&saved).unwrap();
+    assert!(!config.yubikeys.contains(SERIAL.parse().unwrap()));
 }

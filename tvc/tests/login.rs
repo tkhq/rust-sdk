@@ -1,3 +1,5 @@
+mod common;
+
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
 use std::collections::HashMap;
@@ -98,4 +100,50 @@ fn login_delete_removes_default_registry_key_layout() {
     assert!(!saved.contains("org-test"));
     assert!(!saved.contains("app-1"));
     assert!(!saved.contains("operator-1"));
+}
+
+/// Deleting a yubikey-default profile removes the org but never the device:
+/// the shared [[yubikeys]] registry entry survives and the output points at
+/// the explicit local unregistration command.
+#[test]
+fn login_delete_keeps_the_yubikey_registry_entry() {
+    let temp = TempDir::new().unwrap();
+    common::write_yubikey_only_config(temp.path(), "test", "org-test");
+
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env(NON_INTERACTIVE_ENV, "1")
+        .args(["profile", "delete", "--org", "test", "--yes"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Kept the YubiKey registry entries (serials 01c95c1f)",
+        ))
+        .stdout(predicate::str::contains("tvc yubikey unregister"));
+
+    let saved = fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
+    assert!(saved.contains("[[yubikeys]]"), "{saved}");
+    assert!(saved.contains("serial = \"01c95c1f\""), "{saved}");
+    assert!(!saved.contains("org-test"), "{saved}");
+}
+
+/// With two profiles sharing one registered serial, deleting one leaves the
+/// other profile and the shared registry entry fully intact.
+#[test]
+fn login_delete_preserves_a_shared_yubikey_registry_entry() {
+    let temp = TempDir::new().unwrap();
+    common::write_yubikey_shared_config(temp.path(), &[("one", "org-1"), ("two", "org-2")]);
+
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env(NON_INTERACTIVE_ENV, "1")
+        .args(["profile", "delete", "--org", "one", "--yes"])
+        .assert()
+        .success();
+
+    let saved = fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
+    assert!(!saved.contains("org-1"), "{saved}");
+    assert!(saved.contains("org-2"), "{saved}");
+    assert!(saved.contains("[[yubikeys]]"), "{saved}");
+    assert!(saved.contains("serial = \"01c95c1f\""), "{saved}");
 }

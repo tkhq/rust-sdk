@@ -4,19 +4,21 @@ use crate::{
     approvals::{ApprovalVerdict, OperatorApproval, ValidatedManifest},
     client::build_client,
     commands::Run,
-    config::turnkey::Config,
+    config::turnkey::{
+        Config, OperatorRecordKind, QosOperatorPublicKey, StoredQosOperatorKey, YubiKeySerial,
+    },
     errors::MissingResource,
-    local_operator_key::LocalOperatorSeedSource,
-    operator::SignerRequirement,
+    local_operator_key::{LocalOperatorSeedSource, resolve_local_operator},
+    operator::{OperatorSelection, ResolvedHostedOperator, SignerRequirement},
     outcome::Outcome,
     output::StdCtx,
-    pair::HexSeed,
+    pair::{HexSeed, LocalPair, Signer},
     prompts::{self, bail_required_in_non_interactive, stdin_can_prompt},
     shell_print, shell_println,
     util::{read_file_to_string, write_file},
-    yubikey::{self, pair::PinAcquisition},
+    yubikey::{self, Pin},
 };
-use anyhow::{Context, bail};
+use anyhow::{Context, bail, ensure};
 use clap::{ArgGroup, Args as ClapArgs};
 use displaydoc::Display;
 use qos_core::protocol::services::boot::{
@@ -24,6 +26,7 @@ use qos_core::protocol::services::boot::{
     ShareSet, VersionedManifest,
 };
 use serde::Serialize;
+use std::collections::HashSet;
 use std::fmt::{self, Formatter, Write};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
@@ -31,6 +34,9 @@ use std::{
     path::{Path, PathBuf},
 };
 use tracing::{debug, instrument};
+use turnkey_client::generated::external::data::v1::{
+    TvcDeployment, TvcManifest, TvcOperator, TvcOperatorSet,
+};
 use turnkey_client::generated::{
     CreateTvcManifestApprovalsIntent, GetTvcDeploymentRequest, TvcManifestApproval,
 };
@@ -43,6 +49,12 @@ const QUORUM_REACHED_MESSAGE: &str =
 #[derive(Debug, ClapArgs)]
 #[command(about, long_about = None)]
 #[command(group(ArgGroup::new("manifest-source").args(["manifest", "deploy_id"])))]
+#[command(group(ArgGroup::new("operator-selector").args([
+    "operator_id",
+    "serial",
+    "operator_seed",
+    "operator_seed_path",
+])))]
 pub struct Args {
     /// Path to QOS manifest file.
     #[arg(
@@ -68,11 +80,21 @@ pub struct Args {
     #[arg(long, env = "TVC_MANIFEST_ID")]
     pub manifest_id: Option<Uuid>,
 
-    /// Turnkey operator UUID for the approving operator. When posting without
-    /// this flag, TVC selects from the last manifest's saved operator IDs. A
-    /// configured hosted operator is selected by its UUID.
-    #[arg(long, env = "TVC_OPERATOR_ID")]
+    /// Turnkey operator UUID for the approving operator.
+    #[arg(
+        long,
+        env = "TVC_OPERATOR_ID",
+        help_heading = "Operator selector (pick one)"
+    )]
     pub operator_id: Option<Uuid>,
+
+    /// Serial (hex) of the YubiKey operator to approve with.
+    #[arg(
+        long,
+        value_name = "SERIAL",
+        help_heading = "Operator selector (pick one)"
+    )]
+    pub serial: Option<YubiKeySerial>,
 
     /// Hex-encoded 32-byte master seed for the operator key.
     /// If no seed flag is provided, uses the operator key from the logged-in org config.
@@ -80,7 +102,7 @@ pub struct Args {
         long,
         value_name = "HEX_SEED",
         env = "TVC_OPERATOR_SEED",
-        help_heading = "Operator seed (pick one)"
+        help_heading = "Operator selector (pick one)"
     )]
     pub operator_seed: Option<HexSeed>,
 
@@ -89,7 +111,7 @@ pub struct Args {
         long,
         value_name = "PATH",
         env = "TVC_OPERATOR_SEED_PATH",
-        help_heading = "Operator seed (pick one)"
+        help_heading = "Operator selector (pick one)"
     )]
     pub operator_seed_path: Option<PathBuf>,
 
@@ -116,7 +138,7 @@ impl Run for Args {
 
     #[instrument(skip_all)]
     async fn run(self, ctx: &mut StdCtx, config: Config) -> anyhow::Result<Self::Outcome> {
-        let args = ArgsWithResolvedOperatorSeedSource::try_from(self)?;
+        let args = ResolvedApproveArgs::try_from(self)?;
 
         // Manifest review prompts are required unless explicitly skipped;
         // bail before fetching anything if nobody can answer them.
@@ -124,39 +146,314 @@ impl Run for Args {
             bail_required_in_non_interactive("--dangerous-skip-interactive")?;
         }
 
-        let (manifest, fetched) = load_manifest(ctx, &args, &config).await?;
+        if !args.dry_run && !args.skip_post && args.manifest.is_some() && args.manifest_id.is_none()
+        {
+            return Err(ApproveInputError::MissingManifestId.into());
+        }
+
+        let can_prompt = !ctx.is_non_interactive() && stdin_can_prompt();
+        if !args.dry_run
+            && let Some(OperatorSelector::Serial(serial)) = args.operator_selector.as_ref()
+        {
+            let (alias, org) = config
+                .active_org_config()
+                .context("--serial requires an active organization")?;
+            org.select_yubikey_operator(Some(*serial))
+                .with_context(|| format!("org '{alias}'"))?;
+        }
+
+        let LoadedManifest {
+            manifest,
+            mut fetched,
+        } = load_manifest(ctx, &args, &config).await?;
         let manifest = ValidatedManifest::try_from(&manifest)?;
 
         if !args.dangerous_skip_interactive {
             interactive_approve(ctx, &manifest)?;
         }
 
-        let (post_target, operator_id) = build_post_target(
-            BuildPostTargetArgs::from(&args),
-            fetched.as_ref().map(|(id, _)| *id),
-            ctx.is_non_interactive(),
-            &config,
-        )
-        .await?;
-
-        // The only mode branch: whether a YubiKey PIN prompt is possible is
-        // this endpoint's knowledge; resolution just follows the policy.
-        let pin = if ctx.is_non_interactive() || !stdin_can_prompt() {
-            PinAcquisition::Unavailable
+        let (selection, post_target) = if args.dry_run {
+            (None, None)
         } else {
-            PinAcquisition::Prompt
+            let (requested_operator_id, requested_serial, explicit_pair) =
+                match args.operator_selector {
+                    Some(OperatorSelector::Id(operator_id)) => (Some(operator_id), None, None),
+                    Some(OperatorSelector::Serial(serial)) => (None, Some(serial), None),
+                    Some(OperatorSelector::ExplicitLocal(source)) => (
+                        None,
+                        None,
+                        Some(resolve_local_operator(&config, Some(source)).await?),
+                    ),
+                    None => (None, None, None),
+                };
+            let explicit_selected = explicit_pair.is_some();
+
+            let requested_approval_key = match (fetched.as_ref(), requested_operator_id) {
+                (Some(fetched), Some(operator_id)) => {
+                    let matches = fetched
+                        .operators
+                        .iter()
+                        .filter(|operator| operator.id == operator_id)
+                        .collect::<Vec<_>>();
+
+                    match matches.as_slice() {
+                        [operator] => Some(operator.public_key),
+                        [] => bail!(
+                            "operator ID {operator_id} is not in the deployment's manifest set"
+                        ),
+                        _ => bail!(
+                            "deployment manifest set contains multiple operators with ID {operator_id}"
+                        ),
+                    }
+                }
+                _ => None,
+            };
+
+            let authorized_keys = manifest
+                .manifest_set()
+                .members
+                .iter()
+                .map(|member| member.pub_key.as_slice())
+                .collect::<HashSet<_>>();
+            let mut candidates = Vec::new();
+
+            if let Some(pair) = explicit_pair {
+                let public_key_bytes = pair.public_key();
+                let public_key = QosOperatorPublicKey::try_from(public_key_bytes.as_slice())
+                    .context("explicit local operator has an invalid public key")?;
+
+                if authorized_keys.contains(public_key_bytes.as_slice())
+                    && requested_approval_key.is_none_or(|requested| requested == public_key)
+                {
+                    candidates.push(ApprovalOperatorCandidate {
+                        name: "explicit local seed".to_string(),
+                        public_key,
+                        source: ApprovalOperatorSource::ExplicitLocal(pair),
+                    });
+                }
+            } else {
+                let (_, org) = config.active_org_config().ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "No active organization. Run `tvc login` first or provide \
+                         --operator-seed or --operator-seed-path."
+                    )
+                })?;
+
+                for operator in &org.operators {
+                    let candidate = match &operator.kind {
+                        OperatorRecordKind::Local(local) => {
+                            let Some(key) = StoredQosOperatorKey::load(&local.key_path).await?
+                            else {
+                                debug!(
+                                    operator = %operator.name,
+                                    key_path = %local.key_path.display(),
+                                    "registered local operator key is unavailable"
+                                );
+                                continue;
+                            };
+
+                            ApprovalOperatorCandidate {
+                                name: operator.name.clone(),
+                                public_key: key.public_key,
+                                source: ApprovalOperatorSource::Local {
+                                    key_path: local.key_path.clone(),
+                                    configured_operator_id: local.operator_id.clone(),
+                                },
+                            }
+                        }
+                        OperatorRecordKind::Hosted(hosted) => {
+                            let hosted = ResolvedHostedOperator::from_registry(
+                                org.id.clone(),
+                                &operator.name,
+                                hosted,
+                            )?;
+                            let public_key = QosOperatorPublicKey::try_from(
+                                hosted.composite_public_key().as_slice(),
+                            )
+                            .context("hosted operator has an invalid composite public key")?;
+
+                            ApprovalOperatorCandidate {
+                                name: operator.name.clone(),
+                                public_key,
+                                source: ApprovalOperatorSource::Hosted(hosted),
+                            }
+                        }
+                        OperatorRecordKind::Yubikey(yubikey) => {
+                            let Some(entry) = config.yubikeys.get(yubikey.serial) else {
+                                bail!(
+                                    "YubiKey {} is not in the device registry; either remove it \
+                                     from the organization config or install its certificates and \
+                                     run `tvc keys refresh-yubikey` first",
+                                    yubikey.serial
+                                );
+                            };
+
+                            ApprovalOperatorCandidate {
+                                name: operator.name.clone(),
+                                public_key: entry.public_key,
+                                source: ApprovalOperatorSource::Yubikey {
+                                    serial: yubikey.serial,
+                                },
+                            }
+                        }
+                    };
+
+                    let matches_requested_serial = requested_serial.is_none_or(|requested| {
+                        matches!(
+                            &candidate.source,
+                            ApprovalOperatorSource::Yubikey { serial } if *serial == requested
+                        )
+                    });
+
+                    if matches_requested_serial
+                        && authorized_keys.contains(candidate.public_key.as_bytes().as_slice())
+                        && requested_approval_key
+                            .is_none_or(|requested| requested == candidate.public_key)
+                    {
+                        candidates.push(candidate);
+                    }
+                }
+            }
+
+            let candidate = if candidates.is_empty() {
+                match (requested_operator_id, requested_serial) {
+                    (Some(operator_id), _) => bail!(
+                        "operator ID {operator_id} does not identify a configured operator whose \
+                         public key belongs to this manifest set"
+                    ),
+                    (None, Some(serial)) => {
+                        bail!("YubiKey {serial} public key does not belong to this manifest set")
+                    }
+                    (None, None) if explicit_selected => {
+                        bail!(
+                            "explicit local operator public key does not belong to this manifest set"
+                        )
+                    }
+                    (None, None) => {
+                        bail!("no configured operator public key belongs to this manifest set")
+                    }
+                }
+            } else if candidates.len() == 1 {
+                candidates
+                    .pop()
+                    .context("sole approval operator candidate is missing")?
+            } else if !can_prompt {
+                bail!(
+                    "multiple configured operators can approve this manifest; provide one operator selector"
+                )
+            } else {
+                prompts::select("Select approving operator", candidates)?
+            };
+            let selected_key = candidate.public_key;
+
+            let expected_operator = if !args.skip_post {
+                fetched.as_ref().map(|fetched| {
+                    let matches = fetched
+                        .operators
+                        .iter()
+                        .filter(|operator| {
+                            operator.public_key == selected_key
+                                && requested_operator_id
+                                    .is_none_or(|requested| operator.id == requested)
+                        })
+                        .cloned()
+                        .collect::<Vec<_>>();
+
+                    match matches.as_slice() {
+                        [operator] => Ok(operator.clone()),
+                        [] => bail!(
+                            "selected operator public key is not linked to an operator in the deployment's manifest set"
+                        ),
+                        _ => bail!(
+                            "selected operator public key is linked to multiple operators in the deployment's manifest set"
+                        ),
+                    }
+                })
+                .transpose()?
+            } else {
+                None
+            };
+            let post_operator_id = expected_operator
+                .as_ref()
+                .map(|operator| operator.id)
+                .or(requested_operator_id);
+
+            let selection = match candidate.source {
+                ApprovalOperatorSource::ExplicitLocal(pair) => OperatorSelection::ExplicitLocal {
+                    pair,
+                    post_operator_id,
+                },
+                ApprovalOperatorSource::Local {
+                    key_path,
+                    configured_operator_id,
+                } => OperatorSelection::Local {
+                    name: candidate.name,
+                    key_path,
+                    configured_operator_id,
+                    post_operator_id,
+                },
+                ApprovalOperatorSource::Hosted(hosted) => {
+                    if let Some(post_operator_id) = post_operator_id {
+                        ensure!(
+                            hosted.operator_id() == post_operator_id,
+                            "selected deployment operator ID {post_operator_id} does not match configured hosted operator ID {}",
+                            hosted.operator_id()
+                        );
+                    }
+
+                    OperatorSelection::Hosted(hosted)
+                }
+                ApprovalOperatorSource::Yubikey { serial } => {
+                    if !can_prompt {
+                        bail!(
+                            "a YubiKey operator needs its PIN typed at an interactive prompt; \
+                             the PIN is never read from config or the environment"
+                        );
+                    }
+
+                    let pin = Pin::from(prompts::password(
+                        "YubiKey PIV PIN (touch the device each time it blinks)",
+                    )?);
+
+                    OperatorSelection::Yubikey {
+                        name: candidate.name,
+                        serial,
+                        pin,
+                        post_operator_id,
+                    }
+                }
+            };
+
+            let post_target = if args.skip_post {
+                None
+            } else {
+                let manifest_id = fetched
+                    .as_ref()
+                    .map(|fetched| fetched.manifest_id)
+                    .or(args.manifest_id)
+                    .ok_or(ApproveInputError::MissingManifestId)?;
+
+                Some(PostTarget {
+                    manifest_id,
+                    deploy_id: args.deploy_id,
+                    expected_operator,
+                })
+            };
+
+            (Some(selection), post_target)
         };
 
         let inputs = ResolvedApproveInputs {
             manifest,
-            operator_seed_source: args.operator_seed_source,
-            operator_id,
+            selection,
             approval_out: args.approval_out,
             dry_run: args.dry_run,
             skip_post: args.skip_post,
-            pin,
             post_target,
-            posted_approvals: fetched.map(|(_, approvals)| approvals).unwrap_or_default(),
+            posted_approvals: fetched
+                .take()
+                .map(|fetched| fetched.approvals)
+                .unwrap_or_default(),
         };
 
         run_with_resolved_inputs(ctx, inputs, &config).await
@@ -318,6 +615,7 @@ pub struct ApprovalDryRun;
 struct PostTarget {
     manifest_id: Uuid,
     deploy_id: Option<Uuid>,
+    expected_operator: Option<DeploymentOperator>,
 }
 
 /// Approve inputs that cannot be resolved into a postable approval; carries
@@ -331,36 +629,12 @@ enum ApproveInputError {
     MissingManifestId,
 }
 
-/// The slice of [`ArgsWithResolvedOperatorSeedSource`] that
-/// [`build_post_target`] observes.
-struct BuildPostTargetArgs {
-    manifest_id: Option<Uuid>,
-    operator_id: Option<Uuid>,
-    deploy_id: Option<Uuid>,
-    dry_run: bool,
-    skip_post: bool,
-}
-
-impl From<&ArgsWithResolvedOperatorSeedSource> for BuildPostTargetArgs {
-    fn from(args: &ArgsWithResolvedOperatorSeedSource) -> Self {
-        Self {
-            manifest_id: args.manifest_id,
-            operator_id: args.operator_id,
-            deploy_id: args.deploy_id,
-            dry_run: args.dry_run,
-            skip_post: args.skip_post,
-        }
-    }
-}
-
 struct ResolvedApproveInputs<'a> {
     manifest: ValidatedManifest<'a>,
-    operator_seed_source: Option<LocalOperatorSeedSource>,
-    operator_id: Option<Uuid>,
+    selection: Option<OperatorSelection>,
     approval_out: Option<PathBuf>,
     dry_run: bool,
     skip_post: bool,
-    pin: PinAcquisition,
     post_target: Option<PostTarget>,
     /// Present only when the manifest came from a deployment fetch: the
     /// already-posted approvals, parsed at that boundary, for validation and
@@ -368,21 +642,26 @@ struct ResolvedApproveInputs<'a> {
     posted_approvals: Vec<OperatorApproval>,
 }
 
-/// [`Args`] with the mutually-exclusive seed flags already parsed into a
-/// seed source, so input resolution can no longer observe the raw flags.
-struct ArgsWithResolvedOperatorSeedSource {
+/// The optional operator selector after Clap has enforced mutual exclusion.
+enum OperatorSelector {
+    Id(Uuid),
+    Serial(YubiKeySerial),
+    ExplicitLocal(LocalOperatorSeedSource),
+}
+
+/// [`Args`] with its raw operator flags narrowed to one selector.
+struct ResolvedApproveArgs {
     manifest: Option<PathBuf>,
     deploy_id: Option<Uuid>,
     manifest_id: Option<Uuid>,
-    operator_id: Option<Uuid>,
-    operator_seed_source: Option<LocalOperatorSeedSource>,
+    operator_selector: Option<OperatorSelector>,
     dry_run: bool,
     dangerous_skip_interactive: bool,
     approval_out: Option<PathBuf>,
     skip_post: bool,
 }
 
-impl TryFrom<Args> for ArgsWithResolvedOperatorSeedSource {
+impl TryFrom<Args> for ResolvedApproveArgs {
     type Error = anyhow::Error;
 
     fn try_from(args: Args) -> anyhow::Result<Self> {
@@ -393,6 +672,7 @@ impl TryFrom<Args> for ArgsWithResolvedOperatorSeedSource {
             deploy_id,
             manifest_id,
             operator_id,
+            serial,
             dry_run,
             dangerous_skip_interactive,
             approval_out,
@@ -401,13 +681,19 @@ impl TryFrom<Args> for ArgsWithResolvedOperatorSeedSource {
 
         let operator_seed_source =
             LocalOperatorSeedSource::from_args(operator_seed, operator_seed_path)?;
+        let operator_selector = match (operator_id, serial, operator_seed_source) {
+            (Some(operator_id), None, None) => Some(OperatorSelector::Id(operator_id)),
+            (None, Some(serial), None) => Some(OperatorSelector::Serial(serial)),
+            (None, None, Some(source)) => Some(OperatorSelector::ExplicitLocal(source)),
+            (None, None, None) => None,
+            _ => bail!("operator selectors are mutually exclusive"),
+        };
 
         Ok(Self {
             manifest,
             deploy_id,
             manifest_id,
-            operator_id,
-            operator_seed_source,
+            operator_selector,
             dry_run,
             dangerous_skip_interactive,
             approval_out,
@@ -416,78 +702,99 @@ impl TryFrom<Args> for ArgsWithResolvedOperatorSeedSource {
     }
 }
 
-/// A candidate for posting without `--operator-id`: the parsed ID that
-/// resolution needs, displayed with its registry name when it has one.
-struct ApprovingOperator {
-    id: Uuid,
-    name: Option<String>,
+/// One configured signing backend whose public key belongs to the manifest
+/// set. Server identity is joined later, by the same key.
+struct ApprovalOperatorCandidate {
+    name: String,
+    public_key: QosOperatorPublicKey,
+    source: ApprovalOperatorSource,
 }
 
-impl fmt::Display for ApprovingOperator {
+enum ApprovalOperatorSource {
+    ExplicitLocal(LocalPair),
+    Local {
+        key_path: PathBuf,
+        configured_operator_id: Option<String>,
+    },
+    Hosted(ResolvedHostedOperator),
+    Yubikey {
+        serial: YubiKeySerial,
+    },
+}
+
+impl fmt::Display for ApprovalOperatorCandidate {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match &self.name {
-            Some(name) => write!(f, "{name} ({})", self.id),
-            None => fmt::Display::fmt(&self.id, f),
+        match &self.source {
+            ApprovalOperatorSource::ExplicitLocal(_) => f.write_str(&self.name),
+            ApprovalOperatorSource::Local { .. } => write!(f, "{} (local key)", self.name),
+            ApprovalOperatorSource::Hosted(hosted) => {
+                write!(f, "{} (hosted, {})", self.name, hosted.operator_id())
+            }
+            ApprovalOperatorSource::Yubikey { serial } => {
+                write!(f, "{} (YubiKey serial {serial})", self.name)
+            }
         }
     }
 }
 
-/// Resolve where to post and which operator approves. No post target is
-/// built for `--dry-run` or `--skip-post`; without `--operator-id`, a lone
-/// known operator (registered hosted or saved from the last `app create`)
-/// is used and multiple prompt for a choice when possible.
-async fn build_post_target(
-    args: BuildPostTargetArgs,
-    fetched_manifest_id: Option<Uuid>,
-    non_interactive: bool,
-    config: &Config,
-) -> anyhow::Result<(Option<PostTarget>, Option<Uuid>)> {
-    if args.dry_run || args.skip_post {
-        return Ok((None, args.operator_id));
-    }
+/// One server-side manifest-set operator, parsed at the deployment boundary.
+#[derive(Clone)]
+struct DeploymentOperator {
+    id: Uuid,
+    name: String,
+    public_key: QosOperatorPublicKey,
+}
 
-    let manifest_id = fetched_manifest_id
-        .or(args.manifest_id)
-        .ok_or(ApproveInputError::MissingManifestId)?;
+#[derive(Debug, thiserror::Error)]
+enum DeploymentOperatorError {
+    #[error("manifest-set operator ID '{id}' is not a UUID")]
+    InvalidId { id: String, source: uuid::Error },
+    #[error("manifest-set operator {operator_id} has an invalid public key")]
+    InvalidPublicKey {
+        operator_id: Uuid,
+        source: crate::config::turnkey::QosOperatorPublicKeyParseError,
+    },
+}
 
-    let operator_id = if let Some(operator_id) = args.operator_id {
-        operator_id
-    } else {
-        let candidates = config
-            .known_operator_candidates()
-            .into_iter()
-            .map(|candidate| {
-                let id = Uuid::parse_str(&candidate.id).with_context(|| {
-                    format!("saved operator ID '{}' is not a UUID", candidate.id)
+impl TryFrom<TvcOperator> for DeploymentOperator {
+    type Error = DeploymentOperatorError;
+
+    fn try_from(operator: TvcOperator) -> Result<Self, Self::Error> {
+        let TvcOperator {
+            id,
+            name,
+            public_key,
+            created_at: _,
+            updated_at: _,
+        } = operator;
+        let id = id
+            .parse()
+            .map_err(|source| DeploymentOperatorError::InvalidId { id, source })?;
+        let public_key =
+            public_key
+                .parse()
+                .map_err(|source| DeploymentOperatorError::InvalidPublicKey {
+                    operator_id: id,
+                    source,
                 })?;
 
-                Ok(ApprovingOperator {
-                    id,
-                    name: candidate.name,
-                })
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
+        Ok(Self {
+            id,
+            name,
+            public_key,
+        })
+    }
+}
 
-        match candidates.as_slice() {
-            [] => bail!(
-                "--operator-id is required to post approval to API. \
-                 No registered or saved operator IDs found. \
-                 Use --skip-post to only generate the approval locally."
-            ),
-            [candidate] => candidate.id,
-            _ if non_interactive || !stdin_can_prompt() => bail!(
-                "--operator-id is required to post approval to API when multiple operator IDs are available"
-            ),
-            _ => prompts::select("Select approving operator", candidates)?.id,
-        }
-    };
+struct FetchedManifest {
+    manifest_id: Uuid,
+    approvals: Vec<OperatorApproval>,
+    operators: Vec<DeploymentOperator>,
+}
 
-    let post_target = PostTarget {
-        manifest_id,
-        deploy_id: args.deploy_id,
-    };
-
-    Ok((post_target.into(), operator_id.into()))
+struct LoadedManifest {
+    manifest: VersionedManifest,
+    fetched: Option<FetchedManifest>,
 }
 
 async fn run_with_resolved_inputs(
@@ -522,14 +829,11 @@ async fn run_with_resolved_inputs(
         SignerRequirement::Any
     };
 
+    let selection = inputs
+        .selection
+        .context("operator selection required outside dry-run mode")?;
     let operator = config
-        .resolve_operator(
-            yubikey::open,
-            inputs.operator_seed_source,
-            inputs.operator_id,
-            requirement,
-            inputs.pin,
-        )
+        .resolve_operator(yubikey::open, selection, requirement)
         .await?;
 
     let approval = operator.approve_manifest(&inputs.manifest).await?;
@@ -546,6 +850,20 @@ async fn run_with_resolved_inputs(
             let operator_id = operator
                 .id()
                 .context("resolved operator ID required to post approval")?;
+
+            if let Some(expected) = target.expected_operator.as_ref() {
+                ensure!(
+                    operator_id == expected.id,
+                    "resolved operator ID {operator_id} does not match deployment manifest-set operator ID {}",
+                    expected.id
+                );
+                ensure!(
+                    approval.member.pub_key.as_slice() == expected.public_key.as_bytes(),
+                    "selected signer key does not match deployment manifest-set operator '{}' ({})",
+                    expected.name,
+                    expected.id
+                );
+            }
 
             // An approval already posted by this operator, matched by
             // operator ID or by the manifest set member public key.
@@ -585,15 +903,21 @@ async fn run_with_resolved_inputs(
 
 async fn load_manifest(
     ctx: &mut StdCtx,
-    args: &ArgsWithResolvedOperatorSeedSource,
+    args: &ResolvedApproveArgs,
     config: &Config,
-) -> anyhow::Result<(VersionedManifest, Option<(Uuid, Vec<OperatorApproval>)>)> {
+) -> anyhow::Result<LoadedManifest> {
     match (&args.manifest, &args.deploy_id) {
-        (Some(path), _) => Ok((read_manifest_from_path(path).await?, None)),
+        (Some(path), _) => Ok(LoadedManifest {
+            manifest: read_manifest_from_path(path).await?,
+            fetched: None,
+        }),
         (_, Some(deploy_id)) => {
-            let (manifest, manifest_id, approvals) =
+            let (manifest, fetched) =
                 fetch_manifest_from_deploy(ctx, &deploy_id.to_string(), config).await?;
-            Ok((manifest, Some((manifest_id, approvals))))
+            Ok(LoadedManifest {
+                manifest,
+                fetched: Some(fetched),
+            })
         }
         (None, None) => bail!("a manifest source is required"),
     }
@@ -883,14 +1207,14 @@ async fn read_manifest_from_path(path: &Path) -> anyhow::Result<VersionedManifes
     Ok(manifest)
 }
 
-/// Fetch manifest from Turnkey using GetTvcDeployment API.
-/// Returns the manifest, its Turnkey manifest_id, and the deployment itself.
+/// Fetch a manifest and the server identities that bind public keys to the
+/// operator UUIDs used when posting.
 #[instrument(skip(ctx, config))]
 async fn fetch_manifest_from_deploy(
     ctx: &mut StdCtx,
     deploy_id: &str,
     config: &Config,
-) -> anyhow::Result<(VersionedManifest, Uuid, Vec<OperatorApproval>)> {
+) -> anyhow::Result<(VersionedManifest, FetchedManifest)> {
     shell_println!(ctx, "Fetching deployment {deploy_id}...")?;
 
     let auth = build_client(config).await?;
@@ -909,29 +1233,63 @@ async fn fetch_manifest_from_deploy(
     let deployment = response
         .tvc_deployment
         .ok_or_else(|| MissingResource::new("deployment", deploy_id.to_string()))?;
-
-    let tvc_manifest = deployment
-        .manifest
-        .as_ref()
+    let TvcDeployment {
+        manifest,
+        manifest_set,
+        manifest_approvals,
+        id: _,
+        organization_id: _,
+        app_id: _,
+        share_set: _,
+        qos_version: _,
+        pivot_container: _,
+        created_at: _,
+        updated_at: _,
+        delete: _,
+        debug_mode: _,
+    } = deployment;
+    let TvcManifest {
+        id: manifest_id,
+        manifest: manifest_bytes,
+        created_at: _,
+        updated_at: _,
+    } = manifest
         .ok_or_else(|| MissingResource::new("manifest", format!("deployment {deploy_id}")))?;
+    let TvcOperatorSet {
+        operators,
+        id: _,
+        name: _,
+        organization_id: _,
+        threshold: _,
+        created_at: _,
+        updated_at: _,
+    } = manifest_set
+        .ok_or_else(|| MissingResource::new("manifest set", format!("deployment {deploy_id}")))?;
 
-    let manifest = VersionedManifest::try_from_slice_compat(&tvc_manifest.manifest)
+    let manifest = VersionedManifest::try_from_slice_compat(&manifest_bytes)
         .context("failed to parse manifest from deployment")?;
-
-    let manifest_id = tvc_manifest
-        .id
+    let manifest_id = manifest_id
         .parse::<Uuid>()
-        .with_context(|| format!("manifest ID '{}' is not a UUID", tvc_manifest.id))?;
-
-    let approvals = deployment
-        .manifest_approvals
+        .with_context(|| format!("manifest ID '{manifest_id}' is not a UUID"))?;
+    let approvals = manifest_approvals
         .into_iter()
         .map(OperatorApproval::try_from)
+        .collect::<Result<Vec<_>, _>>()?;
+    let operators = operators
+        .into_iter()
+        .map(DeploymentOperator::try_from)
         .collect::<Result<Vec<_>, _>>()?;
 
     shell_println!(ctx, "✓ Manifest loaded (manifest_id: {manifest_id})")?;
 
-    Ok((manifest, manifest_id, approvals))
+    Ok((
+        manifest,
+        FetchedManifest {
+            manifest_id,
+            approvals,
+            operators,
+        },
+    ))
 }
 
 #[cfg(test)]

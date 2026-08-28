@@ -122,10 +122,6 @@ pub fn write_hosted_only_config(home: &Path, alias: &str, org_id: &str) {
 /// that read the cache need no device; device-touching flows fail at their
 /// first PC/SC step.
 pub fn write_yubikey_only_config(home: &Path, alias: &str, org_id: &str) {
-    let turnkey_dir = home.join(".config/turnkey");
-    fs::create_dir_all(&turnkey_dir).unwrap();
-
-    let serial = YubiKeySerial::from(0x01c9_5c1f);
     let public_key = QosOperatorPublicKey::try_from(
         qos_p256::P256Pair::generate()
             .unwrap()
@@ -134,6 +130,21 @@ pub fn write_yubikey_only_config(home: &Path, alias: &str, org_id: &str) {
             .as_slice(),
     )
     .unwrap();
+
+    write_yubikey_only_config_with_public_key(home, alias, org_id, public_key);
+}
+
+/// Write the single-YubiKey fixture with a caller-selected cached public key.
+pub fn write_yubikey_only_config_with_public_key(
+    home: &Path,
+    alias: &str,
+    org_id: &str,
+    public_key: QosOperatorPublicKey,
+) {
+    let turnkey_dir = home.join(".config/turnkey");
+    fs::create_dir_all(&turnkey_dir).unwrap();
+
+    let serial = YubiKeySerial::from(0x01c9_5c1f);
 
     let config = Config {
         active_org: Some(alias.to_string()),
@@ -154,6 +165,69 @@ pub fn write_yubikey_only_config(home: &Path, alias: &str, org_id: &str) {
                 extra: toml::Table::new(),
             },
         )]),
+        yubikeys: vec![YubiKeyRegistryEntry {
+            serial,
+            public_key,
+            extra: toml::Table::new(),
+        }]
+        .try_into()
+        .unwrap(),
+        last_created_app_id: HashMap::new(),
+        last_operator_ids: HashMap::new(),
+        extra: toml::Table::new(),
+    };
+
+    fs::write(
+        turnkey_dir.join("tvc.config.toml"),
+        format!("version = 1\n{}", toml::to_string_pretty(&config).unwrap()),
+    )
+    .unwrap();
+}
+
+/// Write a v1 `tvc.config.toml` under `home` with one yubikey-default
+/// organization per `(alias, org_id)` pair, every org referencing the SAME
+/// registered serial — the fixture for shared-registry-entry behavior. The
+/// first alias is active.
+pub fn write_yubikey_shared_config(home: &Path, profiles: &[(&str, &str)]) {
+    let turnkey_dir = home.join(".config/turnkey");
+    fs::create_dir_all(&turnkey_dir).unwrap();
+
+    let serial = YubiKeySerial::from(0x01c9_5c1f);
+    let public_key = QosOperatorPublicKey::try_from(
+        qos_p256::P256Pair::generate()
+            .unwrap()
+            .public_key()
+            .to_bytes()
+            .as_slice(),
+    )
+    .unwrap();
+
+    let orgs: HashMap<_, _> = profiles
+        .iter()
+        .map(|(alias, org_id)| {
+            (
+                alias.to_string(),
+                OrgConfig {
+                    id: org_id.to_string(),
+                    api_key_path: turnkey_dir.join(format!("orgs/{alias}/api_key.json")),
+                    api_base_url: LOCAL_API_BASE_URL.to_string(),
+                    default_operator_kind: OperatorKind::Yubikey,
+                    operators: vec![OperatorRecord {
+                        name: "yubikey-op".to_string(),
+                        kind: OperatorRecordKind::Yubikey(YubiKeyOperatorRecord {
+                            serial,
+                            extra: toml::Table::new(),
+                        }),
+                    }],
+                    extra: toml::Table::new(),
+                },
+            )
+        })
+        .collect();
+
+    let config = Config {
+        active_org: profiles.first().map(|(alias, _)| alias.to_string()),
+        orgs,
         yubikeys: vec![YubiKeyRegistryEntry {
             serial,
             public_key,

@@ -203,6 +203,15 @@ fn args_request_json_output(args: impl IntoIterator<Item = OsString>) -> bool {
 
 impl Commands {
     async fn run(self, ctx: &mut StdCtx) -> anyhow::Result<Outcome> {
+        // Device-local certificate creation must not depend on, or create, a
+        // TVC configuration file.
+        let command = match self {
+            Commands::Yubikey {
+                command: YubikeyCommands::CreateCerts(args),
+            } => return args.run(ctx).await.map(Into::into),
+            command => command,
+        };
+
         let home = std::env::var("HOME").context("HOME environment variable not set")?;
         let path = PathBuf::from(home).join(CONFIG_DIR).join(CONFIG_FILE);
         debug!(config_path = %path.display(), "loading tvc config");
@@ -230,7 +239,7 @@ impl Commands {
             config
         };
 
-        match self {
+        match command {
             Commands::Deploy { command } => match command {
                 DeployCommands::Approve(args) => args.run(ctx, config).await.map(Into::into),
                 DeployCommands::GetStatus(args) => {
@@ -276,9 +285,7 @@ impl Commands {
                 KeysCommands::BackupOperatorKey(args) => {
                     args.run(ctx, config).await.map(Into::into)
                 }
-                KeysCommands::ProvisionYubikey(args) => args.run(ctx, config).await.map(Into::into),
                 KeysCommands::RefreshYubikey(args) => args.run(ctx, config).await.map(Into::into),
-                KeysCommands::DeleteYubikey(args) => args.run(ctx, config).await.map(Into::into),
                 KeysCommands::CreateQuorumKey(args) => {
                     commands::keys::create_quorum_key::run(ctx, args, config).await
                 }
@@ -294,13 +301,17 @@ impl Commands {
             },
             Commands::Login(args) => commands::login::run(ctx, args, config).await,
             Commands::Operator { command } => match command {
-                OperatorCommands::Create(args) => {
-                    commands::operator::create::run(ctx, args, config).await
-                }
+                OperatorCommands::Create(args) => args.run(ctx, config).await.map(Into::into),
             },
             Commands::Profile { command } => match command {
                 ProfileCommands::Delete(delete_args) => {
                     commands::login::run_delete(ctx, delete_args, config).await
+                }
+            },
+            Commands::Yubikey { command } => match command {
+                YubikeyCommands::Unregister(args) => args.run(ctx, config).await.map(Into::into),
+                YubikeyCommands::CreateCerts(_) => {
+                    unreachable!("create-certs returned before loading the TVC configuration")
                 }
             },
             Commands::Version => commands::version::run(),
@@ -312,7 +323,7 @@ impl Commands {
 enum Commands {
     /// Authenticate with Turnkey.
     Login(commands::login::Args),
-    /// Manage hosted TVC operators.
+    /// Manage TVC operators.
     Operator {
         #[command(subcommand)]
         command: OperatorCommands,
@@ -337,6 +348,11 @@ enum Commands {
         #[command(subcommand)]
         command: KeysCommands,
     },
+    /// Manage YubiKeys.
+    Yubikey {
+        #[command(subcommand)]
+        command: YubikeyCommands,
+    },
     /// Print the tvc CLI version.
     Version,
 }
@@ -354,6 +370,7 @@ impl Commands {
             Commands::Deploy { command } => command.name(),
             Commands::App { command } => command.name(),
             Commands::Keys { command } => command.name(),
+            Commands::Yubikey { command } => command.name(),
             Commands::Version => "version",
         }
     }
@@ -361,13 +378,14 @@ impl Commands {
 
 #[derive(Debug, Subcommand)]
 enum OperatorCommands {
-    /// Create a hosted TVC operator and save it to the active organization.
+    /// Create a hosted or YubiKey operator and save it to the active
+    /// organization.
     Create(commands::operator::create::Args),
 }
 
 #[derive(Debug, Subcommand)]
 enum ProfileCommands {
-    /// Permanently delete a saved login profile and its key files.
+    /// Permanently delete a saved login profile and its local key files.
     Delete(commands::login::DeleteArgs),
 }
 
@@ -441,12 +459,8 @@ enum AppCommands {
 enum KeysCommands {
     /// Back up a local operator key by copying its key file to a chosen destination.
     BackupOperatorKey(commands::keys::backup_operator_key::Args),
-    /// Provision a YubiKey with the QuorumOS operator key pair and register its serial.
-    ProvisionYubikey(commands::keys::provision_yubikey::Args),
     /// Refresh the registry's cached operator key for a YubiKey from the device.
     RefreshYubikey(commands::keys::refresh_yubikey::Args),
-    /// Delete a registered YubiKey's QuorumOS key material and registry entry.
-    DeleteYubikey(commands::keys::delete_yubikey::Args),
     /// Create a hosted quorum key encrypted to hosted operator keys.
     CreateQuorumKey(commands::keys::create_quorum_key::Args),
     /// Generate and shamir-split a local quorum key, encrypting each share to an operator key.
@@ -455,6 +469,14 @@ enum KeysCommands {
     InitLocalQuorumKey(commands::keys::init_local_quorum_key::Args),
     /// Re-encrypt a local share for enclave provisioning.
     ReEncryptLocalShare(commands::keys::re_encrypt_local_share::Args),
+}
+
+#[derive(Debug, Subcommand)]
+enum YubikeyCommands {
+    /// Create certificates for existing keys without modifying the device.
+    CreateCerts(commands::yubikey::create_certs::Args),
+    /// Remove a YubiKey from the local TVC configuration without modifying it.
+    Unregister(commands::yubikey::unregister::Args),
 }
 
 impl AppCommands {
@@ -474,13 +496,20 @@ impl KeysCommands {
     fn name(&self) -> &'static str {
         match self {
             KeysCommands::BackupOperatorKey(_) => "keys backup-operator-key",
-            KeysCommands::ProvisionYubikey(_) => "keys provision-yubikey",
             KeysCommands::RefreshYubikey(_) => "keys refresh-yubikey",
-            KeysCommands::DeleteYubikey(_) => "keys delete-yubikey",
             KeysCommands::CreateQuorumKey(_) => "keys create-quorum-key",
             KeysCommands::GenerateLocalQuorumKey(_) => "keys generate-local-quorum-key",
             KeysCommands::InitLocalQuorumKey(_) => "keys init-local-quorum-key",
             KeysCommands::ReEncryptLocalShare(_) => "keys re-encrypt-local-share",
+        }
+    }
+}
+
+impl YubikeyCommands {
+    fn name(&self) -> &'static str {
+        match self {
+            YubikeyCommands::CreateCerts(_) => "yubikey create-certs",
+            YubikeyCommands::Unregister(_) => "yubikey unregister",
         }
     }
 }
@@ -520,5 +549,26 @@ mod tests {
             "--message-format",
             "json",
         ])));
+    }
+
+    #[test]
+    fn parses_yubikey_create_certs() {
+        let cli = Cli::try_parse_from(["tvc", "yubikey", "create-certs", "--serial", "01c95c1f"])
+            .unwrap();
+
+        assert!(matches!(
+            cli.command,
+            Commands::Yubikey {
+                command: YubikeyCommands::CreateCerts(_),
+            }
+        ));
+    }
+
+    #[test]
+    fn rejects_a_non_hex_yubikey_create_certs_serial() {
+        let error = Cli::try_parse_from(["tvc", "yubikey", "create-certs", "--serial", "not-hex"])
+            .unwrap_err();
+
+        assert_eq!(error.kind(), ErrorKind::ValueValidation);
     }
 }
