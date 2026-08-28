@@ -524,6 +524,16 @@ fn remembered_operator_ids_are_not_approval_candidates() {
 #[test]
 fn malformed_registered_local_operator_id_is_reported() {
     let temp = TempDir::new().unwrap();
+    let operator_key_path = temp.path().join("operator.json");
+    fs::write(
+        &operator_key_path,
+        serde_json::to_string(&StoredQosOperatorKey {
+            public_key: fixture_manifest_member_key(0),
+            private_key: fixture_seed_hex(),
+        })
+        .unwrap(),
+    )
+    .unwrap();
     let config = Config {
         active_org: Some("test".to_string()),
         orgs: HashMap::from([(
@@ -536,7 +546,7 @@ fn malformed_registered_local_operator_id_is_reported() {
                 operators: vec![OperatorRecord {
                     name: "local".to_string(),
                     kind: OperatorRecordKind::Local(LocalOperatorRecord {
-                        key_path: temp.path().join("operator.json"),
+                        key_path: operator_key_path,
                         operator_id: Some("not-a-uuid".to_string()),
                         extra: toml::Table::new(),
                     }),

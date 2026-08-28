@@ -695,7 +695,7 @@ fn write_registry_only_config(home: &Path) -> String {
 
 /// A new organization can be set up with an already-registered YubiKey as
 /// its operator, entirely from the registry cache: no device is needed,
-/// nothing is provisioned, and the saved config defaults to the yubikey
+/// no device operation occurs, and the saved config defaults to the yubikey
 /// backend with a serial-only operator record.
 #[test]
 fn login_creates_a_new_org_with_the_explicit_registered_yubikey() {

@@ -1,7 +1,7 @@
 //! The YubiKey-backed operator pair.
 //!
 //! [`YubiKeyPair`] implements the [`Signer`] and [`Pair`] ports over a
-//! provisioned device: signing uses the signing-slot key, and decryption
+//! externally configured device: signing uses the signing-slot key, and decryption
 //! runs the key-agreement slot's ECDH under the qos p256 envelope scheme.
 //! PC/SC calls block, so they run on the blocking thread pool, and a mutex
 //! serializes access to the one device.
@@ -107,7 +107,7 @@ impl Config {
     /// Resolve a registered serial into a usable operator pair.
     ///
     /// Refusals come in resolution order: an unregistered serial, a missing
-    /// or unprovisioned device, and a registry cache that no longer matches
+    /// or incompletely configured device, and a registry cache that no longer matches
     /// the device. The endpoint supplies the PIN before dispatch.
     pub(crate) async fn resolve_yubikey<D: DeviceOps + Send + 'static>(
         &self,
@@ -121,8 +121,8 @@ impl Config {
             .map(|entry| entry.public_key)
             .ok_or_else(|| {
                 anyhow!(
-                    "YubiKey {serial} is not in the device registry; run \
-                     `tvc keys provision-yubikey --serial {serial}` to provision and register it"
+                    "YubiKey {serial} is not in the device registry; install its certificates \
+                     and run `tvc keys refresh-yubikey --serial {serial}` first"
                 )
             })?;
 
@@ -134,8 +134,9 @@ impl Config {
                 .await
                 .map_err(|error| match error.downcast_ref::<DeviceError>() {
                     Some(DeviceError::EmptySlot { .. }) => error.context(format!(
-                        "YubiKey {serial} is not fully provisioned; run \
-                     `tvc keys provision-yubikey --serial {serial}`"
+                        "YubiKey {serial} is not fully configured; generate its keys and install \
+                         its certificates with `ykman`, then run \
+                         `tvc keys refresh-yubikey --serial {serial}`"
                     )),
                     _ => error,
                 })?
@@ -207,18 +208,18 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn an_unregistered_serial_points_at_provisioning() {
+    async fn an_unregistered_serial_points_at_registration() {
         let error = Config::default()
             .resolve_yubikey(serial(), provisioned_device(), fixed_pin())
             .await
             .unwrap_err();
 
         assert!(rendered(&error).contains("not in the device registry"));
-        assert!(rendered(&error).contains("provision-yubikey"));
+        assert!(rendered(&error).contains("refresh-yubikey"));
     }
 
     #[tokio::test]
-    async fn an_unprovisioned_device_points_at_provisioning() {
+    async fn an_incompletely_configured_device_points_at_external_setup() {
         let device = FakeDevice::new(SlotStatus::Empty, SlotStatus::Empty);
         let config = registered_config(&device);
 
@@ -227,8 +228,8 @@ mod tests {
             .await
             .unwrap_err();
 
-        assert!(rendered(&error).contains("not fully provisioned"));
-        assert!(rendered(&error).contains("provision-yubikey"));
+        assert!(rendered(&error).contains("not fully configured"));
+        assert!(rendered(&error).contains("refresh-yubikey"));
     }
 
     #[tokio::test]
@@ -319,13 +320,12 @@ mod tests {
 
     /// Resolution and the full pair round-trip against real hardware.
     ///
-    /// Requires a provisioned YubiKey with the factory-default PIN (run
-    /// `tvc keys provision-yubikey`, or the yubikey module's
-    /// `hardware_sign_and_key_agreement` first). Sign and decrypt each need
-    /// a touch while the device blinks. Run manually:
+    /// Requires an externally configured YubiKey with the factory-default
+    /// PIN. Sign and decrypt each need a touch while the device blinks. Run
+    /// manually:
     /// `cargo test -p tvc --lib -- --ignored hardware_`
     #[tokio::test]
-    #[ignore = "requires a provisioned YubiKey with default PIN; sign and decrypt each need a touch"]
+    #[ignore = "requires an externally configured YubiKey with default PIN; sign and decrypt each need a touch"]
     async fn hardware_resolve_sign_and_decrypt_roundtrip() {
         use crate::yubikey::{connected_serials, open};
 

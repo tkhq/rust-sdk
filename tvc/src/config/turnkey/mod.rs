@@ -589,10 +589,6 @@ impl Config {
         disk::from_toml(content)
     }
 
-    pub(crate) fn to_toml(&self) -> Result<String> {
-        disk::to_toml(self)
-    }
-
     /// Save config to disk
     pub async fn save(&self) -> Result<()> {
         // Owns its whole failure surface: callers add what only they know

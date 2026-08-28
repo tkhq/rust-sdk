@@ -182,8 +182,9 @@ fn a_yubikey_operator_requires_a_serial_in_non_interactive_mode() {
 }
 
 #[test]
-fn an_unregistered_serial_cannot_be_provisioned_non_interactively() {
+fn an_unregistered_serial_points_at_external_setup() {
     let temp = tempfile::TempDir::new().unwrap();
+    write_local_org_with_registered_yubikey(temp.path());
 
     cargo_bin_cmd!("tvc")
         .env("HOME", temp.path())
@@ -193,7 +194,10 @@ fn an_unregistered_serial_cannot_be_provisioned_non_interactively() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "is not in the device registry, and provisioning it is interactive",
+            "is not in the device registry; install its certificates",
+        ))
+        .stderr(predicate::str::contains(
+            "tvc keys refresh-yubikey --serial deadbeef",
         ));
 }
 

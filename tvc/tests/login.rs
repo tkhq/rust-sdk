@@ -104,7 +104,7 @@ fn login_delete_removes_default_registry_key_layout() {
 
 /// Deleting a yubikey-default profile removes the org but never the device:
 /// the shared [[yubikeys]] registry entry survives and the output points at
-/// the explicit hardware-management command.
+/// the explicit local unregistration command.
 #[test]
 fn login_delete_keeps_the_yubikey_registry_entry() {
     let temp = TempDir::new().unwrap();
@@ -119,7 +119,7 @@ fn login_delete_keeps_the_yubikey_registry_entry() {
         .stdout(predicate::str::contains(
             "Kept the YubiKey registry entries (serials 01c95c1f)",
         ))
-        .stdout(predicate::str::contains("tvc keys delete-yubikey"));
+        .stdout(predicate::str::contains("tvc yubikey unregister"));
 
     let saved = fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
     assert!(saved.contains("[[yubikeys]]"), "{saved}");

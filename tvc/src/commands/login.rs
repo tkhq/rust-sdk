@@ -8,19 +8,18 @@ use crate::config::turnkey::{
     API_BASE_URL_PROD, Config, KeyCurve, LocalOperatorRecord, NewOrgOperator, OperatorKind,
     OperatorRecord, OperatorRecordKind, OrgConfig, QosOperatorPublicKey,
     SelectYubiKeyOperatorError, StoredApiKey, StoredQosOperatorKey, YubiKeyOperatorRecord,
-    YubiKeyRegistryEntry, YubiKeySerial, dashboard_base_url, default_api_key_path,
-    default_operator_key_path, default_org_dir,
+    YubiKeySerial, dashboard_base_url, default_api_key_path, default_operator_key_path,
+    default_org_dir,
 };
 use crate::outcome::Outcome;
 use crate::output::{MissingRequiredInput, StdCtx};
 use crate::prompts::{self, error_required_in_non_interactive};
-use crate::yubikey::{self, CertlessSlotOverwrite, ConnectedYubiKeys, Pin};
 use crate::{shell_eprintln, shell_print, shell_println};
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow, bail, ensure};
 use clap::Args as ClapArgs;
 use qos_p256::P256Pair;
 use serde::Serialize;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 use std::fmt::{self, Display, Formatter};
 use std::io::BufRead;
 use tracing::{debug, instrument};
@@ -72,17 +71,12 @@ enum OrgPlan {
 enum NewOrgOperatorPlan {
     Local,
     RegisteredYubikey(YubiKeySerial),
-    ProvisionYubikey { serial: YubiKeySerial, pin: Pin },
 }
 
 /// The yubikey leg of a newly created organization: what the coherent save
 /// must be able to recover, and what the post-save guidance surfaces.
 struct NewOrgYubiKey {
-    serial: YubiKeySerial,
     public_key: QosOperatorPublicKey,
-    /// Whether this login provisioned the device: hardware success precedes
-    /// the save, so a failed save needs recovery instructions.
-    provisioned: bool,
 }
 
 enum ApiKeyPolicy {
@@ -195,9 +189,16 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) 
             )?;
             shell_eprintln!(
                 ctx,
-                "    (other profiles may share them). Remove device key material with"
+                "    (other profiles may share them). After removing every profile reference,"
             )?;
-            shell_eprintln!(ctx, "    `tvc keys delete-yubikey`.")?;
+            shell_eprintln!(
+                ctx,
+                "    forget a device locally with `tvc yubikey unregister`; this does not"
+            )?;
+            shell_eprintln!(
+                ctx,
+                "    modify the device or revoke it from an organization."
+            )?;
         }
 
         shell_eprintln!(ctx, "")?;
@@ -437,53 +438,23 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
         } => {
             let api_base_url = new_org_api_base_url(plan.api_base_url_override.as_deref());
 
-            // The hardware leg runs before the org is added, so the single
-            // save below persists the registry entry and the organization
-            // reference as one coherent transition.
+            // The registry entry already exists; the save below persists only
+            // the new organization and its serial reference.
             let (operator, yubikey) = match operator {
                 NewOrgOperatorPlan::Local => (NewOrgOperator::LocalKeyFile, None),
                 NewOrgOperatorPlan::RegisteredYubikey(serial) => {
                     let entry = config.yubikeys.get(serial).ok_or_else(|| {
                         anyhow!(
-                            "YubiKey {serial} is not in the device registry; run \
-                             `tvc keys provision-yubikey --serial {serial}` to provision \
-                             and register it"
+                            "YubiKey {serial} is not in the device registry; install its \
+                             certificates and run `tvc keys refresh-yubikey --serial {serial}` \
+                             first"
                         )
                     })?;
 
                     (
                         NewOrgOperator::Yubikey(serial),
                         Some(NewOrgYubiKey {
-                            serial,
                             public_key: entry.public_key,
-                            provisioned: false,
-                        }),
-                    )
-                }
-                NewOrgOperatorPlan::ProvisionYubikey { serial, pin } => {
-                    let mut device = yubikey::open(serial)?;
-                    let enrolled = config.enroll_yubikey(
-                        serial,
-                        &mut device,
-                        &pin,
-                        CertlessSlotOverwrite::Refuse,
-                    )?;
-
-                    if enrolled.provisioned_slots.is_empty() {
-                        shell_println!(
-                            ctx,
-                            "YubiKey {serial} already provisioned - keeping the existing key pair."
-                        )?;
-                    } else {
-                        shell_println!(ctx, "YubiKey {serial} provisioned.")?;
-                    }
-
-                    (
-                        NewOrgOperator::Yubikey(serial),
-                        Some(NewOrgYubiKey {
-                            serial,
-                            public_key: enrolled.public_key,
-                            provisioned: true,
                         }),
                     )
                 }
@@ -498,46 +469,7 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
 
     config.set_active_org(&alias)?;
 
-    // A provisioned device is irreversible state the config must catch up
-    // with: a failed save gets paste-able recovery covering both the registry
-    // entry and the organization reference.
-    let recovery = yubikey
-        .as_ref()
-        .filter(|yubikey| yubikey.provisioned)
-        .map(|yubikey| {
-            #[derive(Serialize)]
-            struct Recovery<'a> {
-                yubikeys: [YubiKeyRegistryEntry; 1],
-                orgs: HashMap<&'a str, &'a OrgConfig>,
-            }
-
-            toml::to_string_pretty(&Recovery {
-                yubikeys: [YubiKeyRegistryEntry {
-                    serial: yubikey.serial,
-                    public_key: yubikey.public_key,
-                    extra: toml::Table::new(),
-                }],
-                orgs: HashMap::from([(alias.as_str(), &org_config)]),
-            })
-            .context("failed to serialize recovery config for the new organization")
-        })
-        .transpose()?;
-
-    match recovery {
-        Some(recovery) => {
-            let config_path = crate::config::turnkey::config_file_path()?;
-
-            config.save().await.with_context(|| {
-                format!(
-                    r#"the YubiKey is provisioned but saving the config failed; the device keeps its keys, so rerunning `tvc login` is safe (provisioning is idempotent), or add this to {} manually:
-
-{recovery}"#,
-                    config_path.display()
-                )
-            })?;
-        }
-        None => config.save().await?,
-    }
+    config.save().await?;
 
     if let Some(yubikey) = &yubikey {
         shell_println!(ctx)?;
@@ -630,8 +562,8 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
             let entry = config.yubikeys.get(yubikey.serial).ok_or_else(|| {
                 anyhow!(
                     "YubiKey {serial} of operator '{name}' is not in the device registry; \
-                         run `tvc keys provision-yubikey --serial {serial}` to provision and \
-                         register it",
+                     install its certificates and run \
+                     `tvc keys refresh-yubikey --serial {serial}` first",
                     serial = yubikey.serial,
                     name = operator.name,
                 )
@@ -749,54 +681,30 @@ fn prompt_for_new_org_inputs(
         )? {
             OperatorKeyChoice::Local => NewOrgOperatorPlan::Local,
             OperatorKeyChoice::Yubikey => {
-                enum SourceChoice {
-                    Registered(YubiKeySerial),
-                    Provision(Option<YubiKeySerial>),
-                }
-
-                impl Display for SourceChoice {
-                    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-                        match self {
-                            Self::Registered(serial) => write!(f, "{serial} (registered)"),
-                            Self::Provision(_) => {
-                                f.write_str("[new] Provision a connected YubiKey")
-                            }
-                        }
+                let serial = match serial {
+                    Some(serial) => {
+                        ensure!(
+                            config.yubikeys.contains(serial),
+                            "YubiKey {serial} is not in the device registry; install its \
+                             certificates and run `tvc keys refresh-yubikey --serial {serial}` \
+                             first"
+                        );
+                        serial
                     }
-                }
-
-                let source = match serial {
-                    Some(serial) if config.yubikeys.contains(serial) => {
-                        SourceChoice::Registered(serial)
-                    }
-                    Some(serial) => SourceChoice::Provision(Some(serial)),
-                    None if config.yubikeys.is_empty() => SourceChoice::Provision(None),
                     None => {
-                        let mut choices = config
-                            .yubikeys
-                            .serials()
-                            .map(SourceChoice::Registered)
-                            .collect::<Vec<_>>();
-                        choices.push(SourceChoice::Provision(None));
-
-                        prompts::select("YubiKey to use as the operator", choices)?
+                        let registered = config.yubikeys.serials().collect::<Vec<_>>();
+                        match registered.as_slice() {
+                            [] => bail!(
+                                "no YubiKeys are registered; complete the external setup and run \
+                                 `tvc keys refresh-yubikey` first"
+                            ),
+                            [sole] => *sole,
+                            _ => prompts::select("YubiKey to use as the operator", registered)?,
+                        }
                     }
                 };
 
-                match source {
-                    SourceChoice::Registered(serial) => {
-                        NewOrgOperatorPlan::RegisteredYubikey(serial)
-                    }
-                    SourceChoice::Provision(explicit) => {
-                        let serial =
-                            ConnectedYubiKeys::from(ctx.connected_yubikeys()?).choose(explicit)?;
-                        let pin = Pin::from(prompts::password(
-                            "YubiKey PIV PIN (the factory default is 123456; touch the device each time it blinks)",
-                        )?);
-
-                        NewOrgOperatorPlan::ProvisionYubikey { serial, pin }
-                    }
-                }
+                NewOrgOperatorPlan::RegisteredYubikey(serial)
             }
         }
     };
@@ -1140,8 +1048,8 @@ impl Display for ProfileDeleted {
                 .collect();
 
             lines.push(format!(
-                "Kept the YubiKey registry entries (serials {}); remove device key \
-                 material with `tvc keys delete-yubikey`.",
+                "Kept the YubiKey registry entries (serials {}); after removing every \
+                 profile reference, forget them locally with `tvc yubikey unregister`.",
                 serials.join(", ")
             ));
         }

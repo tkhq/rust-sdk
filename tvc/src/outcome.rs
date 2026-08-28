@@ -56,11 +56,10 @@ pub enum Outcome {
     AppDeleted(app::delete::AppDeleted),
     OperatorKeyBackedUp(keys::backup_operator_key::OperatorKeyBackedUp),
     // Spelled Yubikey, not YubiKey: the variant name IS the reason (see the
-    // module docs), and the wire strings are yubikey_provisioned/_refreshed/_deleted.
-    YubikeyProvisioned(keys::provision_yubikey::YubiKeyProvisioned),
+    // module docs), so these outcomes use the stable `yubikey_*` prefix.
     YubikeyRefreshed(keys::refresh_yubikey::YubiKeyRefreshed),
-    YubikeyDeleted(keys::delete_yubikey::YubiKeyDeleted),
     YubikeyCertificatesCreated(yubikey::create_certs::YubiKeyCertificatesCreated),
+    YubikeyUnregistered(yubikey::unregister::YubiKeyUnregistered),
     QuorumKeyCreated(keys::create_quorum_key::QuorumKeyCreated),
     QuorumKeyGenerated(keys::generate_local_quorum_key::QuorumKeyGenerated),
     QuorumKeyConfigCreated(keys::init_local_quorum_key::QuorumKeyConfigCreated),
@@ -98,10 +97,9 @@ impl Display for Outcome {
             Outcome::LiveDeploymentSet(msg) => msg.fmt(f),
             Outcome::AppDeleted(msg) => msg.fmt(f),
             Outcome::OperatorKeyBackedUp(msg) => msg.fmt(f),
-            Outcome::YubikeyProvisioned(msg) => msg.fmt(f),
             Outcome::YubikeyRefreshed(msg) => msg.fmt(f),
-            Outcome::YubikeyDeleted(msg) => msg.fmt(f),
             Outcome::YubikeyCertificatesCreated(msg) => msg.fmt(f),
+            Outcome::YubikeyUnregistered(msg) => msg.fmt(f),
             Outcome::QuorumKeyCreated(msg) => msg.fmt(f),
             Outcome::QuorumKeyGenerated(msg) => msg.fmt(f),
             Outcome::QuorumKeyConfigCreated(msg) => msg.fmt(f),

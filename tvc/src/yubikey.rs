@@ -5,28 +5,16 @@
 //! [`connected_serials`]), opening a serial is the ambient [`open`] entry
 //! point, and per-device functionality hangs off the opened
 //! [`yubikey::YubiKey`] through the [`DeviceOps`] extension trait. Commands
-//! open a device once and drive inspection and mutation through that one
-//! handle.
+//! open a device once and drive its read, signing, and key-agreement operations
+//! through that one handle.
 //!
-//! Provisioning follows the QuorumOS conventions from `qos_client`: two
-//! P-256 keys in the PIV signing and key-agreement slots, each under a
-//! self-signed `CN=QuorumOS` certificate, PIN policy "always" and touch
-//! policy "always". That certificate subject is how TVC recognizes its own
-//! material; a slot holding anything else is never touched. A slot only
-//! counts as empty when its emptiness is proven — no readable certificate
-//! AND no key per the PIV metadata command (firmware 5.3+). Ambiguous
-//! certificate-less slots are never guessed empty: ordinary flows refuse
-//! them, while the explicit provisioning command may overwrite them only
-//! after user confirmation.
-//!
-//! Deletion removes the QuorumOS certificates. The `yubikey` crate offers no
-//! way to delete a slot's private key short of a full PIV reset, which would
-//! erase credentials TVC does not own — so the key material itself stays
-//! behind until the slot is reprovisioned, and TVC never resets a device.
+//! TVC expects externally generated P-256 keys in the PIV signing and
+//! key-agreement slots, each under a self-signed `CN=QuorumOS` certificate,
+//! with PIN and touch policies set to "always". Device mutations remain
+//! explicit `ykman` operations: TVC never generates or deletes device keys or
+//! certificates and never authenticates with a PIV management key.
 
-use crate::config::turnkey::{
-    Config, QosOperatorPublicKey, QosOperatorPublicKeyParseError, Registration, YubiKeySerial,
-};
+use crate::config::turnkey::{QosOperatorPublicKey, QosOperatorPublicKeyParseError, YubiKeySerial};
 use p256::{
     PublicKey,
     ecdsa::{DerSignature, VerifyingKey, signature::Verifier},
@@ -51,14 +39,14 @@ use x509_cert::{
     time::Validity,
 };
 use yubikey::{
-    Error as PivError, MgmKey, PinPolicy, Serial, TouchPolicy, YubiKey,
+    Error as PivError, PinPolicy, Serial, TouchPolicy, YubiKey,
     certificate::{Certificate, yubikey_signer::Signer},
     piv::{self, AlgorithmId, ManagementAlgorithmId, Origin, SlotId, SlotMetadata},
     reader::Context,
 };
 use zeroize::Zeroizing;
 
-/// The subject of the self-signed certificates `qos_client` provisions.
+/// The subject TVC requires on the externally installed certificates.
 // TODO: qos_client keeps this constant private; have it exported (along with
 // a re-export of the yubikey crate) and use it here.
 const QOS_CERTIFICATE_SUBJECT: &str = "CN=QuorumOS";
@@ -134,7 +122,7 @@ pub(crate) fn open(serial: YubiKeySerial) -> Result<YubiKey, DeviceError> {
     })
 }
 
-/// The two PIV slots QuorumOS provisions on an operator YubiKey.
+/// The two PIV slots QuorumOS uses on an operator YubiKey.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum QosSlot {
@@ -344,9 +332,9 @@ impl DeviceStatus {
         ]
     }
 
-    /// The first slot state that rules out provisioning the device: foreign
-    /// material, or a key whose ownership cannot be proven.
-    pub(crate) fn unprovisionable_slot(&self) -> Option<DeviceError> {
+    /// The first slot state that rules out using the device: foreign material,
+    /// or a key whose ownership cannot be proven.
+    pub(crate) fn unusable_slot(&self) -> Option<DeviceError> {
         self.slots()
             .into_iter()
             .find_map(|(slot, status)| match status {
@@ -367,67 +355,6 @@ impl DeviceStatus {
             })
     }
 
-    /// The first slot holding a certificate TVC must not delete. A bare key
-    /// is not a deletion obstacle — there is no certificate to remove.
-    pub(crate) fn foreign_slot(&self) -> Option<(QosSlot, &str)> {
-        self.slots()
-            .into_iter()
-            .find_map(|(slot, status)| match status {
-                SlotStatus::Foreign { subject } => Some((slot, subject.as_str())),
-                SlotStatus::Empty
-                | SlotStatus::QosProvisioned
-                | SlotStatus::KeyWithoutCertificate
-                | SlotStatus::UnknownWithoutCertificate { .. } => None,
-            })
-    }
-
-    /// Slots whose existing key material, if any, would be replaced by
-    /// provisioning and therefore require explicit user confirmation.
-    pub(crate) fn slots_requiring_overwrite(&self) -> Vec<QosSlot> {
-        self.slots()
-            .into_iter()
-            .filter_map(|(slot, status)| match status {
-                SlotStatus::KeyWithoutCertificate
-                | SlotStatus::UnknownWithoutCertificate { .. } => Some(slot),
-                SlotStatus::Empty | SlotStatus::QosProvisioned | SlotStatus::Foreign { .. } => None,
-            })
-            .collect()
-    }
-
-    fn slots_to_provision(
-        &self,
-        overwrite: CertlessSlotOverwrite,
-    ) -> Result<Vec<QosSlot>, DeviceError> {
-        if overwrite == CertlessSlotOverwrite::Refuse {
-            if let Some(error) = self.unprovisionable_slot() {
-                return Err(error);
-            }
-        } else if let Some((slot, subject)) = self.foreign_slot() {
-            return Err(DeviceError::ForeignSlot {
-                slot,
-                subject: subject.to_string(),
-            });
-        }
-
-        Ok(self
-            .slots()
-            .into_iter()
-            .filter_map(|(slot, status)| match status {
-                SlotStatus::Empty => Some(slot),
-                SlotStatus::KeyWithoutCertificate
-                | SlotStatus::UnknownWithoutCertificate { .. }
-                    if overwrite == CertlessSlotOverwrite::Confirmed =>
-                {
-                    Some(slot)
-                }
-                SlotStatus::QosProvisioned
-                | SlotStatus::KeyWithoutCertificate
-                | SlotStatus::UnknownWithoutCertificate { .. }
-                | SlotStatus::Foreign { .. } => None,
-            })
-            .collect())
-    }
-
     pub(crate) fn slots_with(&self, wanted: SlotStatus) -> Vec<QosSlot> {
         self.slots()
             .into_iter()
@@ -435,14 +362,6 @@ impl DeviceStatus {
             .map(|(slot, _)| slot)
             .collect()
     }
-}
-
-/// Whether the caller has obtained explicit permission to replace keys in
-/// slots that have no readable QuorumOS certificate.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum CertlessSlotOverwrite {
-    Refuse,
-    Confirmed,
 }
 
 /// A YubiKey PIV PIN, held only for the duration of device-backed operations
@@ -517,18 +436,16 @@ pub(crate) enum DeviceError {
     /// The slot state cannot be attributed: a key exists, but there is no
     /// readable QuorumOS certificate proving TVC manages it.
     #[error(
-        "the {slot} slot holds a key but no readable QuorumOS certificate; refusing to touch \
-         this device without confirmation (run `tvc keys provision-yubikey` to inspect and \
-         confirm replacing it)"
+        "the {slot} slot holds a key but no readable QuorumOS certificate; install the matching \
+         certificate with `ykman` before using this device with TVC"
     )]
     OccupiedWithoutCertificate { slot: QosSlot },
     /// The metadata command did not distinguish an empty slot from an
-    /// existing key. Only the explicit provisioning command can turn this
-    /// into a confirmed overwrite.
+    /// existing key.
     #[error(
         "the {slot} slot has no readable QuorumOS certificate, and its key presence could not be \
-         determined ({metadata_error}); refusing to overwrite it without confirmation (run \
-         `tvc keys provision-yubikey` to inspect and confirm)"
+         determined ({metadata_error}); confirm firmware 5.3 or later and install the matching \
+         certificate with `ykman` before using this device with TVC"
     )]
     UnknownWithoutCertificate {
         slot: QosSlot,
@@ -536,16 +453,12 @@ pub(crate) enum DeviceError {
     },
     /// A slot holds material TVC does not manage; nothing was modified.
     #[error(
-        "the {slot} slot holds a non-QuorumOS certificate ({subject}); refusing to touch this device"
+        "the {slot} slot holds a non-QuorumOS certificate ({subject}); refusing to use this device"
     )]
     ForeignSlot { slot: QosSlot, subject: String },
-    /// The slot holds no key; the device is not fully provisioned.
+    /// The slot holds no key; the device is not fully configured.
     #[error("the {slot} slot holds no QuorumOS key")]
     EmptySlot { slot: QosSlot },
-    #[error(
-        "the {slot} slot no longer holds a QuorumOS certificate; the device changed since it was inspected"
-    )]
-    ChangedSinceInspection { slot: QosSlot },
     #[error("the YubiKey PIN was rejected; {tries} attempts remain before the PIN locks")]
     WrongPin { tries: u8 },
     #[error("failed to verify the YubiKey PIN before signing the {slot} certificate")]
@@ -583,8 +496,6 @@ pub(crate) enum DeviceError {
     // qos_client's YubiKeyError implements neither Display nor Error, so it
     // is rendered by value instead of chained as a source.
     // TODO: derive those in qos_client and turn these fields into #[source].
-    #[error("failed to provision the {slot} slot: {error:?}")]
-    Provision { slot: QosSlot, error: YubiKeyError },
     #[error("failed to read the operator public key from the device: {error:?}")]
     ReadPairPublicKey { error: YubiKeyError },
     #[error(
@@ -597,14 +508,6 @@ pub(crate) enum DeviceError {
     KeyAgreement { error: YubiKeyError },
     #[error("device returned a malformed operator public key")]
     MalformedPairPublicKey(#[source] QosOperatorPublicKeyParseError),
-    #[error("failed to authenticate with the default PIV management key")]
-    Authenticate(#[source] PivError),
-    #[error("failed to delete the certificate in the {slot} slot")]
-    DeleteCertificate {
-        slot: QosSlot,
-        #[source]
-        source: PivError,
-    },
 }
 
 /// Decision table mapping raw certificate and key-metadata outcomes to a
@@ -636,17 +539,13 @@ fn classify_slot(
 }
 
 /// Per-device operations TVC needs, as an extension of [`YubiKey`] itself so
-/// inspection and mutation always go through the caller's one open handle.
+/// inspection and private-key operations use the caller's one open handle.
 pub(crate) trait DeviceOps {
     /// What one QuorumOS slot provably holds.
     fn slot_status(&mut self, slot: QosSlot) -> Result<SlotStatus, DeviceError>;
 
     /// What both QuorumOS slots provably hold.
     fn device_status(&mut self) -> Result<DeviceStatus, DeviceError>;
-
-    /// Generate a P-256 key and QuorumOS certificate in one slot, using the
-    /// standing QuorumOS policies. Fails on an occupied slot.
-    fn provision_slot(&mut self, slot: QosSlot, pin: &Pin) -> Result<(), DeviceError>;
 
     /// The composite `encrypt_public ‖ sign_public` operator key, read from
     /// the two slot certificates.
@@ -666,12 +565,12 @@ pub(crate) trait DeviceOps {
         sender_public: PublicKey,
     ) -> Result<Zeroizing<Vec<u8>>, DeviceError>;
 
-    /// Verify both QuorumOS slots hold TVC-provisioned keys and return the
+    /// Verify both QuorumOS slots hold configured QuorumOS keys and return the
     /// device's composite operator key. Refuses on foreign or empty slots.
     fn verified_pair_public_key(&mut self) -> Result<QosOperatorPublicKey, DeviceError> {
         let status = self.device_status()?;
 
-        if let Some(error) = status.unprovisionable_slot() {
+        if let Some(error) = status.unusable_slot() {
             return Err(error);
         }
 
@@ -681,13 +580,6 @@ pub(crate) trait DeviceOps {
 
         self.pair_public_key()
     }
-
-    /// Delete one slot's certificate.
-    ///
-    /// Gated on what this handle reads immediately beforehand: the slot must
-    /// still hold exactly the QuorumOS certificate. The slot's private key
-    /// cannot be deleted (see the module docs) and stays behind.
-    fn delete_qos_certificate(&mut self, slot: QosSlot) -> Result<(), DeviceError>;
 }
 
 impl DeviceOps for YubiKey {
@@ -709,18 +601,6 @@ impl DeviceOps for YubiKey {
             signing: self.slot_status(QosSlot::Signing)?,
             key_agreement: self.slot_status(QosSlot::KeyAgreement)?,
         })
-    }
-
-    fn provision_slot(&mut self, slot: QosSlot, pin: &Pin) -> Result<(), DeviceError> {
-        qos_client::yubikey::generate_signed_certificate(
-            self,
-            slot.slot_id(),
-            pin.as_bytes(),
-            MgmKey::default(),
-            TouchPolicy::Always,
-        )
-        .map(drop)
-        .map_err(|error| DeviceError::Provision { slot, error })
     }
 
     fn pair_public_key(&mut self) -> Result<QosOperatorPublicKey, DeviceError> {
@@ -756,63 +636,6 @@ impl DeviceOps for YubiKey {
             },
         )
     }
-
-    fn delete_qos_certificate(&mut self, slot: QosSlot) -> Result<(), DeviceError> {
-        match self.slot_status(slot)? {
-            SlotStatus::QosProvisioned => {}
-            SlotStatus::Foreign { subject } => {
-                return Err(DeviceError::ForeignSlot { slot, subject });
-            }
-            SlotStatus::Empty
-            | SlotStatus::KeyWithoutCertificate
-            | SlotStatus::UnknownWithoutCertificate { .. } => {
-                return Err(DeviceError::ChangedSinceInspection { slot });
-            }
-        }
-
-        self.authenticate(MgmKey::default())
-            .map_err(DeviceError::Authenticate)?;
-
-        Certificate::delete(self, slot.slot_id())
-            .map_err(|source| DeviceError::DeleteCertificate { slot, source })
-    }
-}
-
-/// Result of [`Config::enroll_yubikey`]: the device key and changes made to
-/// the device and registry.
-#[cfg_attr(test, derive(Debug))]
-pub(crate) struct EnrolledYubiKey {
-    pub(crate) public_key: QosOperatorPublicKey,
-    pub(crate) provisioned_slots: Vec<QosSlot>,
-    pub(crate) registration: Registration,
-}
-
-impl Config {
-    /// Bring one opened device to the fully provisioned state and make its
-    /// in-memory registry entry authoritative. The caller owns input
-    /// acquisition, device opening, persistence, and save recovery.
-    pub(crate) fn enroll_yubikey<D: DeviceOps>(
-        &mut self,
-        serial: YubiKeySerial,
-        device: &mut D,
-        pin: &Pin,
-        overwrite: CertlessSlotOverwrite,
-    ) -> Result<EnrolledYubiKey, DeviceError> {
-        let status = device.device_status()?;
-        let provisioned_slots = status.slots_to_provision(overwrite)?;
-        provisioned_slots
-            .iter()
-            .try_for_each(|slot| device.provision_slot(*slot, pin))?;
-
-        let public_key = device.pair_public_key()?;
-        let registration = self.yubikeys.register(serial, public_key);
-
-        Ok(EnrolledYubiKey {
-            public_key,
-            provisioned_slots,
-            registration,
-        })
-    }
 }
 
 pub(crate) mod pair;
@@ -822,7 +645,7 @@ pub(crate) mod test_support;
 
 #[cfg(test)]
 mod tests {
-    use super::test_support::{FakeDevice, PIN, serial};
+    use super::test_support::{FakeDevice, PIN};
     use super::*;
     use p256::ecdh::diffie_hellman;
     use p256::{PublicKey, ecdsa::SigningKey};
@@ -934,54 +757,6 @@ mod tests {
         Pin::from(String::from_utf8(PIN.to_vec()).unwrap())
     }
 
-    #[test]
-    fn enroll_provisions_and_registers_a_fresh_device() {
-        let mut config = Config::default();
-        let mut device = FakeDevice::new(SlotStatus::Empty, SlotStatus::Empty);
-
-        let enrolled = config
-            .enroll_yubikey(
-                serial(),
-                &mut device,
-                &default_pin(),
-                CertlessSlotOverwrite::Refuse,
-            )
-            .unwrap();
-
-        assert_eq!(enrolled.public_key, device.operator_public_key());
-        assert_eq!(
-            enrolled.provisioned_slots,
-            vec![QosSlot::Signing, QosSlot::KeyAgreement]
-        );
-        assert_eq!(enrolled.registration, Registration::Added);
-        assert_eq!(
-            config.yubikeys.get(serial()).unwrap().public_key,
-            device.operator_public_key()
-        );
-    }
-
-    #[test]
-    fn re_enrolling_a_registered_device_changes_nothing() {
-        let mut config = Config::default();
-        let mut device = FakeDevice::new(SlotStatus::QosProvisioned, SlotStatus::QosProvisioned);
-        config
-            .yubikeys
-            .register(serial(), device.operator_public_key());
-
-        let enrolled = config
-            .enroll_yubikey(
-                serial(),
-                &mut device,
-                &default_pin(),
-                CertlessSlotOverwrite::Refuse,
-            )
-            .unwrap();
-
-        assert_eq!(enrolled.registration, Registration::Unchanged);
-        assert_eq!(enrolled.provisioned_slots, Vec::new());
-        assert_eq!(device.provision_calls, Vec::new());
-    }
-
     fn connected(serials: &[u32]) -> ConnectedYubiKeys {
         ConnectedYubiKeys::from(
             serials
@@ -1067,7 +842,7 @@ mod tests {
     }
 
     #[test]
-    fn a_quorumos_certificate_is_provisioned() {
+    fn a_quorumos_certificate_is_recognized() {
         let status = classify_slot(QosSlot::Signing, qos_subject(), metadata_untouched).unwrap();
 
         assert_eq!(status, SlotStatus::QosProvisioned);
@@ -1110,20 +885,18 @@ mod tests {
     }
 
     #[test]
-    fn an_unproven_key_rules_out_provisioning() {
+    fn an_unproven_key_is_refused() {
         let status = DeviceStatus {
             signing: SlotStatus::Empty,
             key_agreement: SlotStatus::KeyWithoutCertificate,
         };
 
         assert!(matches!(
-            status.unprovisionable_slot(),
+            status.unusable_slot(),
             Some(DeviceError::OccupiedWithoutCertificate {
                 slot: QosSlot::KeyAgreement
             })
         ));
-        // But it is not a deletion obstacle: there is no certificate there.
-        assert_eq!(status.foreign_slot(), None);
     }
 
     #[test]
@@ -1180,27 +953,6 @@ mod tests {
     }
 
     #[test]
-    fn foreign_slot_reports_the_first_foreign_entry() {
-        let status = DeviceStatus {
-            signing: SlotStatus::QosProvisioned,
-            key_agreement: foreign(),
-        };
-
-        assert_eq!(
-            status.foreign_slot(),
-            Some((QosSlot::KeyAgreement, "CN=SomeoneElse"))
-        );
-        assert_eq!(
-            DeviceStatus {
-                signing: SlotStatus::Empty,
-                key_agreement: SlotStatus::QosProvisioned,
-            }
-            .foreign_slot(),
-            None
-        );
-    }
-
-    #[test]
     fn slots_with_selects_by_state_in_slot_order() {
         let status = DeviceStatus {
             signing: SlotStatus::QosProvisioned,
@@ -1214,90 +966,6 @@ mod tests {
         assert_eq!(
             status.slots_with(SlotStatus::QosProvisioned),
             vec![QosSlot::Signing]
-        );
-    }
-
-    #[test]
-    fn enrollment_refuses_a_certless_key_without_confirmation() {
-        let mut config = Config::default();
-        let mut device = FakeDevice::new(
-            SlotStatus::KeyWithoutCertificate,
-            SlotStatus::QosProvisioned,
-        );
-
-        let error = config
-            .enroll_yubikey(
-                serial(),
-                &mut device,
-                &default_pin(),
-                CertlessSlotOverwrite::Refuse,
-            )
-            .unwrap_err();
-
-        assert!(matches!(
-            error,
-            DeviceError::OccupiedWithoutCertificate {
-                slot: QosSlot::Signing
-            }
-        ));
-        assert_eq!(device.provision_calls, Vec::new());
-    }
-
-    #[test]
-    fn enrollment_refuses_unknown_key_presence_without_confirmation() {
-        let mut config = Config::default();
-        let mut device = FakeDevice::new(
-            SlotStatus::UnknownWithoutCertificate {
-                metadata_error: PivError::GenericError,
-            },
-            SlotStatus::QosProvisioned,
-        );
-
-        let error = config
-            .enroll_yubikey(
-                serial(),
-                &mut device,
-                &default_pin(),
-                CertlessSlotOverwrite::Refuse,
-            )
-            .unwrap_err();
-
-        assert!(matches!(
-            error,
-            DeviceError::UnknownWithoutCertificate {
-                slot: QosSlot::Signing,
-                metadata_error: PivError::GenericError,
-            }
-        ));
-        assert_eq!(device.provision_calls, Vec::new());
-    }
-
-    #[test]
-    fn confirmed_enrollment_overwrites_known_and_unknown_certless_slots() {
-        let mut config = Config::default();
-        let mut device = FakeDevice::new(
-            SlotStatus::KeyWithoutCertificate,
-            SlotStatus::UnknownWithoutCertificate {
-                metadata_error: PivError::GenericError,
-            },
-        );
-
-        let enrolled = config
-            .enroll_yubikey(
-                serial(),
-                &mut device,
-                &default_pin(),
-                CertlessSlotOverwrite::Confirmed,
-            )
-            .unwrap();
-
-        assert_eq!(
-            enrolled.provisioned_slots,
-            vec![QosSlot::Signing, QosSlot::KeyAgreement]
-        );
-        assert_eq!(
-            device.provision_calls,
-            vec![QosSlot::Signing, QosSlot::KeyAgreement]
         );
     }
 
@@ -1414,78 +1082,20 @@ mod tests {
         ));
     }
 
-    /// Full provision-inspect-delete cycle against real hardware.
-    ///
-    /// DESTRUCTIVE: generates keys in, and deletes the certificates from,
-    /// the PIV signing and key-agreement slots of the sole connected
-    /// YubiKey. Requires the factory-default PIN and management key, and
-    /// firmware 5.3+ (the metadata command proves slot emptiness). Run
-    /// manually: `cargo test -p tvc --lib -- --ignored hardware_`
-    #[test]
-    #[ignore = "requires a connected YubiKey with default PIN/management key; overwrites its QuorumOS slots"]
-    fn hardware_provision_and_delete_cycle() {
-        let mut yubikey = open(sole_connected_serial()).unwrap();
-        let pin = default_pin();
-
-        let status = yubikey.device_status().unwrap();
-
-        status
-            .slots_to_provision(CertlessSlotOverwrite::Confirmed)
-            .unwrap()
-            .iter()
-            .try_for_each(|slot| yubikey.provision_slot(*slot, &pin))
-            .unwrap();
-        assert_eq!(
-            yubikey.device_status().unwrap(),
-            DeviceStatus {
-                signing: SlotStatus::QosProvisioned,
-                key_agreement: SlotStatus::QosProvisioned,
-            }
-        );
-
-        let pair_public_key = yubikey.pair_public_key().unwrap();
-        assert_eq!(pair_public_key.to_string().len(), 260);
-
-        yubikey.delete_qos_certificate(QosSlot::Signing).unwrap();
-        yubikey
-            .delete_qos_certificate(QosSlot::KeyAgreement)
-            .unwrap();
-
-        // The keys remain (no per-slot key deletion), so the slots read as
-        // key-without-certificate rather than empty.
-        assert_eq!(
-            yubikey.device_status().unwrap(),
-            DeviceStatus {
-                signing: SlotStatus::KeyWithoutCertificate,
-                key_agreement: SlotStatus::KeyWithoutCertificate,
-            }
-        );
-    }
-
     /// Signing and key agreement against real hardware.
     ///
-    /// DESTRUCTIVE: provisions the QuorumOS slots of the sole connected
-    /// YubiKey when they are empty, and leaves them provisioned. Requires
-    /// the factory-default PIN and management key; sign and key agreement
-    /// each need a touch while the device blinks. Run manually:
+    /// Requires an externally configured YubiKey with QuorumOS certificates
+    /// in both slots and the factory-default PIN. Sign and key agreement each
+    /// need a touch while the device blinks. Run manually:
     /// `cargo test -p tvc --lib -- --ignored hardware_`
     #[test]
-    #[ignore = "requires a connected YubiKey with default PIN/management key; provisions its QuorumOS slots"]
+    #[ignore = "requires an externally configured YubiKey with the default PIN; sign and key agreement each need a touch"]
     fn hardware_sign_and_key_agreement() {
         let mut yubikey = open(sole_connected_serial()).unwrap();
         let pin = default_pin();
 
         let absent = YubiKeySerial::from(0x0000_0001);
         assert!(matches!(open(absent), Err(DeviceError::NotFound { .. })));
-
-        let status = yubikey.device_status().unwrap();
-
-        status
-            .slots_to_provision(CertlessSlotOverwrite::Confirmed)
-            .unwrap()
-            .iter()
-            .try_for_each(|slot| yubikey.provision_slot(*slot, &pin))
-            .unwrap();
 
         let verified = yubikey.verified_pair_public_key().unwrap();
         let composite = hex::decode(verified.to_string()).unwrap();
@@ -1513,9 +1123,9 @@ mod tests {
     ///
     /// Burns one PIN retry with a deliberately wrong PIN, then restores the
     /// counter by signing with the factory-default PIN (one touch). Requires
-    /// a provisioned device — run `hardware_sign_and_key_agreement` first.
+    /// an externally configured device.
     #[test]
-    #[ignore = "requires a provisioned YubiKey with default PIN; burns and restores one PIN retry"]
+    #[ignore = "requires an externally configured YubiKey with default PIN; burns and restores one PIN retry"]
     fn hardware_wrong_pin_reports_retries() {
         let mut yubikey = open(sole_connected_serial()).unwrap();
 

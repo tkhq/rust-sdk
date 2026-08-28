@@ -1,4 +1,4 @@
-//! YubiKey registry refresh command - re-reads a provisioned device's
+//! YubiKey registry refresh command - re-reads a configured device's
 //! operator key and updates the cached registry entry.
 
 use crate::{

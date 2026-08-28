@@ -7,9 +7,10 @@ TVC uses two keys in the YubiKey PIV application:
 | `9c` | Sign deployment approvals | P-256, generated on the device, PIN Always, touch Always |
 | `9d` | Decrypt and re-encrypt quorum-key shares | P-256, generated on the device, PIN Always, touch Always |
 
-The private keys never leave the YubiKey. In this setup flow, every
-management-key-protected PIV operation is an explicit `ykman` command; the TVC
-certificate command neither accepts nor uses the PIV management key.
+The private keys never leave the YubiKey. TVC never generates, imports, or
+deletes device keys or certificates and never authenticates with the PIV
+management key. Every management-key-protected PIV operation is an explicit
+`ykman` command.
 
 The examples below assume exactly one YubiKey is connected. When several are
 connected, unplug the others or pass TVC's canonical hexadecimal serial with
@@ -165,6 +166,23 @@ tvc keys re-encrypt-local-share \
 Private-key operations prompt for the PIV PIN and require a physical touch.
 When the organization has only one YubiKey operator, TVC can usually select it
 without `--serial`.
+
+## Unregister the YubiKey locally
+
+After removing the YubiKey operator from every local organization profile that
+references it, remove its registry entry with:
+
+```sh
+tvc yubikey unregister --serial <serial>
+```
+
+This command only changes the local TVC configuration. It does not open or
+modify the YubiKey, erase its keys or certificates, or revoke the operator from
+any organization. The YubiKey remains able to act as an operator for every
+organization that still trusts its public keys.
+
+The command refuses to unregister a serial while a local organization profile
+still references it. In non-interactive mode, pass both `--serial` and `--yes`.
 
 ## Troubleshooting
 

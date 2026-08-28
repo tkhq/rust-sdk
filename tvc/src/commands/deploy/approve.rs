@@ -281,8 +281,9 @@ impl Run for Args {
                         OperatorRecordKind::Yubikey(yubikey) => {
                             let Some(entry) = config.yubikeys.get(yubikey.serial) else {
                                 bail!(
-                                    "YubiKey {} is not in the device registry; either manually remove it from the org-config or run \
-                                     `tvc keys provision-yubikey` first",
+                                    "YubiKey {} is not in the device registry; either remove it \
+                                     from the organization config or install its certificates and \
+                                     run `tvc keys refresh-yubikey` first",
                                     yubikey.serial
                                 );
                             };
@@ -297,7 +298,15 @@ impl Run for Args {
                         }
                     };
 
-                    if authorized_keys.contains(candidate.public_key.as_bytes().as_slice())
+                    let matches_requested_serial = requested_serial.is_none_or(|requested| {
+                        matches!(
+                            &candidate.source,
+                            ApprovalOperatorSource::Yubikey { serial } if *serial == requested
+                        )
+                    });
+
+                    if matches_requested_serial
+                        && authorized_keys.contains(candidate.public_key.as_bytes().as_slice())
                         && requested_approval_key
                             .is_none_or(|requested| requested == candidate.public_key)
                     {

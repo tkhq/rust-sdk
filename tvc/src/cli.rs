@@ -206,11 +206,9 @@ impl Commands {
         // Device-local certificate creation must not depend on, or create, a
         // TVC configuration file.
         let command = match self {
-            Commands::Yubikey { command } => {
-                return match command {
-                    YubikeyCommands::CreateCerts(args) => args.run(ctx).await.map(Into::into),
-                };
-            }
+            Commands::Yubikey {
+                command: YubikeyCommands::CreateCerts(args),
+            } => return args.run(ctx).await.map(Into::into),
             command => command,
         };
 
@@ -287,9 +285,7 @@ impl Commands {
                 KeysCommands::BackupOperatorKey(args) => {
                     args.run(ctx, config).await.map(Into::into)
                 }
-                KeysCommands::ProvisionYubikey(args) => args.run(ctx, config).await.map(Into::into),
                 KeysCommands::RefreshYubikey(args) => args.run(ctx, config).await.map(Into::into),
-                KeysCommands::DeleteYubikey(args) => args.run(ctx, config).await.map(Into::into),
                 KeysCommands::CreateQuorumKey(args) => {
                     commands::keys::create_quorum_key::run(ctx, args, config).await
                 }
@@ -313,7 +309,10 @@ impl Commands {
                 }
             },
             Commands::Yubikey { command } => match command {
-                YubikeyCommands::CreateCerts(args) => args.run(ctx).await.map(Into::into),
+                YubikeyCommands::Unregister(args) => args.run(ctx, config).await.map(Into::into),
+                YubikeyCommands::CreateCerts(_) => {
+                    unreachable!("create-certs returned before loading the TVC configuration")
+                }
             },
             Commands::Version => commands::version::run(),
         }
@@ -349,7 +348,7 @@ enum Commands {
         #[command(subcommand)]
         command: KeysCommands,
     },
-    /// Manage YubiKey certificate workflows.
+    /// Manage YubiKeys.
     Yubikey {
         #[command(subcommand)]
         command: YubikeyCommands,
@@ -460,13 +459,8 @@ enum AppCommands {
 enum KeysCommands {
     /// Back up a local operator key by copying its key file to a chosen destination.
     BackupOperatorKey(commands::keys::backup_operator_key::Args),
-    /// Provision a YubiKey with the QuorumOS operator key pair and register its serial.
-    #[command(long_about = commands::keys::provision_yubikey::LONG_ABOUT)]
-    ProvisionYubikey(commands::keys::provision_yubikey::Args),
     /// Refresh the registry's cached operator key for a YubiKey from the device.
     RefreshYubikey(commands::keys::refresh_yubikey::Args),
-    /// Delete a registered YubiKey's QuorumOS key material and registry entry.
-    DeleteYubikey(commands::keys::delete_yubikey::Args),
     /// Create a hosted quorum key encrypted to hosted operator keys.
     CreateQuorumKey(commands::keys::create_quorum_key::Args),
     /// Generate and shamir-split a local quorum key, encrypting each share to an operator key.
@@ -481,6 +475,8 @@ enum KeysCommands {
 enum YubikeyCommands {
     /// Create certificates for existing keys without modifying the device.
     CreateCerts(commands::yubikey::create_certs::Args),
+    /// Remove a YubiKey from the local TVC configuration without modifying it.
+    Unregister(commands::yubikey::unregister::Args),
 }
 
 impl AppCommands {
@@ -500,9 +496,7 @@ impl KeysCommands {
     fn name(&self) -> &'static str {
         match self {
             KeysCommands::BackupOperatorKey(_) => "keys backup-operator-key",
-            KeysCommands::ProvisionYubikey(_) => "keys provision-yubikey",
             KeysCommands::RefreshYubikey(_) => "keys refresh-yubikey",
-            KeysCommands::DeleteYubikey(_) => "keys delete-yubikey",
             KeysCommands::CreateQuorumKey(_) => "keys create-quorum-key",
             KeysCommands::GenerateLocalQuorumKey(_) => "keys generate-local-quorum-key",
             KeysCommands::InitLocalQuorumKey(_) => "keys init-local-quorum-key",
@@ -515,6 +509,7 @@ impl YubikeyCommands {
     fn name(&self) -> &'static str {
         match self {
             YubikeyCommands::CreateCerts(_) => "yubikey create-certs",
+            YubikeyCommands::Unregister(_) => "yubikey unregister",
         }
     }
 }

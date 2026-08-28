@@ -3,7 +3,7 @@
 use super::{DeviceError, DeviceOps, DeviceStatus, Pin, QosSlot, SlotStatus};
 use crate::config::turnkey::{QosOperatorPublicKey, YubiKeySerial};
 use p256::{PublicKey, ecdh::diffie_hellman};
-use qos_client::{yubikey::YubiKeyError, yubikey_crate as yubikey};
+use qos_client::yubikey::YubiKeyError;
 use qos_p256::P256Pair;
 use zeroize::Zeroizing;
 
@@ -17,15 +17,10 @@ pub(crate) fn serial() -> YubiKeySerial {
 }
 
 /// In-memory [`DeviceOps`] implementation: per-slot state and a software
-/// P-256 pair standing in for the on-device keys, plus scriptable primitive
-/// failures, recording every mutating call.
+/// P-256 pair standing in for the on-device keys.
 pub(crate) struct FakeDevice {
     status: DeviceStatus,
     pair: P256Pair,
-    pub(crate) fail_provision: Option<QosSlot>,
-    pub(crate) fail_delete: Option<QosSlot>,
-    pub(crate) provision_calls: Vec<QosSlot>,
-    pub(crate) delete_calls: Vec<QosSlot>,
 }
 
 impl FakeDevice {
@@ -36,10 +31,6 @@ impl FakeDevice {
                 key_agreement,
             },
             pair: P256Pair::generate().expect("software key generation"),
-            fail_provision: None,
-            fail_delete: None,
-            provision_calls: Vec::new(),
-            delete_calls: Vec::new(),
         }
     }
 
@@ -91,20 +82,6 @@ impl DeviceOps for FakeDevice {
         Ok(self.status.clone())
     }
 
-    fn provision_slot(&mut self, slot: QosSlot, _pin: &Pin) -> Result<(), DeviceError> {
-        self.provision_calls.push(slot);
-
-        if self.fail_provision == Some(slot) {
-            return Err(DeviceError::Provision {
-                slot,
-                error: YubiKeyError::WillNotOverwriteSlot,
-            });
-        }
-
-        *self.slot_status_mut(slot) = SlotStatus::QosProvisioned;
-        Ok(())
-    }
-
     fn pair_public_key(&mut self) -> Result<QosOperatorPublicKey, DeviceError> {
         if self.status
             == (DeviceStatus {
@@ -138,29 +115,5 @@ impl DeviceOps for FakeDevice {
         );
 
         Ok(Zeroizing::new(secret.raw_secret_bytes().to_vec()))
-    }
-
-    fn delete_qos_certificate(&mut self, slot: QosSlot) -> Result<(), DeviceError> {
-        self.delete_calls.push(slot);
-
-        if self.fail_delete == Some(slot) {
-            return Err(DeviceError::DeleteCertificate {
-                slot,
-                source: yubikey::Error::GenericError,
-            });
-        }
-
-        match self.slot_status(slot)? {
-            SlotStatus::QosProvisioned => {
-                *self.slot_status_mut(slot) = SlotStatus::KeyWithoutCertificate;
-                Ok(())
-            }
-            SlotStatus::Foreign { subject } => Err(DeviceError::ForeignSlot { slot, subject }),
-            SlotStatus::Empty
-            | SlotStatus::KeyWithoutCertificate
-            | SlotStatus::UnknownWithoutCertificate { .. } => {
-                Err(DeviceError::ChangedSinceInspection { slot })
-            }
-        }
     }
 }
