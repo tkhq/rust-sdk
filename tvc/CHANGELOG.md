@@ -7,6 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.15.0](https://github.com/tkhq/rust-sdk/compare/tvc-v0.14.0...tvc-v0.15.0) - 2026-08-28
+
+### Added
+
+- *(tvc)* add YubiKey certificate creation
+- *(tvc)* add --kind yubikey to operator create
+- *(tvc)* offer YubiKey operators during interactive new-org login
+- *(tvc)* create organizations with a YubiKey operator record
+- *(tvc)* add the YubiKey enrollment core
+- *(tvc)* choose the connected YubiKey without a selector
+- *(tvc)* disambiguate multiple YubiKey operators by serial
+- *(tvc)* add keys refresh-yubikey to resync the registry key cache
+- *(tvc)* route local share re-encryption through the operator pair port
+- *(tvc)* route manifest approval through a yubikey default operator
+- *(tvc)* add yubikey as a configurable default operator kind
+- *(tvc)* add the YubiKey operator pair and serial resolution
+- *(tvc)* add sign and key-agreement primitives to the YubiKey device boundary
+- *(tvc)* add YubiKey registry, provisioning, and key management
+- *(tvc)* add deploy replicas option
+- *(tvc)* log in to hosted-default orgs with a backend-shaped outcome
+- *(tvc)* offer registered hosted operators in app create and approve defaults
+- *(tvc)* resolve the sole hosted operator when the default backend is hosted
+- *(tvc)* offer operator key backup during login onboarding
+- *(tvc)* add keys backup-operator-key command
+- *(tvc)* collapse client-version-too-old error and instrument the CLI callstack
+- *(tvc)* classify backend client-version rejection and render upgrade hint
+
+### Fixed
+
+- *(tvc)* Check the manifest before trying to do approval
+- *(tvc)* match operator keys before app reuse
+- *(tvc)* confirm certless YubiKey reprovisioning
+- *(tvc)* resolve YubiKey inputs before side effects
+- *(tvc)* YubiKey parity for profile deletion and operator-key messaging
+- *(tvc)* fence the multi-candidate reuse prompt and pin the selection paths
+- *(tvc)* explain the local-only key commands to hosted-operator orgs
+
+### Other
+
+- *(tvc)* stop managing YubiKey device state
+- *(tvc)* cover multi-record YubiKey login selection end to end
+- *(tvc)* fake-test keys refresh-yubikey and fix its save remediation
+- *(tvc)* select the share-decryption backend before reading inputs
+- *(tvc)* make operator resolution a Config method
+- *(tvc)* type the key-agreement points and preserve qos_p256 errors
+- *(tvc)* extract the Pair port for decrypt-capable operators
+- *(tvc)* Remove bad `.expect`s
+- *(tvc)* address remaining PR 254 feedback
+- *(tvc)* followups from PR 254 review
+- *(tvc)* Add qos_client as a dependency
+- Merge pull request #250 from tkhq/swag/client-transport
+- sync protos from tkhq/mono fd98e55aa01e (make -C proto sync/rust-sdk)
+- Merge pull request #234 from tkhq/zeke/deployment-approval-prompts
+- Improve tvc key file output handling
+- Update qos_* versions
+- *(tvc)* load config once at dispatch and pass it into commands
+- *(tvc)* simplify return types
+- *(tvc)* remove single-use functions
+- *(tvc)* seal operator backends behind a Signer port
+- *(tvc)* parse stored operator public keys into a typed composite
+- Merge pull request #228 from tkhq/richard/eng-4082-ensure-tvc-cli-is-on-a-recent-enough-version
+
 ### Added
 
 - *(tvc)* expose deployment replica count on `tvc deploy create` via the `replicas` config field and `--replicas`/`TVC_REPLICAS` override

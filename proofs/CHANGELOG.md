@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.15.0](https://github.com/tkhq/rust-sdk/compare/turnkey_proofs-v0.14.0...turnkey_proofs-v0.15.0) - 2026-08-28
+
+### Other
+
+- Merge pull request #243 from tkhq/zeke/proof-verification-doc-warnings
+- *(proofs)* clarify verification scope of attestation and proof verification
+
 ## [0.11.0](https://github.com/tkhq/rust-sdk/compare/turnkey_proofs-v0.10.0...turnkey_proofs-v0.11.0) - 2026-07-15
 
 ### Other

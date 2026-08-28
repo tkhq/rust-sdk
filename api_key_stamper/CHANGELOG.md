@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.15.0](https://github.com/tkhq/rust-sdk/compare/turnkey_api_key_stamper-v0.14.0...turnkey_api_key_stamper-v0.15.0) - 2026-08-28
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.8.0](https://github.com/tkhq/rust-sdk/compare/turnkey_api_key_stamper-v0.7.0...turnkey_api_key_stamper-v0.8.0) - 2026-06-30
 
 ### Changed
