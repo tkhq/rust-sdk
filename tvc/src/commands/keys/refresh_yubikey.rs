@@ -8,9 +8,9 @@ use crate::{
     },
     outcome::Outcome,
     output::{Ctx, StdCtx},
-    yubikey::{self, ConnectedYubiKeys, DeviceError, DeviceOps},
+    yubikey::{self, ConnectedYubiKeys, DeviceError, DeviceOps, YubiKeySelectionError},
 };
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Args as ClapArgs;
 use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
@@ -82,7 +82,38 @@ impl Args {
         D: DeviceOps,
         O: FnOnce(YubiKeySerial) -> Result<D, DeviceError>,
     {
-        let serial = ConnectedYubiKeys::from(ctx.connected_yubikeys()?).choose(self.serial)?;
+        let serial = match ConnectedYubiKeys::from(ctx.connected_yubikeys()?).choose(self.serial) {
+            Ok(serial) => serial,
+            Err(YubiKeySelectionError::NoneConnected) => bail!("no YubiKey is connected"),
+            Err(YubiKeySelectionError::NotConnected {
+                requested,
+                connected,
+            }) => {
+                let connected = connected
+                    .into_iter()
+                    .map(|serial| serial.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                if connected.is_empty() {
+                    bail!("YubiKey {requested} is not connected");
+                }
+
+                bail!("YubiKey {requested} is not connected; connected: {connected}")
+            }
+            Err(YubiKeySelectionError::Ambiguous { connected }) => {
+                let serials = connected
+                    .into_iter()
+                    .map(|serial| serial.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                bail!(
+                    "multiple YubiKeys are connected (serials {serials}); unplug all but the one \
+                     to use and try again, or pass --serial"
+                )
+            }
+        };
 
         // Reading the slot certificates needs neither the PIN nor a touch,
         // so the refresh itself also runs non-interactively.

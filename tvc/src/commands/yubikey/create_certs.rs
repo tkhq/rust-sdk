@@ -6,7 +6,7 @@ use crate::{
     outcome::Outcome,
     output::StdCtx,
     prompts,
-    yubikey::{self, CertificateDeviceOps, ConnectedYubiKeys, Pin, QosSlot},
+    yubikey::{self, CertificateDeviceOps, ConnectedYubiKeys, Pin, QosSlot, YubiKeySelectionError},
 };
 use anyhow::{Context, Result, bail};
 use clap::Args as ClapArgs;
@@ -37,7 +37,39 @@ impl Args {
             );
         }
 
-        let serial = ConnectedYubiKeys::from(ctx.connected_yubikeys()?).choose(self.serial)?;
+        let serial = match ConnectedYubiKeys::from(ctx.connected_yubikeys()?).choose(self.serial) {
+            Ok(serial) => serial,
+            Err(YubiKeySelectionError::NoneConnected) => bail!("no YubiKey is connected"),
+            Err(YubiKeySelectionError::NotConnected {
+                requested,
+                connected,
+            }) => {
+                let connected = connected
+                    .into_iter()
+                    .map(|serial| serial.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                if connected.is_empty() {
+                    bail!("YubiKey {requested} is not connected");
+                }
+
+                bail!("YubiKey {requested} is not connected; connected: {connected}")
+            }
+            Err(YubiKeySelectionError::Ambiguous { connected }) => {
+                let serials = connected
+                    .into_iter()
+                    .map(|serial| serial.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                bail!(
+                    "multiple YubiKeys are connected (serials {serials}); unplug all but the one \
+                     to use and try again, or pass --serial"
+                )
+            }
+        };
+
         let mut yubikey = yubikey::open(serial)?;
         let signing = yubikey.certificate_slot(QosSlot::Signing)?;
         let key_agreement = yubikey.certificate_slot(QosSlot::KeyAgreement)?;
