@@ -5,6 +5,8 @@ set -euo pipefail
 target="${1:?missing target triple}"
 version="2.5.1"
 sha512="027851359b38cf56c2ea97a969c0ae8c5eabbb977fc2a86c650c6c8e0e2caba43934f3de35573deb408bf6365e9deb2a9c443b3712b313692069421c77222057"
+meson_version="0.58.2"
+meson_sha256="7634ec32955d3f897d623b88e9d2988451035f43d73c17a29caf767387baedb7"
 
 case "${target}" in
   aarch64-unknown-linux-musl)
@@ -40,7 +42,23 @@ apt-get install --assume-yes --no-install-recommends \
   python3-pip \
   python3-setuptools \
   xz-utils
-python3 -m pip install --no-cache-dir 'meson==0.58.2'
+meson_requirements="/tmp/meson-requirements.txt"
+printf 'meson==%s --hash=sha256:%s\n' \
+  "${meson_version}" \
+  "${meson_sha256}" > "${meson_requirements}"
+pip_build_options=()
+if python3 -m pip install --help |
+  awk '/--no-build-isolation/ { found=1 } END { exit !found }'; then
+  pip_build_options+=(--no-build-isolation)
+fi
+python3 -m pip install \
+  --no-cache-dir \
+  --no-deps \
+  --no-binary=:all: \
+  --require-hashes \
+  "${pip_build_options[@]}" \
+  --requirement "${meson_requirements}"
+rm -f "${meson_requirements}"
 
 archive="/tmp/pcsc-lite-${version}.tar.xz"
 source_dir="/tmp/pcsc-lite-${version}"
