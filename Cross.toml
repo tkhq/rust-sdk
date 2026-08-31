@@ -1,4 +1,6 @@
 [target.aarch64-unknown-linux-musl]
+# Resolved from ghcr.io/cross-rs/aarch64-unknown-linux-musl:0.2.5.
+image = "ghcr.io/cross-rs/aarch64-unknown-linux-musl@sha256:702154f52b2d8091671aa2c84d5582d849f949977228c735ff8462f93cc0e1e4"
 pre-build = ".github/cross/install-pcsc-lite.sh"
 
 [target.aarch64-unknown-linux-musl.env]
@@ -9,6 +11,8 @@ passthrough = [
 ]
 
 [target.x86_64-unknown-linux-musl]
+# Resolved from ghcr.io/cross-rs/x86_64-unknown-linux-musl:0.2.5.
+image = "ghcr.io/cross-rs/x86_64-unknown-linux-musl@sha256:77db671d8356a64ae72a3e1415e63f547f26d374fbe3c4762c1cd36c7eac7b99"
 pre-build = ".github/cross/install-pcsc-lite.sh"
 
 [target.x86_64-unknown-linux-musl.env]
