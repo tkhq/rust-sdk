@@ -12,7 +12,7 @@ mod common;
 
 use qos_p256::P256Pair;
 use rexpect::session::PtySession;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
 use std::path::Path;
@@ -76,6 +76,43 @@ fn spawn_with_home(home: &Path, args: &[&str]) -> PtySession {
 
     rexpect::session::spawn_command(cmd, Some(TIMEOUT_MS))
         .unwrap_or_else(|e| panic!("spawn failed: {e}\n  cmd: {bin} {}", args.join(" ")))
+}
+
+/// Drive `tvc login` through the interactive new-org flow against a dead-port
+/// API base URL. Login persists the profile and its generated API key before
+/// the final whoami request, so the profile exists on disk even though the
+/// command exits nonzero when that request fails.
+///
+/// `pick_new_in_selector` is required once profiles exist: login then opens an
+/// org selector first, and typing "new" filters it down to the
+/// "[new] Add a new organization" entry (no fixture string here contains
+/// "new") which Enter selects.
+fn pty_create_profile(home: &Path, org_id: &str, alias: &str, pick_new_in_selector: bool) {
+    let mut session = spawn_with_home(home, &["login", "--api-base-url", "http://127.0.0.1:1"]);
+
+    if pick_new_in_selector {
+        session.exp_string("Select organization").unwrap();
+        session.send_line("new").unwrap();
+    }
+
+    session.exp_string("Organization ID").unwrap();
+    session.send_line(org_id).unwrap();
+    session.exp_string("Organization alias").unwrap();
+    session.send_line(alias).unwrap();
+
+    // Enter accepts the highlighted "Local key file" entry.
+    session.exp_string("Operator key type").unwrap();
+    session.send_line("").unwrap();
+
+    session
+        .exp_string(&format!("Selected org: {alias} ({org_id})"))
+        .unwrap();
+    session.exp_string("API Key Generated!").unwrap();
+    session.exp_string("Press Enter when done...").unwrap();
+    session.send_line("").unwrap();
+
+    session.exp_string("Verifying credentials...").unwrap();
+    session.exp_eof().unwrap();
 }
 
 /// One-shot mock Turnkey API that answers the whoami query, enough to carry
@@ -208,23 +245,69 @@ fn approve_bails_when_user_rejects_pivot() {
 fn login_with_empty_org_id_bails() {
     let temp = tempfile::TempDir::new().unwrap();
 
-    let bin = env!("CARGO_BIN_EXE_tvc");
-    let cmd = format!("{bin} login");
-
-    let mut session = rexpect::session::spawn_command(
-        {
-            let mut c = std::process::Command::new(bin);
-            c.arg("login").env("HOME", temp.path());
-            c
-        },
-        Some(TIMEOUT_MS),
-    )
-    .unwrap_or_else(|e| panic!("spawn failed: {e}\n  cmd: {cmd}"));
+    let mut session = spawn_with_home(temp.path(), &["login"]);
 
     session.exp_string("Organization ID").unwrap();
     session.send_line("").unwrap();
     session.exp_string("Organization ID is required").unwrap();
     session.exp_eof().unwrap();
+}
+
+/// TVC-159: when one organization ID is registered under multiple aliases,
+/// `login --org <org-id>` resolves to an arbitrary alias, because resolution
+/// falls back to `HashMap` iteration order, which is randomized per process.
+///
+/// The duplicate state is created through the CLI itself (two logins to the
+/// same organization under different aliases), then resolution runs in fresh
+/// processes until both aliases have been observed. With the bug present the
+/// expected number of attempts is 2-3; all 40 agreeing has probability 2⁻³⁹.
+#[test]
+fn login_with_duplicate_org_id_selects_alias_nondeterministically() {
+    let temp = tempfile::TempDir::new().unwrap();
+    pty_create_profile(temp.path(), "org-dup-test", "alias-a", false);
+    pty_create_profile(temp.path(), "org-dup-test", "alias-b", true);
+
+    let bin = env!("CARGO_BIN_EXE_tvc");
+    let mut seen = BTreeSet::new();
+
+    for _ in 0..40 {
+        let output = Command::new(bin)
+            .args(["login", "--org", "org-dup-test"])
+            .env("HOME", temp.path())
+            .env("TVC_NON_INTERACTIVE", "1")
+            .env_remove("TVC_ORG")
+            .env_remove("TVC_API_BASE_URL")
+            .env_remove("TVC_ORG_ID")
+            .env_remove("TVC_API_KEY_PUBLIC")
+            .env_remove("TVC_API_KEY_PRIVATE")
+            .output()
+            .unwrap();
+
+        // Selection happens (and the config is saved) before the whoami
+        // request, which fails against the dead-port base URL on the profile.
+        assert!(!output.status.success());
+
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        let alias = stdout
+            .lines()
+            .find_map(|line| line.strip_prefix("Selected org: "))
+            .and_then(|rest| rest.strip_suffix(" (org-dup-test)"))
+            .unwrap_or_else(|| panic!("no selected-org line in output:\n{stdout}"));
+        seen.insert(alias.to_string());
+
+        if seen.len() == 2 {
+            break;
+        }
+    }
+
+    let expected = ["alias-a", "alias-b"]
+        .into_iter()
+        .map(String::from)
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        seen, expected,
+        "resolution by org ID should be nondeterministic across processes (TVC-159)"
+    );
 }
 
 /// Interactive `keys backup-operator-key` prompts for the destination and
