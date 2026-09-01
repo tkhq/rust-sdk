@@ -115,6 +115,23 @@ jobs:
           fi
           cat "${archive}.sha256"
 
+      - name: Verify musl binary hardening
+        if: matrix.build_tool == 'cross'
+        run: |
+          set -euo pipefail
+          binary="target/${TARGET}/release/tvc"
+          file_header="$(readelf --wide --file-header "${binary}")"
+          program_headers="$(readelf --wide --program-headers "${binary}")"
+
+          printf '%s\n' "${file_header}" | rg 'Type:'
+          printf '%s\n' "${program_headers}" | rg 'GNU_RELRO'
+          printf '%s\n' "${program_headers}" | rg 'GNU_STACK.*RW '
+          if printf '%s\n' "${program_headers}" | rg --quiet 'GNU_STACK.*RWE'; then
+            echo 'musl binary has an executable stack' >&2
+            exit 1
+          fi
+          readelf --wide --symbols "${binary}" | rg '__stack_chk_fail'
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:

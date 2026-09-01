@@ -1,0 +1,37 @@
+name: Check PC/SC release
+
+on:
+  schedule:
+    - cron: "17 13 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Check for a newer PC/SC release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          current="$(sed -n 's/^version="\([^"]*\)"$/\1/p' .github/cross/install-pcsc-lite.sh)"
+          if [[ -z "${current}" ]]; then
+            echo 'could not read the pinned PC/SC version' >&2
+            exit 1
+          fi
+
+          latest="$(gh api repos/LudovicRousseau/PCSC/releases/latest --jq .tag_name)"
+          if [[ "${current}" != "${latest}" ]]; then
+            echo "PC/SC ${latest} is available; the static build pins ${current}" >&2
+            exit 1
+          fi
+
+          echo "PC/SC ${current} is current"

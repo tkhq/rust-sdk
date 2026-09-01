@@ -87,6 +87,9 @@ tar -xJf "${archive}" -C /tmp
   echo "cpu = '${cpu}'"
   echo "endian = 'little'"
   echo
+  echo '[built-in options]'
+  echo "c_args = ['-D_FORTIFY_SOURCE=2', '-fPIC', '-fstack-protector-strong', '-Wformat', '-Wformat-security', '-Werror=format-security']"
+  echo
   echo '[properties]'
   echo 'needs_exe_wrapper = true'
 } > "${cross_file}"
