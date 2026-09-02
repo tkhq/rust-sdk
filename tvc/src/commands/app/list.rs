@@ -33,7 +33,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Resul
     let response = auth
         .client
         .get_tvc_apps(GetTvcAppsRequest {
-            organization_id: auth.org_id.clone(),
+            organization_id: auth.org_id.to_string(),
         })
         .await
         .context("failed to list TVC apps")?;

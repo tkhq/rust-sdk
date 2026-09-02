@@ -91,7 +91,7 @@ async fn execute(ctx: &mut StdCtx, args: Args, config: &turnkey::Config) -> Resu
             // TL;DR split fetching the data/resources separately
             // from building the client
             let auth = build_client(config).await?;
-            let org_id = auth.org_id.clone();
+            let org_id = auth.org_id.to_string();
             let deployment = fetch_tvc_deployment(&auth, org_id, deploy_id).await?;
             DeployConfig::try_from(deployment)?
         }

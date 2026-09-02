@@ -127,7 +127,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcom
     let expected_share_count = intent.operator_encrypt_keys.len();
     let auth = build_client(&config).await?;
     if let Some(configured_org_id) = configured_org_id {
-        ensure_authenticated_org(&auth.org_id, &configured_org_id)?;
+        ensure_authenticated_org(auth.org_id, configured_org_id)?;
     }
     let timestamp_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -136,7 +136,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcom
 
     let result = auth
         .client
-        .create_tvc_quorum_key(auth.org_id, timestamp_ms, intent)
+        .create_tvc_quorum_key(auth.org_id.to_string(), timestamp_ms, intent)
         .await
         .map_err(|error| hosted_activity_error("create hosted TVC quorum key", error))?;
     let output = validate_result(result.result, expected_share_count)?;
@@ -151,7 +151,7 @@ fn parse_operator_id(value: &str) -> std::result::Result<Uuid, String> {
 fn resolve_operator_encrypt_keys(
     config: &Config,
     operator_source: OperatorSource,
-) -> Result<(Vec<OperatorPublicKey>, Option<String>)> {
+) -> Result<(Vec<OperatorPublicKey>, Option<Uuid>)> {
     match operator_source {
         OperatorSource::EncryptKeys(keys) => Ok((keys, None)),
         OperatorSource::OperatorIds(operator_ids) => {
@@ -164,7 +164,7 @@ fn resolve_operator_encrypt_keys(
 fn resolve_operator_ids(
     config: &Config,
     operator_ids: &[Uuid],
-) -> Result<(Vec<OperatorPublicKey>, Option<String>)> {
+) -> Result<(Vec<OperatorPublicKey>, Option<Uuid>)> {
     let (_, org) = config
         .active_org_config()
         .context("No active organization. Run `tvc login` first.")?;
@@ -178,7 +178,7 @@ fn resolve_operator_ids(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    Ok((keys, Some(org.id.to_string())))
+    Ok((keys, Some(org.id)))
 }
 
 fn validate_operator_ids(operator_ids: &[Uuid]) -> Result<()> {

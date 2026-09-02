@@ -192,7 +192,7 @@ impl Run for Args {
                     .context("No active organization. Run `tvc login` first.")?;
 
                 let auth = build_client(&config).await?;
-                ensure_authenticated_org(&auth.org_id, &configured_org_id.to_string())?;
+                ensure_authenticated_org(auth.org_id, configured_org_id)?;
 
                 let HostedOperatorSpec { name, wallet, path } = spec;
 
@@ -210,7 +210,7 @@ impl Run for Args {
 
                 let result = auth
                     .client
-                    .create_tvc_operator(auth.org_id.clone(), timestamp_ms()?, intent)
+                    .create_tvc_operator(auth.org_id.to_string(), timestamp_ms()?, intent)
                     .await
                     .map_err(|error| hosted_activity_error("create hosted TVC operator", error))?;
 

@@ -162,7 +162,7 @@ impl TryFrom<CreateOperatorRequestResult> for OperatorRecord {
 /// Its keys are parsed exactly once, at resolution.
 #[cfg_attr(test, derive(Debug, PartialEq, Eq))]
 pub(crate) struct ResolvedHostedOperator {
-    organization_id: String,
+    organization_id: Uuid,
     name: String,
     operator_id: Uuid,
     keys: OperatorKeyPair,
@@ -171,7 +171,7 @@ pub(crate) struct ResolvedHostedOperator {
 impl ResolvedHostedOperator {
     /// Parse and validate a hosted registry record into a resolved operator.
     pub(crate) fn from_registry(
-        organization_id: String,
+        organization_id: Uuid,
         name: &str,
         record: &HostedOperatorRecord,
     ) -> Result<Self> {
@@ -210,8 +210,8 @@ impl ResolvedHostedOperator {
         })
     }
 
-    pub(crate) fn organization_id(&self) -> &str {
-        &self.organization_id
+    pub(crate) fn organization_id(&self) -> Uuid {
+        self.organization_id
     }
 
     pub(crate) fn name(&self) -> &str {
@@ -253,9 +253,7 @@ impl Config {
         match (matches.next(), matches.next()) {
             (None, _) => Ok(None),
             (Some((name, hosted)), None) => Ok(Some(ResolvedHostedOperator::from_registry(
-                org.id.to_string(),
-                name,
-                hosted,
+                org.id, name, hosted,
             )?)),
             (Some(_), Some(_)) => bail!("multiple hosted operators have ID {operator_id}"),
         }
@@ -318,7 +316,7 @@ impl Signer for HostedSigner {
             let result = self
                 .auth
                 .client
-                .sign_raw_payload(self.auth.org_id.clone(), timestamp_ms()?, intent)
+                .sign_raw_payload(self.auth.org_id.to_string(), timestamp_ms()?, intent)
                 .await
                 .map_err(|error| {
                     hosted_activity_error("sign manifest with hosted operator", error)
@@ -439,7 +437,7 @@ mod tests {
         let record = hosted_record();
         let operator_id = Uuid::parse_str(OPERATOR_ID).unwrap();
         let expected = ResolvedHostedOperator {
-            organization_id: Uuid::from_u128(0xA1).to_string(),
+            organization_id: Uuid::from_u128(0xA1),
             name: "hosted".to_string(),
             operator_id,
             keys: OperatorKeyPair {

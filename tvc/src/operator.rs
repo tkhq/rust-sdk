@@ -147,8 +147,8 @@ impl ResolvedOperator {
 }
 
 pub(crate) fn ensure_authenticated_org(
-    authenticated_org_id: &str,
-    configured_org_id: &str,
+    authenticated_org_id: Uuid,
+    configured_org_id: Uuid,
 ) -> Result<()> {
     ensure!(
         authenticated_org_id == configured_org_id,
@@ -361,7 +361,7 @@ impl Config {
                 }
 
                 let auth = build_client(self).await?;
-                ensure_authenticated_org(&auth.org_id, hosted.organization_id())?;
+                ensure_authenticated_org(auth.org_id, hosted.organization_id())?;
 
                 Ok(ResolvedOperator {
                     name: Some(hosted.name().to_string()),
@@ -974,11 +974,17 @@ mod tests {
 
     #[test]
     fn authenticated_org_must_match_configured_org() {
+        let authenticated = Uuid::from_u128(0xAA);
+        let configured = Uuid::from_u128(0xCC);
+
         assert_eq!(
-            ensure_authenticated_org("authenticated", "configured")
+            ensure_authenticated_org(authenticated, configured)
                 .unwrap_err()
                 .to_string(),
-            "authenticated organization (authenticated) does not match configured organization (configured)"
+            format!(
+                "authenticated organization ({authenticated}) does not match \
+                 configured organization ({configured})"
+            )
         );
     }
 }
