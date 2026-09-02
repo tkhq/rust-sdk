@@ -63,16 +63,18 @@ pub(crate) fn connected_serials() -> Result<Vec<YubiKeySerial>, DeviceError> {
     let mut context = Context::open().map_err(DeviceError::Discovery)?;
     let readers = context.iter().map_err(DeviceError::Discovery)?;
 
-    Itertools::try_collect(readers.filter_map(|reader| match reader.open() {
-        Ok(yubikey) => Some(Ok(YubiKeySerial::from(yubikey.serial().0))),
-        // The dependency cannot distinguish a non-YubiKey smartcard from
-        // a YubiKey with PIV disabled; both report a missing PIV applet.
-        Err(PivError::AppletNotFound { applet_name: "PIV" }) => None,
-        Err(source) => Some(Err(DeviceError::OpenReader {
-            reader: reader.name().into_owned(),
-            source,
-        })),
-    }))
+    readers
+        .filter_map(|reader| match reader.open() {
+            Ok(yubikey) => Some(Ok(YubiKeySerial::from(yubikey.serial().0))),
+            // The dependency cannot distinguish a non-YubiKey smartcard from
+            // a YubiKey with PIV disabled; both report a missing PIV applet.
+            Err(PivError::AppletNotFound { applet_name: "PIV" }) => None,
+            Err(source) => Some(Err(DeviceError::OpenReader {
+                reader: reader.name().into_owned(),
+                source,
+            })),
+        })
+        .collect::<Result<_, _>>()
 }
 
 /// The connected YubiKey serials captured by one discovery pass.
