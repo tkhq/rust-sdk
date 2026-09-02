@@ -549,6 +549,7 @@ pub(crate) trait DeviceOps {
         } = self.device_status()?;
 
         match (signing, key_agreement) {
+            (SlotStatus::QosProvisioned, SlotStatus::QosProvisioned) => self.pair_public_key(),
             (SlotStatus::Foreign { subject }, _) => Err(DeviceError::ForeignSlot {
                 slot: QosSlot::Signing,
                 subject,
@@ -585,7 +586,6 @@ pub(crate) trait DeviceOps {
             (_, SlotStatus::Empty) => Err(DeviceError::EmptySlot {
                 slot: QosSlot::KeyAgreement,
             }),
-            (SlotStatus::QosProvisioned, SlotStatus::QosProvisioned) => self.pair_public_key(),
         }
     }
 }
