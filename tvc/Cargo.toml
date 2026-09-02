@@ -50,6 +50,13 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 displaydoc = { workspace = true }
 
+# `tests/common.rs` is the fixture module the integration-test binaries pull
+# in via `mod common;`; registering it with `test = false` stops cargo from
+# also building it as an (empty) test binary of its own.
+[[test]]
+name = "common"
+test = false
+
 [dev-dependencies]
 assert_cmd = { workspace = true }
 hpke = { workspace = true }

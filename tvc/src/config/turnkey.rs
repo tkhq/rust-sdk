@@ -21,11 +21,13 @@ pub use yubikey::{
 };
 
 use anyhow::{Context, Result, bail};
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
+use std::convert::Infallible;
 use std::fmt::{self, Display, Formatter};
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use thiserror::Error;
 use tracing::debug;
 use uuid::Uuid;
@@ -49,9 +51,11 @@ pub struct Config {
     /// The currently active organization alias
     #[serde(default)]
     pub active_org: Option<String>,
-    /// Map of org alias -> org config
+    /// Map of org alias -> org config, in config-file order. The order is
+    /// preserved so saves don't churn the file and so "first profile in the
+    /// config" is well-defined.
     #[serde(default)]
-    pub orgs: HashMap<String, OrgConfig>,
+    pub orgs: IndexMap<String, OrgConfig>,
     /// Registered YubiKey devices, shared across organizations. Absent from
     /// disk entirely while empty, so configs predating the registry rewrite
     /// byte-identically.
@@ -75,8 +79,8 @@ mod disk {
         YubiKeyRegistry,
     };
     use anyhow::{Context, Result, bail};
+    use indexmap::IndexMap;
     use serde::Serialize;
-    use std::collections::HashMap;
     use std::path::PathBuf;
 
     /// Every supported shape of `tvc.config.toml`.
@@ -193,7 +197,7 @@ mod disk {
             .orgs
             .into_iter()
             .map(|(alias, org)| migrate_v0_org(&alias, org).map(|org| (alias, org)))
-            .collect::<Result<HashMap<_, _>>>()?;
+            .collect::<Result<IndexMap<_, _>>>()?;
 
         Ok(Config {
             active_org: config.active_org,
@@ -360,11 +364,16 @@ pub struct HostedOperatorRecord {
 }
 
 /// Configuration for a single organization.
+///
+/// A profile's alias is the key it is registered under in [`Config::orgs`];
+/// it is deliberately not repeated here so the name cannot diverge from the
+/// registry. Lookups that need both return `(alias, config)` pairs — see
+/// [`Config::matching_profiles`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct OrgConfig {
     /// The Turnkey organization ID
-    pub id: String,
+    pub id: Uuid,
     /// Path to the API key file
     pub api_key_path: PathBuf,
     /// API base URL for this organization
@@ -553,6 +562,35 @@ fn default_api_base_url() -> String {
     API_BASE_URL_PROD.to_string()
 }
 
+/// A user-supplied organization reference, as taken by `--org` flags.
+///
+/// Organization IDs are UUIDs, so anything that parses as one is an ID and
+/// everything else is a profile alias; parsing never fails.
+#[derive(Debug, Clone)]
+pub enum OrgQuery {
+    Id(Uuid),
+    Alias(String),
+}
+
+impl FromStr for OrgQuery {
+    type Err = Infallible;
+
+    fn from_str(query: &str) -> Result<Self, Infallible> {
+        Ok(Uuid::parse_str(query)
+            .map(Self::Id)
+            .unwrap_or_else(|_| Self::Alias(query.to_string())))
+    }
+}
+
+impl Display for OrgQuery {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Id(id) => id.fmt(f),
+            Self::Alias(alias) => alias.fmt(f),
+        }
+    }
+}
+
 /// Returns the base config directory: `~/.config/turnkey/`
 pub fn config_dir() -> Result<PathBuf> {
     let home = std::env::var("HOME").context("HOME environment variable not set")?;
@@ -629,26 +667,43 @@ impl Config {
         self.orgs.get(alias).map(|config| (alias, config))
     }
 
-    /// Organization IDs registered under more than one alias, with the
-    /// aliases that share them. Sorted by organization ID and by alias so
-    /// callers report and prompt in a stable order.
-    pub fn duplicated_org_ids(&self) -> Vec<(String, Vec<String>)> {
-        let mut groups: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
-
-        for (alias, org) in &self.orgs {
-            groups.entry(&org.id).or_default().push(alias);
+    /// Every configured profile matching an org query, in config order.
+    ///
+    /// An alias query names at most one profile; an organization-ID query
+    /// returns every profile registered for that organization.
+    pub fn matching_profiles(&self, query: &OrgQuery) -> Vec<(&str, &OrgConfig)> {
+        match query {
+            OrgQuery::Alias(alias) => self
+                .orgs
+                .get_key_value(alias)
+                .map(|(alias, org)| (alias.as_str(), org))
+                .into_iter()
+                .collect(),
+            OrgQuery::Id(id) => self
+                .orgs
+                .iter()
+                .filter(|(_, org)| org.id == *id)
+                .map(|(alias, org)| (alias.as_str(), org))
+                .collect(),
         }
+    }
 
-        groups
+    /// Organization IDs registered under more than one profile, with the
+    /// aliases that share them. Groups are sorted by organization ID; the
+    /// aliases within a group keep their config order.
+    pub fn duplicated_org_ids(&self) -> Vec<(Uuid, Vec<String>)> {
+        self.orgs
+            .iter()
+            .fold(
+                BTreeMap::<Uuid, Vec<&str>>::new(),
+                |mut groups, (alias, org)| {
+                    groups.entry(org.id).or_default().push(alias);
+                    groups
+                },
+            )
             .into_iter()
             .filter(|(_, aliases)| aliases.len() > 1)
-            .map(|(id, mut aliases)| {
-                aliases.sort_unstable();
-                (
-                    id.to_string(),
-                    aliases.into_iter().map(String::from).collect(),
-                )
-            })
+            .map(|(id, aliases)| (id, aliases.into_iter().map(String::from).collect()))
             .collect()
     }
 
@@ -662,7 +717,7 @@ impl Config {
     pub fn add_org(
         &mut self,
         alias: &str,
-        org_id: String,
+        org_id: Uuid,
         api_base_url: String,
         operator: NewOrgOperator,
     ) -> Result<()> {
@@ -698,7 +753,7 @@ impl Config {
     /// was configured. This only touches the config registry; deleting the
     /// org's key files on disk is the caller's responsibility.
     pub fn remove_org(&mut self, alias: &str) -> Option<OrgConfig> {
-        let removed = self.orgs.remove(alias)?;
+        let removed = self.orgs.shift_remove(alias)?;
         debug!(org_alias = alias, "removing organization config");
         self.last_created_app_id.remove(alias);
         self.last_operator_ids.remove(alias);
@@ -768,7 +823,7 @@ active_org = "default"
 future_root = "keep-root"
 
 [orgs.default]
-id = "org-123"
+id = "11111111-1111-4111-8111-111111111111"
 api_key_path = "/keys/api.json"
 operator_key_path = "/keys/operator.json"
 future_org = 42
@@ -786,7 +841,7 @@ active_org = "default"
 future_root = "keep-root"
 
 [orgs.default]
-id = "org-123"
+id = "11111111-1111-4111-8111-111111111111"
 api_key_path = "/keys/api.json"
 api_base_url = "https://api.turnkey.com"
 default_operator_kind = "local"
@@ -855,7 +910,7 @@ public_key = "{}"
 future_entry = "keep"
 
 [orgs.default]
-id = "org-123"
+id = "11111111-1111-4111-8111-111111111111"
 api_key_path = "/keys/api.json"
 default_operator_kind = "yubikey"
 
@@ -921,7 +976,7 @@ serial = "1C95C1F"
 version = 1
 
 [orgs.default]
-id = "org-123"
+id = "11111111-1111-4111-8111-111111111111"
 api_key_path = "/keys/api.json"
 
 [[orgs.default.operators]]
@@ -941,7 +996,7 @@ serial = "01c95c1f"
     }
     fn yubikey_org(serials: &[u32]) -> OrgConfig {
         OrgConfig {
-            id: "org-123".to_string(),
+            id: Uuid::from_u128(0x123),
             api_key_path: PathBuf::from("/keys/api.json"),
             api_base_url: default_api_base_url(),
             default_operator_kind: OperatorKind::Yubikey,
@@ -1058,15 +1113,19 @@ serial = "01c95c1f"
         assert_eq!(yubikey.serial, YubiKeySerial::from(0xdead_beef));
     }
 
-    fn config_with_org_entries(entries: &[(&str, &str)]) -> Config {
+    const ORG_1: Uuid = Uuid::from_u128(1);
+    const ORG_2: Uuid = Uuid::from_u128(2);
+    const ORG_3: Uuid = Uuid::from_u128(3);
+
+    fn config_with_org_entries<'a>(entries: impl IntoIterator<Item = (&'a str, Uuid)>) -> Config {
         Config {
             orgs: entries
-                .iter()
+                .into_iter()
                 .map(|(alias, org_id)| {
                     (
                         alias.to_string(),
                         OrgConfig {
-                            id: org_id.to_string(),
+                            id: org_id,
                             api_key_path: PathBuf::from("api_key.json"),
                             api_base_url: API_BASE_URL_PROD.to_string(),
                             default_operator_kind: OperatorKind::Local,
@@ -1082,27 +1141,49 @@ serial = "01c95c1f"
 
     #[test]
     fn duplicated_org_ids_ignores_unique_ids() {
-        let config = config_with_org_entries(&[("a", "org-1"), ("b", "org-2")]);
+        let config = config_with_org_entries([("a", ORG_1), ("b", ORG_2)]);
 
         assert_eq!(config.duplicated_org_ids(), Vec::new());
     }
 
     #[test]
-    fn duplicated_org_ids_groups_and_sorts() {
-        let config = config_with_org_entries(&[
-            ("c", "org-2"),
-            ("b", "org-1"),
-            ("a", "org-2"),
-            ("e", "org-1"),
-            ("d", "org-3"),
+    fn duplicated_org_ids_groups_in_config_order() {
+        let config = config_with_org_entries([
+            ("c", ORG_2),
+            ("b", ORG_1),
+            ("a", ORG_2),
+            ("e", ORG_1),
+            ("d", ORG_3),
         ]);
 
         assert_eq!(
             config.duplicated_org_ids(),
             vec![
-                ("org-1".to_string(), vec!["b".to_string(), "e".to_string()]),
-                ("org-2".to_string(), vec!["a".to_string(), "c".to_string()]),
+                (ORG_1, vec!["b".to_string(), "e".to_string()]),
+                (ORG_2, vec!["c".to_string(), "a".to_string()]),
             ]
+        );
+    }
+
+    #[test]
+    fn matching_profiles_prefers_alias_over_id_lookup() {
+        let config = config_with_org_entries([("a", ORG_1), ("b", ORG_1)]);
+
+        let by_alias = config.matching_profiles(&OrgQuery::Alias("b".to_string()));
+        assert_eq!(by_alias.len(), 1);
+        assert_eq!(by_alias[0].0, "b");
+
+        let by_id = config
+            .matching_profiles(&OrgQuery::Id(ORG_1))
+            .into_iter()
+            .map(|(alias, _)| alias)
+            .collect::<Vec<_>>();
+        assert_eq!(by_id, ["a", "b"]);
+
+        assert!(
+            config
+                .matching_profiles(&OrgQuery::Alias("missing".to_string()))
+                .is_empty()
         );
     }
 
@@ -1112,7 +1193,7 @@ serial = "01c95c1f"
         config
             .add_org(
                 "default",
-                "org-123".to_string(),
+                Uuid::from_u128(0x123),
                 API_BASE_URL_PROD.to_string(),
                 NewOrgOperator::Yubikey(YubiKeySerial::from(0x01c9_5c1f)),
             )

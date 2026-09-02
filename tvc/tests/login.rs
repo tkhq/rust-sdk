@@ -1,6 +1,7 @@
 mod common;
 
 use assert_cmd::cargo::cargo_bin_cmd;
+use indexmap::IndexMap;
 use predicates::prelude::*;
 use std::collections::HashMap;
 use std::fs;
@@ -8,6 +9,9 @@ use tempfile::TempDir;
 use tvc::config::turnkey::{Config, OperatorKind, OperatorRecord, OrgConfig};
 
 const NON_INTERACTIVE_ENV: &str = "TVC_NON_INTERACTIVE";
+
+const ORG_DUP: &str = "11111111-2222-4333-8444-555555555555";
+const ORG_TEST: &str = "33333333-3333-4333-8333-333333333333";
 
 fn write_login_config(
     home: &TempDir,
@@ -18,10 +22,10 @@ fn write_login_config(
     fs::create_dir_all(&turnkey_dir).unwrap();
     let config = Config {
         active_org: Some("test".to_string()),
-        orgs: HashMap::from([(
+        orgs: IndexMap::from([(
             "test".to_string(),
             OrgConfig {
-                id: "org-test".to_string(),
+                id: ORG_TEST.parse().unwrap(),
                 api_key_path,
                 api_base_url: "https://api.turnkey.com".to_string(),
                 default_operator_kind: OperatorKind::Local,
@@ -67,7 +71,7 @@ fn login_non_interactive_with_duplicate_org_id_lists_profiles() {
     let temp = TempDir::new().unwrap();
     common::write_profiles_config(
         temp.path(),
-        &[("alias-a", "org-dup-test"), ("alias-b", "org-dup-test")],
+        &[("alias-a", ORG_DUP), ("alias-b", ORG_DUP)],
         Some("alias-a"),
     );
 
@@ -76,12 +80,12 @@ fn login_non_interactive_with_duplicate_org_id_lists_profiles() {
         .env(NON_INTERACTIVE_ENV, "1")
         .arg("login")
         .arg("--org")
-        .arg("org-dup-test")
+        .arg(ORG_DUP)
         .assert()
         .failure()
-        .stderr(predicate::str::contains(
-            "Organization 'org-dup-test' is configured under multiple profiles: alias-a, alias-b",
-        ))
+        .stderr(predicate::str::contains(format!(
+            "Organization '{ORG_DUP}' is configured under multiple profiles: alias-a, alias-b"
+        )))
         .stderr(predicate::str::contains("--org <alias>"));
 }
 
@@ -92,7 +96,7 @@ fn profile_delete_non_interactive_with_duplicate_org_id_lists_profiles() {
     let temp = TempDir::new().unwrap();
     common::write_profiles_config(
         temp.path(),
-        &[("alias-a", "org-dup-test"), ("alias-b", "org-dup-test")],
+        &[("alias-a", ORG_DUP), ("alias-b", ORG_DUP)],
         Some("alias-a"),
     );
     common::write_profile_key_files(temp.path(), "alias-a");
@@ -104,13 +108,13 @@ fn profile_delete_non_interactive_with_duplicate_org_id_lists_profiles() {
         .arg("profile")
         .arg("delete")
         .arg("--org")
-        .arg("org-dup-test")
+        .arg(ORG_DUP)
         .arg("--yes")
         .assert()
         .failure()
-        .stderr(predicate::str::contains(
-            "Organization 'org-dup-test' is configured under multiple profiles: alias-a, alias-b",
-        ))
+        .stderr(predicate::str::contains(format!(
+            "Organization '{ORG_DUP}' is configured under multiple profiles: alias-a, alias-b"
+        )))
         .stderr(predicate::str::contains(
             "to select which profile to delete",
         ));
@@ -150,7 +154,7 @@ fn profile_delete_warns_and_keeps_custom_key_paths() {
     assert!(operator_key_path.exists());
 
     let saved = fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
-    assert!(!saved.contains("org-test"));
+    assert!(!saved.contains(ORG_TEST));
 }
 
 #[test]
@@ -190,7 +194,7 @@ fn login_delete_removes_default_registry_key_layout() {
     assert!(!org_dir.exists());
     let saved = fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
     assert!(saved.contains("version = 1"));
-    assert!(!saved.contains("org-test"));
+    assert!(!saved.contains(ORG_TEST));
     assert!(!saved.contains("app-1"));
     assert!(!saved.contains("operator-1"));
 }
@@ -201,7 +205,7 @@ fn login_delete_removes_default_registry_key_layout() {
 #[test]
 fn login_delete_keeps_the_yubikey_registry_entry() {
     let temp = TempDir::new().unwrap();
-    common::write_yubikey_only_config(temp.path(), "test", "org-test");
+    common::write_yubikey_only_config(temp.path(), "test", ORG_TEST);
 
     cargo_bin_cmd!("tvc")
         .env("HOME", temp.path())
@@ -217,7 +221,7 @@ fn login_delete_keeps_the_yubikey_registry_entry() {
     let saved = fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
     assert!(saved.contains("[[yubikeys]]"), "{saved}");
     assert!(saved.contains("serial = \"01c95c1f\""), "{saved}");
-    assert!(!saved.contains("org-test"), "{saved}");
+    assert!(!saved.contains(ORG_TEST), "{saved}");
 }
 
 /// With two profiles sharing one registered serial, deleting one leaves the
@@ -225,7 +229,13 @@ fn login_delete_keeps_the_yubikey_registry_entry() {
 #[test]
 fn login_delete_preserves_a_shared_yubikey_registry_entry() {
     let temp = TempDir::new().unwrap();
-    common::write_yubikey_shared_config(temp.path(), &[("one", "org-1"), ("two", "org-2")]);
+    common::write_yubikey_shared_config(
+        temp.path(),
+        &[
+            ("one", "10000000-0000-4000-8000-000000000011"),
+            ("two", "10000000-0000-4000-8000-000000000022"),
+        ],
+    );
 
     cargo_bin_cmd!("tvc")
         .env("HOME", temp.path())
@@ -235,8 +245,14 @@ fn login_delete_preserves_a_shared_yubikey_registry_entry() {
         .success();
 
     let saved = fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
-    assert!(!saved.contains("org-1"), "{saved}");
-    assert!(saved.contains("org-2"), "{saved}");
+    assert!(
+        !saved.contains("10000000-0000-4000-8000-000000000011"),
+        "{saved}"
+    );
+    assert!(
+        saved.contains("10000000-0000-4000-8000-000000000022"),
+        "{saved}"
+    );
     assert!(saved.contains("[[yubikeys]]"), "{saved}");
     assert!(saved.contains("serial = \"01c95c1f\""), "{saved}");
 }

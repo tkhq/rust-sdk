@@ -188,11 +188,11 @@ impl Run for Args {
             CreatePlan::Hosted { spec, make_default } => {
                 let (alias, configured_org_id) = config
                     .active_org_config()
-                    .map(|(alias, org)| (alias.clone(), org.id.as_str()))
+                    .map(|(alias, org)| (alias.clone(), org.id))
                     .context("No active organization. Run `tvc login` first.")?;
 
                 let auth = build_client(&config).await?;
-                ensure_authenticated_org(&auth.org_id, configured_org_id)?;
+                ensure_authenticated_org(&auth.org_id, &configured_org_id.to_string())?;
 
                 let HostedOperatorSpec { name, wallet, path } = spec;
 
@@ -519,7 +519,7 @@ mod tests {
     use crate::config::turnkey::{HostedOperatorRecord, OrgConfig};
     use crate::yubikey::SlotStatus;
     use crate::yubikey::test_support::{self, FakeDevice};
-    use std::collections::HashMap;
+    use indexmap::IndexMap;
     use std::path::PathBuf;
 
     fn hosted_record() -> OperatorRecord {
@@ -617,10 +617,10 @@ mod tests {
     fn config_with_active_org() -> Config {
         Config {
             active_org: Some("default".to_string()),
-            orgs: HashMap::from([(
+            orgs: IndexMap::from([(
                 "default".to_string(),
                 OrgConfig {
-                    id: "org-123".to_string(),
+                    id: Uuid::from_u128(0x123),
                     api_key_path: PathBuf::from("api-key.json"),
                     api_base_url: "https://api.turnkey.com".to_string(),
                     default_operator_kind: OperatorKind::Local,

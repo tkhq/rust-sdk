@@ -217,7 +217,7 @@ serial = "01c95c1f"
 public_key = "{key}"
 
 [orgs.default]
-id = "org-123"
+id = "11111111-1111-4111-8111-111111111111"
 api_key_path = "/keys/api.json"
 
 [[orgs.default.operators]]
@@ -277,7 +277,11 @@ fn a_registered_serial_is_added_non_interactively_without_a_device() {
 fn a_failed_hosted_default_save_reports_the_record_and_default_kind() {
     let temp = tempfile::TempDir::new().unwrap();
     let (api_base_url, server) = spawn_create_operator_server();
-    common::write_profiles_config(temp.path(), &[("default", "org-123")], Some("default"));
+    common::write_profiles_config(
+        temp.path(),
+        &[("default", "11111111-1111-4111-8111-111111111111")],
+        Some("default"),
+    );
     common::write_profile_key_files(temp.path(), "default");
 
     let config_path = temp.path().join(".config/turnkey/tvc.config.toml");
