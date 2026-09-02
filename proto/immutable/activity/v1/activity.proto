@@ -5012,6 +5012,14 @@ message CreateTvcDeploymentIntent {
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional desired replica count for this deployment."}
   ];
+  optional uint32 instance_size_cpus = 18 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional desired instance cpu count."}
+  ];
+  optional uint32 instance_size_ram = 19 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional desired instance memory size in GiB."}
+  ];
 }
 
 message CreateTvcManifestApprovalsIntent {

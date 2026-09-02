@@ -131,6 +131,14 @@ message TvcContainerSpec {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The port to use for public ingress to this executable."}
   ];
+  uint32 instance_size_cpus = 8 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The instance cpu count for this enclave."}
+  ];
+  uint32 instance_size_ram = 9 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The instance memory size in GiB for this enclave."}
+  ];
 }
 
 message TvcOperatorApproval {

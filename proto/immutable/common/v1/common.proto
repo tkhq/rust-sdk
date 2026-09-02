@@ -342,3 +342,4 @@ enum AuthenticationType {
   AUTHENTICATION_TYPE_OAUTH = 5;
   AUTHENTICATION_TYPE_SESSION = 6;
 }
+

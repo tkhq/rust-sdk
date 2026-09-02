@@ -380,6 +380,8 @@ fn build_create_intent(
         health_check_port: deploy_config.health_check_port as u32,
         public_ingress_port: deploy_config.public_ingress_port as u32,
         replicas: deploy_config.replicas,
+        instance_size_cpus: deploy_config.instance_size_cpus,
+        instance_size_ram: deploy_config.instance_size_ram,
     }
 }
 
@@ -557,6 +559,8 @@ mod tests {
         c.pivot_container_encrypted_pull_secret = None;
         c.health_check_port = 4000;
         c.public_ingress_port = 5000;
+        c.instance_size_cpus = None;
+        c.instance_size_ram = None;
         c
     }
 
@@ -844,6 +848,28 @@ mod tests {
         cfg.replicas = None;
         let json = serde_json::to_value(&cfg).unwrap();
         assert_eq!(json.get("replicas"), None);
+    }
+
+    /// Defaults to instance size `small`
+    /// `deploy init` templates stay clean and round-trips don't add noise.
+    #[test]
+    fn defaults_to_instance_size_small() {
+        let cfg = file_config();
+        let json = serde_json::to_value(&cfg).unwrap();
+        assert_eq!(json.get("instanceSizeCpus"), None);
+        assert_eq!(json.get("instanceSizeRam"), None);
+    }
+
+    /// Defaults to instance size `small`
+    /// `deploy init` templates stay clean and round-trips don't add noise.
+    #[test]
+    fn serializes_instance_size_correctly() {
+        let mut cfg = file_config();
+        cfg.instance_size_cpus = Some(14);
+        cfg.instance_size_ram = Some(64);
+        let json = serde_json::to_value(&cfg).unwrap();
+        assert_eq!(json.get("instanceSizeCpus").unwrap().as_u64().unwrap(), 14);
+        assert_eq!(json.get("instanceSizeRam").unwrap().as_u64().unwrap(), 64);
     }
 
     /// Exercises every deploy-create flag via clap parsing so flag renames or
