@@ -52,11 +52,7 @@ fn save_writes_the_bundled_skill_to_an_explicit_dir() {
 fn save_is_idempotent() {
     let (temp, mut first) = skills_cmd();
     let dest = temp.path().join("skills");
-    first
-        .args(["save", "--dir"])
-        .arg(&dest)
-        .assert()
-        .success();
+    first.args(["save", "--dir"]).arg(&dest).assert().success();
 
     let mut second = cargo_bin_cmd!("tvc");
     second.env_clear().env("HOME", temp.path());
@@ -76,11 +72,7 @@ fn save_is_idempotent() {
 fn save_refuses_to_overwrite_a_modified_file_without_force() {
     let (temp, mut first) = skills_cmd();
     let dest = temp.path().join("skills");
-    first
-        .args(["save", "--dir"])
-        .arg(&dest)
-        .assert()
-        .success();
+    first.args(["save", "--dir"]).arg(&dest).assert().success();
 
     let skill_md = dest.join("tvc-deployments/SKILL.md");
     std::fs::write(&skill_md, "locally modified").unwrap();
@@ -112,11 +104,7 @@ fn save_refuses_to_overwrite_a_modified_file_without_force() {
 fn save_force_replaces_a_modified_file() {
     let (temp, mut first) = skills_cmd();
     let dest = temp.path().join("skills");
-    first
-        .args(["save", "--dir"])
-        .arg(&dest)
-        .assert()
-        .success();
+    first.args(["save", "--dir"]).arg(&dest).assert().success();
 
     let skill_md = dest.join("tvc-deployments/SKILL.md");
     std::fs::write(&skill_md, "locally modified").unwrap();
