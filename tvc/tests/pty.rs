@@ -244,12 +244,13 @@ fn login_with_empty_org_id_bails() {
     session.exp_eof().unwrap();
 }
 
-/// TVC-159: `login --org <org-id>` with several profiles registered for that
-/// organization ID prompts for which profile to use instead of resolving to
-/// an arbitrary one. Duplicate profiles can no longer be created through the
-/// CLI, so this seeds the legacy on-disk state directly.
+/// TVC-159: interactive `tvc login` folds duplicate profiles down to one per
+/// organization before proceeding: prompt for the keeper, one confirmation,
+/// full profile-delete cleanup for the losers, and active-profile repair onto
+/// the keeper. Duplicate profiles can no longer be created through the CLI,
+/// so this seeds the legacy on-disk state directly.
 #[test]
-fn login_with_duplicate_org_id_prompts_for_profile() {
+fn login_consolidates_duplicate_profiles_interactively() {
     let temp = tempfile::TempDir::new().unwrap();
     common::write_profiles_config(
         temp.path(),
@@ -259,19 +260,83 @@ fn login_with_duplicate_org_id_prompts_for_profile() {
     common::write_profile_key_files(temp.path(), "alias-a");
     common::write_profile_key_files(temp.path(), "alias-b");
 
-    let mut session = spawn_with_home(temp.path(), &["login", "--org", "org-dup-test"]);
+    let mut session = spawn_with_home(temp.path(), &["login"]);
 
     session
-        .exp_string("Select profile for organization 'org-dup-test'")
+        .exp_string("Select the profile to keep for organization 'org-dup-test'")
         .unwrap();
     session.send_line("alias-a").unwrap();
 
+    session
+        .exp_string("Permanently delete profile 'alias-b' and the key files on disk?")
+        .unwrap();
+    session.send_line("y").unwrap();
+
+    session
+        .exp_string("Deleted login profile 'alias-b' (org-dup-test).")
+        .unwrap();
+    session.exp_string("Removed key directory").unwrap();
+    session
+        .exp_string("IMPORTANT: The API key may still be registered")
+        .unwrap();
+
+    // Login proceeds against the consolidated config.
+    session.exp_string("Select organization").unwrap();
+    session.send_line("alias-a").unwrap();
     session
         .exp_string("Selected org: alias-a (org-dup-test)")
         .unwrap();
     session.exp_string("Using existing API key.").unwrap();
     session.exp_string("Verifying credentials...").unwrap();
     session.exp_eof().unwrap();
+
+    assert!(!temp.path().join(".config/turnkey/orgs/alias-b").exists());
+    assert!(temp.path().join(".config/turnkey/orgs/alias-a").exists());
+
+    let saved =
+        std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
+    assert!(!saved.contains("alias-b"));
+    assert!(saved.contains(r#"active_org = "alias-a""#));
+}
+
+/// Declining the consolidation confirmation cancels login and leaves both
+/// profiles and their key files untouched (nothing is mutated before the
+/// single consent point).
+#[test]
+fn login_consolidation_decline_cancels_login() {
+    let temp = tempfile::TempDir::new().unwrap();
+    common::write_profiles_config(
+        temp.path(),
+        &[("alias-a", "org-dup-test"), ("alias-b", "org-dup-test")],
+        Some("alias-b"),
+    );
+    common::write_profile_key_files(temp.path(), "alias-a");
+    common::write_profile_key_files(temp.path(), "alias-b");
+
+    let mut session = spawn_with_home(temp.path(), &["login"]);
+
+    session
+        .exp_string("Select the profile to keep for organization 'org-dup-test'")
+        .unwrap();
+    session.send_line("alias-a").unwrap();
+
+    session
+        .exp_string("Permanently delete profile 'alias-b' and the key files on disk?")
+        .unwrap();
+    session.send_line("n").unwrap();
+
+    session
+        .exp_string("operation cancelled by user: profile consolidation")
+        .unwrap();
+    session.exp_eof().unwrap();
+
+    assert!(temp.path().join(".config/turnkey/orgs/alias-a").exists());
+    assert!(temp.path().join(".config/turnkey/orgs/alias-b").exists());
+
+    let saved =
+        std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
+    assert!(saved.contains("alias-a"));
+    assert!(saved.contains("alias-b"));
 }
 
 /// `profile delete --org <org-id>` with several profiles registered for that

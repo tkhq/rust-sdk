@@ -22,7 +22,7 @@ pub use yubikey::{
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::{self, Display, Formatter};
 use std::path::Path;
 use std::path::PathBuf;
@@ -629,6 +629,29 @@ impl Config {
         self.orgs.get(alias).map(|config| (alias, config))
     }
 
+    /// Organization IDs registered under more than one alias, with the
+    /// aliases that share them. Sorted by organization ID and by alias so
+    /// callers report and prompt in a stable order.
+    pub fn duplicated_org_ids(&self) -> Vec<(String, Vec<String>)> {
+        let mut groups: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+
+        for (alias, org) in &self.orgs {
+            groups.entry(&org.id).or_default().push(alias);
+        }
+
+        groups
+            .into_iter()
+            .filter(|(_, aliases)| aliases.len() > 1)
+            .map(|(id, mut aliases)| {
+                aliases.sort_unstable();
+                (
+                    id.to_string(),
+                    aliases.into_iter().map(String::from).collect(),
+                )
+            })
+            .collect()
+    }
+
     /// Add or update an organization with default key paths, starting with
     /// the given operator backend as its default.
     ///
@@ -1033,6 +1056,54 @@ serial = "01c95c1f"
             .unwrap();
         assert_eq!(record.name, "backup");
         assert_eq!(yubikey.serial, YubiKeySerial::from(0xdead_beef));
+    }
+
+    fn config_with_org_entries(entries: &[(&str, &str)]) -> Config {
+        Config {
+            orgs: entries
+                .iter()
+                .map(|(alias, org_id)| {
+                    (
+                        alias.to_string(),
+                        OrgConfig {
+                            id: org_id.to_string(),
+                            api_key_path: PathBuf::from("api_key.json"),
+                            api_base_url: API_BASE_URL_PROD.to_string(),
+                            default_operator_kind: OperatorKind::Local,
+                            operators: vec![OperatorRecord::local(PathBuf::from("operator.json"))],
+                            extra: toml::Table::new(),
+                        },
+                    )
+                })
+                .collect(),
+            ..Config::default()
+        }
+    }
+
+    #[test]
+    fn duplicated_org_ids_ignores_unique_ids() {
+        let config = config_with_org_entries(&[("a", "org-1"), ("b", "org-2")]);
+
+        assert_eq!(config.duplicated_org_ids(), Vec::new());
+    }
+
+    #[test]
+    fn duplicated_org_ids_groups_and_sorts() {
+        let config = config_with_org_entries(&[
+            ("c", "org-2"),
+            ("b", "org-1"),
+            ("a", "org-2"),
+            ("e", "org-1"),
+            ("d", "org-3"),
+        ]);
+
+        assert_eq!(
+            config.duplicated_org_ids(),
+            vec![
+                ("org-1".to_string(), vec!["b".to_string(), "e".to_string()]),
+                ("org-2".to_string(), vec!["a".to_string(), "c".to_string()]),
+            ]
+        );
     }
 
     #[test]
