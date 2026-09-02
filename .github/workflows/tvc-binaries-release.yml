@@ -33,14 +33,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # - target: x86_64-unknown-linux-musl
-          #   os: ubuntu-latest
-          #   build_tool: cross
-          #   rustflags: -C target-feature=+crt-static
-          # - target: aarch64-unknown-linux-musl
-          #   os: ubuntu-latest
-          #   build_tool: cross
-          #   rustflags: -C target-feature=+crt-static
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            build_tool: cross
+            rustflags: -C target-feature=+crt-static
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            build_tool: cross
+            rustflags: -C target-feature=+crt-static
           - target: aarch64-apple-darwin
             os: macos-14
             build_tool: cargo
@@ -114,6 +114,30 @@ jobs:
             shasum -a 256 "${archive}" > "${archive}.sha256"
           fi
           cat "${archive}.sha256"
+
+      - name: Verify musl binary hardening
+        if: matrix.build_tool == 'cross'
+        run: |
+          set -euo pipefail
+          binary="target/${TARGET}/release/tvc"
+          file_header="$(readelf --wide --file-header "${binary}")"
+          program_headers="$(readelf --wide --program-headers "${binary}")"
+
+          # Check the final ELF rather than trusting compiler flags alone. Use
+          # POSIX awk because GitHub runner images do not guarantee ripgrep.
+          printf '%s\n' "${file_header}" |
+            awk '/Type:/ { found = 1; print } END { exit !found }'
+          printf '%s\n' "${program_headers}" |
+            awk '/GNU_RELRO/ { found = 1; print } END { exit !found }'
+          printf '%s\n' "${program_headers}" |
+            awk '/GNU_STACK.*RW / { found = 1; print } END { exit !found }'
+          if printf '%s\n' "${program_headers}" |
+            awk '/GNU_STACK.*RWE/ { found = 1 } END { exit !found }'; then
+            echo 'musl binary has an executable stack' >&2
+            exit 1
+          fi
+          readelf --wide --symbols "${binary}" |
+            awk '/__stack_chk_fail/ { found = 1; print } END { exit !found }'
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
