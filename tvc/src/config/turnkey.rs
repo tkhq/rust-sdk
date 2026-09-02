@@ -2,10 +2,13 @@
 //!
 //! Config files are stored at `~/.config/turnkey/`:
 //! - `tvc.config.toml` - Main config with org registry, active org, and key paths
-//! - `orgs/<alias>/api_key.json` - Default location for API keys
-//! - `orgs/<alias>/operator.json` - Default location for operator keys
+//! - `orgs/<org-id>/api_key.json` - Default location for API keys
+//! - `orgs/<org-id>/operator.json` - Default location for operator keys
 //!
 //! Key paths are stored in the config so users can customize storage locations.
+//! Directories keyed by the legacy `orgs/<alias>/` layout remain readable —
+//! paths are data, not schema — and interactive login migrates them to the
+//! id-keyed layout.
 
 mod api_key;
 mod qos_operator_key;
@@ -465,6 +468,24 @@ impl OrgConfig {
         }
     }
 
+    /// Whether this profile's key files sit exactly in `dir` under the
+    /// default file names — i.e. `dir` is a default-layout directory the
+    /// profile owns. A profile with no local operators only needs its API key
+    /// there.
+    pub(crate) fn has_default_layout_at(&self, dir: &Path) -> bool {
+        let operator_key = dir.join(OPERATOR_KEY_FILE);
+
+        self.api_key_path == dir.join(API_KEY_FILE)
+            && self
+                .operators
+                .iter()
+                .filter_map(|operator| match &operator.kind {
+                    OperatorRecordKind::Local(local) => Some(&local.key_path),
+                    _ => None,
+                })
+                .all(|key_path| *key_path == operator_key)
+    }
+
     /// The hosted operator registry entries, each with its kind-specific
     /// record, in config order.
     pub(crate) fn hosted_operators(&self) -> impl Iterator<Item = (&str, &HostedOperatorRecord)> {
@@ -607,19 +628,26 @@ pub fn orgs_dir() -> Result<PathBuf> {
     Ok(config_dir()?.join(ORGS_DIR))
 }
 
-/// Returns the default directory for a specific org: `~/.config/turnkey/orgs/<alias>/`
-pub fn default_org_dir(alias: &str) -> Result<PathBuf> {
-    Ok(orgs_dir()?.join(alias))
+/// Returns the default directory for a specific org: `~/.config/turnkey/orgs/<org-id>/`
+pub fn default_org_dir(org_id: Uuid) -> Result<PathBuf> {
+    Ok(orgs_dir()?.join(org_id.to_string()))
 }
 
 /// Returns the default API key path for an org
-pub fn default_api_key_path(alias: &str) -> Result<PathBuf> {
-    Ok(default_org_dir(alias)?.join(API_KEY_FILE))
+pub fn default_api_key_path(org_id: Uuid) -> Result<PathBuf> {
+    Ok(default_org_dir(org_id)?.join(API_KEY_FILE))
 }
 
 /// Returns the default operator key path for an org
-pub fn default_operator_key_path(alias: &str) -> Result<PathBuf> {
-    Ok(default_org_dir(alias)?.join(OPERATOR_KEY_FILE))
+pub fn default_operator_key_path(org_id: Uuid) -> Result<PathBuf> {
+    Ok(default_org_dir(org_id)?.join(OPERATOR_KEY_FILE))
+}
+
+/// The legacy default directory for a profile: `~/.config/turnkey/orgs/<alias>/`.
+/// Never used for new profiles; still recognized so deletion cleans it up and
+/// interactive login can migrate it to the id-keyed layout.
+pub(crate) fn legacy_org_dir(alias: &str) -> Result<PathBuf> {
+    Ok(orgs_dir()?.join(alias))
 }
 
 impl Config {
@@ -726,7 +754,7 @@ impl Config {
         let (default_operator_kind, operators) = match operator {
             NewOrgOperator::LocalKeyFile => (
                 OperatorKind::Local,
-                vec![OperatorRecord::local(default_operator_key_path(alias)?)],
+                vec![OperatorRecord::local(default_operator_key_path(org_id)?)],
             ),
             NewOrgOperator::Yubikey(serial) => {
                 (OperatorKind::Yubikey, vec![OperatorRecord::yubikey(serial)])
@@ -735,7 +763,7 @@ impl Config {
 
         let org_config = OrgConfig {
             id: org_id,
-            api_key_path: default_api_key_path(alias)?,
+            api_key_path: default_api_key_path(org_id)?,
             api_base_url,
             default_operator_kind,
             operators,
@@ -1163,6 +1191,36 @@ serial = "01c95c1f"
                 (ORG_2, vec!["c".to_string(), "a".to_string()]),
             ]
         );
+    }
+
+    #[test]
+    fn has_default_layout_at_requires_both_default_file_names() {
+        let dir = Path::new("/keys/org");
+        let org = OrgConfig {
+            id: ORG_1,
+            api_key_path: dir.join("api_key.json"),
+            api_base_url: API_BASE_URL_PROD.to_string(),
+            default_operator_kind: OperatorKind::Local,
+            operators: vec![OperatorRecord::local(dir.join("operator.json"))],
+            extra: toml::Table::new(),
+        };
+
+        assert!(org.has_default_layout_at(dir));
+        assert!(!org.has_default_layout_at(Path::new("/keys/other")));
+
+        let custom_operator = OrgConfig {
+            operators: vec![OperatorRecord::local(PathBuf::from(
+                "/elsewhere/operator.json",
+            ))],
+            ..org.clone()
+        };
+        assert!(!custom_operator.has_default_layout_at(dir));
+
+        let custom_api_key = OrgConfig {
+            api_key_path: PathBuf::from("/elsewhere/api_key.json"),
+            ..org
+        };
+        assert!(!custom_api_key.has_default_layout_at(dir));
     }
 
     #[test]
