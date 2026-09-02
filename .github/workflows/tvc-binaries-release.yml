@@ -123,14 +123,21 @@ jobs:
           file_header="$(readelf --wide --file-header "${binary}")"
           program_headers="$(readelf --wide --program-headers "${binary}")"
 
-          printf '%s\n' "${file_header}" | rg 'Type:'
-          printf '%s\n' "${program_headers}" | rg 'GNU_RELRO'
-          printf '%s\n' "${program_headers}" | rg 'GNU_STACK.*RW '
-          if printf '%s\n' "${program_headers}" | rg --quiet 'GNU_STACK.*RWE'; then
+          # Check the final ELF rather than trusting compiler flags alone. Use
+          # POSIX awk because GitHub runner images do not guarantee ripgrep.
+          printf '%s\n' "${file_header}" |
+            awk '/Type:/ { found = 1; print } END { exit !found }'
+          printf '%s\n' "${program_headers}" |
+            awk '/GNU_RELRO/ { found = 1; print } END { exit !found }'
+          printf '%s\n' "${program_headers}" |
+            awk '/GNU_STACK.*RW / { found = 1; print } END { exit !found }'
+          if printf '%s\n' "${program_headers}" |
+            awk '/GNU_STACK.*RWE/ { found = 1 } END { exit !found }'; then
             echo 'musl binary has an executable stack' >&2
             exit 1
           fi
-          readelf --wide --symbols "${binary}" | rg '__stack_chk_fail'
+          readelf --wide --symbols "${binary}" |
+            awk '/__stack_chk_fail/ { found = 1; print } END { exit !found }'
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
