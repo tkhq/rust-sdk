@@ -106,7 +106,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args, mut config: Config) -> Result<Out
     );
 
     let plan = if ctx.is_non_interactive() {
-        build_login_plan_non_interactive(args, &config)?
+        build_login_plan_non_interactive(ctx, args, &config)?
     } else {
         // Consolidate before resolving the org query, so the builders never
         // resolve against profiles that are about to be deleted.
@@ -499,28 +499,7 @@ fn build_login_plan_interactive(
         serial,
     } = args;
     let org = match org {
-        Some(query) => {
-            let aliases = find_org_aliases(config, &query);
-
-            let alias = match aliases.as_slice() {
-                [] => bail!(
-                    "Organization '{query}' not found. \
-                     Run `tvc login` without --org to set up a new organization."
-                ),
-                [alias] => alias.clone(),
-                // Unreachable while login consolidates duplicates up front;
-                // kept so --org-by-ID resolution stays deterministic if the
-                // consolidation gate ever moves.
-                _ => prompts::select(
-                    &format!("Select profile for organization '{query}'"),
-                    duplicate_alias_choices(config, &aliases),
-                )?
-                .alias
-                .to_string(),
-            };
-
-            OrgPlan::Existing(alias)
-        }
+        Some(query) => OrgPlan::Existing(resolve_org_query(ctx, config, &query)?),
         None => prompt_for_org_plan(ctx, config, api_base_url.as_deref(), serial)?,
     };
 
@@ -569,25 +548,16 @@ fn build_login_plan_interactive(
     })
 }
 
-fn build_login_plan_non_interactive(args: Args, config: &Config) -> Result<LoginPlan> {
+fn build_login_plan_non_interactive(
+    ctx: &mut StdCtx,
+    args: Args,
+    config: &Config,
+) -> Result<LoginPlan> {
     let Some(org_query) = args.org else {
         return Err(error_required_in_non_interactive("--org"));
     };
 
-    let aliases = find_org_aliases(config, &org_query);
-
-    let alias = match aliases.as_slice() {
-        [] => bail!(
-            "Organization '{org_query}' not found. \
-             Run `tvc login` without --org to set up a new organization."
-        ),
-        [alias] => alias.clone(),
-        _ => bail!(
-            "Organization '{org_query}' is configured under multiple profiles: {}. \
-             Re-run with --org <alias> to select one.",
-            aliases.join(", ")
-        ),
-    };
+    let alias = resolve_org_query(ctx, config, &org_query)?;
 
     Ok(LoginPlan {
         org: OrgPlan::Existing(alias),
@@ -595,6 +565,40 @@ fn build_login_plan_non_interactive(args: Args, config: &Config) -> Result<Login
         api_key_policy: ApiKeyPolicy::RequireExisting,
         yubikey_serial: args.serial,
     })
+}
+
+/// Resolve an org query (profile alias or organization ID) to a single
+/// configured profile alias.
+///
+/// An explicitly named alias is an unambiguous choice and wins outright. An
+/// org-ID query matching several profiles prompts for one interactively;
+/// non-interactively it fails with instructions. Read-only consumers (login,
+/// key backup) share these rules; destructive commands resolve via
+/// `resolve_profile_alias` instead, which never guesses among duplicates.
+pub(crate) fn resolve_org_query(ctx: &mut StdCtx, config: &Config, query: &str) -> Result<String> {
+    let aliases = find_org_aliases(config, query);
+
+    match aliases.as_slice() {
+        [] => bail!(
+            "Organization '{query}' not found. \
+             Run `tvc login` without --org to set up a new organization."
+        ),
+        [alias] => Ok(alias.clone()),
+        _ if ctx.is_non_interactive() => bail!(
+            "Organization '{query}' is configured under multiple profiles: {}. \
+             Re-run with --org <alias> to select one.",
+            aliases.join(", ")
+        ),
+        // Unreachable from login while it consolidates duplicates up front;
+        // kept so --org-by-ID resolution stays deterministic for read-only
+        // consumers that do not consolidate.
+        _ => Ok(prompts::select(
+            &format!("Select profile for organization '{query}'"),
+            duplicate_alias_choices(config, &aliases),
+        )?
+        .alias
+        .to_string()),
+    }
 }
 
 async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) -> Result<Outcome> {
@@ -936,20 +940,6 @@ impl Display for OrgChoice {
             OrgChoice::New => write!(f, "[new] Add a new organization"),
         }
     }
-}
-
-pub(crate) fn find_org<'a>(config: &'a Config, org: &str) -> Option<(&'a String, &'a OrgConfig)> {
-    if let Some((alias, org_config)) = config.orgs.get_key_value(org) {
-        return Some((alias, org_config));
-    }
-
-    for (alias, org_config) in &config.orgs {
-        if org_config.id == org {
-            return Some((alias, org_config));
-        }
-    }
-
-    None
 }
 
 /// Every configured alias matching an org query, for callers to dispose of
