@@ -61,7 +61,7 @@ pub struct Config {
     /// Org registry keyed by organization ID, in config-file order.
     #[serde(default)]
     pub orgs: IndexMap<Uuid, OrgConfig>,
-    /// Edge-side names for organizations.
+    /// User-facing names for organizations.
     #[serde(default)]
     pub aliases: Aliases,
     /// Registered YubiKey devices, shared across organizations. Absent from
@@ -80,7 +80,7 @@ pub struct Config {
     pub extra: toml::Table,
 }
 
-/// Edge-side names for UUID-identified resources.
+/// User-facing names for UUID-identified resources.
 ///
 /// The one serialized alias surface: a name maps to exactly one ID by map
 /// construction, and every mutation goes through these methods. Nothing in
@@ -465,6 +465,7 @@ mod disk {
     }
 
     pub(super) mod v0 {
+        use indexmap::IndexMap;
         use serde::Deserialize;
         use std::collections::HashMap;
         use uuid::Uuid;
@@ -475,8 +476,10 @@ mod disk {
         pub(super) struct Config {
             #[serde(default)]
             pub(super) active_org: Option<String>,
+            /// File order is preserved: the duplicate-organization merge keeps
+            /// the first profile in file order, for v0 exactly as for v1.
             #[serde(default)]
-            pub(super) orgs: HashMap<String, toml::Table>,
+            pub(super) orgs: IndexMap<String, toml::Table>,
             #[serde(default)]
             pub(super) last_created_app_id: HashMap<String, Uuid>,
             #[serde(default)]
@@ -1175,6 +1178,8 @@ mod tests {
 
     const ORG_1: Uuid = Uuid::from_u128(1);
     const ORG_2: Uuid = Uuid::from_u128(2);
+    const OPERATOR_ID: Uuid = Uuid::from_u128(0x123);
+    const APP_ID: Uuid = Uuid::from_u128(0x321);
 
     fn test_org(api_base_url: &str, dir: &Path) -> OrgConfig {
         OrgConfig {
@@ -1332,6 +1337,261 @@ api_base_url = "https://b.example"
         assert_eq!(config.aliases.resolve("alias-a").unwrap().id(), ORG_1);
         assert_eq!(config.aliases.resolve("alias-b").unwrap().id(), ORG_1);
         assert_eq!(config.active_org, Some(ORG_1));
+    }
+
+    #[tokio::test]
+    async fn migrates_v1_to_v2_eagerly_with_backup_lifecycle() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("tvc.config.toml");
+        tokio::fs::write(
+            &path,
+            format!(
+                r#"
+version = 1
+active_org = "prod"
+future_root = "keep-root"
+
+[orgs.prod]
+id = "00000000-0000-0000-0000-000000000001"
+api_key_path = "/keys/api.json"
+future_org = 42
+
+[last_created_app_id]
+prod = "{APP_ID}"
+
+[last_operator_ids]
+prod = ["{OPERATOR_ID}"]
+"#
+            ),
+        )
+        .await
+        .unwrap();
+
+        let config = Config::load_from_path(&path).await.unwrap();
+
+        // Registry and side maps re-key from alias to organization ID, and
+        // unknown fields survive at both levels.
+        assert_eq!(config.aliases.resolve("prod").unwrap().id(), ORG_1);
+        assert_eq!(config.active_org, Some(ORG_1));
+        assert_eq!(config.last_created_app_id[&ORG_1], APP_ID);
+        assert_eq!(config.last_operator_ids[&ORG_1], vec![OPERATOR_ID]);
+        assert_eq!(
+            config.orgs[&ORG_1].extra["future_org"],
+            toml::Value::Integer(42)
+        );
+        assert_eq!(
+            config.extra["future_root"],
+            toml::Value::String("keep-root".into())
+        );
+
+        // Eagerly rewritten: the file on disk is v2 and the backup is gone.
+        let saved = tokio::fs::read_to_string(&path).await.unwrap();
+        assert!(saved.contains("version = 2"), "{saved}");
+        assert!(!backup_file_path(&path).exists());
+
+        let reloaded = Config::load_from_path(&path).await.unwrap();
+        assert_eq!(reloaded, config);
+    }
+
+    /// The fence blocks even when the config file itself already carries the
+    /// migrated schema: a crash between writing the new file and removing
+    /// the backup must surface, not be silently absorbed.
+    #[tokio::test]
+    async fn an_existing_backup_blocks_even_an_already_migrated_config() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("tvc.config.toml");
+
+        let mut config = Config::default();
+        config
+            .add_org(
+                ORG_1,
+                API_BASE_URL_PROD.to_string(),
+                NewOrgOperator::LocalKeyFile,
+            )
+            .unwrap();
+        config.save_to_path(&path).await.unwrap();
+        tokio::fs::write(backup_file_path(&path), V0_CONFIG)
+            .await
+            .unwrap();
+
+        let error = Config::load_from_path(&path)
+            .await
+            .expect_err("backup must block");
+
+        assert!(
+            error.to_string().contains("interrupted config migration"),
+            "{error}"
+        );
+    }
+
+    /// Deleting the backup — the manual fix for a crash after the migrated
+    /// file was written — unblocks loading with the migration intact.
+    #[tokio::test]
+    async fn removing_the_backup_recovers_the_post_write_crash_window() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("tvc.config.toml");
+        tokio::fs::write(&path, V0_CONFIG).await.unwrap();
+        let migrated = Config::load_from_path(&path).await.unwrap();
+
+        // Recreate the crash window: the migrated file was written but the
+        // process died before the backup was removed.
+        tokio::fs::write(backup_file_path(&path), V0_CONFIG)
+            .await
+            .unwrap();
+        Config::load_from_path(&path)
+            .await
+            .expect_err("fence engaged");
+
+        tokio::fs::remove_file(backup_file_path(&path))
+            .await
+            .unwrap();
+
+        assert_eq!(Config::load_from_path(&path).await.unwrap(), migrated);
+    }
+
+    /// Restoring the backup over the config path — the manual fix for a
+    /// crash between parking the original and writing the new file — re-runs
+    /// the migration cleanly.
+    #[tokio::test]
+    async fn restoring_the_backup_recovers_the_pre_write_crash_window() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("tvc.config.toml");
+        // The crash window: original parked at the backup path, no config.
+        tokio::fs::write(backup_file_path(&path), V0_CONFIG)
+            .await
+            .unwrap();
+        Config::load_from_path(&path)
+            .await
+            .expect_err("fence engaged");
+
+        tokio::fs::rename(backup_file_path(&path), &path)
+            .await
+            .unwrap();
+
+        let config = Config::load_from_path(&path).await.unwrap();
+
+        assert_eq!(config.active_org, Some(ORG_1));
+        assert!(
+            tokio::fs::read_to_string(&path)
+                .await
+                .unwrap()
+                .contains("version = 2")
+        );
+        assert!(!backup_file_path(&path).exists());
+    }
+
+    /// v0 kept its organizations in file order too: a duplicated
+    /// organization ID merges to the first profile in file order, exactly as
+    /// it does for v1, not to a hash-ordered arbitrary one.
+    #[tokio::test]
+    async fn v0_duplicate_org_ids_merge_to_the_first_profile_in_file_order() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("tvc.config.toml");
+        tokio::fs::write(
+            &path,
+            r#"
+[orgs.first]
+id = "00000000-0000-0000-0000-000000000001"
+api_key_path = "/keys/first/api.json"
+operator_key_path = "/keys/first/operator.json"
+
+[orgs.second]
+id = "00000000-0000-0000-0000-000000000001"
+api_key_path = "/keys/second/api.json"
+operator_key_path = "/keys/second/operator.json"
+"#,
+        )
+        .await
+        .unwrap();
+
+        let config = Config::load_from_path(&path).await.unwrap();
+
+        assert_eq!(config.orgs.len(), 1);
+        assert_eq!(
+            config.orgs[&ORG_1].api_key_path,
+            PathBuf::from("/keys/first/api.json")
+        );
+        // Both names survive as aliases for the kept profile.
+        assert_eq!(config.aliases.resolve("first").unwrap().id(), ORG_1);
+        assert_eq!(config.aliases.resolve("second").unwrap().id(), ORG_1);
+    }
+
+    #[test]
+    fn v0_missing_operator_key_path_names_the_organization() {
+        let error = disk::from_toml(
+            r#"
+[orgs.prod]
+id = "00000000-0000-0000-0000-000000000001"
+api_key_path = "/keys/api.json"
+"#,
+        )
+        .map(|_| ())
+        .expect_err("v0 without operator_key_path must fail");
+
+        assert!(
+            format!("{error:#}")
+                .contains("v0 config for organization 'prod' is missing operator_key_path"),
+            "{error:#}"
+        );
+    }
+
+    /// Side-map entries whose alias has no surviving profile are dropped —
+    /// there is no organization ID to re-key them under.
+    #[tokio::test]
+    async fn v1_side_maps_drop_entries_for_unknown_aliases() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("tvc.config.toml");
+        tokio::fs::write(
+            &path,
+            format!(
+                r#"
+version = 1
+
+[orgs.prod]
+id = "00000000-0000-0000-0000-000000000001"
+api_key_path = "/keys/api.json"
+
+[last_created_app_id]
+ghost = "{APP_ID}"
+
+[last_operator_ids]
+prod = ["{OPERATOR_ID}"]
+"#
+            ),
+        )
+        .await
+        .unwrap();
+
+        let config = Config::load_from_path(&path).await.unwrap();
+
+        assert!(config.last_created_app_id.is_empty());
+        assert_eq!(config.last_operator_ids[&ORG_1], vec![OPERATOR_ID]);
+    }
+
+    /// An active_org naming an alias with no profile cannot survive the
+    /// re-keying; the migrated config simply has no active organization.
+    #[tokio::test]
+    async fn v1_dangling_active_org_migrates_to_none() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("tvc.config.toml");
+        tokio::fs::write(
+            &path,
+            r#"
+version = 1
+active_org = "ghost"
+
+[orgs.prod]
+id = "00000000-0000-0000-0000-000000000001"
+api_key_path = "/keys/api.json"
+"#,
+        )
+        .await
+        .unwrap();
+
+        let config = Config::load_from_path(&path).await.unwrap();
+
+        assert_eq!(config.active_org, None);
+        assert_eq!(config.aliases.resolve("prod").unwrap().id(), ORG_1);
     }
 
     #[tokio::test]
