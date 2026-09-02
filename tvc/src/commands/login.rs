@@ -8,7 +8,8 @@ use crate::config::turnkey::{
     API_BASE_URL_PROD, Config, KeyCurve, LocalOperatorRecord, NewOrgOperator, OperatorKind,
     OperatorRecord, OperatorRecordKind, OrgConfig, OrgQuery, QosOperatorPublicKey,
     SelectYubiKeyOperatorError, StoredApiKey, StoredQosOperatorKey, YubiKeyOperatorRecord,
-    YubiKeySerial, dashboard_base_url, default_org_dir, legacy_org_dir,
+    YubiKeySerial, dashboard_base_url, default_api_key_path, default_operator_key_path,
+    default_org_dir, legacy_org_dir,
 };
 use crate::outcome::Outcome;
 use crate::output::{MissingRequiredInput, StdCtx};
@@ -117,6 +118,14 @@ pub async fn run(ctx: &mut StdCtx, args: Args, mut config: Config) -> Result<Out
             consolidate_duplicate_profiles(ctx, &mut config, duplicates).await?;
         }
 
+        // Runs after consolidation: one profile per organization means the
+        // id-keyed target directories cannot collide.
+        let legacy_profiles = config.legacy_layout_profiles()?;
+
+        if !legacy_profiles.is_empty() {
+            migrate_legacy_key_directories(ctx, &mut config, legacy_profiles).await?;
+        }
+
         build_login_plan_interactive(ctx, args, &config)?
     };
 
@@ -199,6 +208,60 @@ async fn consolidate_duplicate_profiles(
         let deleted = delete_profile(ctx, config, alias).await?;
         shell_println!(ctx, "{deleted}")?;
         shell_println!(ctx)?;
+    }
+
+    Ok(())
+}
+
+/// Move legacy alias-keyed key directories to the id-keyed layout and rewrite
+/// each profile's paths, saving after every profile so a crash strands at
+/// most one. A rename failure warns and skips that profile: its legacy paths
+/// remain valid, and login must not die over a tidiness move.
+async fn migrate_legacy_key_directories(
+    ctx: &mut StdCtx,
+    config: &mut Config,
+    profiles: Vec<(String, Uuid)>,
+) -> Result<()> {
+    for (alias, org_id) in profiles {
+        let source = legacy_org_dir(&alias)?;
+        let target = default_org_dir(org_id)?;
+
+        match tokio::fs::rename(&source, &target).await {
+            Ok(()) => {}
+            // A crash between a previous run's rename and its save leaves the
+            // files already moved; treat the move as done and just rewrite.
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound && target.is_dir() => {}
+            Err(error) => {
+                shell_eprintln!(
+                    ctx,
+                    "WARNING: could not move key directory {} -> {}: {error}. \
+                     The profile keeps its current paths.",
+                    source.display(),
+                    target.display()
+                )?;
+                continue;
+            }
+        }
+
+        if let Some(org) = config.orgs.get_mut(&alias) {
+            let operator_key_path = default_operator_key_path(org_id)?;
+            org.api_key_path = default_api_key_path(org_id)?;
+            org.operators
+                .iter_mut()
+                .filter_map(|operator| match &mut operator.kind {
+                    OperatorRecordKind::Local(local) => Some(local),
+                    _ => None,
+                })
+                .for_each(|local| local.key_path = operator_key_path.clone());
+        }
+
+        config.save().await?;
+        shell_println!(
+            ctx,
+            "Moved key directory: {} -> {}",
+            source.display(),
+            target.display()
+        )?;
     }
 
     Ok(())
