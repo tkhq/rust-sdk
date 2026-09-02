@@ -733,8 +733,34 @@ fn prompt_for_new_org_inputs(
         bail!("Organization ID is required");
     }
 
+    // One profile per organization: a second alias for the same ID would make
+    // resolution ambiguous again (TVC-159).
+    let already_configured = config
+        .orgs
+        .iter()
+        .filter(|(_, org)| org.id == id)
+        .map(|(alias, _)| alias)
+        .min();
+
+    if let Some(alias) = already_configured {
+        bail!(
+            "Organization '{id}' is already configured as profile '{alias}'. \
+             Run `tvc login --org {alias}` to use it, \
+             or `tvc profile delete --org {alias}` to remove it first."
+        );
+    }
+
     let alias = prompts::text("Organization alias", Some("default"))?;
     debug!(org_alias = %alias, "user entered new organization inputs");
+
+    if let Some(existing) = config.orgs.get(&alias) {
+        bail!(
+            "Profile alias '{alias}' is already in use for organization '{}'. \
+             Choose a different alias, \
+             or run `tvc profile delete --org {alias}` to remove it first.",
+            existing.id
+        );
+    }
 
     let operator = {
         enum OperatorKeyChoice {

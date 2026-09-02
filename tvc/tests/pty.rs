@@ -78,22 +78,13 @@ fn spawn_with_home(home: &Path, args: &[&str]) -> PtySession {
         .unwrap_or_else(|e| panic!("spawn failed: {e}\n  cmd: {bin} {}", args.join(" ")))
 }
 
-/// Drive `tvc login` through the interactive new-org flow against a dead-port
-/// API base URL. Login persists the profile and its generated API key before
-/// the final whoami request, so the profile exists on disk even though the
-/// command exits nonzero when that request fails.
-///
-/// `pick_new_in_selector` is required once profiles exist: login then opens an
-/// org selector first, and typing "new" filters it down to the
-/// "[new] Add a new organization" entry (no fixture string here contains
-/// "new") which Enter selects.
-fn pty_create_profile(home: &Path, org_id: &str, alias: &str, pick_new_in_selector: bool) {
+/// Drive `tvc login` through the interactive new-org flow (empty config, so
+/// no org selector appears) against a dead-port API base URL. Login persists
+/// the profile and its generated API key before the final whoami request, so
+/// the profile exists on disk even though the command exits nonzero when that
+/// request fails.
+fn pty_create_profile(home: &Path, org_id: &str, alias: &str) {
     let mut session = spawn_with_home(home, &["login", "--api-base-url", "http://127.0.0.1:1"]);
-
-    if pick_new_in_selector {
-        session.exp_string("Select organization").unwrap();
-        session.send_line("new").unwrap();
-    }
 
     session.exp_string("Organization ID").unwrap();
     session.send_line(org_id).unwrap();
@@ -255,13 +246,18 @@ fn login_with_empty_org_id_bails() {
 
 /// TVC-159: `login --org <org-id>` with several profiles registered for that
 /// organization ID prompts for which profile to use instead of resolving to
-/// an arbitrary one. The duplicate state is created through the CLI itself,
-/// proving the fix handles profiles that predate it.
+/// an arbitrary one. Duplicate profiles can no longer be created through the
+/// CLI, so this seeds the legacy on-disk state directly.
 #[test]
 fn login_with_duplicate_org_id_prompts_for_profile() {
     let temp = tempfile::TempDir::new().unwrap();
-    pty_create_profile(temp.path(), "org-dup-test", "alias-a", false);
-    pty_create_profile(temp.path(), "org-dup-test", "alias-b", true);
+    common::write_profiles_config(
+        temp.path(),
+        &[("alias-a", "org-dup-test"), ("alias-b", "org-dup-test")],
+        Some("alias-b"),
+    );
+    common::write_profile_key_files(temp.path(), "alias-a");
+    common::write_profile_key_files(temp.path(), "alias-b");
 
     let mut session = spawn_with_home(temp.path(), &["login", "--org", "org-dup-test"]);
 
@@ -314,6 +310,77 @@ fn profile_delete_with_duplicate_org_id_prompts_for_profile() {
         std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
     assert!(!saved.contains("alias-b"));
     assert!(saved.contains("alias-a"));
+}
+
+/// The interactive new-org flow (the only way to create a profile) works end
+/// to end and persists the profile even though the final whoami request fails
+/// against the dead-port URL.
+#[test]
+fn login_creates_first_profile_and_persists_it() {
+    let temp = tempfile::TempDir::new().unwrap();
+    pty_create_profile(temp.path(), "org-solo-test", "solo");
+
+    let saved =
+        std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
+    assert!(saved.contains("[orgs.solo]"));
+    assert!(saved.contains(r#"id = "org-solo-test""#));
+}
+
+/// Entering an organization ID that is already configured refuses to create a
+/// second profile for it (one profile per organization, TVC-159) and names
+/// the existing alias.
+#[test]
+fn login_new_org_refuses_already_configured_org_id() {
+    let temp = tempfile::TempDir::new().unwrap();
+    common::write_profiles_config(temp.path(), &[("alias-a", "org-dup-test")], Some("alias-a"));
+
+    let mut session = spawn_with_home(temp.path(), &["login"]);
+
+    session.exp_string("Select organization").unwrap();
+    session.send_line("new").unwrap();
+
+    session.exp_string("Organization ID").unwrap();
+    session.send_line("org-dup-test").unwrap();
+
+    session
+        .exp_string("Organization 'org-dup-test' is already configured as profile 'alias-a'.")
+        .unwrap();
+    session
+        .exp_string("tvc profile delete --org alias-a")
+        .unwrap();
+    session.exp_eof().unwrap();
+
+    let saved =
+        std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
+    assert_eq!(saved.matches(r#"id = "org-dup-test""#).count(), 1);
+}
+
+/// Reusing an existing profile alias for a different organization refuses
+/// instead of silently overwriting the profile.
+#[test]
+fn login_new_org_refuses_alias_already_in_use() {
+    let temp = tempfile::TempDir::new().unwrap();
+    common::write_profiles_config(temp.path(), &[("alias-a", "org-other-id")], Some("alias-a"));
+
+    let mut session = spawn_with_home(temp.path(), &["login"]);
+
+    session.exp_string("Select organization").unwrap();
+    session.send_line("new").unwrap();
+
+    session.exp_string("Organization ID").unwrap();
+    session.send_line("org-fresh-id").unwrap();
+    session.exp_string("Organization alias").unwrap();
+    session.send_line("alias-a").unwrap();
+
+    session
+        .exp_string("Profile alias 'alias-a' is already in use for organization 'org-other-id'.")
+        .unwrap();
+    session.exp_eof().unwrap();
+
+    let saved =
+        std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
+    assert!(saved.contains(r#"id = "org-other-id""#));
+    assert!(!saved.contains("org-fresh-id"));
 }
 
 /// Interactive `keys backup-operator-key` prompts for the destination and
