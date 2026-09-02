@@ -336,13 +336,6 @@ pub(crate) enum SlotStatus {
     },
 }
 
-/// Status of both QuorumOS slots on one device.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct DeviceStatus {
-    pub signing: SlotStatus,
-    pub key_agreement: SlotStatus,
-}
-
 /// A YubiKey PIV PIN, held only for the duration of device-backed operations
 /// and zeroized on drop. Never persisted.
 pub(crate) struct Pin(Zeroizing<Vec<u8>>);
@@ -513,14 +506,45 @@ pub(crate) enum DeviceError {
     MalformedPairPublicKey(#[source] QosOperatorPublicKeyParseError),
 }
 
+/// Failures found while checking both QuorumOS slots on one device.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum SlotsError {
+    #[error(transparent)]
+    Signing(DeviceError),
+    #[error(transparent)]
+    KeyAgreement(DeviceError),
+    #[error("multiple YubiKey slot errors: {signing}; {key_agreement}")]
+    SigningAndKeyAgreement {
+        signing: Box<DeviceError>,
+        key_agreement: Box<DeviceError>,
+    },
+    #[error(transparent)]
+    PairPublicKey(DeviceError),
+}
+
+impl SlotsError {
+    pub(crate) fn contains_empty_slot(&self) -> bool {
+        match self {
+            Self::Signing(error) | Self::KeyAgreement(error) => {
+                matches!(error, DeviceError::EmptySlot { .. })
+            }
+            Self::SigningAndKeyAgreement {
+                signing,
+                key_agreement,
+            } => {
+                matches!(signing.as_ref(), DeviceError::EmptySlot { .. })
+                    || matches!(key_agreement.as_ref(), DeviceError::EmptySlot { .. })
+            }
+            Self::PairPublicKey(_) => false,
+        }
+    }
+}
+
 /// Per-device operations TVC needs, as an extension of [`YubiKey`] itself so
 /// inspection and private-key operations use the caller's one open handle.
 pub(crate) trait DeviceOps {
     /// What one QuorumOS slot provably holds.
     fn slot_status(&mut self, slot: QosSlot) -> Result<SlotStatus, DeviceError>;
-
-    /// What both QuorumOS slots provably hold.
-    fn device_status(&mut self) -> Result<DeviceStatus, DeviceError>;
 
     /// The composite `encrypt_public ‖ sign_public` operator key, read from
     /// the two slot certificates.
@@ -541,50 +565,38 @@ pub(crate) trait DeviceOps {
     ) -> Result<Zeroizing<Vec<u8>>, DeviceError>;
 
     /// Verify both QuorumOS slots hold configured QuorumOS keys and return the
-    /// device's composite operator key. Refuses on foreign or empty slots.
-    fn verified_pair_public_key(&mut self) -> Result<QosOperatorPublicKey, DeviceError> {
-        let DeviceStatus {
-            signing,
-            key_agreement,
-        } = self.device_status()?;
+    /// device's composite operator key. Both slots are checked so callers see
+    /// every actionable configuration error in one result.
+    fn verified_pair_public_key(&mut self) -> Result<QosOperatorPublicKey, SlotsError> {
+        let slot_result = |slot, status| match status {
+            Ok(SlotStatus::QosProvisioned) => Ok(()),
+            Ok(SlotStatus::Empty) => Err(DeviceError::EmptySlot { slot }),
+            Ok(SlotStatus::KeyWithoutCertificate) => {
+                Err(DeviceError::OccupiedWithoutCertificate { slot })
+            }
+            Ok(SlotStatus::UnknownWithoutCertificate { metadata_error }) => {
+                Err(DeviceError::UnknownWithoutCertificate {
+                    slot,
+                    metadata_error,
+                })
+            }
+            Ok(SlotStatus::Foreign { subject }) => Err(DeviceError::ForeignSlot { slot, subject }),
+            Err(error) => Err(error),
+        };
+
+        let signing = slot_result(QosSlot::Signing, self.slot_status(QosSlot::Signing));
+        let key_agreement = slot_result(
+            QosSlot::KeyAgreement,
+            self.slot_status(QosSlot::KeyAgreement),
+        );
 
         match (signing, key_agreement) {
-            (SlotStatus::QosProvisioned, SlotStatus::QosProvisioned) => self.pair_public_key(),
-            (SlotStatus::Foreign { subject }, _) => Err(DeviceError::ForeignSlot {
-                slot: QosSlot::Signing,
-                subject,
-            }),
-            (SlotStatus::KeyWithoutCertificate, _) => {
-                Err(DeviceError::OccupiedWithoutCertificate {
-                    slot: QosSlot::Signing,
-                })
-            }
-            (SlotStatus::UnknownWithoutCertificate { metadata_error }, _) => {
-                Err(DeviceError::UnknownWithoutCertificate {
-                    slot: QosSlot::Signing,
-                    metadata_error,
-                })
-            }
-            (_, SlotStatus::Foreign { subject }) => Err(DeviceError::ForeignSlot {
-                slot: QosSlot::KeyAgreement,
-                subject,
-            }),
-            (_, SlotStatus::KeyWithoutCertificate) => {
-                Err(DeviceError::OccupiedWithoutCertificate {
-                    slot: QosSlot::KeyAgreement,
-                })
-            }
-            (_, SlotStatus::UnknownWithoutCertificate { metadata_error }) => {
-                Err(DeviceError::UnknownWithoutCertificate {
-                    slot: QosSlot::KeyAgreement,
-                    metadata_error,
-                })
-            }
-            (SlotStatus::Empty, _) => Err(DeviceError::EmptySlot {
-                slot: QosSlot::Signing,
-            }),
-            (_, SlotStatus::Empty) => Err(DeviceError::EmptySlot {
-                slot: QosSlot::KeyAgreement,
+            (Ok(()), Ok(())) => self.pair_public_key().map_err(SlotsError::PairPublicKey),
+            (Err(signing), Ok(())) => Err(SlotsError::Signing(signing)),
+            (Ok(()), Err(key_agreement)) => Err(SlotsError::KeyAgreement(key_agreement)),
+            (Err(signing), Err(key_agreement)) => Err(SlotsError::SigningAndKeyAgreement {
+                signing: Box::new(signing),
+                key_agreement: Box::new(key_agreement),
             }),
         }
     }
@@ -651,13 +663,6 @@ impl DeviceOps for YubiKey {
             }
             Err(source) => Err(DeviceError::ReadCertificate { slot, source }),
         }
-    }
-
-    fn device_status(&mut self) -> Result<DeviceStatus, DeviceError> {
-        Ok(DeviceStatus {
-            signing: self.slot_status(QosSlot::Signing)?,
-            key_agreement: self.slot_status(QosSlot::KeyAgreement)?,
-        })
     }
 
     fn pair_public_key(&mut self) -> Result<QosOperatorPublicKey, DeviceError> {
@@ -998,23 +1003,41 @@ mod tests {
 
         assert!(matches!(
             error,
-            DeviceError::ForeignSlot {
+            SlotsError::Signing(DeviceError::ForeignSlot {
                 slot: QosSlot::Signing,
                 ..
-            }
+            })
         ));
     }
 
     #[test]
-    fn verified_pair_public_key_prioritizes_an_unproven_key_over_an_empty_slot() {
+    fn verified_pair_public_key_reports_both_slot_errors() {
         let mut device = FakeDevice::new(SlotStatus::Empty, SlotStatus::KeyWithoutCertificate);
 
         let error = device.verified_pair_public_key().unwrap_err();
+        let rendered = error.to_string();
+
+        assert!(rendered.contains("the signing slot holds no QuorumOS key"));
+        assert!(rendered.contains("the key-agreement slot holds a key"));
+
+        let SlotsError::SigningAndKeyAgreement {
+            signing,
+            key_agreement,
+        } = error
+        else {
+            panic!("expected both slot errors");
+        };
 
         assert!(matches!(
-            error,
+            *signing,
+            DeviceError::EmptySlot {
+                slot: QosSlot::Signing,
+            }
+        ));
+        assert!(matches!(
+            *key_agreement,
             DeviceError::OccupiedWithoutCertificate {
-                slot: QosSlot::KeyAgreement
+                slot: QosSlot::KeyAgreement,
             }
         ));
     }
@@ -1044,9 +1067,9 @@ mod tests {
 
         assert!(matches!(
             error,
-            DeviceError::EmptySlot {
-                slot: QosSlot::KeyAgreement
-            }
+            SlotsError::KeyAgreement(DeviceError::EmptySlot {
+                slot: QosSlot::KeyAgreement,
+            })
         ));
     }
 

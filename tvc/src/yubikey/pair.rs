@@ -6,7 +6,7 @@
 //! PC/SC calls block, so they run on the blocking thread pool, and a mutex
 //! serializes access to the one device.
 
-use super::{DeviceError, DeviceOps, Pin};
+use super::{DeviceOps, Pin, SlotsError};
 use crate::config::turnkey::{Config, QosOperatorPublicKey, YubiKeySerial};
 use crate::pair::{Pair, QosP256Error, Signer, SignerFuture};
 use anyhow::{Context, anyhow, ensure};
@@ -42,10 +42,14 @@ impl<D> Debug for YubiKeyPair<D> {
 impl<D: DeviceOps + Send + 'static> YubiKeyPair<D> {
     /// Run one blocking device operation on the blocking thread pool; the
     /// mutex serializes access to the device.
-    async fn device_op<T: Send + 'static>(
+    async fn device_op<T, E>(
         device: Arc<Mutex<D>>,
-        operation: impl FnOnce(&mut D) -> Result<T, DeviceError> + Send + 'static,
-    ) -> anyhow::Result<T> {
+        operation: impl FnOnce(&mut D) -> Result<T, E> + Send + 'static,
+    ) -> anyhow::Result<T>
+    where
+        T: Send + 'static,
+        E: std::error::Error + Send + Sync + 'static,
+    {
         let result = spawn_blocking(move || {
             let mut device = device.lock().unwrap_or_else(PoisonError::into_inner);
             operation(&mut device)
@@ -132,8 +136,8 @@ impl Config {
 
             YubiKeyPair::device_op(device, DeviceOps::verified_pair_public_key)
                 .await
-                .map_err(|error| match error.downcast_ref::<DeviceError>() {
-                    Some(DeviceError::EmptySlot { .. }) => error.context(format!(
+                .map_err(|error| match error.downcast_ref::<SlotsError>() {
+                    Some(slots) if slots.contains_empty_slot() => error.context(format!(
                         "YubiKey {serial} is not fully configured; generate its keys and install \
                          its certificates with `ykman`, then run \
                          `tvc keys refresh-yubikey --serial {serial}`"
