@@ -549,6 +549,27 @@ impl SlotsError {
     }
 }
 
+fn validate_slot_status(
+    slot: QosSlot,
+    status: Result<SlotStatus, DeviceError>,
+) -> Result<(), DeviceError> {
+    match status {
+        Ok(SlotStatus::QosProvisioned) => Ok(()),
+        Ok(SlotStatus::Empty) => Err(DeviceError::EmptySlot { slot }),
+        Ok(SlotStatus::KeyWithoutCertificate) => {
+            Err(DeviceError::OccupiedWithoutCertificate { slot })
+        }
+        Ok(SlotStatus::UnknownWithoutCertificate { metadata_error }) => {
+            Err(DeviceError::UnknownWithoutCertificate {
+                slot,
+                metadata_error,
+            })
+        }
+        Ok(SlotStatus::Foreign { subject }) => Err(DeviceError::ForeignSlot { slot, subject }),
+        Err(error) => Err(error),
+    }
+}
+
 /// Per-device operations TVC needs, as an extension of [`YubiKey`] itself so
 /// inspection and private-key operations use the caller's one open handle.
 pub(crate) trait DeviceOps {
@@ -577,24 +598,8 @@ pub(crate) trait DeviceOps {
     /// device's composite operator key. Both slots are checked so callers see
     /// every actionable configuration error in one result.
     fn verified_pair_public_key(&mut self) -> Result<QosOperatorPublicKey, SlotsError> {
-        let slot_result = |slot, status| match status {
-            Ok(SlotStatus::QosProvisioned) => Ok(()),
-            Ok(SlotStatus::Empty) => Err(DeviceError::EmptySlot { slot }),
-            Ok(SlotStatus::KeyWithoutCertificate) => {
-                Err(DeviceError::OccupiedWithoutCertificate { slot })
-            }
-            Ok(SlotStatus::UnknownWithoutCertificate { metadata_error }) => {
-                Err(DeviceError::UnknownWithoutCertificate {
-                    slot,
-                    metadata_error,
-                })
-            }
-            Ok(SlotStatus::Foreign { subject }) => Err(DeviceError::ForeignSlot { slot, subject }),
-            Err(error) => Err(error),
-        };
-
-        let signing = slot_result(QosSlot::Signing, self.slot_status(QosSlot::Signing));
-        let key_agreement = slot_result(
+        let signing = validate_slot_status(QosSlot::Signing, self.slot_status(QosSlot::Signing));
+        let key_agreement = validate_slot_status(
             QosSlot::KeyAgreement,
             self.slot_status(QosSlot::KeyAgreement),
         );
