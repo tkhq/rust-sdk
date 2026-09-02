@@ -5,9 +5,7 @@
 // unused items here; without this, each `cargo test` target warns.
 #![allow(dead_code)]
 
-use indexmap::IndexMap;
 use std::{
-    collections::HashMap,
     fs,
     path::{Path, PathBuf},
 };
@@ -17,6 +15,7 @@ use tvc::config::turnkey::{
     OrgConfig, QosOperatorPublicKey, StoredApiKey, StoredQosOperatorKey, YubiKeyOperatorRecord,
     YubiKeyRegistryEntry, YubiKeySerial,
 };
+use uuid::Uuid;
 
 /// Dead port: connection attempts fail immediately, so commands stop at their
 /// first network step without hanging.
@@ -26,59 +25,68 @@ fn org_dir(home: &Path, alias: &str) -> PathBuf {
     home.join(".config/turnkey/orgs").join(alias)
 }
 
-/// Write a v1 `tvc.config.toml` under `home` with one profile per
+/// Write a v2 `tvc.config.toml` under `home` with one organization per
 /// `(alias, org_id)` pair, using the legacy alias-keyed key-file layout and a
 /// dead-port API base URL. The legacy layout is deliberate: these fixtures
 /// seed pre-existing user state (which interactive login migrates to the
 /// id-keyed layout); the current layout is exercised through the real CLI's
-/// new-profile flow. Profiles are written in slice order.
+/// new-org flow.
 pub fn write_profiles_config(home: &Path, profiles: &[(&str, &str)], active_org: Option<&str>) {
     let turnkey_dir = home.join(".config/turnkey");
     fs::create_dir_all(&turnkey_dir).unwrap();
 
-    let orgs: IndexMap<_, _> = profiles
-        .iter()
-        .map(|(alias, org_id)| {
-            let dir = org_dir(home, alias);
-            (
-                alias.to_string(),
-                OrgConfig {
-                    id: org_id.parse().expect("test org ids must be UUIDs"),
-                    api_key_path: dir.join("api_key.json"),
-                    api_base_url: LOCAL_API_BASE_URL.to_string(),
-                    default_operator_kind: OperatorKind::Local,
-                    operators: vec![OperatorRecord::local(dir.join("operator.json"))],
-                    extra: toml::Table::new(),
-                },
-            )
-        })
-        .collect();
+    let mut config = Config::default();
 
-    let config = Config {
-        active_org: active_org.map(String::from),
-        orgs,
-        yubikeys: Default::default(),
-        last_created_app_id: HashMap::new(),
-        last_operator_ids: HashMap::new(),
-        extra: toml::Table::new(),
-    };
+    for (alias, org_id) in profiles {
+        let id: Uuid = org_id.parse().expect("test org ids must be UUIDs");
+        let dir = org_dir(home, alias);
+
+        config.orgs.insert(
+            id,
+            OrgConfig {
+                api_key_path: dir.join("api_key.json"),
+                api_base_url: LOCAL_API_BASE_URL.to_string(),
+                default_operator_kind: OperatorKind::Local,
+                operators: vec![OperatorRecord::local(dir.join("operator.json"))],
+                extra: toml::Table::new(),
+            },
+        );
+        config.aliases.bind(alias.to_string(), id);
+    }
+
+    if let Some(active) = active_org {
+        let id = config
+            .aliases
+            .resolve(active)
+            .expect("active_org must name a fixture profile")
+            .id();
+        config.set_active_org(id).unwrap();
+    }
+
+    write_config(home, &config);
+}
+
+/// Serialize `config` as the current on-disk schema at the default path.
+pub fn write_config(home: &Path, config: &Config) {
+    let turnkey_dir = home.join(".config/turnkey");
+    fs::create_dir_all(&turnkey_dir).unwrap();
 
     fs::write(
         turnkey_dir.join("tvc.config.toml"),
-        format!("version = 1\n{}", toml::to_string_pretty(&config).unwrap()),
+        format!("version = 2\n{}", toml::to_string_pretty(config).unwrap()),
     )
     .unwrap();
 }
 
-/// Write a v1 `tvc.config.toml` under `home` whose sole, active organization
+/// Write a v2 `tvc.config.toml` under `home` whose sole, active organization
 /// defaults to the hosted backend and registers exactly one operator, hosted
 /// — the fixture for commands that need local key material a hosted-only org
 /// does not have. The record carries a real generated composite key split
 /// into its two points, the way `operator create` stores it.
 pub fn write_hosted_only_config(home: &Path, alias: &str, org_id: &str) {
     let turnkey_dir = home.join(".config/turnkey");
-    fs::create_dir_all(&turnkey_dir).unwrap();
 
+    let id: Uuid = org_id.parse().expect("test org ids must be UUIDs");
     let composite = hex::encode(
         qos_p256::P256Pair::generate()
             .unwrap()
@@ -87,43 +95,34 @@ pub fn write_hosted_only_config(home: &Path, alias: &str, org_id: &str) {
     );
     let (encrypt_public_key, sign_public_key) = composite.split_at(composite.len() / 2);
 
-    let config = Config {
-        active_org: Some(alias.to_string()),
-        orgs: IndexMap::from([(
-            alias.to_string(),
-            OrgConfig {
-                id: org_id.parse().expect("test org ids must be UUIDs"),
-                api_key_path: turnkey_dir.join(format!("orgs/{alias}/api_key.json")),
-                api_base_url: LOCAL_API_BASE_URL.to_string(),
-                default_operator_kind: OperatorKind::Hosted,
-                operators: vec![OperatorRecord {
-                    name: "hosted-op".to_string(),
-                    kind: OperatorRecordKind::Hosted(HostedOperatorRecord {
-                        operator_id: "11111111-1111-4111-8111-111111111111".parse().unwrap(),
-                        wallet_id: "22222222-2222-4222-8222-222222222222".parse().unwrap(),
-                        path: "m/5527107'/0'/0'".to_string(),
-                        encrypt_public_key: encrypt_public_key.to_string(),
-                        sign_public_key: sign_public_key.to_string(),
-                        extra: toml::Table::new(),
-                    }),
-                }],
-                extra: toml::Table::new(),
-            },
-        )]),
-        yubikeys: Default::default(),
-        last_created_app_id: HashMap::new(),
-        last_operator_ids: HashMap::new(),
-        extra: toml::Table::new(),
-    };
+    let mut config = Config::default();
+    config.orgs.insert(
+        id,
+        OrgConfig {
+            api_key_path: turnkey_dir.join(format!("orgs/{id}/api_key.json")),
+            api_base_url: LOCAL_API_BASE_URL.to_string(),
+            default_operator_kind: OperatorKind::Hosted,
+            operators: vec![OperatorRecord {
+                name: "hosted-op".to_string(),
+                kind: OperatorRecordKind::Hosted(HostedOperatorRecord {
+                    operator_id: "11111111-1111-4111-8111-111111111111".parse().unwrap(),
+                    wallet_id: "22222222-2222-4222-8222-222222222222".parse().unwrap(),
+                    path: "m/5527107'/0'/0'".to_string(),
+                    encrypt_public_key: encrypt_public_key.to_string(),
+                    sign_public_key: sign_public_key.to_string(),
+                    extra: toml::Table::new(),
+                }),
+            }],
+            extra: toml::Table::new(),
+        },
+    );
+    config.aliases.bind(alias.to_string(), id);
+    config.set_active_org(id).unwrap();
 
-    fs::write(
-        turnkey_dir.join("tvc.config.toml"),
-        format!("version = 1\n{}", toml::to_string_pretty(&config).unwrap()),
-    )
-    .unwrap();
+    write_config(home, &config);
 }
 
-/// Write a v1 `tvc.config.toml` under `home` whose sole, active organization
+/// Write a v2 `tvc.config.toml` under `home` whose sole, active organization
 /// defaults to the yubikey backend: one serial-only operator record plus the
 /// top-level registry entry caching a real generated composite key. Flows
 /// that read the cache need no device; device-touching flows fail at their
@@ -149,29 +148,11 @@ pub fn write_yubikey_only_config_with_public_key(
     public_key: QosOperatorPublicKey,
 ) {
     let turnkey_dir = home.join(".config/turnkey");
-    fs::create_dir_all(&turnkey_dir).unwrap();
 
+    let id: Uuid = org_id.parse().expect("test org ids must be UUIDs");
     let serial = YubiKeySerial::from(0x01c9_5c1f);
 
-    let config = Config {
-        active_org: Some(alias.to_string()),
-        orgs: IndexMap::from([(
-            alias.to_string(),
-            OrgConfig {
-                id: org_id.parse().expect("test org ids must be UUIDs"),
-                api_key_path: turnkey_dir.join(format!("orgs/{alias}/api_key.json")),
-                api_base_url: LOCAL_API_BASE_URL.to_string(),
-                default_operator_kind: OperatorKind::Yubikey,
-                operators: vec![OperatorRecord {
-                    name: "yubikey-op".to_string(),
-                    kind: OperatorRecordKind::Yubikey(YubiKeyOperatorRecord {
-                        serial,
-                        extra: toml::Table::new(),
-                    }),
-                }],
-                extra: toml::Table::new(),
-            },
-        )]),
+    let mut config = Config {
         yubikeys: vec![YubiKeyRegistryEntry {
             serial,
             public_key,
@@ -179,25 +160,36 @@ pub fn write_yubikey_only_config_with_public_key(
         }]
         .try_into()
         .unwrap(),
-        last_created_app_id: HashMap::new(),
-        last_operator_ids: HashMap::new(),
-        extra: toml::Table::new(),
+        ..Config::default()
     };
+    config.orgs.insert(
+        id,
+        OrgConfig {
+            api_key_path: turnkey_dir.join(format!("orgs/{id}/api_key.json")),
+            api_base_url: LOCAL_API_BASE_URL.to_string(),
+            default_operator_kind: OperatorKind::Yubikey,
+            operators: vec![OperatorRecord {
+                name: "yubikey-op".to_string(),
+                kind: OperatorRecordKind::Yubikey(YubiKeyOperatorRecord {
+                    serial,
+                    extra: toml::Table::new(),
+                }),
+            }],
+            extra: toml::Table::new(),
+        },
+    );
+    config.aliases.bind(alias.to_string(), id);
+    config.set_active_org(id).unwrap();
 
-    fs::write(
-        turnkey_dir.join("tvc.config.toml"),
-        format!("version = 1\n{}", toml::to_string_pretty(&config).unwrap()),
-    )
-    .unwrap();
+    write_config(home, &config);
 }
 
-/// Write a v1 `tvc.config.toml` under `home` with one yubikey-default
+/// Write a v2 `tvc.config.toml` under `home` with one yubikey-default
 /// organization per `(alias, org_id)` pair, every org referencing the SAME
 /// registered serial — the fixture for shared-registry-entry behavior. The
 /// first alias is active.
 pub fn write_yubikey_shared_config(home: &Path, profiles: &[(&str, &str)]) {
     let turnkey_dir = home.join(".config/turnkey");
-    fs::create_dir_all(&turnkey_dir).unwrap();
 
     let serial = YubiKeySerial::from(0x01c9_5c1f);
     let public_key = QosOperatorPublicKey::try_from(
@@ -209,32 +201,7 @@ pub fn write_yubikey_shared_config(home: &Path, profiles: &[(&str, &str)]) {
     )
     .unwrap();
 
-    let orgs: IndexMap<_, _> = profiles
-        .iter()
-        .map(|(alias, org_id)| {
-            (
-                alias.to_string(),
-                OrgConfig {
-                    id: org_id.parse().expect("test org ids must be UUIDs"),
-                    api_key_path: turnkey_dir.join(format!("orgs/{alias}/api_key.json")),
-                    api_base_url: LOCAL_API_BASE_URL.to_string(),
-                    default_operator_kind: OperatorKind::Yubikey,
-                    operators: vec![OperatorRecord {
-                        name: "yubikey-op".to_string(),
-                        kind: OperatorRecordKind::Yubikey(YubiKeyOperatorRecord {
-                            serial,
-                            extra: toml::Table::new(),
-                        }),
-                    }],
-                    extra: toml::Table::new(),
-                },
-            )
-        })
-        .collect();
-
-    let config = Config {
-        active_org: profiles.first().map(|(alias, _)| alias.to_string()),
-        orgs,
+    let mut config = Config {
         yubikeys: vec![YubiKeyRegistryEntry {
             serial,
             public_key,
@@ -242,16 +209,41 @@ pub fn write_yubikey_shared_config(home: &Path, profiles: &[(&str, &str)]) {
         }]
         .try_into()
         .unwrap(),
-        last_created_app_id: HashMap::new(),
-        last_operator_ids: HashMap::new(),
-        extra: toml::Table::new(),
+        ..Config::default()
     };
 
-    fs::write(
-        turnkey_dir.join("tvc.config.toml"),
-        format!("version = 1\n{}", toml::to_string_pretty(&config).unwrap()),
-    )
-    .unwrap();
+    for (alias, org_id) in profiles {
+        let id: Uuid = org_id.parse().expect("test org ids must be UUIDs");
+
+        config.orgs.insert(
+            id,
+            OrgConfig {
+                api_key_path: turnkey_dir.join(format!("orgs/{id}/api_key.json")),
+                api_base_url: LOCAL_API_BASE_URL.to_string(),
+                default_operator_kind: OperatorKind::Yubikey,
+                operators: vec![OperatorRecord {
+                    name: "yubikey-op".to_string(),
+                    kind: OperatorRecordKind::Yubikey(YubiKeyOperatorRecord {
+                        serial,
+                        extra: toml::Table::new(),
+                    }),
+                }],
+                extra: toml::Table::new(),
+            },
+        );
+        config.aliases.bind(alias.to_string(), id);
+    }
+
+    if let Some((alias, _)) = profiles.first() {
+        let id = config
+            .aliases
+            .resolve(alias)
+            .expect("first profile was just bound")
+            .id();
+        config.set_active_org(id).unwrap();
+    }
+
+    write_config(home, &config);
 }
 
 /// Create the default-layout key files for `alias`: a valid generated

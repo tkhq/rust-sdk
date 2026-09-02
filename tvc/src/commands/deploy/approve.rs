@@ -155,11 +155,11 @@ impl Run for Args {
         if !args.dry_run
             && let Some(OperatorSelector::Serial(serial)) = args.operator_selector.as_ref()
         {
-            let (alias, org) = config
+            let (org_id, org) = config
                 .active_org_config()
                 .context("--serial requires an active organization")?;
             org.select_yubikey_operator(Some(*serial))
-                .with_context(|| format!("org '{alias}'"))?;
+                .with_context(|| format!("org '{}'", config.display_name(org_id)))?;
         }
 
         let LoadedManifest {
@@ -232,7 +232,7 @@ impl Run for Args {
                     });
                 }
             } else {
-                let (_, org) = config.active_org_config().ok_or_else(|| {
+                let (org_id, org) = config.active_org_config().ok_or_else(|| {
                     anyhow::anyhow!(
                         "No active organization. Run `tvc login` first or provide \
                          --operator-seed or --operator-seed-path."
@@ -263,7 +263,7 @@ impl Run for Args {
                         }
                         OperatorRecordKind::Hosted(hosted) => {
                             let hosted = ResolvedHostedOperator::from_registry(
-                                org.id,
+                                org_id,
                                 &operator.name,
                                 hosted,
                             )?;

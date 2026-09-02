@@ -10,10 +10,8 @@
 
 mod common;
 
-use indexmap::IndexMap;
 use qos_p256::P256Pair;
 use rexpect::session::PtySession;
-use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
 use std::path::Path;
@@ -25,6 +23,7 @@ use tvc::config::turnkey::{
     Config, HostedOperatorRecord, KeyCurve, OperatorKind, OperatorRecord, OperatorRecordKind,
     OrgConfig, StoredApiKey, YubiKeyOperatorRecord, YubiKeySerial,
 };
+use uuid::Uuid;
 
 /// Default per-step timeout. Generous enough for CI-runner cold cargo builds
 /// of the binary; tight enough to fail fast if an `exp_string` mismatches.
@@ -252,140 +251,49 @@ fn login_with_empty_org_id_bails() {
     session.exp_eof().unwrap();
 }
 
-/// TVC-159: interactive `tvc login` folds duplicate profiles down to one per
-/// organization before proceeding: prompt for the keeper, one confirmation,
-/// full profile-delete cleanup for the losers, and active-profile repair onto
-/// the keeper. Duplicate profiles can no longer be created through the CLI,
-/// so this seeds the legacy on-disk state directly.
+/// Organization IDs are UUIDs; anything else is rejected at the prompt
+/// boundary before any profile is created.
 #[test]
-fn login_consolidates_duplicate_profiles_interactively() {
+fn login_with_non_uuid_org_id_bails() {
     let temp = tempfile::TempDir::new().unwrap();
-    common::write_profiles_config(
-        temp.path(),
-        &[("alias-a", ORG_DUP), ("alias-b", ORG_DUP)],
-        Some("alias-b"),
-    );
-    common::write_profile_key_files(temp.path(), "alias-a");
-    common::write_profile_key_files(temp.path(), "alias-b");
 
     let mut session = spawn_with_home(temp.path(), &["login"]);
 
-    exp_wrapped(
-        &mut session,
-        &format!("Select the profile to keep for organization '{ORG_DUP}'"),
-    );
-    session.send_line("alias-a").unwrap();
-
+    session.exp_string("Organization ID").unwrap();
+    session.send_line("not-a-uuid").unwrap();
     session
-        .exp_string("Permanently delete 'alias-b' and the key files on disk?")
+        .exp_string("Organization ID must be a UUID")
         .unwrap();
-    session.send_line("y").unwrap();
-
-    exp_wrapped(
-        &mut session,
-        &format!("Deleted login profile 'alias-b' ({ORG_DUP})."),
-    );
-    session.exp_string("Removed key directory").unwrap();
-    session
-        .exp_string("IMPORTANT: The API key may still be registered")
-        .unwrap();
-
-    // The keeper's legacy directory is migrated to the id-keyed layout, then
-    // login proceeds against the consolidated config.
-    session.exp_string("Moved key directory").unwrap();
-    session.exp_string("Select organization").unwrap();
-    session.send_line("alias-a").unwrap();
-    exp_wrapped(&mut session, &format!("Selected org: alias-a ({ORG_DUP})"));
-    session.exp_string("Using existing API key.").unwrap();
-    session.exp_string("Verifying credentials...").unwrap();
     session.exp_eof().unwrap();
-
-    assert!(!temp.path().join(".config/turnkey/orgs/alias-b").exists());
-    assert!(!temp.path().join(".config/turnkey/orgs/alias-a").exists());
-    assert!(
-        temp.path()
-            .join(".config/turnkey/orgs")
-            .join(ORG_DUP)
-            .join("api_key.json")
-            .exists()
-    );
-
-    let saved =
-        std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
-    assert!(!saved.contains("alias-b"));
-    assert!(saved.contains(r#"active_org = "alias-a""#));
 }
 
-/// Declining the consolidation confirmation cancels login and leaves both
-/// profiles and their key files untouched (nothing is mutated before the
-/// single consent point).
+/// `profile delete` without --org prompts with the organization picker and
+/// deletes only the chosen organization.
 #[test]
-fn login_consolidation_decline_cancels_login() {
+fn profile_delete_without_query_prompts_with_picker() {
     let temp = tempfile::TempDir::new().unwrap();
     common::write_profiles_config(
         temp.path(),
-        &[("alias-a", ORG_DUP), ("alias-b", ORG_DUP)],
-        Some("alias-b"),
-    );
-    common::write_profile_key_files(temp.path(), "alias-a");
-    common::write_profile_key_files(temp.path(), "alias-b");
-
-    let mut session = spawn_with_home(temp.path(), &["login"]);
-
-    exp_wrapped(
-        &mut session,
-        &format!("Select the profile to keep for organization '{ORG_DUP}'"),
-    );
-    session.send_line("alias-a").unwrap();
-
-    session
-        .exp_string("Permanently delete 'alias-b' and the key files on disk?")
-        .unwrap();
-    session.send_line("n").unwrap();
-
-    session
-        .exp_string("operation cancelled by user: profile consolidation")
-        .unwrap();
-    session.exp_eof().unwrap();
-
-    assert!(temp.path().join(".config/turnkey/orgs/alias-a").exists());
-    assert!(temp.path().join(".config/turnkey/orgs/alias-b").exists());
-
-    let saved =
-        std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
-    assert!(saved.contains("alias-a"));
-    assert!(saved.contains("alias-b"));
-}
-
-/// `profile delete --org <org-id>` with several profiles registered for that
-/// organization ID prompts for which profile to delete instead of deleting an
-/// arbitrary one (TVC-159), and only the chosen profile is removed.
-#[test]
-fn profile_delete_with_duplicate_org_id_prompts_for_profile() {
-    let temp = tempfile::TempDir::new().unwrap();
-    common::write_profiles_config(
-        temp.path(),
-        &[("alias-a", ORG_DUP), ("alias-b", ORG_DUP)],
+        &[("alias-a", ORG_DUP), ("alias-b", ORG_OTHER)],
         Some("alias-a"),
     );
     common::write_profile_key_files(temp.path(), "alias-a");
     common::write_profile_key_files(temp.path(), "alias-b");
 
-    let mut session = spawn_with_home(temp.path(), &["profile", "delete", "--org", ORG_DUP]);
+    let mut session = spawn_with_home(temp.path(), &["profile", "delete"]);
 
-    session.exp_string("Select profile to delete").unwrap();
+    session.exp_string("Select organization to delete").unwrap();
     session.send_line("alias-b").unwrap();
 
     exp_wrapped(
         &mut session,
-        &format!("Permanently delete profile 'alias-b' ({ORG_DUP})"),
+        &format!("Permanently delete 'alias-b' ({ORG_OTHER})"),
     );
     session.send_line("y").unwrap();
 
-    exp_wrapped(
-        &mut session,
-        &format!("Deleted login profile 'alias-b' ({ORG_DUP})."),
-    );
+    session
+        .exp_string("Deleted the login for organization")
+        .unwrap();
     session.exp_eof().unwrap();
 
     assert!(!temp.path().join(".config/turnkey/orgs/alias-b").exists());
@@ -407,8 +315,11 @@ fn login_creates_first_profile_and_persists_it() {
 
     let saved =
         std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
-    assert!(saved.contains("[orgs.solo]"));
-    assert!(saved.contains(&format!(r#"id = "{ORG_SOLO}""#)));
+    assert!(saved.contains(&format!("[orgs.{ORG_SOLO}]")), "{saved}");
+    assert!(
+        saved.contains(&format!(r#"solo = "{ORG_SOLO}""#)),
+        "{saved}"
+    );
 
     let org_dir = temp.path().join(".config/turnkey/orgs").join(ORG_SOLO);
     assert!(org_dir.join("api_key.json").exists());
@@ -433,16 +344,23 @@ fn login_new_org_refuses_already_configured_org_id() {
 
     exp_wrapped(
         &mut session,
-        &format!("Organization '{ORG_DUP}' is already configured as profile 'alias-a'."),
+        &format!("Organization '{ORG_DUP}' is already configured as 'alias-a'."),
     );
     session
         .exp_string("tvc profile delete --org alias-a")
         .unwrap();
     session.exp_eof().unwrap();
 
+    // Refused before any mutation: still exactly one configured org and one
+    // alias.
     let saved =
         std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
-    assert_eq!(saved.matches(&format!(r#"id = "{ORG_DUP}""#)).count(), 1);
+    // "\n[orgs." matches the org table header but not "[[orgs.<id>.operators]]".
+    assert_eq!(saved.matches("\n[orgs.").count(), 1, "{saved}");
+    assert!(
+        saved.contains(&format!(r#"alias-a = "{ORG_DUP}""#)),
+        "{saved}"
+    );
 }
 
 /// Reusing an existing profile alias for a different organization refuses
@@ -464,13 +382,13 @@ fn login_new_org_refuses_alias_already_in_use() {
 
     exp_wrapped(
         &mut session,
-        &format!("Profile alias 'alias-a' is already in use for organization '{ORG_OTHER}'."),
+        &format!("Alias 'alias-a' already names organization '{ORG_OTHER}'."),
     );
     session.exp_eof().unwrap();
 
     let saved =
         std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
-    assert!(saved.contains(&format!(r#"id = "{ORG_OTHER}""#)));
+    assert!(saved.contains(&format!("[orgs.{ORG_OTHER}]")), "{saved}");
     assert!(!saved.contains(ORG_SOLO));
 }
 
@@ -532,7 +450,7 @@ fn login_migrates_legacy_key_directory() {
     let saved =
         std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
     let table: toml::Table = toml::from_str(&saved).unwrap();
-    let org = table["orgs"]["alias-a"].as_table().unwrap();
+    let org = table["orgs"][ORG_E2E].as_table().unwrap();
     assert_eq!(
         org["api_key_path"].as_str().unwrap(),
         id_dir.join("api_key.json").to_str().unwrap()
@@ -769,30 +687,27 @@ fn write_hosted_org_config(home: &Path, saved_operator_ids: &[&str]) -> String {
             }),
     );
 
-    let config = Config {
-        active_org: Some("hosted-org".to_string()),
-        orgs: IndexMap::from([(
-            "hosted-org".to_string(),
-            OrgConfig {
-                id: ORG_HOSTED.parse().unwrap(),
-                api_key_path: turnkey_dir.join("orgs/hosted-org/api_key.json"),
-                api_base_url: common::LOCAL_API_BASE_URL.to_string(),
-                default_operator_kind: OperatorKind::Hosted,
-                operators,
-                extra: toml::Table::new(),
-            },
-        )]),
-        yubikeys: Default::default(),
-        last_created_app_id: HashMap::new(),
-        last_operator_ids: HashMap::from([(
-            "hosted-org".to_string(),
-            saved_operator_ids.iter().map(|id| id.to_string()).collect(),
-        )]),
-        extra: toml::Table::new(),
-    };
+    let org_id: Uuid = ORG_HOSTED.parse().unwrap();
+    let mut config = Config::default();
+    config.orgs.insert(
+        org_id,
+        OrgConfig {
+            api_key_path: turnkey_dir.join("orgs/hosted-org/api_key.json"),
+            api_base_url: common::LOCAL_API_BASE_URL.to_string(),
+            default_operator_kind: OperatorKind::Hosted,
+            operators,
+            extra: toml::Table::new(),
+        },
+    );
+    config.aliases.bind("hosted-org".to_string(), org_id);
+    config.set_active_org(org_id).unwrap();
+    config.last_operator_ids.insert(
+        org_id,
+        saved_operator_ids.iter().map(|id| id.to_string()).collect(),
+    );
     std::fs::write(
         turnkey_dir.join("tvc.config.toml"),
-        format!("version = 1\n{}", toml::to_string_pretty(&config).unwrap()),
+        format!("version = 2\n{}", toml::to_string_pretty(&config).unwrap()),
     )
     .unwrap();
 
@@ -1000,7 +915,7 @@ fn write_registry_only_config(home: &Path) -> String {
         .register(YubiKeySerial::from(0x01c9_5c1f), composite.parse().unwrap());
     std::fs::write(
         turnkey_dir.join("tvc.config.toml"),
-        format!("version = 1\n{}", toml::to_string_pretty(&config).unwrap()),
+        format!("version = 2\n{}", toml::to_string_pretty(&config).unwrap()),
     )
     .unwrap();
 
@@ -1097,27 +1012,23 @@ fn login_selects_among_multiple_yubikey_operators() {
             .parse()
             .unwrap()
     };
-    let mut config = Config {
-        active_org: Some("yk-org".to_string()),
-        orgs: IndexMap::from([(
-            "yk-org".to_string(),
-            OrgConfig {
-                id: ORG_E2E.parse().unwrap(),
-                api_key_path: turnkey_dir.join("orgs/yk-org/api_key.json"),
-                api_base_url: common::LOCAL_API_BASE_URL.to_string(),
-                default_operator_kind: OperatorKind::Yubikey,
-                operators: vec![
-                    yubikey_record("first", 0x01c9_5c1f),
-                    yubikey_record("second", 0xdead_beef),
-                ],
-                extra: toml::Table::new(),
-            },
-        )]),
-        yubikeys: Default::default(),
-        last_created_app_id: HashMap::new(),
-        last_operator_ids: HashMap::new(),
-        extra: toml::Table::new(),
-    };
+    let org_id: Uuid = ORG_E2E.parse().unwrap();
+    let mut config = Config::default();
+    config.orgs.insert(
+        org_id,
+        OrgConfig {
+            api_key_path: turnkey_dir.join("orgs/yk-org/api_key.json"),
+            api_base_url: common::LOCAL_API_BASE_URL.to_string(),
+            default_operator_kind: OperatorKind::Yubikey,
+            operators: vec![
+                yubikey_record("first", 0x01c9_5c1f),
+                yubikey_record("second", 0xdead_beef),
+            ],
+            extra: toml::Table::new(),
+        },
+    );
+    config.aliases.bind("yk-org".to_string(), org_id);
+    config.set_active_org(org_id).unwrap();
     config
         .yubikeys
         .register(YubiKeySerial::from(0x01c9_5c1f), registry_key());
@@ -1126,7 +1037,7 @@ fn login_selects_among_multiple_yubikey_operators() {
         .register(YubiKeySerial::from(0xdead_beef), registry_key());
     std::fs::write(
         turnkey_dir.join("tvc.config.toml"),
-        format!("version = 1\n{}", toml::to_string_pretty(&config).unwrap()),
+        format!("version = 2\n{}", toml::to_string_pretty(&config).unwrap()),
     )
     .unwrap();
 

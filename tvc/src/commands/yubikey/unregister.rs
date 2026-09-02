@@ -57,7 +57,7 @@ impl Run for Args {
         };
 
         let referencing_orgs = {
-            let mut aliases = config
+            let mut names = config
                 .orgs
                 .iter()
                 .filter(|(_, org)| {
@@ -68,10 +68,10 @@ impl Run for Args {
                         )
                     })
                 })
-                .map(|(alias, _)| alias.as_str())
+                .map(|(org_id, _)| config.display_name(*org_id))
                 .collect::<Vec<_>>();
-            aliases.sort_unstable();
-            aliases
+            names.sort_unstable();
+            names
         };
 
         if !referencing_orgs.is_empty() {
