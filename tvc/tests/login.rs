@@ -36,10 +36,10 @@ fn write_login_config(
     config.set_active_org(org_id).unwrap();
     config
         .last_created_app_id
-        .insert(org_id, "app-1".to_string());
+        .insert(org_id, Uuid::from_u128(0xAA));
     config
         .last_operator_ids
-        .insert(org_id, vec!["operator-1".to_string()]);
+        .insert(org_id, vec![Uuid::from_u128(0xBB)]);
     fs::write(
         turnkey_dir.join("tvc.config.toml"),
         format!("version = 2\n{}", toml::to_string_pretty(&config).unwrap()),
@@ -268,8 +268,8 @@ fn login_delete_removes_legacy_alias_keyed_layout() {
     let saved = fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
     assert!(saved.contains("version = 2"));
     assert!(!saved.contains(ORG_TEST));
-    assert!(!saved.contains("app-1"));
-    assert!(!saved.contains("operator-1"));
+    assert!(!saved.contains(&Uuid::from_u128(0xAA).to_string()));
+    assert!(!saved.contains(&Uuid::from_u128(0xBB).to_string()));
 }
 
 /// Deleting a profile with the id-keyed directory layout (what login creates

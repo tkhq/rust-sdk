@@ -338,8 +338,8 @@ fn deploy_id_and_serial_resolve_one_operator_identity_by_public_key() {
         last_operator_ids: HashMap::from([(
             ORG_TEST.parse().unwrap(),
             vec![
-                "66666666-6666-4666-8666-666666666666".to_string(),
-                "77777777-7777-4777-8777-777777777777".to_string(),
+                "66666666-6666-4666-8666-666666666666".parse().unwrap(),
+                "77777777-7777-4777-8777-777777777777".parse().unwrap(),
             ],
         )]),
         ..Config::default()
@@ -508,7 +508,7 @@ fn remembered_operator_ids_are_not_approval_candidates() {
         )]),
         last_operator_ids: HashMap::from([(
             ORG_TEST.parse().unwrap(),
-            vec!["not-a-uuid".to_string()],
+            vec!["99999999-9999-4999-8999-999999999999".parse().unwrap()],
         )]),
         ..Config::default()
     };
@@ -637,7 +637,7 @@ fn manifest_membership_controls_signer_resolution_in_mixed_registry() {
         )]),
         last_operator_ids: HashMap::from([(
             ORG_TEST.parse().unwrap(),
-            vec![HOSTED_OPERATOR_ID.to_string()],
+            vec![HOSTED_OPERATOR_ID.parse().unwrap()],
         )]),
         ..Config::default()
     };
