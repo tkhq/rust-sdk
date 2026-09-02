@@ -1,6 +1,10 @@
 # Cargo.lock changes should trigger dependency reviewers
 Cargo.lock @tkhq/dependency-reviewers
 
+# TVC's musl build downloads and pins dependencies outside Cargo.lock
+/.github/cross/install-pcsc-lite.sh @tkhq/dependency-reviewers
+/.github/workflows/tvc-pcsc-release-check.yml @tkhq/dependency-reviewers
+
 # We also want this file (COWDEOWNERS file) to trigger dependency reviewers
 # Otherwise anyone can remove dependency reviews!
 /.github/CODEOWNERS @tkhq/dependency-reviewers
