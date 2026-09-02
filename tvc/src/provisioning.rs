@@ -67,7 +67,7 @@ pub(crate) async fn fetch_provisioning_details(
     deployment_id: &Uuid,
 ) -> anyhow::Result<FetchedProvisioningDetails> {
     let request = GetTvcDeploymentProvisioningDetailsRequest {
-        organization_id: auth.org_id.clone(),
+        organization_id: auth.org_id.to_string(),
         deployment_id: deployment_id.to_string(),
     };
     let fetched_at_unix_ms = u64::try_from(

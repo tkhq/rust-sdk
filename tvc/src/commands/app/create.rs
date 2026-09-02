@@ -262,7 +262,7 @@ async fn run_with_app_config(
 
     let result = auth
         .client
-        .create_tvc_app(auth.org_id, timestamp_ms, intent)
+        .create_tvc_app(auth.org_id.to_string(), timestamp_ms, intent)
         .await
         .context("failed to create TVC app")?;
 

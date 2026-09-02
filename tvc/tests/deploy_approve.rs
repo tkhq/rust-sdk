@@ -252,7 +252,7 @@ fn deployment_missing_from_the_organization_names_the_org_in_json() {
             "code": "not_found",
             "httpStatus": 404,
             "message": format!(
-                "cannot find deployment {DEPLOYMENT_ID} in organization org-test: \
+                "cannot find deployment {DEPLOYMENT_ID} in organization {ORG_TEST}: \
                  HTTP response was not successful: 404 ({DEPLOYMENT_404_BODY})"
             ),
         })

@@ -78,7 +78,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome
 
     let operator = config.resolve_hosted_operator(&operator_id)?;
     let auth = build_client(&config).await?;
-    ensure_authenticated_org(&auth.org_id, operator.organization_id())?;
+    ensure_authenticated_org(auth.org_id, operator.organization_id())?;
 
     let deployment = fetch_tvc_deployment(&auth, deploy_id.to_string()).await?;
     let details = fetch_provisioning_details(&auth, &deploy_id).await?;
@@ -103,7 +103,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome
     )?;
     let result = auth
         .client
-        .re_encrypt_tvc_quorum_key_share(auth.org_id, timestamp_ms()?, intent)
+        .re_encrypt_tvc_quorum_key_share(auth.org_id.to_string(), timestamp_ms()?, intent)
         .await
         .map_err(|error| hosted_activity_error("re-encrypt hosted TVC quorum-key share", error))?;
     let output = validate_result(result.result)?;

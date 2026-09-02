@@ -41,7 +41,7 @@ fn env_auth_accepts_all_three_required_vars() {
 
     app_status_cmd()
         .env("HOME", home.path())
-        .env(ENV_ORG_ID, "org-env")
+        .env(ENV_ORG_ID, "10000000-0000-4000-8000-000000000003")
         .env(ENV_API_KEY_PUBLIC, public_key)
         .env(ENV_API_KEY_PRIVATE, private_key)
         .assert()
@@ -58,7 +58,7 @@ fn env_auth_rejects_two_required_vars() {
 
     app_status_cmd()
         .env("HOME", home.path())
-        .env(ENV_ORG_ID, "org-env")
+        .env(ENV_ORG_ID, "10000000-0000-4000-8000-000000000003")
         .env(ENV_API_KEY_PUBLIC, public_key)
         .assert()
         .failure()
@@ -72,7 +72,7 @@ fn env_auth_rejects_one_required_var() {
 
     app_status_cmd()
         .env("HOME", home.path())
-        .env(ENV_ORG_ID, "org-env")
+        .env(ENV_ORG_ID, "10000000-0000-4000-8000-000000000003")
         .assert()
         .failure()
         .stderr(predicate::str::contains("partial env var auth"))
