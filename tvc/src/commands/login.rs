@@ -97,7 +97,7 @@ struct LoginPlan {
 }
 
 #[instrument(skip_all)]
-pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome> {
+pub async fn run(ctx: &mut StdCtx, args: Args, mut config: Config) -> Result<Outcome> {
     debug!(
         non_interactive = ctx.is_non_interactive(),
         org_arg_present = args.org.is_some(),
@@ -108,10 +108,97 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome
     let plan = if ctx.is_non_interactive() {
         build_login_plan_non_interactive(args, &config)?
     } else {
+        // Consolidate before resolving the org query, so the builders never
+        // resolve against profiles that are about to be deleted.
+        let duplicates = config.duplicated_org_ids();
+        consolidate_duplicate_profiles(ctx, &mut config, duplicates).await?;
         build_login_plan_interactive(ctx, args, &config)?
     };
 
     execute_login(ctx, config, plan).await
+}
+
+/// Fold duplicate profiles down to one per organization before login
+/// proceeds: prompt for the profile to keep per duplicated organization,
+/// confirm once, then delete the others with full profile-delete cleanup.
+/// Nothing is mutated before the confirmation, so declining leaves the config
+/// and disk untouched.
+async fn consolidate_duplicate_profiles(
+    ctx: &mut StdCtx,
+    config: &mut Config,
+    duplicates: Vec<(String, Vec<String>)>,
+) -> Result<()> {
+    if duplicates.is_empty() {
+        return Ok(());
+    }
+
+    shell_eprintln!(
+        ctx,
+        "Multiple profiles are configured for the same organization. tvc keeps \
+         one profile per organization, so the extra profiles must be deleted \
+         before login can continue."
+    )?;
+    shell_eprintln!(ctx, "")?;
+
+    let mut losers: Vec<String> = Vec::new();
+    let mut active_repair: Option<String> = None;
+
+    for (org_id, aliases) in &duplicates {
+        let keeper = prompts::select(
+            &format!("Select the profile to keep for organization '{org_id}'"),
+            duplicate_alias_choices(config, aliases),
+        )?
+        .alias
+        .to_string();
+
+        if let Some(active) = &config.active_org
+            && aliases.contains(active)
+            && *active != keeper
+        {
+            active_repair = Some(keeper.clone());
+        }
+
+        losers.extend(aliases.iter().filter(|alias| **alias != keeper).cloned());
+    }
+
+    let listed = losers
+        .iter()
+        .map(|alias| format!("'{alias}'"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let noun = if losers.len() == 1 {
+        "profile"
+    } else {
+        "profiles"
+    };
+
+    shell_eprintln!(ctx, "")?;
+    shell_eprintln!(
+        ctx,
+        "This deletes the local config entries and key files for {listed}. It \
+         does NOT touch the Turnkey dashboard; revocation instructions follow \
+         each deletion."
+    )?;
+    prompts::confirm_or_bail(
+        &format!("Permanently delete {noun} {listed} and the key files on disk?"),
+        "profile consolidation",
+    )?;
+
+    for alias in &losers {
+        let deleted = delete_profile(ctx, config, alias).await?;
+        shell_println!(ctx, "{deleted}")?;
+        shell_println!(ctx)?;
+    }
+
+    // `remove_org` cleared `active_org` if the active profile was among the
+    // losers; its group's keeper inherits it.
+    if let Some(keeper) = active_repair {
+        config.set_active_org(&keeper)?;
+    }
+
+    config.save().await?;
+
+    Ok(())
 }
 
 /// Permanently delete a saved login profile: its config entry and its API and
@@ -211,8 +298,28 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) 
         )?;
     }
 
+    let deleted = delete_profile(ctx, &mut config, &alias).await?;
+
+    // Save last: persist the config removal only after the on-disk cleanup
+    // succeeds, so a failure leaves the profile listed and the delete retryable.
+    config.save().await?;
+
+    Ok(Outcome::ProfileDeleted(deleted))
+}
+
+/// Remove profile `alias` from the config registry and delete its key files
+/// when they use the default per-org directory layout; custom key paths are
+/// left on disk with a warning. Does not save the config: callers batch one
+/// or more removals and persist afterwards, preserving the save-last
+/// invariant that a failed file cleanup leaves the profile listed and the
+/// deletion retryable.
+async fn delete_profile(
+    ctx: &mut StdCtx,
+    config: &mut Config,
+    alias: &str,
+) -> Result<ProfileDeleted> {
     let removed = config
-        .remove_org(&alias)
+        .remove_org(alias)
         .expect("alias was resolved from config");
 
     // Read the API key's public key before deleting its file, so the
@@ -228,8 +335,8 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) 
     // default profile is removed by deleting that whole directory. Custom
     // (hand-edited) key paths are left untouched with a warning, since the user
     // placed them deliberately and they may live outside our config tree.
-    let default_api_key = default_api_key_path(&alias)?;
-    let default_operator_key = default_operator_key_path(&alias)?;
+    let default_api_key = default_api_key_path(alias)?;
+    let default_operator_key = default_operator_key_path(alias)?;
     let local_key_paths: Vec<_> = removed
         .operators
         .iter()
@@ -244,7 +351,7 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) 
             .all(|path| *path == &default_operator_key);
 
     let removed_dir = if uses_default_layout {
-        let dir = default_org_dir(&alias)?;
+        let dir = default_org_dir(alias)?;
         match tokio::fs::remove_dir_all(&dir).await {
             Ok(()) => Some(dir),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -276,26 +383,22 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) 
         None
     };
 
-    // Save last: persist the config removal only after the on-disk cleanup above
-    // succeeds, so a failure leaves the profile listed and the delete retryable.
-    config.save().await?;
-
     // A local delete does not touch the dashboard-registered API key, and we
     // can't tell whether it is still there, so hedge with "may" and give steps.
     let dashboard_url = dashboard_base_url(&removed.api_base_url);
-    let retained_yubikey_serials: Vec<YubiKeySerial> = removed
+    let retained_yubikey_serials = removed
         .yubikey_operators()
         .map(|(_, yubikey)| yubikey.serial)
-        .collect();
+        .collect::<Vec<_>>();
 
-    Ok(Outcome::ProfileDeleted(ProfileDeleted {
-        alias,
+    Ok(ProfileDeleted {
+        alias: alias.to_string(),
         organization_id: removed.id,
         removed_key_directory: removed_dir.map(|dir| dir.display().to_string()),
         retained_yubikey_serials,
         dashboard_url: dashboard_url.to_string(),
         api_public_key,
-    }))
+    })
 }
 
 /// Resolve the alias of a configured profile to delete. Prompts interactively
@@ -405,6 +508,9 @@ fn build_login_plan_interactive(
                      Run `tvc login` without --org to set up a new organization."
                 ),
                 [alias] => alias.clone(),
+                // Unreachable while login consolidates duplicates up front;
+                // kept so --org-by-ID resolution stays deterministic if the
+                // consolidation gate ever moves.
                 _ => prompts::select(
                     &format!("Select profile for organization '{query}'"),
                     duplicate_alias_choices(config, &aliases),

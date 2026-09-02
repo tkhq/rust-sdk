@@ -119,6 +119,40 @@ fn profile_delete_non_interactive_with_duplicate_org_id_lists_profiles() {
     assert!(temp.path().join(".config/turnkey/orgs/alias-b").exists());
 }
 
+/// Custom (non-default-layout) key paths are never deleted: the profile entry
+/// is removed from the config but the files stay on disk with a warning.
+#[test]
+fn profile_delete_warns_and_keeps_custom_key_paths() {
+    let temp = TempDir::new().unwrap();
+    let custom_dir = temp.path().join("custom-keys");
+    let api_key_path = custom_dir.join("api_key.json");
+    let operator_key_path = custom_dir.join("operator.json");
+    fs::create_dir_all(&custom_dir).unwrap();
+    fs::write(&api_key_path, "custom api key").unwrap();
+    fs::write(&operator_key_path, "custom operator key").unwrap();
+    write_login_config(&temp, api_key_path.clone(), operator_key_path.clone());
+
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env(NON_INTERACTIVE_ENV, "1")
+        .arg("profile")
+        .arg("delete")
+        .arg("--org")
+        .arg("test")
+        .arg("--yes")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "custom key paths are configured and were NOT deleted",
+        ));
+
+    assert!(api_key_path.exists());
+    assert!(operator_key_path.exists());
+
+    let saved = fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
+    assert!(!saved.contains("org-test"));
+}
+
 #[test]
 fn login_help_shows_api_base_url_override() {
     cargo_bin_cmd!("tvc")
