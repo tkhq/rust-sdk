@@ -60,6 +60,65 @@ fn login_errors_when_provided_org_not_found() {
         ));
 }
 
+/// TVC-159: an org-ID query matching several profiles must not resolve to an
+/// arbitrary one; non-interactive login fails fast and names them all.
+#[test]
+fn login_non_interactive_with_duplicate_org_id_lists_profiles() {
+    let temp = TempDir::new().unwrap();
+    common::write_profiles_config(
+        temp.path(),
+        &[("alias-a", "org-dup-test"), ("alias-b", "org-dup-test")],
+        Some("alias-a"),
+    );
+
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env(NON_INTERACTIVE_ENV, "1")
+        .arg("login")
+        .arg("--org")
+        .arg("org-dup-test")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Organization 'org-dup-test' is configured under multiple profiles: alias-a, alias-b",
+        ))
+        .stderr(predicate::str::contains("--org <alias>"));
+}
+
+/// TVC-159: same fence for `profile delete` — an ambiguous org-ID query must
+/// not delete an arbitrary profile.
+#[test]
+fn profile_delete_non_interactive_with_duplicate_org_id_lists_profiles() {
+    let temp = TempDir::new().unwrap();
+    common::write_profiles_config(
+        temp.path(),
+        &[("alias-a", "org-dup-test"), ("alias-b", "org-dup-test")],
+        Some("alias-a"),
+    );
+    common::write_profile_key_files(temp.path(), "alias-a");
+    common::write_profile_key_files(temp.path(), "alias-b");
+
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env(NON_INTERACTIVE_ENV, "1")
+        .arg("profile")
+        .arg("delete")
+        .arg("--org")
+        .arg("org-dup-test")
+        .arg("--yes")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Organization 'org-dup-test' is configured under multiple profiles: alias-a, alias-b",
+        ))
+        .stderr(predicate::str::contains(
+            "to select which profile to delete",
+        ));
+
+    assert!(temp.path().join(".config/turnkey/orgs/alias-a").exists());
+    assert!(temp.path().join(".config/turnkey/orgs/alias-b").exists());
+}
+
 #[test]
 fn login_help_shows_api_base_url_override() {
     cargo_bin_cmd!("tvc")

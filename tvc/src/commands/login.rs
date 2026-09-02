@@ -59,6 +59,9 @@ pub struct DeleteArgs {
 }
 
 enum OrgPlan {
+    /// A resolved alias of a configured profile. The plan builders validate
+    /// the user's query (alias or organization ID) before constructing this,
+    /// so it is never a raw query.
     Existing(String),
     New {
         id: String,
@@ -103,7 +106,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome
     );
 
     let plan = if ctx.is_non_interactive() {
-        build_login_plan_non_interactive(args)?
+        build_login_plan_non_interactive(args, &config)?
     } else {
         build_login_plan_interactive(ctx, args, &config)?
     };
@@ -135,7 +138,7 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) 
         }
     }
 
-    let alias = resolve_profile_alias(&config, args.org)?;
+    let alias = resolve_profile_alias(&config, args.org, is_non_interactive)?;
     let org_id = config
         .orgs
         .get(&alias)
@@ -296,17 +299,36 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) 
 }
 
 /// Resolve the alias of a configured profile to delete. Prompts interactively
-/// with a picker when no query is given; a query that matches nothing is handled
-/// by `find_org` returning `None`.
-fn resolve_profile_alias(config: &Config, org: Option<String>) -> Result<String> {
+/// with a picker when no query is given, or when an org-ID query matches
+/// several profiles; non-interactive runs must name a single profile.
+fn resolve_profile_alias(
+    config: &Config,
+    org: Option<String>,
+    is_non_interactive: bool,
+) -> Result<String> {
     match org {
-        Some(query) => match find_org(config, &query) {
-            Some((alias, _)) => Ok(alias.clone()),
-            None => bail!(
-                "Login profile '{query}' not found. \
-                 Run `tvc login` to see configured profiles."
-            ),
-        },
+        Some(query) => {
+            let aliases = find_org_aliases(config, &query);
+
+            match aliases.as_slice() {
+                [] => bail!(
+                    "Login profile '{query}' not found. \
+                     Run `tvc login` to see configured profiles."
+                ),
+                [alias] => Ok(alias.clone()),
+                _ if is_non_interactive => bail!(
+                    "Organization '{query}' is configured under multiple profiles: {}. \
+                     Re-run with --org <alias> to select which profile to delete.",
+                    aliases.join(", ")
+                ),
+                _ => Ok(prompts::select(
+                    "Select profile to delete",
+                    duplicate_alias_choices(config, &aliases),
+                )?
+                .alias
+                .to_string()),
+            }
+        }
         None => {
             // Reached only in interactive mode; a non-interactive run without
             // --org is rejected up front in `run_delete` before we get here.
@@ -342,6 +364,27 @@ impl Display for ProfileChoice<'_> {
     }
 }
 
+/// Selection choices for aliases that share one organization ID, marking the
+/// active profile the way the no-query delete picker does.
+fn duplicate_alias_choices<'a>(
+    config: &'a Config,
+    aliases: &'a [String],
+) -> Vec<ProfileChoice<'a>> {
+    aliases
+        .iter()
+        .map(|alias| ProfileChoice {
+            alias: alias.as_str(),
+            org_id: config
+                .orgs
+                .get(alias)
+                .expect("alias was resolved from this config")
+                .id
+                .as_str(),
+            is_active: config.active_org.as_deref() == Some(alias.as_str()),
+        })
+        .collect()
+}
+
 fn build_login_plan_interactive(
     ctx: &mut StdCtx,
     args: Args,
@@ -353,14 +396,34 @@ fn build_login_plan_interactive(
         serial,
     } = args;
     let org = match org {
-        Some(query) => OrgPlan::Existing(query),
+        Some(query) => {
+            let aliases = find_org_aliases(config, &query);
+
+            let alias = match aliases.as_slice() {
+                [] => bail!(
+                    "Organization '{query}' not found. \
+                     Run `tvc login` without --org to set up a new organization."
+                ),
+                [alias] => alias.clone(),
+                _ => prompts::select(
+                    &format!("Select profile for organization '{query}'"),
+                    duplicate_alias_choices(config, &aliases),
+                )?
+                .alias
+                .to_string(),
+            };
+
+            OrgPlan::Existing(alias)
+        }
         None => prompt_for_org_plan(ctx, config, api_base_url.as_deref(), serial)?,
     };
 
     let yubikey_serial = match &org {
-        OrgPlan::Existing(query) => find_org(config, query)
-            .filter(|(_, org)| org.default_operator_kind == OperatorKind::Yubikey)
-            .map(|(_, org)| -> Result<YubiKeySerial> {
+        OrgPlan::Existing(alias) => config
+            .orgs
+            .get(alias)
+            .filter(|org| org.default_operator_kind == OperatorKind::Yubikey)
+            .map(|org| -> Result<YubiKeySerial> {
                 if let Some(serial) = serial {
                     return Ok(org.select_yubikey_operator(Some(serial))?.1.serial);
                 }
@@ -400,13 +463,28 @@ fn build_login_plan_interactive(
     })
 }
 
-fn build_login_plan_non_interactive(args: Args) -> Result<LoginPlan> {
+fn build_login_plan_non_interactive(args: Args, config: &Config) -> Result<LoginPlan> {
     let Some(org_query) = args.org else {
         return Err(error_required_in_non_interactive("--org"));
     };
 
+    let aliases = find_org_aliases(config, &org_query);
+
+    let alias = match aliases.as_slice() {
+        [] => bail!(
+            "Organization '{org_query}' not found. \
+             Run `tvc login` without --org to set up a new organization."
+        ),
+        [alias] => alias.clone(),
+        _ => bail!(
+            "Organization '{org_query}' is configured under multiple profiles: {}. \
+             Re-run with --org <alias> to select one.",
+            aliases.join(", ")
+        ),
+    };
+
     Ok(LoginPlan {
-        org: OrgPlan::Existing(org_query),
+        org: OrgPlan::Existing(alias),
         api_base_url_override: args.api_base_url,
         api_key_policy: ApiKeyPolicy::RequireExisting,
         yubikey_serial: args.serial,
@@ -415,20 +493,18 @@ fn build_login_plan_non_interactive(args: Args) -> Result<LoginPlan> {
 
 async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) -> Result<Outcome> {
     let (alias, org_config, yubikey) = match plan.org {
-        OrgPlan::Existing(query) => {
-            let alias = match find_org(&config, &query) {
-                Some((alias, _)) => alias.clone(),
-                None => bail!(
-                    "Organization '{query}' not found. \
-                     Run `tvc login` without --org to set up a new organization."
-                ),
-            };
+        OrgPlan::Existing(alias) => {
             update_api_base_url_from_override(
                 &mut config,
                 &alias,
                 plan.api_base_url_override.as_deref(),
             );
-            let org_config = config.orgs.get(&alias).unwrap().clone();
+
+            let org_config = config
+                .orgs
+                .get(&alias)
+                .cloned()
+                .expect("plan alias was resolved against this config");
             (alias, org_config, None)
         }
         OrgPlan::New {
@@ -742,6 +818,25 @@ pub(crate) fn find_org<'a>(config: &'a Config, org: &str) -> Option<(&'a String,
     }
 
     None
+}
+
+/// Every configured alias matching an org query, for callers to dispose of
+/// per their mode. An exact alias match is unambiguous and wins outright;
+/// otherwise all aliases registered for the query as an organization ID are
+/// returned, sorted for stable output.
+fn find_org_aliases(config: &Config, query: &str) -> Vec<String> {
+    if config.orgs.contains_key(query) {
+        return vec![query.to_string()];
+    }
+
+    let mut aliases = config
+        .orgs
+        .iter()
+        .filter(|(_, org)| org.id == query)
+        .map(|(alias, _)| alias.clone())
+        .collect::<Vec<_>>();
+    aliases.sort();
+    aliases
 }
 
 fn generate_org(
@@ -1307,6 +1402,55 @@ mod tests {
         update_api_base_url_from_override(&mut config, "default", Some(OVERRIDE_URL));
 
         assert_eq!(config.orgs["default"].api_base_url, OVERRIDE_URL);
+    }
+
+    #[test]
+    fn find_org_aliases_prefers_exact_alias_match() {
+        // The alias "org-x" collides with another profile's organization ID;
+        // the exact alias match must win outright.
+        let config = config_with_orgs(&[("org-x", "org-y"), ("a", "org-x")]);
+
+        assert_eq!(find_org_aliases(&config, "org-x"), ["org-x"]);
+    }
+
+    #[test]
+    fn find_org_aliases_returns_all_id_matches_sorted() {
+        let config = config_with_orgs(&[("c", "org-1"), ("a", "org-1"), ("b", "org-1")]);
+
+        assert_eq!(find_org_aliases(&config, "org-1"), ["a", "b", "c"]);
+    }
+
+    #[test]
+    fn find_org_aliases_returns_empty_for_unknown_query() {
+        let config = config_with_orgs(&[("a", "org-1")]);
+
+        assert!(find_org_aliases(&config, "org-unknown").is_empty());
+    }
+
+    fn config_with_orgs(entries: &[(&str, &str)]) -> Config {
+        Config {
+            active_org: None,
+            orgs: entries
+                .iter()
+                .map(|(alias, org_id)| {
+                    (
+                        alias.to_string(),
+                        OrgConfig {
+                            id: org_id.to_string(),
+                            api_key_path: PathBuf::from("api_key.json"),
+                            api_base_url: API_BASE_URL_PROD.to_string(),
+                            default_operator_kind: OperatorKind::Local,
+                            operators: vec![OperatorRecord::local(PathBuf::from("operator.json"))],
+                            extra: toml::Table::new(),
+                        },
+                    )
+                })
+                .collect(),
+            yubikeys: Default::default(),
+            last_created_app_id: HashMap::new(),
+            last_operator_ids: HashMap::new(),
+            extra: toml::Table::new(),
+        }
     }
 
     fn config_with_org(api_base_url: &str) -> Config {
