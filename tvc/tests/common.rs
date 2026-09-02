@@ -24,8 +24,11 @@ fn org_dir(home: &Path, alias: &str) -> PathBuf {
 }
 
 /// Write a v1 `tvc.config.toml` under `home` with one profile per
-/// `(alias, org_id)` pair, using the default alias-keyed key-file layout and
-/// a dead-port API base URL.
+/// `(alias, org_id)` pair, using the legacy alias-keyed key-file layout and a
+/// dead-port API base URL. The legacy layout is deliberate: these fixtures
+/// seed pre-existing user state (which interactive login migrates to the
+/// id-keyed layout); the current layout is exercised through the real CLI's
+/// new-profile flow. Profiles are written in slice order.
 pub fn write_profiles_config(home: &Path, profiles: &[(&str, &str)], active_org: Option<&str>) {
     let turnkey_dir = home.join(".config/turnkey");
     fs::create_dir_all(&turnkey_dir).unwrap();
