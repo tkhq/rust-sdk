@@ -214,7 +214,7 @@ impl SelectedYubiKey {
 /// parse at their own boundary.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct OperatorCandidate {
-    pub id: String,
+    pub id: Uuid,
     pub name: Option<String>,
     /// The key this identity is proven to use. IDs remembered from an app
     /// response predate key-aware persistence, so they deliberately carry
@@ -226,7 +226,7 @@ impl Display for OperatorCandidate {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self.name {
             Some(name) => write!(f, "{name} ({})", self.id),
-            None => f.write_str(&self.id),
+            None => write!(f, "{}", self.id),
         }
     }
 }
@@ -453,7 +453,7 @@ impl Config {
         let mut candidates: Vec<OperatorCandidate> = org
             .hosted_operators()
             .map(|(name, hosted)| OperatorCandidate {
-                id: hosted.operator_id.to_string(),
+                id: hosted.operator_id,
                 name: name.to_owned().into(),
                 public_key: format!("{}{}", hosted.encrypt_public_key, hosted.sign_public_key)
                     .parse()
@@ -461,15 +461,19 @@ impl Config {
             })
             .collect();
 
-        for id in self.get_last_operator_ids().unwrap_or_default() {
-            if candidates.iter().all(|candidate| candidate.id != id) {
-                candidates.push(OperatorCandidate {
-                    id,
-                    name: None,
-                    public_key: None,
-                });
-            }
-        }
+        self.get_last_operator_ids()
+            .unwrap_or_default()
+            .iter()
+            .copied()
+            .for_each(|id| {
+                if candidates.iter().all(|candidate| candidate.id != id) {
+                    candidates.push(OperatorCandidate {
+                        id,
+                        name: None,
+                        public_key: None,
+                    });
+                }
+            });
 
         candidates
     }
@@ -889,13 +893,15 @@ mod tests {
     fn candidates_are_registered_hosted_operators_then_saved_ids() {
         let mut config = config_with_operators(vec![local_operator(), hosted_operator("hosted")]);
         config
-            .set_last_operator_ids(&["44444444-4444-4444-8444-444444444444".to_string()])
+            .set_last_operator_ids(vec![
+                "44444444-4444-4444-8444-444444444444".parse().unwrap(),
+            ])
             .unwrap();
 
         let candidates = config.known_operator_candidates();
 
         assert_eq!(candidates.len(), 2);
-        assert_eq!(candidates[0].id, HOSTED_ID);
+        assert_eq!(candidates[0].id.to_string(), HOSTED_ID);
         assert_eq!(candidates[0].name.as_deref(), Some("hosted"));
         assert!(candidates[0].public_key.is_some());
         assert_eq!(
@@ -912,13 +918,13 @@ mod tests {
     fn candidates_dedupe_saved_ids_against_the_registry() {
         let mut config = config_with_operators(vec![hosted_operator("hosted")]);
         config
-            .set_last_operator_ids(&[HOSTED_ID.to_string()])
+            .set_last_operator_ids(vec![HOSTED_ID.parse().unwrap()])
             .unwrap();
 
         let candidates = config.known_operator_candidates();
 
         assert_eq!(candidates.len(), 1);
-        assert_eq!(candidates[0].id, HOSTED_ID);
+        assert_eq!(candidates[0].id.to_string(), HOSTED_ID);
         assert_eq!(candidates[0].name.as_deref(), Some("hosted"));
         assert!(candidates[0].public_key.is_some());
     }
@@ -931,12 +937,12 @@ mod tests {
     #[test]
     fn candidate_display_labels_named_operators() {
         let named = OperatorCandidate {
-            id: HOSTED_ID.to_string(),
+            id: HOSTED_ID.parse().unwrap(),
             name: Some("hosted".to_string()),
             public_key: None,
         };
         let unnamed = OperatorCandidate {
-            id: HOSTED_ID.to_string(),
+            id: HOSTED_ID.parse().unwrap(),
             name: None,
             public_key: None,
         };

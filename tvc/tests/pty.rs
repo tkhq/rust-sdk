@@ -703,7 +703,10 @@ fn write_hosted_org_config(home: &Path, saved_operator_ids: &[&str]) -> String {
     config.set_active_org(org_id).unwrap();
     config.last_operator_ids.insert(
         org_id,
-        saved_operator_ids.iter().map(|id| id.to_string()).collect(),
+        saved_operator_ids
+            .iter()
+            .map(|id| id.parse().expect("saved operator ids must be UUIDs"))
+            .collect(),
     );
     std::fs::write(
         turnkey_dir.join("tvc.config.toml"),

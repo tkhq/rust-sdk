@@ -62,7 +62,7 @@ fn write_two_candidate_config(home: &Path) -> String {
     config.set_active_org(org_id).unwrap();
     config.last_operator_ids.insert(
         org_id,
-        vec!["66666666-6666-4666-8666-666666666666".to_string()],
+        vec!["66666666-6666-4666-8666-666666666666".parse().unwrap()],
     );
     std::fs::write(
         turnkey_dir.join("tvc.config.toml"),

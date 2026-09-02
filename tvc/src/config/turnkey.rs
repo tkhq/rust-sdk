@@ -71,10 +71,10 @@ pub struct Config {
     pub yubikeys: YubiKeyRegistry,
     /// Last created app ID per organization (for convenience).
     #[serde(default)]
-    pub last_created_app_id: HashMap<Uuid, String>,
+    pub last_created_app_id: HashMap<Uuid, Uuid>,
     /// Last manifest set operator IDs per organization (for convenience).
     #[serde(default)]
-    pub last_operator_ids: HashMap<Uuid, Vec<String>>,
+    pub last_operator_ids: HashMap<Uuid, Vec<Uuid>>,
     /// Unrecognized top-level fields retained across supported config rewrites.
     #[serde(default, flatten)]
     pub extra: toml::Table,
@@ -442,9 +442,9 @@ mod disk {
             #[serde(default)]
             pub(super) yubikeys: YubiKeyRegistry,
             #[serde(default)]
-            pub(super) last_created_app_id: HashMap<String, String>,
+            pub(super) last_created_app_id: HashMap<String, Uuid>,
             #[serde(default)]
-            pub(super) last_operator_ids: HashMap<String, Vec<String>>,
+            pub(super) last_operator_ids: HashMap<String, Vec<Uuid>>,
             #[serde(default, flatten)]
             pub(super) extra: toml::Table,
         }
@@ -467,6 +467,7 @@ mod disk {
     pub(super) mod v0 {
         use serde::Deserialize;
         use std::collections::HashMap;
+        use uuid::Uuid;
 
         /// Legacy top-level schema. Organization tables remain untyped until
         /// migration extracts `operator_key_path` and parses the v1 shape.
@@ -477,9 +478,9 @@ mod disk {
             #[serde(default)]
             pub(super) orgs: HashMap<String, toml::Table>,
             #[serde(default)]
-            pub(super) last_created_app_id: HashMap<String, String>,
+            pub(super) last_created_app_id: HashMap<String, Uuid>,
             #[serde(default)]
-            pub(super) last_operator_ids: HashMap<String, Vec<String>>,
+            pub(super) last_operator_ids: HashMap<String, Vec<Uuid>>,
             /// Unknown root values are carried forward so a migration does not
             /// discard data owned by another writer.
             #[serde(default, flatten)]
@@ -1133,27 +1134,29 @@ file may be missing or already migrated), keep the right contents at
     }
 
     /// Store the last created app ID for the active org
-    pub fn set_last_app_id(&mut self, app_id: &str) -> Result<()> {
+    pub fn set_last_app_id(&mut self, app_id: Uuid) -> Result<()> {
         let org_id = self.active_org.context("no active organization set")?;
-        self.last_created_app_id.insert(org_id, app_id.to_string());
+        self.last_created_app_id.insert(org_id, app_id);
         Ok(())
     }
 
     /// Get the last created app ID for the active org, if any
-    pub fn get_last_app_id(&self) -> Option<String> {
-        self.last_created_app_id.get(&self.active_org?).cloned()
+    pub fn get_last_app_id(&self) -> Option<Uuid> {
+        self.last_created_app_id.get(&self.active_org?).copied()
     }
 
     /// Store the last manifest set operator IDs for the active org
-    pub fn set_last_operator_ids(&mut self, operator_ids: &[String]) -> Result<()> {
+    pub fn set_last_operator_ids(&mut self, operator_ids: Vec<Uuid>) -> Result<()> {
         let org_id = self.active_org.context("no active organization set")?;
-        self.last_operator_ids.insert(org_id, operator_ids.to_vec());
+        self.last_operator_ids.insert(org_id, operator_ids);
         Ok(())
     }
 
     /// Get the last manifest set operator IDs for the active org
-    pub fn get_last_operator_ids(&self) -> Option<Vec<String>> {
-        self.last_operator_ids.get(&self.active_org?).cloned()
+    pub fn get_last_operator_ids(&self) -> Option<&[Uuid]> {
+        self.last_operator_ids
+            .get(&self.active_org?)
+            .map(Vec::as_slice)
     }
 }
 
@@ -1256,10 +1259,10 @@ operator_key_path = "/keys/operator.json"
 future_org = 42
 
 [last_created_app_id]
-default = "app-123"
+default = "00000000-0000-0000-0000-000000000321"
 
 [last_operator_ids]
-default = ["operator-123"]
+default = ["00000000-0000-0000-0000-000000000123"]
 "#;
 
     #[tokio::test]
@@ -1284,10 +1287,10 @@ default = ["operator-123"]
             config.extra["future_root"],
             toml::Value::String("keep-root".into())
         );
-        assert_eq!(config.last_created_app_id[&ORG_1], "app-123");
+        assert_eq!(config.last_created_app_id[&ORG_1], Uuid::from_u128(0x321));
         assert_eq!(
             config.last_operator_ids[&ORG_1],
-            vec!["operator-123".to_string()]
+            vec![Uuid::from_u128(0x123)]
         );
 
         // Eagerly rewritten: the file on disk is v2 and the backup is gone.
