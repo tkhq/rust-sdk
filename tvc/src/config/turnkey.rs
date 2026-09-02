@@ -631,6 +631,11 @@ impl Config {
 
     /// Add or update an organization with default key paths, starting with
     /// the given operator backend as its default.
+    ///
+    /// Callers are responsible for ensuring the alias and organization ID are
+    /// not already registered under another profile; the login command
+    /// enforces one profile per organization before constructing new-org
+    /// inputs. An existing entry under the same alias is replaced wholesale.
     pub fn add_org(
         &mut self,
         alias: &str,
