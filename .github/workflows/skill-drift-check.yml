@@ -1,0 +1,176 @@
+# Skill Drift Check — Valet-powered semantic ruling
+#
+# Detects when CLI command source changes without a matching skill update.
+# The cargo test `embedded_manifest_matches_skills_dir` enforces FILE-LIST
+# parity; this workflow checks SEMANTIC parity — whether the skill prose
+# still describes the CLI's actual behavior after a command changes.
+#
+# Required secrets (configure in Settings → Secrets and variables → Actions):
+#   VALET_API_URL      — Base URL of the Valet API (e.g. https://valet.example.com)
+#   VALET_API_KEY      — Bearer token for Valet API authentication
+#   VALET_SESSION_ID   — Session ID for the Valet conversation thread
+#
+# This workflow is intentionally non-blocking: it posts a comment but does
+# not gate merge. Add it to required checks only after the Valet integration
+# is stable and the team is comfortable with the signal.
+
+name: Skill Drift Check
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tvc/src/commands/**'
+      - 'tvc/skills/**'
+
+jobs:
+  skill-drift-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changes
+        id: detect
+        run: |
+          CHANGED=$(git diff --name-only origin/main...HEAD -- tvc/src/commands/ tvc/skills/)
+          if [ -z "$CHANGED" ]; then
+            echo "No relevant changes detected."
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Changed files:"
+            echo "$CHANGED"
+            echo "$CHANGED" > /tmp/changed-files.txt
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Collect context
+        if: steps.detect.outputs.has_changes == 'true'
+        run: |
+          # Collect the diff of command source changes
+          git diff origin/main...HEAD -- tvc/src/commands/ > /tmp/command-diff.patch
+
+          # Collect the diff of skill changes (may be empty if only commands changed)
+          git diff origin/main...HEAD -- tvc/skills/ > /tmp/skill-diff.patch
+
+          # Collect current skill content
+          {
+            echo "=== SKILL.md ==="
+            cat tvc/skills/tvc-deployments/SKILL.md
+            echo ""
+            for f in tvc/skills/tvc-deployments/references/*.md; do
+              echo "=== $(basename "$f") ==="
+              cat "$f"
+              echo ""
+            done
+          } > /tmp/skill-content.txt
+
+      - name: Send to Valet for semantic ruling
+        if: steps.detect.outputs.has_changes == 'true'
+        id: valet
+        env:
+          VALET_API_URL: ${{ secrets.VALET_API_URL }}
+          VALET_API_KEY: ${{ secrets.VALET_API_KEY }}
+          VALET_SESSION_ID: ${{ secrets.VALET_SESSION_ID }}
+        run: |
+          CHANGED_FILES=$(cat /tmp/changed-files.txt)
+          COMMAND_DIFF=$(cat /tmp/command-diff.patch)
+          SKILL_DIFF=$(cat /tmp/skill-diff.patch)
+          SKILL_CONTENT=$(cat /tmp/skill-content.txt)
+
+          # Build the prompt as a JSON-safe string
+          PROMPT=$(jq -n \
+            --arg changed "$CHANGED_FILES" \
+            --arg cmd_diff "$COMMAND_DIFF" \
+            --arg skill_diff "$SKILL_DIFF" \
+            --arg skill_content "$SKILL_CONTENT" \
+            '{
+              "message": ("You are reviewing a pull request to tkhq/rust-sdk. The repo rule from AGENTS.md states:\n\n> When changing the CLI surface or behavior — commands, flags, outcome reasons, error codes, output fields — update skills/tvc-deployments/ in the same change. The skill is user-facing documentation of exactly this crate; letting it drift defeats the version pinning.\n\nYour job: determine whether the skill documentation still accurately describes the CLI after these changes, or whether it has drifted.\n\n## Changed files\n\n```\n" + $changed + "\n```\n\n## Command source diff\n\n```diff\n" + $cmd_diff + "\n```\n\n## Skill file diff (changes to skills in this PR, may be empty)\n\n```diff\n" + $skill_diff + "\n```\n\n## Current skill content (post-PR)\n\n" + $skill_content + "\n\n## Instructions\n\n1. Analyze the command diff for CLI surface changes: new/removed/renamed commands, changed flags or arguments, new or changed outcome `reason` values, new or changed error `code` values, changed output fields or formats, changed defaults or behavior.\n2. For each CLI surface change found, check whether the current skill content (SKILL.md and references/) accurately documents it.\n3. If the skill was also updated in this PR (skill diff is non-empty), evaluate whether that update is sufficient.\n4. Render your ruling as structured output.\n\nRespond with EXACTLY this format:\n\nVERDICT: PASS or FAIL\n\nEXPLANATION:\n<your explanation — what changed in the CLI, whether the skill covers it, and what is missing if FAIL>\n\nRules for your verdict:\n- PASS: The command changes are internal-only (refactors, bug fixes, test changes) with no user-facing CLI surface change, OR every CLI surface change is already reflected in the skill content.\n- FAIL: A user-facing CLI surface change is not reflected in the skill content.")
+            }')
+
+          # TODO: The exact Valet API shape may differ. Adjust the endpoint
+          # path, request body structure, and response parsing once the Valet
+          # instance is provisioned. The curl below assumes:
+          #   POST /api/sessions/{sessionId}/messages
+          #   Request:  { "message": "..." }
+          #   Response: { "response": { "message": "..." } }
+
+          RESPONSE=$(curl -sf \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${VALET_API_KEY}" \
+            -d "$PROMPT" \
+            "${VALET_API_URL}/api/sessions/${VALET_SESSION_ID}/messages")
+
+          # TODO: Adjust the jq path below to match the actual Valet API
+          # response schema. The agent's text reply may be at .response.message,
+          # .data.content, .result.text, etc.
+          RULING=$(echo "$RESPONSE" | jq -r '.response.message // .data.content // .result.text // "Could not extract response"')
+
+          # Parse verdict from the ruling text
+          if echo "$RULING" | grep -q "VERDICT: PASS"; then
+            VERDICT="PASS"
+          elif echo "$RULING" | grep -q "VERDICT: FAIL"; then
+            VERDICT="FAIL"
+          else
+            VERDICT="UNKNOWN"
+          fi
+
+          # Write outputs (use delimiter for multiline)
+          echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
+          {
+            echo "ruling<<RULING_EOF"
+            echo "$RULING"
+            echo "RULING_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Post PR comment
+        if: steps.detect.outputs.has_changes == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const verdict = '${{ steps.valet.outputs.verdict }}';
+            const ruling = `${{ steps.valet.outputs.ruling }}`;
+
+            const emoji = verdict === 'PASS' ? '✅' : verdict === 'FAIL' ? '❌' : '⚠️';
+            const body = [
+              `## 🔍 Skill Drift Check`,
+              ``,
+              `**Verdict: ${emoji} ${verdict}**`,
+              ``,
+              ruling,
+              ``,
+              `---`,
+              `*Checked by Valet — tvc skill drift check*`,
+            ].join('\n');
+
+            // Find and update existing comment, or create new one
+            const marker = '## 🔍 Skill Drift Check';
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body.startsWith(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
