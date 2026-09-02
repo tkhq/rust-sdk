@@ -76,6 +76,7 @@ pub(crate) fn connected_serials() -> Result<Vec<YubiKeySerial>, DeviceError> {
 }
 
 /// The connected YubiKey serials captured by one discovery pass.
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) struct ConnectedYubiKeys(Vec<YubiKeySerial>);
 
 impl From<Vec<YubiKeySerial>> for ConnectedYubiKeys {
@@ -96,14 +97,24 @@ impl ConnectedYubiKeys {
             Some(serial) if self.0.contains(&serial) => Ok(serial),
             Some(requested) => Err(YubiKeySelectionError::NotConnected {
                 requested,
-                connected: self.0,
+                connected: self,
             }),
             None => match self.0.as_slice() {
                 [] => Err(YubiKeySelectionError::NoneConnected),
                 [sole] => Ok(*sole),
-                _ => Err(YubiKeySelectionError::Ambiguous { connected: self.0 }),
+                _ => Err(YubiKeySelectionError::Ambiguous { connected: self }),
             },
         }
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl Display for ConnectedYubiKeys {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0.iter().format(", "))
     }
 }
 
@@ -116,10 +127,10 @@ pub(crate) enum YubiKeySelectionError {
     #[error("YubiKey {requested} is not connected")]
     NotConnected {
         requested: YubiKeySerial,
-        connected: Vec<YubiKeySerial>,
+        connected: ConnectedYubiKeys,
     },
     #[error("multiple YubiKeys are connected")]
-    Ambiguous { connected: Vec<YubiKeySerial> },
+    Ambiguous { connected: ConnectedYubiKeys },
 }
 
 /// Open the device with the given serial over PC/SC.
@@ -831,7 +842,7 @@ mod tests {
             error,
             YubiKeySelectionError::NotConnected {
                 requested: YubiKeySerial::from(0xdead_beef),
-                connected: vec![YubiKeySerial::from(0x01c9_5c1f)],
+                connected: connected(&[0x01c9_5c1f]),
             }
         );
     }
@@ -846,7 +857,7 @@ mod tests {
             error,
             YubiKeySelectionError::NotConnected {
                 requested: YubiKeySerial::from(0xdead_beef),
-                connected: vec![],
+                connected: connected(&[]),
             }
         );
     }
@@ -874,10 +885,7 @@ mod tests {
         assert_eq!(
             error,
             YubiKeySelectionError::Ambiguous {
-                connected: vec![
-                    YubiKeySerial::from(0x01c9_5c1f),
-                    YubiKeySerial::from(0xdead_beef),
-                ],
+                connected: connected(&[0x01c9_5c1f, 0xdead_beef]),
             }
         );
     }

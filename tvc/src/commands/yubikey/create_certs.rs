@@ -44,12 +44,6 @@ impl Args {
                 requested,
                 connected,
             }) => {
-                let connected = connected
-                    .into_iter()
-                    .map(|serial| serial.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ");
-
                 if connected.is_empty() {
                     bail!("YubiKey {requested} is not connected");
                 }
@@ -57,14 +51,8 @@ impl Args {
                 bail!("YubiKey {requested} is not connected; connected: {connected}")
             }
             Err(YubiKeySelectionError::Ambiguous { connected }) => {
-                let serials = connected
-                    .into_iter()
-                    .map(|serial| serial.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ");
-
                 bail!(
-                    "multiple YubiKeys are connected (serials {serials}); unplug all but the one \
+                    "multiple YubiKeys are connected (serials {connected}); unplug all but the one \
                      to use and try again, or pass --serial"
                 )
             }
