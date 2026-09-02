@@ -2,7 +2,7 @@
 //! user-chosen destination.
 
 use crate::{
-    commands::{Run, login::find_org},
+    commands::{Run, login::resolve_org_query},
     config::turnkey::{
         Config, QosOperatorPublicKey, SelectLocalOperatorError, StoredQosOperatorKey,
     },
@@ -49,14 +49,18 @@ impl Run for Args {
         }
 
         let (alias, org_config) = match &self.org {
-            Some(query) => find_org(&config, query).ok_or_else(|| {
-                anyhow!(
-                    "Login profile '{query}' not found. \
-                     Run `tvc login` to see configured profiles."
-                )
-            })?,
+            Some(query) => {
+                let alias = resolve_org_query(ctx, &config, query)?;
+                let org_config = config
+                    .orgs
+                    .get(&alias)
+                    .expect("alias was resolved against this config");
+
+                (alias, org_config)
+            }
             None => config
                 .active_org_config()
+                .map(|(alias, org_config)| (alias.clone(), org_config))
                 .ok_or_else(|| anyhow!("No active organization. Run `tvc login` first."))?,
         };
 
@@ -108,7 +112,7 @@ impl Run for Args {
             }
             // No --output: the shared interactive flow. Declining the
             // overwrite cancels the command - backing up is all it does.
-            None => prompt_for_backup_destination(alias)?
+            None => prompt_for_backup_destination(&alias)?
                 .ok_or_else(|| anyhow!("operation cancelled by user: backup"))?,
         };
 
