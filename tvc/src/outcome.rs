@@ -17,7 +17,7 @@
 use crate::commands::deploy::approve::{
     ApprovalAlreadyPosted, ApprovalDryRun, ApprovalGenerated, ApprovalPosted,
 };
-use crate::commands::{app, deploy, keys, login, operator, version, yubikey};
+use crate::commands::{app, deploy, keys, login, operator, skills, version, yubikey};
 use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
 
@@ -64,6 +64,7 @@ pub enum Outcome {
     QuorumKeyGenerated(keys::generate_local_quorum_key::QuorumKeyGenerated),
     QuorumKeyConfigCreated(keys::init_local_quorum_key::QuorumKeyConfigCreated),
     ReEncryptedShareGenerated(keys::re_encrypt_local_share::ReEncryptedShareGenerated),
+    SkillsSaved(skills::save::SkillsSaved),
     Version(version::CliVersion),
 }
 
@@ -104,6 +105,7 @@ impl Display for Outcome {
             Outcome::QuorumKeyGenerated(msg) => msg.fmt(f),
             Outcome::QuorumKeyConfigCreated(msg) => msg.fmt(f),
             Outcome::ReEncryptedShareGenerated(msg) => msg.fmt(f),
+            Outcome::SkillsSaved(msg) => msg.fmt(f),
             Outcome::Version(msg) => msg.fmt(f),
         }
     }

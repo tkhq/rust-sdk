@@ -2,6 +2,22 @@
 
 Default guidance for coding-agent runs in this repository.
 
+## Agent skills
+
+- `skills/` holds agent skills in the open Agent Skills format (SKILL.md plus
+  `references/`). They are embedded into the binary and installed into a
+  skills directory by `tvc skills save`, so the skill a user has always
+  documents the CLI at their installed version. If you are *using* the tvc
+  CLI rather than developing it, install the skill with `tvc skills save` and
+  follow it.
+- When changing the CLI surface or behavior — commands, flags, outcome
+  `reason`s, error `code`s, output fields — update `skills/tvc-deployments/`
+  in the same change. The skill is user-facing documentation of exactly this
+  crate; letting it drift defeats the version pinning.
+- A new file under `skills/` must also be registered in `EMBEDDED_SKILL_FILES`
+  (`src/commands/skills/save.rs`); a unit test enforces parity with the
+  on-disk tree. `evals/` directories are deliberately excluded from embedding.
+
 ## Coding style
 
 - Prefer raw string literals (`r#"..."#`) over escaped quotation marks (`\"`) or

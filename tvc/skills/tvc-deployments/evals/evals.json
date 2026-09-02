@@ -1,0 +1,105 @@
+{
+  "skill_name": "tvc-deployments",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I need to ship a TVC app end to end with the tvc CLI, from creating the app through to confirming it is serving traffic. This runs unattended in CI, so nothing can prompt for input.",
+      "expected_output": "Runs the CLI with --message-format json (which also puts it in non-interactive mode), follows operator create -> app create -> deploy create -> deploy approve -> poll deploy get-status, and passes --dangerous-skip-interactive to approve since non-interactive mode requires it. Treats set-live-deploy as conditional on isTargeted, because the first deployment auto-targets on approval.",
+      "files": ["skills/tvc-deployments/references/deploy-lifecycle.md"],
+      "assertions": [
+        { "type": "contains", "value": "--message-format json" },
+        { "type": "regex", "value": "deploy[\"'\\s,]+approve", "comment": "tolerates both shell form (deploy approve) and argv arrays (\"deploy\", \"approve\")" },
+        { "type": "contains", "value": "--dangerous-skip-interactive" },
+        { "type": "contains", "value": "set-live-deploy" },
+        { "type": "regex", "value": "isTargeted", "comment": "set-live-deploy must be conditional: the first deployment auto-targets on approval, and calling it on an already-targeted deployment fails with HTTP 400" },
+        { "type": "regex", "value": "deploy get-status|get-status" },
+        {
+          "type": "not_regex",
+          "pattern": "^\\s*\\$?\\s*tvc\\s+deploy\\s+list\\b",
+          "flags": "m",
+          "comment": "Must not INVOKE `tvc deploy list` (it does not exist). Matches only command position, so correctly saying 'there is no deploy list' still passes."
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "How do I check whether my TVC deployment is live and serving traffic from the CLI?",
+      "expected_output": "Polls tvc deploy get-status and checks isTargeted true and replicas.ready == replicas.desired; notes there is no --wait flag",
+      "files": ["skills/tvc-deployments/SKILL.md"],
+      "gradeFullResponse": true,
+      "assertions": [
+        { "type": "contains", "value": "get-status" },
+        { "type": "contains", "value": "isTargeted" },
+        { "type": "regex", "value": "replicas" },
+        {
+          "type": "not_regex",
+          "pattern": "^\\s*\\$?\\s*tvc\\s[^\\n]*--wait\\b",
+          "flags": "m",
+          "comment": "Must not USE a --wait flag on a tvc command (there is none). Correctly stating 'there is no --wait flag' still passes."
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "List all my TVC deployments with the tvc CLI so I can pick one to approve.",
+      "expected_output": "Points at `tvc app status --app-id <APP_ID>`, whose `deployments[]` array enumerates the app's deployments, and uses `targetedDeploymentId` to identify the already-live one (which needs no approval). There is no `tvc deploy list` subcommand. Notes that deployment IDs should still be saved at create time, since the status array reflects runtime state and a freshly created, unapproved deployment may not appear in it.",
+      "files": ["skills/tvc-deployments/SKILL.md"],
+      "gradeFullResponse": true,
+      "assertions": [
+        { "type": "regex", "value": "app[\"'\\s,]+status", "comment": "tolerates both shell form and argv arrays" },
+        { "type": "regex", "value": "deployments" },
+        { "type": "regex", "value": "targetedDeploymentId", "comment": "must distinguish the already-live deployment, since a live one is by definition already approved" },
+        {
+          "type": "not_regex",
+          "pattern": "^\\s*\\$?\\s*tvc\\s+deploy\\s+list\\b",
+          "flags": "m",
+          "comment": "Secondary guard: must not INVOKE the nonexistent command. Naming it to deny it exists is fine, which is why this matches command position rather than a substring."
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Set up tvc CLI auth for a CI job that has no interactive login.",
+      "expected_output": "Uses the TVC_ORG_ID, TVC_API_KEY_PUBLIC, TVC_API_KEY_PRIVATE env vars (all three), not TURNKEY_API_* and not a login prompt",
+      "files": ["skills/tvc-deployments/SKILL.md"],
+      "assertions": [
+        { "type": "contains", "value": "TVC_ORG_ID" },
+        { "type": "contains", "value": "TVC_API_KEY_PUBLIC" },
+        { "type": "contains", "value": "TVC_API_KEY_PRIVATE" },
+        { "type": "not_contains", "value": "TURNKEY_API_PUBLIC_KEY" }
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "My tvc command failed with {\"reason\":\"command_error\",\"code\":\"unauthorized\",\"httpStatus\":401,\"message\":\"...\"}. What should I do?",
+      "expected_output": "Identifies it as an auth/permission failure, points at verifying TVC_ORG_ID/TVC_API_KEY_* or the login profile and key permissions; branches on code not message",
+      "files": ["skills/tvc-deployments/references/error-reference.md"],
+      "gradeFullResponse": true,
+      "assertions": [
+        { "type": "regex", "value": "unauthorized|401|credential|permission" },
+        { "type": "regex", "value": "TVC_ORG_ID|TVC_API_KEY|login" }
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Create a new version of an existing TVC deployment and cut traffic over to it.",
+      "expected_output": "Uses deploy init --from-deployment to seed config, deploy create, deploy approve with --dangerous-skip-interactive, then app set-live-deploy to switch traffic",
+      "files": ["skills/tvc-deployments/references/deploy-lifecycle.md"],
+      "assertions": [
+        { "type": "regex", "value": "--from-deployment|deploy init" },
+        { "type": "regex", "value": "deploy[\"'\\s,]+create", "comment": "tolerates both shell form and argv arrays" },
+        { "type": "contains", "value": "set-live-deploy" }
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Tail the logs of my TVC deployment from an agent loop.",
+      "expected_output": "Uses tvc deploy debug-logs (requires debug-mode deploy), bounds the stream with --tail-lines or a timeout, notes --poll never self-terminates",
+      "files": ["skills/tvc-deployments/SKILL.md"],
+      "assertions": [
+        { "type": "contains", "value": "debug-logs" },
+        { "type": "regex", "value": "--tail-lines|--poll|timeout|bound" }
+      ]
+    }
+  ]
+}

@@ -15,6 +15,7 @@ pub mod display;
 pub mod keys;
 pub mod login;
 pub mod operator;
+pub mod skills;
 pub mod version;
 pub mod yubikey;
 

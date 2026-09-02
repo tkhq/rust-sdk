@@ -314,6 +314,9 @@ impl Commands {
                     unreachable!("create-certs returned before loading the TVC configuration")
                 }
             },
+            Commands::Skills { command } => match command {
+                SkillsCommands::Save(args) => commands::skills::save::run(args),
+            },
             Commands::Version => commands::version::run(),
         }
     }
@@ -353,6 +356,11 @@ enum Commands {
         #[command(subcommand)]
         command: YubikeyCommands,
     },
+    /// Manage the agent skills bundled with the CLI.
+    Skills {
+        #[command(subcommand)]
+        command: SkillsCommands,
+    },
     /// Print the tvc CLI version.
     Version,
 }
@@ -371,6 +379,7 @@ impl Commands {
             Commands::App { command } => command.name(),
             Commands::Keys { command } => command.name(),
             Commands::Yubikey { command } => command.name(),
+            Commands::Skills { command } => command.name(),
             Commands::Version => "version",
         }
     }
@@ -469,6 +478,21 @@ enum KeysCommands {
     InitLocalQuorumKey(commands::keys::init_local_quorum_key::Args),
     /// Re-encrypt a local share for enclave provisioning.
     ReEncryptLocalShare(commands::keys::re_encrypt_local_share::Args),
+}
+
+#[derive(Debug, Subcommand)]
+enum SkillsCommands {
+    /// Save the bundled agent skills to a skills directory.
+    #[command(long_about = commands::skills::save::LONG_ABOUT)]
+    Save(commands::skills::save::Args),
+}
+
+impl SkillsCommands {
+    fn name(&self) -> &'static str {
+        match self {
+            SkillsCommands::Save(_) => "skills save",
+        }
+    }
 }
 
 #[derive(Debug, Subcommand)]
