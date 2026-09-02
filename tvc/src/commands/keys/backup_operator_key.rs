@@ -49,14 +49,13 @@ impl Run for Args {
             return Err(error_required_in_non_interactive("--output"));
         }
 
-        let (alias, org_config) = self
+        let (resolved, org_config) = self
             .org
             .as_ref()
-            .map(|query| resolve_org_query(ctx, &config, query))
+            .map(|query| resolve_org_query(&config, query))
             .unwrap_or_else(|| {
                 config
-                    .active_org_config()
-                    .map(|(alias, org_config)| (alias.as_str(), org_config))
+                    .resolve_active()
                     .ok_or_else(|| anyhow!("No active organization. Run `tvc login` first."))
             })?;
 
@@ -68,13 +67,13 @@ impl Run for Args {
                 // missing-operator error.
                 SelectLocalOperatorError::NoLocalOperator => {
                     anyhow::Error::new(error).context(format!(
-                        "org '{alias}' has no local operator key file to back up; hosted \
+                        "org '{resolved}' has no local operator key file to back up; hosted \
                          operators' private keys are held by Turnkey, and YubiKey operators' \
                          private keys never leave the device — neither can be exported"
                     ))
                 }
                 SelectLocalOperatorError::MultipleLocalOperators => {
-                    anyhow::Error::new(error).context(format!("org '{alias}'"))
+                    anyhow::Error::new(error).context(format!("org '{resolved}'"))
                 }
             })?;
         let source = &local.key_path;
@@ -108,11 +107,11 @@ impl Run for Args {
             }
             // No --output: the shared interactive flow. Declining the
             // overwrite cancels the command - backing up is all it does.
-            None => prompt_for_backup_destination(alias)?
+            None => prompt_for_backup_destination(&resolved.to_string())?
                 .ok_or_else(|| anyhow!("operation cancelled by user: backup"))?,
         };
 
-        back_up(alias.to_string(), source.clone(), destination).await
+        back_up(resolved.to_string(), source.clone(), destination).await
     }
 }
 

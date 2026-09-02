@@ -1,13 +1,12 @@
 use assert_cmd::cargo::cargo_bin_cmd;
-use indexmap::IndexMap;
 use predicates::prelude::*;
-use std::collections::HashMap;
 use std::fs;
 use tempfile::TempDir;
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use tvc::config::turnkey::{
     Config, KeyCurve, OperatorKind, OperatorRecord, OrgConfig, StoredApiKey,
 };
+use uuid::Uuid;
 
 const ENV_ORG_ID: &str = "TVC_ORG_ID";
 const ENV_API_KEY_PUBLIC: &str = "TVC_API_KEY_PUBLIC";
@@ -101,27 +100,23 @@ fn auth_falls_back_to_disk_config_when_required_env_vars_are_unset() {
     )
     .unwrap();
 
-    let config = Config {
-        active_org: Some("test".to_string()),
-        orgs: IndexMap::from([(
-            "test".to_string(),
-            OrgConfig {
-                id: "10000000-0000-4000-8000-000000000002".parse().unwrap(),
-                api_key_path,
-                api_base_url: LOCAL_API_BASE_URL.to_string(),
-                default_operator_kind: OperatorKind::Local,
-                operators: vec![OperatorRecord::local(operator_key_path)],
-                extra: toml::Table::new(),
-            },
-        )]),
-        yubikeys: Default::default(),
-        last_created_app_id: HashMap::new(),
-        last_operator_ids: HashMap::new(),
-        extra: toml::Table::new(),
-    };
+    let org_id: Uuid = "10000000-0000-4000-8000-000000000002".parse().unwrap();
+    let mut config = Config::default();
+    config.orgs.insert(
+        org_id,
+        OrgConfig {
+            api_key_path,
+            api_base_url: LOCAL_API_BASE_URL.to_string(),
+            default_operator_kind: OperatorKind::Local,
+            operators: vec![OperatorRecord::local(operator_key_path)],
+            extra: toml::Table::new(),
+        },
+    );
+    config.aliases.bind("test".to_string(), org_id);
+    config.set_active_org(org_id).unwrap();
     fs::write(
         turnkey_dir.join("tvc.config.toml"),
-        format!("version = 1\n{}", toml::to_string_pretty(&config).unwrap()),
+        format!("version = 2\n{}", toml::to_string_pretty(&config).unwrap()),
     )
     .unwrap();
 

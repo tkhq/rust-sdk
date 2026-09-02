@@ -102,12 +102,12 @@ pub async fn fetch_tvc_deployment(
 
 #[instrument(skip_all)]
 async fn load_credentials_from_config(config: &Config) -> Result<(Uuid, String, String, String)> {
-    let (alias, org_config) = config
-        .active_org_config()
+    let (resolved, org_config) = config
+        .resolve_active()
         .ok_or_else(|| anyhow!("No active organization. Run `tvc login` first."))?;
 
     debug!(
-        org_alias = %alias,
+        org = %resolved,
         api_base_url = %org_config.api_base_url,
         api_key_path = %org_config.api_key_path.display(),
         "resolved active organization config"
@@ -115,10 +115,10 @@ async fn load_credentials_from_config(config: &Config) -> Result<(Uuid, String, 
 
     let api_key = StoredApiKey::load(org_config)
         .await?
-        .ok_or_else(|| anyhow!("No API key found for org '{alias}'. Run `tvc login` first."))?;
+        .ok_or_else(|| anyhow!("No API key found for org '{resolved}'. Run `tvc login` first."))?;
 
     Ok((
-        org_config.id,
+        resolved.id(),
         org_config.api_base_url.clone(),
         api_key.public_key.clone(),
         api_key.private_key.clone(),

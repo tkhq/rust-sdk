@@ -165,7 +165,7 @@ fn resolve_operator_ids(
     config: &Config,
     operator_ids: &[Uuid],
 ) -> Result<(Vec<OperatorPublicKey>, Option<Uuid>)> {
-    let (_, org) = config
+    let (configured_org_id, _) = config
         .active_org_config()
         .context("No active organization. Run `tvc login` first.")?;
 
@@ -178,7 +178,7 @@ fn resolve_operator_ids(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    Ok((keys, Some(org.id)))
+    Ok((keys, Some(configured_org_id)))
 }
 
 fn validate_operator_ids(operator_ids: &[Uuid]) -> Result<()> {
@@ -307,11 +307,10 @@ mod tests {
 
     fn config_with_operators(operators: Vec<OperatorRecord>) -> Config {
         Config {
-            active_org: Some("active".to_string()),
+            active_org: Some(Uuid::from_u128(0xA1)),
             orgs: IndexMap::from([(
-                "active".to_string(),
+                Uuid::from_u128(0xA1),
                 OrgConfig {
-                    id: Uuid::from_u128(0xA1),
                     api_key_path: PathBuf::from("api-key.json"),
                     api_base_url: "https://api.turnkey.com".to_string(),
                     default_operator_kind: OperatorKind::Local,

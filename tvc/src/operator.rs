@@ -506,11 +506,10 @@ mod tests {
 
     fn config_with_operators(operators: Vec<OperatorRecord>) -> Config {
         Config {
-            active_org: Some("active".to_string()),
+            active_org: Some(Uuid::from_u128(0xA1)),
             orgs: IndexMap::from([(
-                "active".to_string(),
+                Uuid::from_u128(0xA1),
                 OrgConfig {
-                    id: Uuid::from_u128(0xA1),
                     api_key_path: PathBuf::from("api-key.json"),
                     api_base_url: "https://api.turnkey.com".to_string(),
                     default_operator_kind: OperatorKind::Local,
@@ -560,7 +559,11 @@ mod tests {
 
     fn yubikey_default_config(serial: YubiKeySerial) -> Config {
         let mut config = config_with_operators(vec![yubikey_operator(serial)]);
-        config.orgs.get_mut("active").unwrap().default_operator_kind = OperatorKind::Yubikey;
+        config
+            .orgs
+            .get_mut(&Uuid::from_u128(0xA1))
+            .unwrap()
+            .default_operator_kind = OperatorKind::Yubikey;
         config
     }
 
@@ -710,7 +713,7 @@ mod tests {
         let mut config = registered_yubikey_config(&device);
         config
             .orgs
-            .get_mut("active")
+            .get_mut(&Uuid::from_u128(0xA1))
             .unwrap()
             .operators
             .push(hosted_operator("hosted"));
@@ -822,7 +825,11 @@ mod tests {
     #[test]
     fn operator_pair_hosted_default_is_redirected() {
         let mut config = config_with_operators(vec![hosted_operator("hosted")]);
-        config.orgs.get_mut("active").unwrap().default_operator_kind = OperatorKind::Hosted;
+        config
+            .orgs
+            .get_mut(&Uuid::from_u128(0xA1))
+            .unwrap()
+            .default_operator_kind = OperatorKind::Hosted;
 
         let error = config
             .select_operator_pair_source(None, None)
@@ -837,7 +844,11 @@ mod tests {
             yubikey_operator(test_support::serial()),
             yubikey_operator(YubiKeySerial::from(0xdead_beef)),
         ]);
-        config.orgs.get_mut("active").unwrap().default_operator_kind = OperatorKind::Yubikey;
+        config
+            .orgs
+            .get_mut(&Uuid::from_u128(0xA1))
+            .unwrap()
+            .default_operator_kind = OperatorKind::Yubikey;
         config
             .yubikeys
             .register(test_support::serial(), device.operator_public_key());

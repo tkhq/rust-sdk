@@ -1,12 +1,11 @@
 mod common;
 
 use assert_cmd::cargo::cargo_bin_cmd;
-use indexmap::IndexMap;
 use predicates::prelude::*;
-use std::collections::HashMap;
 use std::fs;
 use tempfile::TempDir;
 use tvc::config::turnkey::{Config, OperatorKind, OperatorRecord, OrgConfig};
+use uuid::Uuid;
 
 const NON_INTERACTIVE_ENV: &str = "TVC_NON_INTERACTIVE";
 
@@ -21,27 +20,29 @@ fn write_login_config(
 ) {
     let turnkey_dir = home.path().join(".config/turnkey");
     fs::create_dir_all(&turnkey_dir).unwrap();
-    let config = Config {
-        active_org: Some("test".to_string()),
-        orgs: IndexMap::from([(
-            "test".to_string(),
-            OrgConfig {
-                id: ORG_TEST.parse().unwrap(),
-                api_key_path,
-                api_base_url: "https://api.turnkey.com".to_string(),
-                default_operator_kind: OperatorKind::Local,
-                operators: vec![OperatorRecord::local(operator_key_path)],
-                extra: toml::Table::new(),
-            },
-        )]),
-        yubikeys: Default::default(),
-        last_created_app_id: HashMap::from([("test".to_string(), "app-1".to_string())]),
-        last_operator_ids: HashMap::from([("test".to_string(), vec!["operator-1".to_string()])]),
-        extra: toml::Table::new(),
-    };
+    let org_id: Uuid = ORG_TEST.parse().unwrap();
+    let mut config = Config::default();
+    config.orgs.insert(
+        org_id,
+        OrgConfig {
+            api_key_path,
+            api_base_url: "https://api.turnkey.com".to_string(),
+            default_operator_kind: OperatorKind::Local,
+            operators: vec![OperatorRecord::local(operator_key_path)],
+            extra: toml::Table::new(),
+        },
+    );
+    config.aliases.bind("test".to_string(), org_id);
+    config.set_active_org(org_id).unwrap();
+    config
+        .last_created_app_id
+        .insert(org_id, "app-1".to_string());
+    config
+        .last_operator_ids
+        .insert(org_id, vec!["operator-1".to_string()]);
     fs::write(
         turnkey_dir.join("tvc.config.toml"),
-        format!("version = 1\n{}", toml::to_string_pretty(&config).unwrap()),
+        format!("version = 2\n{}", toml::to_string_pretty(&config).unwrap()),
     )
     .unwrap();
 }
@@ -65,16 +66,87 @@ fn login_errors_when_provided_org_not_found() {
         ));
 }
 
-/// TVC-159: an org-ID query matching several profiles must not resolve to an
-/// arbitrary one; non-interactive login fails fast and names them all.
+fn saved_config(home: &TempDir) -> String {
+    fs::read_to_string(home.path().join(".config/turnkey/tvc.config.toml")).unwrap()
+}
+
+/// A v1 (alias-keyed) config is migrated eagerly on the first load: the file
+/// is rewritten as v2 behind the backup fence, and the command proceeds
+/// against the migrated model.
 #[test]
-fn login_non_interactive_with_duplicate_org_id_lists_profiles() {
+fn any_command_migrates_a_v1_config_eagerly() {
     let temp = TempDir::new().unwrap();
-    common::write_profiles_config(
-        temp.path(),
-        &[("alias-a", ORG_DUP), ("alias-b", ORG_DUP)],
-        Some("alias-a"),
+    let turnkey_dir = temp.path().join(".config/turnkey");
+    fs::create_dir_all(&turnkey_dir).unwrap();
+    fs::write(
+        turnkey_dir.join("tvc.config.toml"),
+        format!(
+            r#"version = 1
+active_org = "alias-a"
+
+[orgs.alias-a]
+id = "{ORG_DUP}"
+api_key_path = "/keys/api.json"
+api_base_url = "{}"
+"#,
+            common::LOCAL_API_BASE_URL
+        ),
+    )
+    .unwrap();
+
+    // The command itself fails (no API key at the fixture path), but the
+    // resolution ran against the migrated config and the file was rewritten.
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env(NON_INTERACTIVE_ENV, "1")
+        .arg("login")
+        .arg("--org")
+        .arg("alias-a")
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains(format!(
+            "Selected org: alias-a ({ORG_DUP})"
+        )));
+
+    let saved = saved_config(&temp);
+    assert!(saved.contains("version = 2"), "{saved}");
+    assert!(saved.contains("[aliases]"), "{saved}");
+    assert!(
+        !temp
+            .path()
+            .join(".config/turnkey/tvc.config.toml.backup")
+            .exists()
     );
+}
+
+/// A leftover migration backup means a previous run crashed mid-migration;
+/// every command refuses to run until it is resolved manually.
+#[test]
+fn a_leftover_migration_backup_blocks_commands() {
+    let temp = TempDir::new().unwrap();
+    let turnkey_dir = temp.path().join(".config/turnkey");
+    fs::create_dir_all(&turnkey_dir).unwrap();
+    common::write_profiles_config(temp.path(), &[("alias-a", ORG_DUP)], Some("alias-a"));
+    fs::write(turnkey_dir.join("tvc.config.toml.backup"), "old contents").unwrap();
+
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env(NON_INTERACTIVE_ENV, "1")
+        .arg("login")
+        .arg("--org")
+        .arg("alias-a")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("interrupted config migration"));
+}
+
+/// Logging in by organization ID echoes the ID; the alias only appears in
+/// output when the user typed one (inputs match outputs).
+#[test]
+fn login_by_id_echoes_the_id_not_the_alias() {
+    let temp = TempDir::new().unwrap();
+    common::write_profiles_config(temp.path(), &[("alias-a", ORG_DUP)], Some("alias-a"));
+    common::write_profile_key_files(temp.path(), "alias-a");
 
     cargo_bin_cmd!("tvc")
         .env("HOME", temp.path())
@@ -83,45 +155,9 @@ fn login_non_interactive_with_duplicate_org_id_lists_profiles() {
         .arg("--org")
         .arg(ORG_DUP)
         .assert()
-        .failure()
-        .stderr(predicate::str::contains(format!(
-            "Organization '{ORG_DUP}' is configured under multiple profiles: alias-a, alias-b"
-        )))
-        .stderr(predicate::str::contains("--org <alias>"));
-}
-
-/// TVC-159: same fence for `profile delete` — an ambiguous org-ID query must
-/// not delete an arbitrary profile.
-#[test]
-fn profile_delete_non_interactive_with_duplicate_org_id_lists_profiles() {
-    let temp = TempDir::new().unwrap();
-    common::write_profiles_config(
-        temp.path(),
-        &[("alias-a", ORG_DUP), ("alias-b", ORG_DUP)],
-        Some("alias-a"),
-    );
-    common::write_profile_key_files(temp.path(), "alias-a");
-    common::write_profile_key_files(temp.path(), "alias-b");
-
-    cargo_bin_cmd!("tvc")
-        .env("HOME", temp.path())
-        .env(NON_INTERACTIVE_ENV, "1")
-        .arg("profile")
-        .arg("delete")
-        .arg("--org")
-        .arg(ORG_DUP)
-        .arg("--yes")
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains(format!(
-            "Organization '{ORG_DUP}' is configured under multiple profiles: alias-a, alias-b"
-        )))
-        .stderr(predicate::str::contains(
-            "to select which profile to delete",
-        ));
-
-    assert!(temp.path().join(".config/turnkey/orgs/alias-a").exists());
-    assert!(temp.path().join(".config/turnkey/orgs/alias-b").exists());
+        .failure() // dead-port whoami
+        .stdout(predicate::str::contains(format!("Selected org: {ORG_DUP}")))
+        .stdout(predicate::str::contains("Selected org: alias-a").not());
 }
 
 /// Custom (non-default-layout) key paths are never deleted: the profile entry
@@ -230,7 +266,7 @@ fn login_delete_removes_legacy_alias_keyed_layout() {
 
     assert!(!org_dir.exists());
     let saved = fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
-    assert!(saved.contains("version = 1"));
+    assert!(saved.contains("version = 2"));
     assert!(!saved.contains(ORG_TEST));
     assert!(!saved.contains("app-1"));
     assert!(!saved.contains("operator-1"));
@@ -266,10 +302,10 @@ fn login_delete_removes_id_keyed_layout() {
     assert!(!saved.contains(ORG_TEST));
 }
 
-/// A hand-edited config can point several profiles into one id-keyed
-/// directory; deleting one profile must not take the survivor's keys with it.
+/// A hand-edited config can point several organizations into one directory;
+/// deleting one must not take the survivor's keys with it.
 #[test]
-fn profile_delete_keeps_directory_shared_with_another_profile() {
+fn profile_delete_keeps_directory_shared_with_another_org() {
     let temp = TempDir::new().unwrap();
     let turnkey_dir = temp.path().join(".config/turnkey");
     let org_dir = turnkey_dir.join("orgs").join(ORG_DUP);
@@ -278,27 +314,23 @@ fn profile_delete_keeps_directory_shared_with_another_profile() {
     fs::write(org_dir.join("operator.json"), "shared operator key").unwrap();
 
     let shared_profile = || OrgConfig {
-        id: ORG_DUP.parse().unwrap(),
         api_key_path: org_dir.join("api_key.json"),
         api_base_url: "https://api.turnkey.com".to_string(),
         default_operator_kind: OperatorKind::Local,
         operators: vec![OperatorRecord::local(org_dir.join("operator.json"))],
         extra: toml::Table::new(),
     };
-    let config = Config {
-        active_org: Some("alias-b".to_string()),
-        orgs: IndexMap::from([
-            ("alias-a".to_string(), shared_profile()),
-            ("alias-b".to_string(), shared_profile()),
-        ]),
-        yubikeys: Default::default(),
-        last_created_app_id: HashMap::new(),
-        last_operator_ids: HashMap::new(),
-        extra: toml::Table::new(),
-    };
+    let org_a: Uuid = ORG_DUP.parse().unwrap();
+    let org_b: Uuid = ORG_TEST.parse().unwrap();
+    let mut config = Config::default();
+    config.orgs.insert(org_a, shared_profile());
+    config.orgs.insert(org_b, shared_profile());
+    config.aliases.bind("alias-a".to_string(), org_a);
+    config.aliases.bind("alias-b".to_string(), org_b);
+    config.set_active_org(org_b).unwrap();
     fs::write(
         turnkey_dir.join("tvc.config.toml"),
-        format!("version = 1\n{}", toml::to_string_pretty(&config).unwrap()),
+        format!("version = 2\n{}", toml::to_string_pretty(&config).unwrap()),
     )
     .unwrap();
 
@@ -313,7 +345,7 @@ fn profile_delete_keeps_directory_shared_with_another_profile() {
         .assert()
         .success()
         .stderr(predicate::str::contains(
-            "is still used by another profile and was NOT deleted",
+            "is still used by another organization and was NOT deleted",
         ));
 
     assert!(org_dir.join("api_key.json").exists());

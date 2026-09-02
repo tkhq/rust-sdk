@@ -247,11 +247,10 @@ mod tests {
         };
 
         Config {
-            active_org: Some("active".to_string()),
+            active_org: Some(Uuid::from_u128(0xA1)),
             orgs: IndexMap::from([(
-                "active".to_string(),
+                Uuid::from_u128(0xA1),
                 OrgConfig {
-                    id: Uuid::from_u128(0xA1),
                     api_key_path: PathBuf::from("api-key.json"),
                     api_base_url: "https://api.turnkey.com".to_string(),
                     default_operator_kind: OperatorKind::Hosted,
