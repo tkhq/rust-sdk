@@ -15,7 +15,6 @@
 //! certificates and never authenticates with a PIV management key.
 
 use crate::config::turnkey::{QosOperatorPublicKey, QosOperatorPublicKeyParseError, YubiKeySerial};
-use itertools::Itertools;
 use p256::{
     PublicKey,
     ecdsa::{DerSignature, VerifyingKey, signature::Verifier},
@@ -116,7 +115,15 @@ impl ConnectedYubiKeys {
 
 impl Display for ConnectedYubiKeys {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0.iter().format(", "))
+        write!(
+            f,
+            "{}",
+            self.0
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
     }
 }
 

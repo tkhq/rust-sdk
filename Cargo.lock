@@ -4289,7 +4289,6 @@ dependencies = [
  "hpke",
  "indexmap 2.9.0",
  "inquire",
- "itertools",
  "p256 0.13.2",
  "predicates",
  "qos_client",
