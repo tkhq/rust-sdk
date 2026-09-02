@@ -2528,6 +2528,10 @@ pub struct CreateTvcDeploymentIntent {
     pub public_ingress_port: u32,
     #[serde(default)]
     pub replicas: ::core::option::Option<u32>,
+    #[serde(default)]
+    pub instance_size_cpus: ::core::option::Option<u32>,
+    #[serde(default)]
+    pub instance_size_ram: ::core::option::Option<u32>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]

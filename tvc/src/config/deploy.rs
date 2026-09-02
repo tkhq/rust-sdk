@@ -48,6 +48,11 @@ pub struct DeployConfig {
     /// choice to the backend default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub replicas: Option<u32>,
+    /// Enclave instance size, one of `TVC_INSTANCE_SIZE_SMALL | TVC_INSTANCE_SIZE_MEDIUM | TVC_INSTANCE_SIZE_LARGE`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instance_size_cpus: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instance_size_ram: Option<u32>,
 }
 
 /// Build a config seeded from an existing deployment, for use as a template.
@@ -92,6 +97,8 @@ impl TryFrom<TvcDeployment> for DeployConfig {
             health_check_type,
             health_check_port,
             public_ingress_port,
+            instance_size_cpus,
+            instance_size_ram,
         } = pivot_container
             .ok_or_else(|| anyhow!("deployment {id} has no pivot container spec"))?;
 
@@ -114,6 +121,8 @@ impl TryFrom<TvcDeployment> for DeployConfig {
             health_check_port,
             public_ingress_port,
             replicas: None,
+            instance_size_cpus: Some(instance_size_cpus),
+            instance_size_ram: Some(instance_size_ram),
         })
     }
 }
@@ -135,6 +144,8 @@ impl DeployConfig {
             health_check_port: 3000,
             public_ingress_port: 3000,
             replicas: None,
+            instance_size_cpus: None,
+            instance_size_ram: None,
         }
     }
 
@@ -363,6 +374,8 @@ mod tests {
                 health_check_type: TvcHealthCheckType::Http,
                 health_check_port: 8080,
                 public_ingress_port: 9090,
+                instance_size_cpus: 2,
+                instance_size_ram: 8,
             }),
             created_at: None,
             updated_at: None,
