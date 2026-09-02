@@ -34,6 +34,7 @@ clap = { workspace = true, features = ["env"] }
 hex = { workspace = true }
 indexmap = { workspace = true }
 inquire = { workspace = true }
+itertools = { workspace = true }
 p256 = { workspace = true }
 rand_core = { workspace = true }
 reqwest = { workspace = true }

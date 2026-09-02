@@ -15,6 +15,7 @@
 //! certificates and never authenticates with a PIV management key.
 
 use crate::config::turnkey::{QosOperatorPublicKey, QosOperatorPublicKeyParseError, YubiKeySerial};
+use itertools::Itertools;
 use p256::{
     PublicKey,
     ecdsa::{DerSignature, VerifyingKey, signature::Verifier},
@@ -62,24 +63,16 @@ pub(crate) fn connected_serials() -> Result<Vec<YubiKeySerial>, DeviceError> {
     let mut context = Context::open().map_err(DeviceError::Discovery)?;
     let readers = context.iter().map_err(DeviceError::Discovery)?;
 
-    let mut serials = Vec::new();
-
-    for reader in readers {
-        match reader.open() {
-            Ok(yubikey) => serials.push(YubiKeySerial::from(yubikey.serial().0)),
-            // The dependency cannot distinguish a non-YubiKey smartcard from
-            // a YubiKey with PIV disabled; both report a missing PIV applet.
-            Err(PivError::AppletNotFound { applet_name: "PIV" }) => {}
-            Err(source) => {
-                return Err(DeviceError::OpenReader {
-                    reader: reader.name().into_owned(),
-                    source,
-                });
-            }
-        }
-    }
-
-    Ok(serials)
+    Itertools::try_collect(readers.filter_map(|reader| match reader.open() {
+        Ok(yubikey) => Some(Ok(YubiKeySerial::from(yubikey.serial().0))),
+        // The dependency cannot distinguish a non-YubiKey smartcard from
+        // a YubiKey with PIV disabled; both report a missing PIV applet.
+        Err(PivError::AppletNotFound { applet_name: "PIV" }) => None,
+        Err(source) => Some(Err(DeviceError::OpenReader {
+            reader: reader.name().into_owned(),
+            source,
+        })),
+    }))
 }
 
 /// The connected YubiKey serials captured by one discovery pass.
