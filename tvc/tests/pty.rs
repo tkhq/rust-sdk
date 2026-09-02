@@ -290,7 +290,9 @@ fn login_consolidates_duplicate_profiles_interactively() {
         .exp_string("IMPORTANT: The API key may still be registered")
         .unwrap();
 
-    // Login proceeds against the consolidated config.
+    // The keeper's legacy directory is migrated to the id-keyed layout, then
+    // login proceeds against the consolidated config.
+    session.exp_string("Moved key directory").unwrap();
     session.exp_string("Select organization").unwrap();
     session.send_line("alias-a").unwrap();
     exp_wrapped(&mut session, &format!("Selected org: alias-a ({ORG_DUP})"));
@@ -299,7 +301,14 @@ fn login_consolidates_duplicate_profiles_interactively() {
     session.exp_eof().unwrap();
 
     assert!(!temp.path().join(".config/turnkey/orgs/alias-b").exists());
-    assert!(temp.path().join(".config/turnkey/orgs/alias-a").exists());
+    assert!(!temp.path().join(".config/turnkey/orgs/alias-a").exists());
+    assert!(
+        temp.path()
+            .join(".config/turnkey/orgs")
+            .join(ORG_DUP)
+            .join("api_key.json")
+            .exists()
+    );
 
     let saved =
         std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
@@ -485,6 +494,69 @@ fn keys_backup_operator_key_prompts_for_destination() {
     assert!(destination.exists());
 }
 
+/// TVC-55: interactive login migrates a legacy alias-keyed key directory to
+/// the id-keyed layout — directory renamed, config paths rewritten, login
+/// succeeds — and a second login finds nothing left to migrate.
+#[test]
+fn login_migrates_legacy_key_directory() {
+    let temp = tempfile::TempDir::new().unwrap();
+    common::write_profiles_config(temp.path(), &[("alias-a", ORG_E2E)], Some("alias-a"));
+    common::write_profile_key_files(temp.path(), "alias-a");
+    let legacy_dir = temp.path().join(".config/turnkey/orgs/alias-a");
+    let id_dir = temp.path().join(".config/turnkey/orgs").join(ORG_E2E);
+
+    let (api_base_url, server) = spawn_whoami_server();
+
+    let mut session = spawn_with_home(
+        temp.path(),
+        &["login", "--org", "alias-a", "--api-base-url", &api_base_url],
+    );
+
+    exp_wrapped(
+        &mut session,
+        &format!(
+            "Moved key directory: {} -> {}",
+            legacy_dir.display(),
+            id_dir.display()
+        ),
+    );
+    session.exp_string("Using existing API key.").unwrap();
+    session.exp_string("Successfully logged in!").unwrap();
+    session.exp_eof().unwrap();
+    server.join().unwrap();
+
+    assert!(!legacy_dir.exists());
+    assert!(id_dir.join("api_key.json").exists());
+    assert!(id_dir.join("operator.json").exists());
+
+    let saved =
+        std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
+    let table: toml::Table = toml::from_str(&saved).unwrap();
+    let org = table["orgs"]["alias-a"].as_table().unwrap();
+    assert_eq!(
+        org["api_key_path"].as_str().unwrap(),
+        id_dir.join("api_key.json").to_str().unwrap()
+    );
+    assert_eq!(
+        org["operators"].as_array().unwrap()[0]["key_path"]
+            .as_str()
+            .unwrap(),
+        id_dir.join("operator.json").to_str().unwrap()
+    );
+
+    // Idempotent: a second login has nothing to move and succeeds silently.
+    let (api_base_url, server) = spawn_whoami_server();
+    let mut session = spawn_with_home(
+        temp.path(),
+        &["login", "--org", "alias-a", "--api-base-url", &api_base_url],
+    );
+    let output = session.exp_eof().unwrap();
+    server.join().unwrap();
+
+    assert!(output.contains("Successfully logged in!"), "{output}");
+    assert!(!output.contains("Moved key directory"), "{output}");
+}
+
 /// TVC-53: generating a fresh operator key during login offers a backup;
 /// accepting prompts for a destination, writes the copy, and login still
 /// succeeds. The mock whoami server carries login past its network step.
@@ -521,11 +593,15 @@ fn login_fresh_operator_key_offers_backup() {
     session.exp_eof().unwrap();
     server.join().unwrap();
 
+    // The legacy directory was migrated on the way in, so the freshly
+    // generated key lives in the id-keyed layout.
     assert_eq!(
         std::fs::read(&destination).unwrap(),
         std::fs::read(
             temp.path()
-                .join(".config/turnkey/orgs/alias-a/operator.json")
+                .join(".config/turnkey/orgs")
+                .join(ORG_E2E)
+                .join("operator.json")
         )
         .unwrap()
     );

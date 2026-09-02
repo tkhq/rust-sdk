@@ -11,6 +11,7 @@ use tvc::config::turnkey::{Config, OperatorKind, OperatorRecord, OrgConfig};
 const NON_INTERACTIVE_ENV: &str = "TVC_NON_INTERACTIVE";
 
 const ORG_DUP: &str = "11111111-2222-4333-8444-555555555555";
+const ORG_SOLO: &str = "55555555-5555-4555-8555-555555555555";
 const ORG_TEST: &str = "33333333-3333-4333-8333-333333333333";
 
 fn write_login_config(
@@ -155,6 +156,39 @@ fn profile_delete_warns_and_keeps_custom_key_paths() {
 
     let saved = fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
     assert!(!saved.contains(ORG_TEST));
+}
+
+/// Non-interactive login never touches the filesystem layout: legacy
+/// alias-keyed directories and the paths pointing at them stay put.
+#[test]
+fn login_non_interactive_leaves_legacy_layout_alone() {
+    let temp = TempDir::new().unwrap();
+    common::write_profiles_config(temp.path(), &[("alias-a", ORG_SOLO)], Some("alias-a"));
+    common::write_profile_key_files(temp.path(), "alias-a");
+    let legacy_dir = temp.path().join(".config/turnkey/orgs/alias-a");
+
+    // Exits nonzero at the dead-port whoami; the layout must be untouched.
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env(NON_INTERACTIVE_ENV, "1")
+        .arg("login")
+        .arg("--org")
+        .arg("alias-a")
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("Moved key directory").not());
+
+    assert!(legacy_dir.join("api_key.json").exists());
+    assert!(
+        !temp
+            .path()
+            .join(".config/turnkey/orgs")
+            .join(ORG_SOLO)
+            .exists()
+    );
+
+    let saved = fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
+    assert!(saved.contains("orgs/alias-a/api_key.json"));
 }
 
 #[test]

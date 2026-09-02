@@ -716,6 +716,23 @@ impl Config {
         }
     }
 
+    /// Profiles whose key files sit exactly in the legacy alias-keyed default
+    /// layout, in config order — the candidates interactive login migrates to
+    /// the id-keyed layout. A profile whose alias spells its own organization
+    /// ID (the two layouts coincide) is not a candidate.
+    pub(crate) fn legacy_layout_profiles(&self) -> Result<Vec<(String, Uuid)>> {
+        self.orgs
+            .iter()
+            .map(|(alias, org)| {
+                let legacy = legacy_org_dir(alias)?;
+                let migrates =
+                    legacy != default_org_dir(org.id)? && org.has_default_layout_at(&legacy);
+                Ok(migrates.then(|| (alias.clone(), org.id)))
+            })
+            .filter_map(Result::transpose)
+            .collect()
+    }
+
     /// Organization IDs registered under more than one profile, with the
     /// aliases that share them. Groups are sorted by organization ID; the
     /// aliases within a group keep their config order.
