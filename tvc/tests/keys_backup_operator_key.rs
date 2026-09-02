@@ -1,5 +1,7 @@
 mod common;
 
+const ORG_BACKUP: &str = "66666666-6666-4666-8666-666666666666";
+
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
 use std::fs;
@@ -44,7 +46,7 @@ fn hosted_only_org_explains_there_is_no_key_file_to_back_up() {
 #[test]
 fn backs_up_with_org_and_output() {
     let temp = TempDir::new().unwrap();
-    common::write_profiles_config(temp.path(), &[("alias-a", "org-backup")], Some("alias-a"));
+    common::write_profiles_config(temp.path(), &[("alias-a", ORG_BACKUP)], Some("alias-a"));
     let operator_public_key = common::write_profile_key_files(temp.path(), "alias-a");
     let destination = temp.path().join("backups/operator-backup.json");
 
@@ -71,7 +73,7 @@ fn backs_up_with_org_and_output() {
 #[test]
 fn defaults_to_active_org() {
     let temp = TempDir::new().unwrap();
-    common::write_profiles_config(temp.path(), &[("alias-a", "org-backup")], Some("alias-a"));
+    common::write_profiles_config(temp.path(), &[("alias-a", ORG_BACKUP)], Some("alias-a"));
     common::write_profile_key_files(temp.path(), "alias-a");
     let destination = temp.path().join("operator-backup.json");
 
@@ -92,7 +94,7 @@ fn defaults_to_active_org() {
 #[test]
 fn existing_destination_requires_overwrite() {
     let temp = TempDir::new().unwrap();
-    common::write_profiles_config(temp.path(), &[("alias-a", "org-backup")], Some("alias-a"));
+    common::write_profiles_config(temp.path(), &[("alias-a", ORG_BACKUP)], Some("alias-a"));
     common::write_profile_key_files(temp.path(), "alias-a");
     let destination = temp.path().join("operator-backup.json");
     fs::write(&destination, "previous backup").unwrap();
@@ -149,7 +151,7 @@ fn piped_stdin_without_output_errors() {
 #[test]
 fn piped_stdin_existing_destination_requires_overwrite_flag() {
     let temp = TempDir::new().unwrap();
-    common::write_profiles_config(temp.path(), &[("alias-a", "org-backup")], Some("alias-a"));
+    common::write_profiles_config(temp.path(), &[("alias-a", ORG_BACKUP)], Some("alias-a"));
     common::write_profile_key_files(temp.path(), "alias-a");
     let destination = temp.path().join("operator-backup.json");
     fs::write(&destination, "previous backup").unwrap();
@@ -171,7 +173,7 @@ fn piped_stdin_existing_destination_requires_overwrite_flag() {
 #[test]
 fn missing_operator_key_file_errors() {
     let temp = TempDir::new().unwrap();
-    common::write_profiles_config(temp.path(), &[("alias-a", "org-backup")], Some("alias-a"));
+    common::write_profiles_config(temp.path(), &[("alias-a", ORG_BACKUP)], Some("alias-a"));
 
     cargo_bin_cmd!("tvc")
         .env("HOME", temp.path())
@@ -189,7 +191,7 @@ fn missing_operator_key_file_errors() {
 #[test]
 fn json_message_format_emits_reason_tag() {
     let temp = TempDir::new().unwrap();
-    common::write_profiles_config(temp.path(), &[("alias-a", "org-backup")], Some("alias-a"));
+    common::write_profiles_config(temp.path(), &[("alias-a", ORG_BACKUP)], Some("alias-a"));
     common::write_profile_key_files(temp.path(), "alias-a");
 
     cargo_bin_cmd!("tvc")

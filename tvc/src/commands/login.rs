@@ -6,7 +6,7 @@ use crate::commands::keys::backup_operator_key::{
 };
 use crate::config::turnkey::{
     API_BASE_URL_PROD, Config, KeyCurve, LocalOperatorRecord, NewOrgOperator, OperatorKind,
-    OperatorRecord, OperatorRecordKind, OrgConfig, QosOperatorPublicKey,
+    OperatorRecord, OperatorRecordKind, OrgConfig, OrgQuery, QosOperatorPublicKey,
     SelectYubiKeyOperatorError, StoredApiKey, StoredQosOperatorKey, YubiKeyOperatorRecord,
     YubiKeySerial, dashboard_base_url, default_api_key_path, default_operator_key_path,
     default_org_dir,
@@ -22,6 +22,8 @@ use serde::Serialize;
 use std::collections::BTreeSet;
 use std::fmt::{self, Display, Formatter};
 use std::io::BufRead;
+use std::str::FromStr;
+use thiserror::Error;
 use tracing::{debug, instrument};
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use turnkey_client::generated::GetWhoamiRequest;
@@ -33,8 +35,8 @@ use uuid::Uuid;
 pub struct Args {
     /// Organization alias or ID to log in with.
     /// If not provided, will prompt interactively.
-    #[arg(long, env = "TVC_ORG")]
-    pub org: Option<String>,
+    #[arg(long, env = "TVC_ORG", value_parser = OrgQuery::from_str)]
+    pub org: Option<OrgQuery>,
     /// Turnkey API base URL. Defaults to production for newly configured orgs.
     #[arg(long, env = "TVC_API_BASE_URL", value_name = "URL")]
     pub api_base_url: Option<String>,
@@ -51,8 +53,8 @@ pub struct Args {
 pub struct DeleteArgs {
     /// Organization alias or ID of the profile to delete.
     /// If not provided, will prompt interactively.
-    #[arg(short, long, value_name = "ORG")]
-    pub org: Option<String>,
+    #[arg(short, long, value_name = "ORG", value_parser = OrgQuery::from_str)]
+    pub org: Option<OrgQuery>,
     /// Skip the confirmation prompt (required to delete in non-interactive mode).
     #[arg(short, long)]
     pub yes: bool,
@@ -64,7 +66,7 @@ enum OrgPlan {
     /// so it is never a raw query.
     Existing(String),
     New {
-        id: String,
+        id: Uuid,
         alias: String,
         operator: NewOrgOperatorPlan,
     },
@@ -111,7 +113,11 @@ pub async fn run(ctx: &mut StdCtx, args: Args, mut config: Config) -> Result<Out
         // Consolidate before resolving the org query, so the builders never
         // resolve against profiles that are about to be deleted.
         let duplicates = config.duplicated_org_ids();
-        consolidate_duplicate_profiles(ctx, &mut config, duplicates).await?;
+
+        if !duplicates.is_empty() {
+            consolidate_duplicate_profiles(ctx, &mut config, duplicates).await?;
+        }
+
         build_login_plan_interactive(ctx, args, &config)?
     };
 
@@ -126,51 +132,40 @@ pub async fn run(ctx: &mut StdCtx, args: Args, mut config: Config) -> Result<Out
 async fn consolidate_duplicate_profiles(
     ctx: &mut StdCtx,
     config: &mut Config,
-    duplicates: Vec<(String, Vec<String>)>,
+    duplicates: Vec<(Uuid, Vec<String>)>,
 ) -> Result<()> {
-    if duplicates.is_empty() {
-        return Ok(());
-    }
-
     shell_eprintln!(
         ctx,
-        "Multiple profiles are configured for the same organization. tvc keeps \
+        "Multiple profiles are configured for the same organization. `{}` keeps \
          one profile per organization, so the extra profiles must be deleted \
-         before login can continue."
+         before login can continue.",
+        env!("CARGO_PKG_NAME")
     )?;
     shell_eprintln!(ctx, "")?;
 
-    let mut losers: Vec<String> = Vec::new();
-    let mut active_repair: Option<String> = None;
+    let keepers = duplicates
+        .iter()
+        .map(|(org_id, _)| {
+            prompts::select(
+                &format!("Select the profile to keep for organization '{org_id}'"),
+                profile_choices(config, &config.matching_profiles(&OrgQuery::Id(*org_id))),
+            )
+            .map(|choice| choice.alias.to_string())
+        })
+        .collect::<Result<Vec<_>>>()?;
 
-    for (org_id, aliases) in &duplicates {
-        let keeper = prompts::select(
-            &format!("Select the profile to keep for organization '{org_id}'"),
-            duplicate_alias_choices(config, aliases),
-        )?
-        .alias
-        .to_string();
-
-        if let Some(active) = &config.active_org
-            && aliases.contains(active)
-            && *active != keeper
-        {
-            active_repair = Some(keeper.clone());
-        }
-
-        losers.extend(aliases.iter().filter(|alias| **alias != keeper).cloned());
-    }
+    let losers = duplicates
+        .iter()
+        .zip(&keepers)
+        .flat_map(|((_, aliases), keeper)| aliases.iter().filter(move |alias| *alias != keeper))
+        .cloned()
+        .collect::<Vec<_>>();
 
     let listed = losers
         .iter()
         .map(|alias| format!("'{alias}'"))
         .collect::<Vec<_>>()
         .join(", ");
-    let noun = if losers.len() == 1 {
-        "profile"
-    } else {
-        "profiles"
-    };
 
     shell_eprintln!(ctx, "")?;
     shell_eprintln!(
@@ -180,23 +175,32 @@ async fn consolidate_duplicate_profiles(
          each deletion."
     )?;
     prompts::confirm_or_bail(
-        &format!("Permanently delete {noun} {listed} and the key files on disk?"),
+        &format!("Permanently delete {listed} and the key files on disk?"),
         "profile consolidation",
     )?;
 
-    for alias in &losers {
+    // Repair the active profile onto its group's keeper before deleting, so
+    // every save below persists a config whose active_org still exists.
+    let active_keeper = duplicates
+        .iter()
+        .zip(&keepers)
+        .find_map(|((_, aliases), keeper)| {
+            config
+                .active_org
+                .as_ref()
+                .filter(|active| aliases.contains(active) && *active != keeper)
+                .map(|_| keeper.clone())
+        });
+
+    if let Some(keeper) = active_keeper {
+        config.set_active_org(&keeper)?;
+    }
+
+    for alias in losers {
         let deleted = delete_profile(ctx, config, alias).await?;
         shell_println!(ctx, "{deleted}")?;
         shell_println!(ctx)?;
     }
-
-    // `remove_org` cleared `active_org` if the active profile was among the
-    // losers; its group's keeper inherits it.
-    if let Some(keeper) = active_repair {
-        config.set_active_org(&keeper)?;
-    }
-
-    config.save().await?;
 
     Ok(())
 }
@@ -225,21 +229,18 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) 
         }
     }
 
-    let alias = resolve_profile_alias(&config, args.org, is_non_interactive)?;
-    let org_id = config
-        .orgs
-        .get(&alias)
-        .map(|org| org.id.clone())
-        .unwrap_or_default();
+    let (alias, org_id, dashboard_url) = {
+        let (alias, org) = resolve_profile_alias(&config, args.org, is_non_interactive)?;
+        (
+            alias.to_string(),
+            org.id,
+            dashboard_base_url(&org.api_base_url),
+        )
+    };
 
     // Interactive confirmation. A non-interactive run without --yes was rejected
     // up front, so reaching here with !args.yes means we can prompt.
     if !args.yes {
-        let dashboard_url = config
-            .orgs
-            .get(&alias)
-            .map(|org| dashboard_base_url(&org.api_base_url))
-            .unwrap_or_default();
         shell_eprintln!(ctx, "")?;
         shell_eprintln!(
             ctx,
@@ -298,29 +299,25 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) 
         )?;
     }
 
-    let deleted = delete_profile(ctx, &mut config, &alias).await?;
-
-    // Save last: persist the config removal only after the on-disk cleanup
-    // succeeds, so a failure leaves the profile listed and the delete retryable.
-    config.save().await?;
+    let deleted = delete_profile(ctx, &mut config, alias).await?;
 
     Ok(Outcome::ProfileDeleted(deleted))
 }
 
-/// Remove profile `alias` from the config registry and delete its key files
-/// when they use the default per-org directory layout; custom key paths are
-/// left on disk with a warning. Does not save the config: callers batch one
-/// or more removals and persist afterwards, preserving the save-last
-/// invariant that a failed file cleanup leaves the profile listed and the
-/// deletion retryable.
+/// Permanently delete profile `alias`: remove it from the config registry,
+/// delete its key files when they use the default per-org directory layout
+/// (custom key paths are left on disk with a warning), then save the config.
+/// The save comes last so that dying between the file cleanup and the save
+/// leaves the profile listed and the deletion retryable; the file deletion
+/// tolerates an already-missing directory for exactly that retry.
 async fn delete_profile(
     ctx: &mut StdCtx,
     config: &mut Config,
-    alias: &str,
+    alias: String,
 ) -> Result<ProfileDeleted> {
-    let removed = config
-        .remove_org(alias)
-        .expect("alias was resolved from config");
+    let Some(removed) = config.remove_org(&alias) else {
+        bail!("Login profile '{alias}' not found.");
+    };
 
     // Read the API key's public key before deleting its file, so the
     // dashboard-revocation reminder below can name exactly which key to remove.
@@ -335,8 +332,8 @@ async fn delete_profile(
     // default profile is removed by deleting that whole directory. Custom
     // (hand-edited) key paths are left untouched with a warning, since the user
     // placed them deliberately and they may live outside our config tree.
-    let default_api_key = default_api_key_path(alias)?;
-    let default_operator_key = default_operator_key_path(alias)?;
+    let default_api_key = default_api_key_path(&alias)?;
+    let default_operator_key = default_operator_key_path(&alias)?;
     let local_key_paths: Vec<_> = removed
         .operators
         .iter()
@@ -351,7 +348,7 @@ async fn delete_profile(
             .all(|path| *path == &default_operator_key);
 
     let removed_dir = if uses_default_layout {
-        let dir = default_org_dir(alias)?;
+        let dir = default_org_dir(&alias)?;
         match tokio::fs::remove_dir_all(&dir).await {
             Ok(()) => Some(dir),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -383,53 +380,59 @@ async fn delete_profile(
         None
     };
 
+    config.save().await?;
+
     // A local delete does not touch the dashboard-registered API key, and we
     // can't tell whether it is still there, so hedge with "may" and give steps.
-    let dashboard_url = dashboard_base_url(&removed.api_base_url);
     let retained_yubikey_serials = removed
         .yubikey_operators()
         .map(|(_, yubikey)| yubikey.serial)
         .collect::<Vec<_>>();
 
     Ok(ProfileDeleted {
-        alias: alias.to_string(),
+        alias,
         organization_id: removed.id,
         removed_key_directory: removed_dir.map(|dir| dir.display().to_string()),
         retained_yubikey_serials,
-        dashboard_url: dashboard_url.to_string(),
+        dashboard_url: dashboard_base_url(&removed.api_base_url).to_string(),
         api_public_key,
     })
 }
 
-/// Resolve the alias of a configured profile to delete. Prompts interactively
-/// with a picker when no query is given, or when an org-ID query matches
-/// several profiles; non-interactive runs must name a single profile.
+/// Resolve the profile to delete. Prompts interactively with a picker when no
+/// query is given, or when an org-ID query matches several profiles;
+/// non-interactive runs must name a single profile.
 fn resolve_profile_alias(
     config: &Config,
-    org: Option<String>,
+    org: Option<OrgQuery>,
     is_non_interactive: bool,
-) -> Result<String> {
+) -> Result<(&str, &OrgConfig)> {
     match org {
         Some(query) => {
-            let aliases = find_org_aliases(config, &query);
+            let profiles = config.matching_profiles(&query);
 
-            match aliases.as_slice() {
+            match profiles.as_slice() {
                 [] => bail!(
                     "Login profile '{query}' not found. \
                      Run `tvc login` to see configured profiles."
                 ),
-                [alias] => Ok(alias.clone()),
+                [profile] => Ok(*profile),
                 _ if is_non_interactive => bail!(
                     "Organization '{query}' is configured under multiple profiles: {}. \
                      Re-run with --org <alias> to select which profile to delete.",
-                    aliases.join(", ")
+                    profiles
+                        .iter()
+                        .map(|(alias, _)| *alias)
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 ),
-                _ => Ok(prompts::select(
-                    "Select profile to delete",
-                    duplicate_alias_choices(config, &aliases),
-                )?
-                .alias
-                .to_string()),
+                _ => {
+                    let choice = prompts::select(
+                        "Select profile to delete",
+                        profile_choices(config, &profiles),
+                    )?;
+                    Ok((choice.alias, choice.org))
+                }
             }
         }
         None => {
@@ -438,52 +441,48 @@ fn resolve_profile_alias(
             if config.orgs.is_empty() {
                 bail!("No login profiles to delete.");
             }
-            let choices: Vec<_> = config
+
+            let all = config
                 .orgs
                 .iter()
-                .map(|(alias, org)| ProfileChoice {
-                    alias: alias.as_str(),
-                    org_id: org.id.as_str(),
-                    is_active: config.active_org.as_deref() == Some(alias.as_str()),
-                })
-                .collect();
-            Ok(prompts::select("Select profile to delete", choices)?
-                .alias
-                .to_string())
+                .map(|(alias, org)| (alias.as_str(), org))
+                .collect::<Vec<_>>();
+            let choice =
+                prompts::select("Select profile to delete", profile_choices(config, &all))?;
+            Ok((choice.alias, choice.org))
         }
     }
 }
 
 struct ProfileChoice<'a> {
     alias: &'a str,
-    org_id: &'a str,
+    org: &'a OrgConfig,
     is_active: bool,
 }
 
 impl Display for ProfileChoice<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let suffix = if self.is_active { " (active)" } else { "" };
-        write!(f, "{} ({}){suffix}", self.alias, self.org_id)
+        write!(f, "{} ({})", self.alias, self.org.id)?;
+
+        if self.is_active {
+            write!(f, " (active)")?;
+        }
+
+        Ok(())
     }
 }
 
-/// Selection choices for aliases that share one organization ID, marking the
-/// active profile the way the no-query delete picker does.
-fn duplicate_alias_choices<'a>(
-    config: &'a Config,
-    aliases: &'a [String],
+/// Picker choices for the given profiles, marking the active one.
+fn profile_choices<'a>(
+    config: &Config,
+    profiles: &[(&'a str, &'a OrgConfig)],
 ) -> Vec<ProfileChoice<'a>> {
-    aliases
+    profiles
         .iter()
-        .map(|alias| ProfileChoice {
-            alias: alias.as_str(),
-            org_id: config
-                .orgs
-                .get(alias)
-                .expect("alias was resolved from this config")
-                .id
-                .as_str(),
-            is_active: config.active_org.as_deref() == Some(alias.as_str()),
+        .map(|(alias, org)| ProfileChoice {
+            alias,
+            org,
+            is_active: config.active_org.as_deref() == Some(*alias),
         })
         .collect()
 }
@@ -499,7 +498,10 @@ fn build_login_plan_interactive(
         serial,
     } = args;
     let org = match org {
-        Some(query) => OrgPlan::Existing(resolve_org_query(ctx, config, &query)?),
+        Some(query) => {
+            let (alias, _) = resolve_org_query(ctx, config, &query)?;
+            OrgPlan::Existing(alias.to_string())
+        }
         None => prompt_for_org_plan(ctx, config, api_base_url.as_deref(), serial)?,
     };
 
@@ -553,77 +555,93 @@ fn build_login_plan_non_interactive(
     args: Args,
     config: &Config,
 ) -> Result<LoginPlan> {
-    let Some(org_query) = args.org else {
+    let Some(query) = args.org else {
         return Err(error_required_in_non_interactive("--org"));
     };
 
-    let alias = resolve_org_query(ctx, config, &org_query)?;
+    let (alias, _) = resolve_org_query(ctx, config, &query)?;
 
     Ok(LoginPlan {
-        org: OrgPlan::Existing(alias),
+        org: OrgPlan::Existing(alias.to_string()),
         api_base_url_override: args.api_base_url,
         api_key_policy: ApiKeyPolicy::RequireExisting,
         yubikey_serial: args.serial,
     })
 }
 
+/// Refusals from resolving an org query against the configured profiles.
+/// Typed so the remediation text lives in one place and the error keeps its
+/// shape through the `anyhow` chain.
+#[derive(Debug, Error)]
+enum ResolveError {
+    #[error(
+        "Organization '{query}' not found. \
+         Run `tvc login` without --org to set up a new organization."
+    )]
+    NotFound { query: OrgQuery },
+    #[error(
+        "Organization '{query}' is configured under multiple profiles: {listed}. \
+         Re-run with --org <alias> to select one."
+    )]
+    MultipleProfiles { query: OrgQuery, listed: String },
+}
+
 /// Resolve an org query (profile alias or organization ID) to a single
-/// configured profile alias.
+/// configured profile.
 ///
 /// An explicitly named alias is an unambiguous choice and wins outright. An
 /// org-ID query matching several profiles prompts for one interactively;
 /// non-interactively it fails with instructions. Read-only consumers (login,
 /// key backup) share these rules; destructive commands resolve via
 /// `resolve_profile_alias` instead, which never guesses among duplicates.
-pub(crate) fn resolve_org_query(ctx: &mut StdCtx, config: &Config, query: &str) -> Result<String> {
-    let aliases = find_org_aliases(config, query);
+pub(crate) fn resolve_org_query<'c>(
+    ctx: &mut StdCtx,
+    config: &'c Config,
+    query: &OrgQuery,
+) -> Result<(&'c str, &'c OrgConfig)> {
+    let matches = config.matching_profiles(query);
 
-    match aliases.as_slice() {
-        [] => bail!(
-            "Organization '{query}' not found. \
-             Run `tvc login` without --org to set up a new organization."
-        ),
-        [alias] => Ok(alias.clone()),
-        _ if ctx.is_non_interactive() => bail!(
-            "Organization '{query}' is configured under multiple profiles: {}. \
-             Re-run with --org <alias> to select one.",
-            aliases.join(", ")
-        ),
+    match matches.as_slice() {
+        [] => bail!(ResolveError::NotFound {
+            query: query.clone()
+        }),
+        [profile] => Ok(*profile),
+        _ if ctx.is_non_interactive() => bail!(ResolveError::MultipleProfiles {
+            query: query.clone(),
+            listed: matches
+                .iter()
+                .map(|(alias, _)| *alias)
+                .collect::<Vec<_>>()
+                .join(", "),
+        }),
         // Unreachable from login while it consolidates duplicates up front;
         // kept so --org-by-ID resolution stays deterministic for read-only
         // consumers that do not consolidate.
-        _ => Ok(prompts::select(
-            &format!("Select profile for organization '{query}'"),
-            duplicate_alias_choices(config, &aliases),
-        )?
-        .alias
-        .to_string()),
+        _ => {
+            let choice = prompts::select(
+                &format!("Select profile for organization '{query}'"),
+                profile_choices(config, &matches),
+            )?;
+            Ok((choice.alias, choice.org))
+        }
     }
 }
 
 async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) -> Result<Outcome> {
-    let (alias, org_config, yubikey) = match plan.org {
+    let (alias, yubikey) = match plan.org {
         OrgPlan::Existing(alias) => {
             update_api_base_url_from_override(
                 &mut config,
                 &alias,
                 plan.api_base_url_override.as_deref(),
             );
-
-            let org_config = config
-                .orgs
-                .get(&alias)
-                .cloned()
-                .expect("plan alias was resolved against this config");
-            (alias, org_config, None)
+            (alias, None)
         }
         OrgPlan::New {
             id,
             alias,
             operator,
         } => {
-            let api_base_url = new_org_api_base_url(plan.api_base_url_override.as_deref());
-
             // The registry entry already exists; the save below persists only
             // the new organization and its serial reference.
             let (operator, yubikey) = match operator {
@@ -646,16 +664,28 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
                 }
             };
 
-            let (alias, org_config) = generate_org(&mut config, id, alias, api_base_url, operator)?;
-            (alias, org_config, yubikey)
+            debug!(org_alias = %alias, "adding organization");
+            config.add_org(
+                &alias,
+                id,
+                new_org_api_base_url(plan.api_base_url_override.as_deref()),
+                operator,
+            )?;
+            (alias, yubikey)
         }
     };
-
-    shell_println!(ctx, "Selected org: {} ({})", alias, org_config.id)?;
 
     config.set_active_org(&alias)?;
 
     config.save().await?;
+
+    // All mutation is done, so the rest of the flow can borrow the profile;
+    // the plan was resolved against (or inserted into) this same config.
+    let Some(org_config) = config.orgs.get(&alias) else {
+        bail!("login profile '{alias}' disappeared from the config");
+    };
+
+    shell_println!(ctx, "Selected org: {} ({})", alias, org_config.id)?;
 
     if let Some(yubikey) = &yubikey {
         shell_println!(ctx)?;
@@ -671,7 +701,7 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
         )?;
     }
 
-    let api_key = match StoredApiKey::load(&org_config).await? {
+    let api_key = match StoredApiKey::load(org_config).await? {
         Some(api_key) => {
             debug!("using existing API key");
             shell_println!(ctx, "Using existing API key.")?;
@@ -679,7 +709,7 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
         }
         None => match plan.api_key_policy {
             ApiKeyPolicy::AllowGenerate => {
-                let api_key = generate_api_key(ctx, &org_config).await?;
+                let api_key = generate_api_key(ctx, org_config).await?;
                 wait_for_dashboard_registration(ctx)?;
                 api_key
             }
@@ -694,7 +724,7 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
     shell_println!(ctx)?;
     shell_println!(ctx, "Verifying credentials...")?;
 
-    let whoami = verify_credentials(&api_key, &org_config.id, &org_config.api_base_url).await?;
+    let whoami = verify_credentials(&api_key, org_config.id, &org_config.api_base_url).await?;
 
     // Login ensures the org's default backend is usable, and never crosses
     // over: a local default finds or generates the registered key file; a
@@ -839,20 +869,20 @@ fn prompt_for_new_org_inputs(
     shell_println!(ctx)?;
 
     let id = prompts::text("Organization ID", None)?;
+
     if id.is_empty() {
         bail!("Organization ID is required");
     }
 
-    // One profile per organization: a second alias for the same ID would make
-    // resolution ambiguous again (TVC-159).
-    let already_configured = config
-        .orgs
-        .iter()
-        .filter(|(_, org)| org.id == id)
-        .map(|(alias, _)| alias)
-        .min();
+    let id: Uuid = id
+        .trim()
+        .parse()
+        .context("Organization ID must be a UUID")?;
 
-    if let Some(alias) = already_configured {
+    // One profile per organization: a second alias for the same ID would make
+    // resolution ambiguous again (TVC-159). Consolidation already folded any
+    // legacy duplicates before this prompt, so at most one profile matches.
+    if let Some((alias, _)) = config.matching_profiles(&OrgQuery::Id(id)).first() {
         bail!(
             "Organization '{id}' is already configured as profile '{alias}'. \
              Run `tvc login --org {alias}` to use it, \
@@ -940,42 +970,6 @@ impl Display for OrgChoice {
             OrgChoice::New => write!(f, "[new] Add a new organization"),
         }
     }
-}
-
-/// Every configured alias matching an org query, for callers to dispose of
-/// per their mode. An exact alias match is unambiguous and wins outright;
-/// otherwise all aliases registered for the query as an organization ID are
-/// returned, sorted for stable output.
-fn find_org_aliases(config: &Config, query: &str) -> Vec<String> {
-    if config.orgs.contains_key(query) {
-        return vec![query.to_string()];
-    }
-
-    let mut aliases = config
-        .orgs
-        .iter()
-        .filter(|(_, org)| org.id == query)
-        .map(|(alias, _)| alias.clone())
-        .collect::<Vec<_>>();
-    aliases.sort();
-    aliases
-}
-
-fn generate_org(
-    config: &mut Config,
-    id: String,
-    alias: String,
-    api_base_url: String,
-    operator: NewOrgOperator,
-) -> Result<(String, OrgConfig)> {
-    debug!(org_alias = %alias, %api_base_url, "adding organization");
-    config.add_org(&alias, id, api_base_url, operator)?;
-    let org_config = config
-        .orgs
-        .get(&alias)
-        .with_context(|| format!("organization '{alias}' disappeared from config"))?
-        .clone();
-    Ok((alias, org_config))
 }
 
 fn new_org_api_base_url(api_base_url_override: Option<&str>) -> String {
@@ -1151,7 +1145,7 @@ pub struct WhoamiResult {
 
 async fn verify_credentials(
     api_key: &StoredApiKey,
-    org_id: &str,
+    org_id: Uuid,
     api_base_url: &str,
 ) -> Result<WhoamiResult> {
     debug!(%api_base_url, "verifying credentials with whoami");
@@ -1236,7 +1230,7 @@ impl Default for LoggedInOperator {
 #[serde(rename_all = "camelCase")]
 pub struct ProfileDeleted {
     alias: String,
-    organization_id: String,
+    organization_id: Uuid,
     removed_key_directory: Option<String>,
     /// Serials of the YubiKey operators the profile referenced. The devices
     /// and their registry entries are kept; other profiles may share them.
@@ -1370,6 +1364,7 @@ mod tests {
         API_BASE_URL_DEV, API_BASE_URL_PREPROD, DASHBOARD_URL_DEV, DASHBOARD_URL_PREPROD,
         DASHBOARD_URL_PROD, OperatorKind, OperatorRecord,
     };
+    use indexmap::IndexMap;
     use std::collections::HashMap;
     use std::path::PathBuf;
 
@@ -1526,62 +1521,13 @@ mod tests {
         assert_eq!(config.orgs["default"].api_base_url, OVERRIDE_URL);
     }
 
-    #[test]
-    fn find_org_aliases_prefers_exact_alias_match() {
-        // The alias "org-x" collides with another profile's organization ID;
-        // the exact alias match must win outright.
-        let config = config_with_orgs(&[("org-x", "org-y"), ("a", "org-x")]);
-
-        assert_eq!(find_org_aliases(&config, "org-x"), ["org-x"]);
-    }
-
-    #[test]
-    fn find_org_aliases_returns_all_id_matches_sorted() {
-        let config = config_with_orgs(&[("c", "org-1"), ("a", "org-1"), ("b", "org-1")]);
-
-        assert_eq!(find_org_aliases(&config, "org-1"), ["a", "b", "c"]);
-    }
-
-    #[test]
-    fn find_org_aliases_returns_empty_for_unknown_query() {
-        let config = config_with_orgs(&[("a", "org-1")]);
-
-        assert!(find_org_aliases(&config, "org-unknown").is_empty());
-    }
-
-    fn config_with_orgs(entries: &[(&str, &str)]) -> Config {
-        Config {
-            active_org: None,
-            orgs: entries
-                .iter()
-                .map(|(alias, org_id)| {
-                    (
-                        alias.to_string(),
-                        OrgConfig {
-                            id: org_id.to_string(),
-                            api_key_path: PathBuf::from("api_key.json"),
-                            api_base_url: API_BASE_URL_PROD.to_string(),
-                            default_operator_kind: OperatorKind::Local,
-                            operators: vec![OperatorRecord::local(PathBuf::from("operator.json"))],
-                            extra: toml::Table::new(),
-                        },
-                    )
-                })
-                .collect(),
-            yubikeys: Default::default(),
-            last_created_app_id: HashMap::new(),
-            last_operator_ids: HashMap::new(),
-            extra: toml::Table::new(),
-        }
-    }
-
     fn config_with_org(api_base_url: &str) -> Config {
         Config {
             active_org: Some("default".to_string()),
-            orgs: HashMap::from([(
+            orgs: IndexMap::from([(
                 "default".to_string(),
                 OrgConfig {
-                    id: "org-test".to_string(),
+                    id: Uuid::from_u128(1),
                     api_key_path: PathBuf::from("api_key.json"),
                     api_base_url: api_base_url.to_string(),
                     default_operator_kind: OperatorKind::Local,

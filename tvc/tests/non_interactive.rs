@@ -7,6 +7,7 @@
 //! Commands join this fence as they gain prompting behavior.
 
 use assert_cmd::cargo::cargo_bin_cmd;
+use indexmap::IndexMap;
 use predicates::prelude::*;
 use std::collections::HashMap;
 use std::fs;
@@ -39,10 +40,10 @@ fn write_config(
 
     let config = Config {
         active_org: Some("test".to_string()),
-        orgs: HashMap::from([(
+        orgs: IndexMap::from([(
             "test".to_string(),
             OrgConfig {
-                id: "org-test".to_string(),
+                id: "10000000-0000-4000-8000-000000000001".parse().unwrap(),
                 api_key_path,
                 api_base_url: LOCAL_API_BASE_URL.to_string(),
                 default_operator_kind: OperatorKind::Local,

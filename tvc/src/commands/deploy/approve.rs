@@ -263,7 +263,7 @@ impl Run for Args {
                         }
                         OperatorRecordKind::Hosted(hosted) => {
                             let hosted = ResolvedHostedOperator::from_registry(
-                                org.id.clone(),
+                                org.id.to_string(),
                                 &operator.name,
                                 hosted,
                             )?;

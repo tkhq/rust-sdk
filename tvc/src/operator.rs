@@ -492,8 +492,9 @@ mod tests {
     use crate::pair::LocalPair;
     use crate::yubikey::test_support::{self, FakeDevice};
     use crate::yubikey::{Pin, SlotStatus};
+    use indexmap::IndexMap;
     use qos_p256::P256Pair;
-    use std::{collections::HashMap, path::PathBuf};
+    use std::path::PathBuf;
 
     fn public_keys() -> (String, String) {
         let first = P256Pair::generate().unwrap().public_key().to_bytes();
@@ -506,10 +507,10 @@ mod tests {
     fn config_with_operators(operators: Vec<OperatorRecord>) -> Config {
         Config {
             active_org: Some("active".to_string()),
-            orgs: HashMap::from([(
+            orgs: IndexMap::from([(
                 "active".to_string(),
                 OrgConfig {
-                    id: "org-id".to_string(),
+                    id: Uuid::from_u128(0xA1),
                     api_key_path: PathBuf::from("api-key.json"),
                     api_base_url: "https://api.turnkey.com".to_string(),
                     default_operator_kind: OperatorKind::Local,
@@ -889,7 +890,7 @@ mod tests {
         assert_eq!(
             candidates[1],
             OperatorCandidate {
-                id: "44444444-4444-4444-8444-444444444444".to_string(),
+                id: "44444444-4444-4444-8444-444444444444".parse().unwrap(),
                 name: None,
                 public_key: None,
             }

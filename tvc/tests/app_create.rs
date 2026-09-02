@@ -1,6 +1,7 @@
 //! Integration tests for `tvc app create`'s operator-reuse decision.
 
 use assert_cmd::cargo::cargo_bin_cmd;
+use indexmap::IndexMap;
 use predicates::prelude::*;
 use qos_p256::P256Pair;
 use std::collections::HashMap;
@@ -25,10 +26,10 @@ fn write_two_candidate_config(home: &Path) -> String {
 
     let config = Config {
         active_org: Some("hosted-org".to_string()),
-        orgs: HashMap::from([(
+        orgs: IndexMap::from([(
             "hosted-org".to_string(),
             OrgConfig {
-                id: "44444444-4444-4444-8444-444444444444".to_string(),
+                id: "44444444-4444-4444-8444-444444444444".parse().unwrap(),
                 api_key_path: turnkey_dir.join("orgs/hosted-org/api_key.json"),
                 api_base_url: "http://127.0.0.1:1".to_string(),
                 default_operator_kind: OperatorKind::Hosted,

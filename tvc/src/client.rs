@@ -117,7 +117,7 @@ async fn load_credentials_from_config(config: &Config) -> Result<(String, String
         .ok_or_else(|| anyhow!("No API key found for org '{alias}'. Run `tvc login` first."))?;
 
     Ok((
-        org_config.id.clone(),
+        org_config.id.to_string(),
         org_config.api_base_url.clone(),
         api_key.public_key.clone(),
         api_key.private_key.clone(),

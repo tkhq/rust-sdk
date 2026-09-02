@@ -6,8 +6,8 @@
 //! the yubikey module and its ignored hardware cycle.
 
 use assert_cmd::cargo::cargo_bin_cmd;
+use indexmap::IndexMap;
 use predicates::prelude::*;
-use std::collections::HashMap;
 use std::fs;
 use tempfile::TempDir;
 use tvc::config::turnkey::{
@@ -43,7 +43,7 @@ fn config_with_registered_device() -> Config {
 
 fn org_with_yubikey_operator() -> OrgConfig {
     OrgConfig {
-        id: "org-test".to_string(),
+        id: "33333333-3333-4333-8333-333333333333".parse().unwrap(),
         api_key_path: "/keys/api.json".into(),
         api_base_url: "http://127.0.0.1:1".to_string(),
         default_operator_kind: Default::default(),
@@ -129,7 +129,7 @@ fn unregister_refuses_an_unregistered_serial() {
 fn unregister_refuses_a_device_an_organization_references() {
     let temp = TempDir::new().unwrap();
     let config = Config {
-        orgs: HashMap::from([("test".to_string(), org_with_yubikey_operator())]),
+        orgs: IndexMap::from([("test".to_string(), org_with_yubikey_operator())]),
         ..config_with_registered_device()
     };
     write_config(&temp, &config);

@@ -182,9 +182,10 @@ mod tests {
     use crate::config::turnkey::{
         HostedOperatorRecord, OperatorKind, OperatorRecord, OperatorRecordKind, OrgConfig,
     };
+    use indexmap::IndexMap;
     use qos_core::protocol::services::boot::VersionedManifestEnvelope;
     use serde::Deserialize;
-    use std::{collections::HashMap, path::PathBuf};
+    use std::path::PathBuf;
 
     const DEPLOYMENT_ID: &str = "33333333-3333-4333-8333-333333333333";
     const OPERATOR_ID: &str = "11111111-1111-4111-8111-111111111111";
@@ -247,10 +248,10 @@ mod tests {
 
         Config {
             active_org: Some("active".to_string()),
-            orgs: HashMap::from([(
+            orgs: IndexMap::from([(
                 "active".to_string(),
                 OrgConfig {
-                    id: "org-id".to_string(),
+                    id: Uuid::from_u128(0xA1),
                     api_key_path: PathBuf::from("api-key.json"),
                     api_base_url: "https://api.turnkey.com".to_string(),
                     default_operator_kind: OperatorKind::Hosted,

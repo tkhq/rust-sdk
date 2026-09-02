@@ -2,6 +2,7 @@
 //! compiles its own copy and uses a subset, so unused items are expected.
 #![allow(dead_code)]
 
+use indexmap::IndexMap;
 use std::{
     collections::HashMap,
     fs,
@@ -29,14 +30,14 @@ pub fn write_profiles_config(home: &Path, profiles: &[(&str, &str)], active_org:
     let turnkey_dir = home.join(".config/turnkey");
     fs::create_dir_all(&turnkey_dir).unwrap();
 
-    let orgs: HashMap<_, _> = profiles
+    let orgs: IndexMap<_, _> = profiles
         .iter()
         .map(|(alias, org_id)| {
             let dir = org_dir(home, alias);
             (
                 alias.to_string(),
                 OrgConfig {
-                    id: org_id.to_string(),
+                    id: org_id.parse().expect("test org ids must be UUIDs"),
                     api_key_path: dir.join("api_key.json"),
                     api_base_url: LOCAL_API_BASE_URL.to_string(),
                     default_operator_kind: OperatorKind::Local,
@@ -82,10 +83,10 @@ pub fn write_hosted_only_config(home: &Path, alias: &str, org_id: &str) {
 
     let config = Config {
         active_org: Some(alias.to_string()),
-        orgs: HashMap::from([(
+        orgs: IndexMap::from([(
             alias.to_string(),
             OrgConfig {
-                id: org_id.to_string(),
+                id: org_id.parse().expect("test org ids must be UUIDs"),
                 api_key_path: turnkey_dir.join(format!("orgs/{alias}/api_key.json")),
                 api_base_url: LOCAL_API_BASE_URL.to_string(),
                 default_operator_kind: OperatorKind::Hosted,
@@ -148,10 +149,10 @@ pub fn write_yubikey_only_config_with_public_key(
 
     let config = Config {
         active_org: Some(alias.to_string()),
-        orgs: HashMap::from([(
+        orgs: IndexMap::from([(
             alias.to_string(),
             OrgConfig {
-                id: org_id.to_string(),
+                id: org_id.parse().expect("test org ids must be UUIDs"),
                 api_key_path: turnkey_dir.join(format!("orgs/{alias}/api_key.json")),
                 api_base_url: LOCAL_API_BASE_URL.to_string(),
                 default_operator_kind: OperatorKind::Yubikey,
@@ -202,13 +203,13 @@ pub fn write_yubikey_shared_config(home: &Path, profiles: &[(&str, &str)]) {
     )
     .unwrap();
 
-    let orgs: HashMap<_, _> = profiles
+    let orgs: IndexMap<_, _> = profiles
         .iter()
         .map(|(alias, org_id)| {
             (
                 alias.to_string(),
                 OrgConfig {
-                    id: org_id.to_string(),
+                    id: org_id.parse().expect("test org ids must be UUIDs"),
                     api_key_path: turnkey_dir.join(format!("orgs/{alias}/api_key.json")),
                     api_base_url: LOCAL_API_BASE_URL.to_string(),
                     default_operator_kind: OperatorKind::Yubikey,
