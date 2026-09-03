@@ -131,10 +131,13 @@ pub async fn run(ctx: &mut StdCtx, args: Args, mut config: Config) -> Result<Out
     execute_login(ctx, config, plan).await
 }
 
-/// Move legacy alias-keyed key directories to the id-keyed layout and rewrite
-/// each organization's paths, saving after every organization so a crash
-/// strands at most one. A rename failure warns and skips: the legacy paths
-/// remain valid, and login must not die over a tidiness move.
+/// Migrate legacy alias-keyed key directories to the id-keyed layout: copy
+/// the files across (verifying every copy), rewrite the organization's
+/// paths, save, and only then delete the old directory. Every crash window
+/// therefore leaves the config pointing at files that exist — the legacy
+/// originals before the save, the verified copies after it. A failure warns
+/// and skips the organization: its legacy paths remain valid, and login must
+/// not die over a tidiness move.
 async fn migrate_legacy_key_directories(
     ctx: &mut StdCtx,
     config: &mut Config,
@@ -144,21 +147,88 @@ async fn migrate_legacy_key_directories(
         let source = legacy_org_dir(&alias)?;
         let target = default_org_dir(org_id)?;
 
-        match tokio::fs::rename(&source, &target).await {
-            Ok(()) => {}
-            // A crash between a previous run's rename and its save leaves the
-            // files already moved; treat the move as done and just rewrite.
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound && target.is_dir() => {}
-            Err(error) => {
-                shell_eprintln!(
-                    ctx,
-                    "WARNING: could not move key directory {} -> {}: {error}. \
-                     The organization keeps its current paths.",
-                    source.display(),
+        let copied = async {
+            // A missing source with a populated target is an interrupted
+            // run's post-copy window (or an old rename-based move); there is
+            // nothing left to copy.
+            if !source.is_dir() {
+                ensure!(
+                    target.is_dir(),
+                    "the legacy directory is missing and nothing was copied to {}",
                     target.display()
-                )?;
-                continue;
+                );
+                return Ok(());
             }
+
+            // Only resume our own interrupted copy: every file already at
+            // the target must be an identical copy of a legacy file —
+            // anything else means the directory belongs to someone else.
+            if target.is_dir() {
+                let mut entries = tokio::fs::read_dir(&target).await?;
+
+                while let Some(entry) = entries.next_entry().await? {
+                    let name = entry.file_name();
+                    let source_file = source.join(&name);
+                    let matches = entry.file_type().await?.is_file()
+                        && tokio::fs::try_exists(&source_file).await?
+                        && tokio::fs::read(entry.path()).await?
+                            == tokio::fs::read(&source_file).await?;
+
+                    ensure!(
+                        matches,
+                        "{} already contains {}",
+                        target.display(),
+                        name.display()
+                    );
+                }
+            }
+
+            let mut names = Vec::new();
+            let mut entries = tokio::fs::read_dir(&source).await?;
+
+            while let Some(entry) = entries.next_entry().await? {
+                ensure!(
+                    entry.file_type().await?.is_file(),
+                    "{} is not a regular file",
+                    entry.path().display()
+                );
+                names.push(entry.file_name());
+            }
+
+            tokio::fs::create_dir_all(&target).await?;
+
+            for name in names {
+                let bytes = tokio::fs::read(source.join(&name)).await?;
+                let to = target.join(&name);
+
+                // Present files passed the identical-copy scan above.
+                if tokio::fs::try_exists(&to).await? {
+                    continue;
+                }
+
+                tokio::fs::write(&to, &bytes).await?;
+
+                // Verify the copy before the config ever points at it.
+                ensure!(
+                    tokio::fs::read(&to).await? == bytes,
+                    "verification failed for {}",
+                    to.display()
+                );
+            }
+
+            Ok(())
+        }
+        .await;
+
+        if let Err(error) = copied {
+            shell_eprintln!(
+                ctx,
+                "WARNING: could not move key directory {} -> {}: {error:#}. \
+                 The organization keeps its current paths.",
+                source.display(),
+                target.display()
+            )?;
+            continue;
         }
 
         if let Some(org) = config.orgs.get_mut(&org_id) {
@@ -180,6 +250,20 @@ async fn migrate_legacy_key_directories(
             source.display(),
             target.display()
         )?;
+
+        // The copies are saved and verified; the originals are redundant now.
+        match tokio::fs::remove_dir_all(&source).await {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                shell_eprintln!(
+                    ctx,
+                    "WARNING: could not remove the old key directory {}: {error}. \
+                     Remove it manually; the config no longer references it.",
+                    source.display()
+                )?;
+            }
+        }
     }
 
     Ok(())
