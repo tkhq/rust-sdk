@@ -1255,10 +1255,10 @@ fn login_reports_the_hosted_operator_for_a_hosted_default_org() {
     assert!(output.contains("Hosted operator:"), "{output}");
 }
 
-/// A crash between the directory rename and the config save leaves the files
-/// moved but the config still pointing at the legacy paths. The next
-/// interactive login heals: it treats the move as done and rewrites the
-/// config.
+/// A directory whose files already moved (an older tvc's rename-based
+/// migration crashing before its save) leaves the config pointing at the
+/// legacy paths. The next interactive login heals: it treats the copy as
+/// done and rewrites the config.
 #[test]
 fn login_heals_a_crash_between_directory_move_and_config_save() {
     let temp = tempfile::TempDir::new().unwrap();
@@ -1361,6 +1361,75 @@ fn login_finishes_a_partially_migrated_config_in_one_pass() {
     assert_eq!(
         table["orgs"][ORG_OTHER]["api_key_path"].as_str().unwrap(),
         id_b.join("api_key.json").to_str().unwrap()
+    );
+}
+
+/// The copy-verify-delete window: a crash after the copy but before the save
+/// leaves both directories populated and the config on the legacy paths —
+/// which non-interactive commands can still use, since nothing was deleted.
+/// The next interactive login resumes the identical copy, saves, and only
+/// then removes the legacy directory.
+#[test]
+fn login_finishes_a_crash_between_copy_and_config_save() {
+    let temp = tempfile::TempDir::new().unwrap();
+    common::write_profiles_config(temp.path(), &[("alias-a", ORG_E2E)], Some("alias-a"));
+    common::write_profile_key_files(temp.path(), "alias-a");
+    let legacy_dir = temp.path().join(".config/turnkey/orgs/alias-a");
+    let id_dir = temp.path().join(".config/turnkey/orgs").join(ORG_E2E);
+
+    // Recreate the crash window: the copy happened, the save did not.
+    std::fs::create_dir_all(&id_dir).unwrap();
+
+    for name in ["api_key.json", "operator.json"] {
+        std::fs::copy(legacy_dir.join(name), id_dir.join(name)).unwrap();
+    }
+
+    // Mid-window, non-interactive commands still work off the legacy paths.
+    let mut cmd = std::process::Command::new(env!("CARGO_BIN_EXE_tvc"));
+    cmd.args(["keys", "backup-operator-key", "--output"])
+        .arg(temp.path().join("mid-window-backup.json"))
+        .env("HOME", temp.path())
+        .env("TVC_NON_INTERACTIVE", "1")
+        .env_remove("TVC_ORG")
+        .env_remove("TVC_API_BASE_URL")
+        .env_remove("TVC_ORG_ID")
+        .env_remove("TVC_API_KEY_PUBLIC")
+        .env_remove("TVC_API_KEY_PRIVATE");
+    let output = cmd.output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let (api_base_url, server) = spawn_whoami_server();
+
+    let mut session = spawn_with_home(
+        temp.path(),
+        &["login", "--org", "alias-a", "--api-base-url", &api_base_url],
+    );
+
+    exp_wrapped(
+        &mut session,
+        &format!(
+            "Moved key directory: {} -> {}",
+            legacy_dir.display(),
+            id_dir.display()
+        ),
+    );
+    session.exp_string("Successfully logged in!").unwrap();
+    session.exp_eof().unwrap();
+    server.join().unwrap();
+
+    assert!(!legacy_dir.exists());
+    assert!(id_dir.join("operator.json").exists());
+
+    let saved =
+        std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
+    let table: toml::Table = toml::from_str(&saved).unwrap();
+    assert_eq!(
+        table["orgs"][ORG_E2E]["api_key_path"].as_str().unwrap(),
+        id_dir.join("api_key.json").to_str().unwrap()
     );
 }
 
