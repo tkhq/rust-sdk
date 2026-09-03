@@ -407,10 +407,12 @@ pub fn verify(app_proof: &AppProof, boot_proof: &BootProof) -> Result<(), Verify
         )));
     }
 
-    let user_data = attestation_doc
-        .user_data
-        .as_ref()
-        .expect("validated attestation doc should have user_data");
+    let user_data = attestation_doc.user_data.as_ref().ok_or_else(|| {
+        VerifyError::InvalidAttestation(
+            "attestation doc is missing user_data, which is required to verify the manifest hash"
+                .to_string(),
+        )
+    })?;
     if manifest_hash.as_slice() != user_data.as_slice() {
         return Err(VerifyError::DifferentManifest(format!(
             "attestation_doc's user_data doesn't match the approved manifest envelope hash. attestation_doc.user_data: {user_data:?}, manifest_hash: {manifest_hash:?}"
@@ -418,10 +420,12 @@ pub fn verify(app_proof: &AppProof, boot_proof: &BootProof) -> Result<(), Verify
     }
 
     // 3. Verify that all the ephemeral public keys match: app proof, boot proof structure, actual attestation doc
-    let attestation_pub_key_bytes = attestation_doc
-        .public_key
-        .as_ref()
-        .expect("validated attestation doc should have public_key");
+    let attestation_pub_key_bytes = attestation_doc.public_key.as_ref().ok_or_else(|| {
+        VerifyError::InvalidAttestation(
+            "attestation doc is missing public_key, which is required to verify the ephemeral key"
+                .to_string(),
+        )
+    })?;
     let attestation_pub_key = hex::encode(attestation_pub_key_bytes);
     if !(app_proof.public_key == attestation_pub_key
         && attestation_pub_key == boot_proof.ephemeral_public_key_hex)
