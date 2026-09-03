@@ -1,8 +1,7 @@
 //! User-facing output primitives for TVC.
 
-use crate::config::turnkey::YubiKeySerial;
 use crate::errors::{Classification, ErrorCode, binary_name, classify, hint, render_error_chain};
-use crate::yubikey::DeviceError;
+use crate::yubikey::{ConnectedYubiKeys, DeviceError};
 use anstyle::{AnsiColor, Color, Style};
 use anyhow::Result;
 use clap::ValueEnum;
@@ -197,7 +196,7 @@ pub struct Ctx<W, W2> {
     /// YubiKey discovery is an effect of the environment, so it lives here
     /// where a test context can script serials or failures instead of
     /// touching PC/SC.
-    connected_yubikeys: Box<dyn FnMut() -> Result<Vec<YubiKeySerial>, DeviceError> + Send>,
+    connected_yubikeys: Box<dyn FnMut() -> Result<ConnectedYubiKeys, DeviceError> + Send>,
 }
 
 pub type StdCtx = Ctx<Stdout, Stderr>;
@@ -219,14 +218,14 @@ impl<W: Write, W2: Write> Ctx<W, W2> {
     #[cfg(test)]
     pub(crate) fn with_yubikey_discovery(
         mut self,
-        discovery: impl FnMut() -> Result<Vec<YubiKeySerial>, DeviceError> + Send + 'static,
+        discovery: impl FnMut() -> Result<ConnectedYubiKeys, DeviceError> + Send + 'static,
     ) -> Self {
         self.connected_yubikeys = Box::new(discovery);
         self
     }
 
-    /// Serials of the connected YubiKeys.
-    pub(crate) fn connected_yubikeys(&mut self) -> Result<Vec<YubiKeySerial>, DeviceError> {
+    /// The connected YubiKeys captured by one discovery pass.
+    pub(crate) fn connected_yubikeys(&mut self) -> Result<ConnectedYubiKeys, DeviceError> {
         (self.connected_yubikeys)()
     }
 
@@ -364,6 +363,7 @@ pub use tests::*;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::turnkey::YubiKeySerial;
     use serde::Serialize;
     use std::io::Empty;
 
@@ -550,8 +550,11 @@ mod tests {
     fn ctx_yubikey_discovery_can_be_scripted() {
         let serial = YubiKeySerial::from(0x01c9_5c1f);
         let mut ctx = Ctx::new(TestShell::with_human_formatter(), false)
-            .with_yubikey_discovery(move || Ok(vec![serial]));
+            .with_yubikey_discovery(move || Ok(ConnectedYubiKeys::from(vec![serial])));
 
-        assert_eq!(ctx.connected_yubikeys().unwrap(), vec![serial]);
+        assert_eq!(
+            ctx.connected_yubikeys().unwrap(),
+            ConnectedYubiKeys::from(vec![serial])
+        );
     }
 }

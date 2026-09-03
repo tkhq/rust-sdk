@@ -333,13 +333,7 @@ mod tests {
     async fn hardware_resolve_sign_and_decrypt_roundtrip() {
         use crate::yubikey::{connected_serials, open};
 
-        let connected = connected_serials().unwrap();
-
-        let [serial] = connected.as_slice() else {
-            panic!("connect exactly one YubiKey; found {connected:?}");
-        };
-
-        let serial = *serial;
+        let serial = connected_serials().unwrap().choose(None).unwrap();
         let mut device = open(serial).unwrap();
         let key = device.verified_pair_public_key().unwrap();
         let mut config = Config::default();

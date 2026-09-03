@@ -8,7 +8,7 @@ use crate::{
     },
     outcome::Outcome,
     output::{Ctx, StdCtx},
-    yubikey::{self, ConnectedYubiKeys, DeviceError, DeviceOps, YubiKeySelectionError},
+    yubikey::{self, DeviceError, DeviceOps, YubiKeySelectionError},
 };
 use anyhow::{Context, Result, bail};
 use clap::Args as ClapArgs;
@@ -82,7 +82,7 @@ impl Args {
         D: DeviceOps,
         O: FnOnce(YubiKeySerial) -> Result<D, DeviceError>,
     {
-        let serial = match ConnectedYubiKeys::from(ctx.connected_yubikeys()?).choose(self.serial) {
+        let serial = match ctx.connected_yubikeys()?.choose(self.serial) {
             Ok(serial) => serial,
             Err(YubiKeySelectionError::NoneConnected) => bail!("no YubiKey is connected"),
             Err(YubiKeySelectionError::NotConnected {
@@ -163,7 +163,7 @@ mod tests {
     use crate::yubikey::test_support::{FakeDevice, serial};
 
     fn test_ctx() -> Ctx<Vec<u8>, Vec<u8>> {
-        Ctx::new(TestShell::default(), false).with_yubikey_discovery(|| Ok(vec![serial()]))
+        Ctx::new(TestShell::default(), false).with_yubikey_discovery(|| Ok(vec![serial()].into()))
     }
 
     fn provisioned_device() -> FakeDevice {

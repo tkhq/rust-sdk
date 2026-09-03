@@ -6,7 +6,7 @@ use crate::{
     outcome::Outcome,
     output::StdCtx,
     prompts,
-    yubikey::{self, CertificateDeviceOps, ConnectedYubiKeys, Pin, QosSlot, YubiKeySelectionError},
+    yubikey::{self, CertificateDeviceOps, Pin, QosSlot, YubiKeySelectionError},
 };
 use anyhow::{Context, Result, bail};
 use clap::Args as ClapArgs;
@@ -37,7 +37,7 @@ impl Args {
             );
         }
 
-        let serial = match ConnectedYubiKeys::from(ctx.connected_yubikeys()?).choose(self.serial) {
+        let serial = match ctx.connected_yubikeys()?.choose(self.serial) {
             Ok(serial) => serial,
             Err(YubiKeySelectionError::NoneConnected) => bail!("no YubiKey is connected"),
             Err(YubiKeySelectionError::NotConnected {

@@ -58,7 +58,7 @@ const CERTIFICATE_VALIDITY_SECS: u64 = 10 * 60 * 60 * 24 * 365;
 /// Serials of the connected YubiKeys, skipping readers without the PIV
 /// applet. The real implementation behind the discovery effect on
 /// [`crate::output::Ctx`].
-pub(crate) fn connected_serials() -> Result<Vec<YubiKeySerial>, DeviceError> {
+pub(crate) fn connected_serials() -> Result<ConnectedYubiKeys, DeviceError> {
     let mut context = Context::open().map_err(DeviceError::Discovery)?;
     let readers = context.iter().map_err(DeviceError::Discovery)?;
 
@@ -73,7 +73,8 @@ pub(crate) fn connected_serials() -> Result<Vec<YubiKeySerial>, DeviceError> {
                 source,
             })),
         })
-        .collect::<Result<_, _>>()
+        .collect::<Result<Vec<_>, _>>()
+        .map(ConnectedYubiKeys::from)
 }
 
 /// The connected YubiKey serials captured by one discovery pass.
@@ -910,13 +911,7 @@ mod tests {
     }
 
     fn sole_connected_serial() -> YubiKeySerial {
-        let connected = connected_serials().unwrap();
-
-        let [serial] = connected.as_slice() else {
-            panic!("connect exactly one YubiKey; found {connected:?}");
-        };
-
-        *serial
+        connected_serials().unwrap().choose(None).unwrap()
     }
 
     fn foreign() -> SlotStatus {
