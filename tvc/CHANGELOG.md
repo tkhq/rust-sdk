@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.15.1](https://github.com/tkhq/rust-sdk/compare/tvc-v0.15.0...tvc-v0.15.1) - 2026-09-03
+
+### Added
+
+- *(tvc)* add skills save command to install bundled agent skills
+- *(tvc)* add tvc-deployments agent skill
+
+### Other
+
+- *(tvc)* rustfmt skills_save tests
+- *(tvc)* point AGENTS.md at the bundled agent skills and their sync rules
+- rm mention of merging imports from AGENTS.md
+- *(tvc)* force use of modern file layout
+
 ## [0.15.0](https://github.com/tkhq/rust-sdk/compare/tvc-v0.14.0...tvc-v0.15.0) - 2026-08-28
 
 ### Added
