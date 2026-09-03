@@ -751,6 +751,10 @@ pub struct TvcContainerSpec {
     pub health_check_port: u32,
     #[serde(default)]
     pub public_ingress_port: u32,
+    #[serde(default)]
+    pub instance_size_cpus: u32,
+    #[serde(default)]
+    pub instance_size_ram: u32,
 }
 #[derive(Debug)]
 #[serde_with::serde_as]
