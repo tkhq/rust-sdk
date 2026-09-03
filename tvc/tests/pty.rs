@@ -326,13 +326,14 @@ fn login_creates_first_profile_and_persists_it() {
     assert!(!temp.path().join(".config/turnkey/orgs/solo").exists());
 }
 
-/// Entering an organization ID that is already configured refuses to create a
-/// second profile for it (one profile per organization, TVC-159) and names
-/// the existing alias.
+/// Entering an organization ID that is already configured offers to bind an
+/// extra alias to the existing entry; accepting binds the name and logs into
+/// the same organization without reconfiguring it.
 #[test]
-fn login_new_org_refuses_already_configured_org_id() {
+fn login_new_org_binds_an_extra_alias_after_confirmation() {
     let temp = tempfile::TempDir::new().unwrap();
     common::write_profiles_config(temp.path(), &[("alias-a", ORG_DUP)], Some("alias-a"));
+    common::write_profile_key_files(temp.path(), "alias-a");
 
     let mut session = spawn_with_home(temp.path(), &["login"]);
 
@@ -347,12 +348,18 @@ fn login_new_org_refuses_already_configured_org_id() {
         &format!("Organization '{ORG_DUP}' is already configured as 'alias-a'."),
     );
     session
-        .exp_string("tvc profile delete --org alias-a")
+        .exp_string("Bind another alias to 'alias-a' and log in to it?")
         .unwrap();
+    session.send_line("y").unwrap();
+
+    session.exp_string("Organization alias").unwrap();
+    session.send_line("alias-b").unwrap();
+
+    exp_wrapped(&mut session, &format!("Selected org: alias-b ({ORG_DUP})"));
+    session.exp_string("Using existing API key.").unwrap();
     session.exp_eof().unwrap();
 
-    // Refused before any mutation: still exactly one configured org and one
-    // alias.
+    // One organization, two names; the existing entry was not reconfigured.
     let saved =
         std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
     // "\n[orgs." matches the org table header but not "[[orgs.<id>.operators]]".
@@ -361,12 +368,71 @@ fn login_new_org_refuses_already_configured_org_id() {
         saved.contains(&format!(r#"alias-a = "{ORG_DUP}""#)),
         "{saved}"
     );
+    assert!(
+        saved.contains(&format!(r#"alias-b = "{ORG_DUP}""#)),
+        "{saved}"
+    );
 }
 
-/// Reusing an existing profile alias for a different organization refuses
-/// instead of silently overwriting the profile.
+/// Declining the extra-alias confirmation cancels login before anything is
+/// bound or written.
 #[test]
-fn login_new_org_refuses_alias_already_in_use() {
+fn login_extra_alias_decline_cancels_login() {
+    let temp = tempfile::TempDir::new().unwrap();
+    common::write_profiles_config(temp.path(), &[("alias-a", ORG_DUP)], Some("alias-a"));
+
+    let mut session = spawn_with_home(temp.path(), &["login"]);
+
+    session.exp_string("Select organization").unwrap();
+    session.send_line("new").unwrap();
+
+    session.exp_string("Organization ID").unwrap();
+    session.send_line(ORG_DUP).unwrap();
+
+    session
+        .exp_string("Bind another alias to 'alias-a' and log in to it?")
+        .unwrap();
+    session.send_line("n").unwrap();
+
+    session
+        .exp_string("operation cancelled by user: alias binding")
+        .unwrap();
+    session.exp_eof().unwrap();
+
+    let saved =
+        std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
+    assert!(!saved.contains("alias-b"), "{saved}");
+}
+
+/// UUID-shaped aliases are refused at binding: org queries parse UUID-shaped
+/// input as an organization ID, so such a name could never be looked up.
+#[test]
+fn login_new_org_refuses_uuid_shaped_alias() {
+    let temp = tempfile::TempDir::new().unwrap();
+
+    let mut session = spawn_with_home(temp.path(), &["login"]);
+
+    session.exp_string("Organization ID").unwrap();
+    session.send_line(ORG_SOLO).unwrap();
+    session.exp_string("Organization alias").unwrap();
+    session.send_line(ORG_OTHER).unwrap();
+
+    exp_wrapped(&mut session, &format!("Alias '{ORG_OTHER}' is UUID-shaped"));
+    session.exp_eof().unwrap();
+
+    // Refused before any mutation: neither the organization nor the alias
+    // reached the config.
+    let saved =
+        std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
+    assert!(!saved.contains(ORG_SOLO), "{saved}");
+    assert!(!saved.contains(ORG_OTHER), "{saved}");
+}
+
+/// Reusing an existing alias for a different organization re-points it after
+/// an explicit confirmation; the old organization keeps its entry, only the
+/// name moves.
+#[test]
+fn login_repoints_an_alias_after_confirmation() {
     let temp = tempfile::TempDir::new().unwrap();
     common::write_profiles_config(temp.path(), &[("alias-a", ORG_OTHER)], Some("alias-a"));
 
@@ -382,13 +448,68 @@ fn login_new_org_refuses_alias_already_in_use() {
 
     exp_wrapped(
         &mut session,
-        &format!("Alias 'alias-a' already names organization '{ORG_OTHER}'."),
+        &format!("Alias 'alias-a' currently names organization '{ORG_OTHER}'."),
     );
+    exp_wrapped(
+        &mut session,
+        &format!("Re-point alias 'alias-a' to organization '{ORG_SOLO}'?"),
+    );
+    session.send_line("y").unwrap();
+
+    // Enter accepts the highlighted "Local key file" entry.
+    session.exp_string("Operator key type").unwrap();
+    session.send_line("").unwrap();
+
+    exp_wrapped(&mut session, &format!("Selected org: alias-a ({ORG_SOLO})"));
+    session.exp_string("API Key Generated!").unwrap();
+    session.exp_string("Press Enter when done...").unwrap();
+    session.send_line("").unwrap();
+    session.exp_string("Verifying credentials...").unwrap();
     session.exp_eof().unwrap();
 
     let saved =
         std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
+    assert!(
+        saved.contains(&format!(r#"alias-a = "{ORG_SOLO}""#)),
+        "{saved}"
+    );
+    // The old organization keeps its entry; only the name moved.
     assert!(saved.contains(&format!("[orgs.{ORG_OTHER}]")), "{saved}");
+}
+
+/// Declining the re-point confirmation cancels login with nothing changed.
+#[test]
+fn login_repoint_decline_cancels_login() {
+    let temp = tempfile::TempDir::new().unwrap();
+    common::write_profiles_config(temp.path(), &[("alias-a", ORG_OTHER)], Some("alias-a"));
+
+    let mut session = spawn_with_home(temp.path(), &["login"]);
+
+    session.exp_string("Select organization").unwrap();
+    session.send_line("new").unwrap();
+
+    session.exp_string("Organization ID").unwrap();
+    session.send_line(ORG_SOLO).unwrap();
+    session.exp_string("Organization alias").unwrap();
+    session.send_line("alias-a").unwrap();
+
+    exp_wrapped(
+        &mut session,
+        &format!("Re-point alias 'alias-a' to organization '{ORG_SOLO}'?"),
+    );
+    session.send_line("n").unwrap();
+
+    session
+        .exp_string("operation cancelled by user: alias re-pointing")
+        .unwrap();
+    session.exp_eof().unwrap();
+
+    let saved =
+        std::fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
+    assert!(
+        saved.contains(&format!(r#"alias-a = "{ORG_OTHER}""#)),
+        "{saved}"
+    );
     assert!(!saved.contains(ORG_SOLO));
 }
 

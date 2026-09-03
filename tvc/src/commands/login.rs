@@ -69,6 +69,9 @@ enum OrgPlan {
     /// interactively, with the name to echo in output (aliases only appear
     /// in output when the user used one).
     Existing { id: Uuid, name: Option<String> },
+    /// A confirmed new name for an organization that is already configured;
+    /// login binds it and proceeds against the existing entry.
+    BindAlias { id: Uuid, alias: String },
     New {
         id: Uuid,
         alias: String,
@@ -488,7 +491,7 @@ fn build_login_plan_interactive(
     };
 
     let yubikey_serial = match &org {
-        OrgPlan::Existing { id, .. } => config
+        OrgPlan::Existing { id, .. } | OrgPlan::BindAlias { id, .. } => config
             .orgs
             .get(id)
             .filter(|org| org.default_operator_kind == OperatorKind::Yubikey)
@@ -587,6 +590,17 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
                 plan.api_base_url_override.as_deref(),
             );
             (id, name, None)
+        }
+        OrgPlan::BindAlias { id, alias } => {
+            // The endpoint confirmed the binding (and any re-point); the save
+            // below persists it.
+            config.aliases.bind(alias.clone(), id);
+            update_api_base_url_from_override(
+                &mut config,
+                id,
+                plan.api_base_url_override.as_deref(),
+            );
+            (id, Some(alias), None)
         }
         OrgPlan::New {
             id,
@@ -828,28 +842,27 @@ fn prompt_for_new_org_inputs(
         .parse()
         .context("Organization ID must be a UUID")?;
 
-    // One entry per organization: the registry is keyed by ID, so a second
-    // login for the same organization is a reconfiguration, not an addition.
+    // The registry is keyed by ID, so a second login for the same
+    // organization binds another name to the existing entry — after an
+    // explicit confirmation — instead of reconfiguring it.
     if config.orgs.contains_key(&id) {
         let known = config.display_name(id);
-        bail!(
-            "Organization '{id}' is already configured as '{known}'. \
-             Run `tvc login --org {known}` to use it, \
-             or `tvc profile delete --org {known}` to remove it first."
-        );
+        shell_eprintln!(
+            ctx,
+            "Organization '{id}' is already configured as '{known}'."
+        )?;
+        prompts::confirm_or_bail(
+            &format!("Bind another alias to '{known}' and log in to it?"),
+            "alias binding",
+        )?;
+
+        let alias = prompt_for_alias_binding(ctx, config, id)?;
+
+        return Ok(OrgPlan::BindAlias { id, alias });
     }
 
-    let alias = prompts::text("Organization alias", Some("default"))?;
+    let alias = prompt_for_alias_binding(ctx, config, id)?;
     debug!(org_alias = %alias, "user entered new organization inputs");
-
-    if let Some(existing) = config.aliases.resolve(&alias) {
-        bail!(
-            "Alias '{alias}' already names organization '{}'. \
-             Choose a different alias, \
-             or run `tvc profile delete --org {alias}` to remove it first.",
-            existing.id()
-        );
-    }
 
     let operator = {
         enum OperatorKeyChoice {
@@ -905,6 +918,39 @@ fn prompt_for_new_org_inputs(
         alias,
         operator,
     })
+}
+
+/// Prompt for an alias to bind to `org_id`, enforcing the binding policy:
+/// UUID-shaped names are refused outright — org queries parse UUID-shaped
+/// input as an organization ID, so such a name could never be looked up —
+/// and re-pointing a name away from another organization requires an
+/// explicit confirmation.
+fn prompt_for_alias_binding(ctx: &mut StdCtx, config: &Config, org_id: Uuid) -> Result<String> {
+    let alias = prompts::text("Organization alias", Some("default"))?;
+
+    if Uuid::parse_str(&alias).is_ok() {
+        bail!(
+            "Alias '{alias}' is UUID-shaped, so it would always resolve as an \
+             organization ID instead of a name. Choose a non-UUID alias."
+        );
+    }
+
+    if let Some(existing) = config.aliases.resolve(&alias) {
+        // Already naming this organization is a no-op, not a re-point.
+        if existing.id() != org_id {
+            shell_eprintln!(
+                ctx,
+                "Alias '{alias}' currently names organization '{}'.",
+                existing.id()
+            )?;
+            prompts::confirm_or_bail(
+                &format!("Re-point alias '{alias}' to organization '{org_id}'?"),
+                "alias re-pointing",
+            )?;
+        }
+    }
+
+    Ok(alias)
 }
 
 enum OrgChoice {
