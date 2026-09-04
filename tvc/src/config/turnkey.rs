@@ -2,10 +2,13 @@
 //!
 //! Config files are stored at `~/.config/turnkey/`:
 //! - `tvc.config.toml` - Main config with org registry, active org, and key paths
-//! - `orgs/<alias>/api_key.json` - Default location for API keys
-//! - `orgs/<alias>/operator.json` - Default location for operator keys
+//! - `orgs/<org-id>/api_key.json` - Default location for API keys
+//! - `orgs/<org-id>/operator.json` - Default location for operator keys
 //!
 //! Key paths are stored in the config so users can customize storage locations.
+//! Directories keyed by the legacy `orgs/<alias>/` layout remain readable —
+//! paths are data, not schema — and interactive login migrates them to the
+//! id-keyed layout.
 
 mod api_key;
 mod qos_operator_key;
@@ -21,11 +24,16 @@ pub use yubikey::{
 };
 
 use anyhow::{Context, Result, bail};
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::fmt::{self, Display, Formatter};
-use std::path::Path;
-use std::path::PathBuf;
+use std::{
+    borrow::Borrow,
+    collections::HashMap,
+    convert::Infallible,
+    fmt::{self, Display, Formatter},
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 use thiserror::Error;
 use tracing::debug;
 use uuid::Uuid;
@@ -35,56 +43,172 @@ pub const CONFIG_FILE: &str = "tvc.config.toml";
 const ORGS_DIR: &str = "orgs";
 const API_KEY_FILE: &str = "api_key.json";
 const OPERATOR_KEY_FILE: &str = "operator.json";
-const CONFIG_VERSION: u16 = 1;
+const CONFIG_VERSION: u16 = 2;
 const DEFAULT_OPERATOR_NAME: &str = "default";
 
-/// Current in-memory TVC configuration.
+/// Current in-memory TVC configuration (the v2 disk schema).
 ///
-/// Disk schemas are versioned separately below. Loading a legacy v0 config
-/// converts it to this model without writing it back; the next existing save
-/// point persists it as v1.
+/// Older disk schemas are migrated eagerly at load: the original file is
+/// renamed to `tvc.config.toml.backup`, the migrated config is written, and
+/// only then is the backup removed, so a crash at any point leaves either the
+/// old file or the backup intact.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct Config {
-    /// The currently active organization alias
+    /// The currently active organization.
     #[serde(default)]
-    pub active_org: Option<String>,
-    /// Map of org alias -> org config
+    pub active_org: Option<Uuid>,
+    /// Org registry keyed by organization ID, in config-file order.
     #[serde(default)]
-    pub orgs: HashMap<String, OrgConfig>,
+    pub orgs: IndexMap<Uuid, OrgConfig>,
+    /// User-facing names for organizations.
+    #[serde(default)]
+    pub aliases: Aliases,
     /// Registered YubiKey devices, shared across organizations. Absent from
     /// disk entirely while empty, so configs predating the registry rewrite
     /// byte-identically.
     #[serde(default, skip_serializing_if = "YubiKeyRegistry::is_empty")]
     pub yubikeys: YubiKeyRegistry,
-    /// Map of org alias -> last created app ID (for convenience)
+    /// Last created app ID per organization (for convenience).
     #[serde(default)]
-    pub last_created_app_id: HashMap<String, String>,
-    /// Map of org alias -> last manifest set operator IDs (for convenience)
+    pub last_created_app_id: HashMap<Uuid, Uuid>,
+    /// Last manifest set operator IDs per organization (for convenience).
     #[serde(default)]
-    pub last_operator_ids: HashMap<String, Vec<String>>,
+    pub last_operator_ids: HashMap<Uuid, Vec<Uuid>>,
     /// Unrecognized top-level fields retained across supported config rewrites.
     #[serde(default, flatten)]
     pub extra: toml::Table,
 }
 
+/// User-facing names for UUID-identified resources.
+///
+/// The one serialized alias surface: a name maps to exactly one ID by map
+/// construction, and every mutation goes through these methods. Nothing in
+/// here is org-specific, so future resource aliases (apps, deployments) can
+/// reuse the shape unchanged.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(transparent)]
+#[cfg_attr(test, derive(PartialEq))]
+pub struct Aliases(IndexMap<String, Uuid>);
+
+impl Aliases {
+    /// Resolve a name, remembering it for output echoing.
+    pub fn resolve(&self, name: &str) -> Option<Resolved<'_>> {
+        self.0.get_key_value(name).map(|(name, id)| Resolved {
+            name: Some(name.as_str()),
+            id: *id,
+        })
+    }
+
+    /// Names bound to `id`, in config-file order.
+    pub fn names_of(&self, id: Uuid) -> impl Iterator<Item = &str> {
+        self.0
+            .iter()
+            .filter(move |(_, bound)| **bound == id)
+            .map(|(name, _)| name.as_str())
+    }
+
+    /// Bind `name` to `id`, returning the ID it previously pointed at.
+    pub fn bind(&mut self, name: String, id: Uuid) -> Option<Uuid> {
+        self.0.insert(name, id)
+    }
+
+    /// Drop every name bound to `id`, returning the removed names in
+    /// config-file order.
+    pub fn unbind_all(&mut self, id: Uuid) -> Vec<String> {
+        let removed = self.names_of(id).map(str::to_string).collect();
+        self.0.retain(|_, bound| *bound != id);
+        removed
+    }
+
+    /// All bindings, in config-file order.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, Uuid)> {
+        self.0.iter().map(|(name, id)| (name.as_str(), *id))
+    }
+}
+
+/// A resolved org reference that remembers how the user named it, so output
+/// echoes the input: alias in -> alias out, UUID in -> UUID out.
+///
+/// Derefs to the [`Uuid`], so it drops into every ID-keyed lookup unchanged.
+#[derive(Debug, Clone, Copy)]
+pub struct Resolved<'a> {
+    name: Option<&'a str>,
+    id: Uuid,
+}
+
+impl Resolved<'_> {
+    pub fn id(&self) -> Uuid {
+        self.id
+    }
+
+    /// The name the user typed, when they typed one.
+    pub fn name(&self) -> Option<&str> {
+        self.name
+    }
+}
+
+impl From<Uuid> for Resolved<'static> {
+    fn from(id: Uuid) -> Self {
+        Self { name: None, id }
+    }
+}
+
+impl std::ops::Deref for Resolved<'_> {
+    type Target = Uuid;
+
+    fn deref(&self) -> &Uuid {
+        &self.id
+    }
+}
+
+impl Borrow<Uuid> for Resolved<'_> {
+    fn borrow(&self) -> &Uuid {
+        &self.id
+    }
+}
+
+impl Display for Resolved<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self.name {
+            Some(name) => name.fmt(f),
+            None => self.id.fmt(f),
+        }
+    }
+}
+
 /// Versioned on-disk schemas and migrations into the current runtime model.
 mod disk {
     use super::{
-        CONFIG_VERSION, Config, OperatorKind, OperatorRecord, OperatorRecordKind, OrgConfig,
-        YubiKeyRegistry,
+        Aliases, CONFIG_VERSION, Config, OperatorKind, OperatorRecord, OperatorRecordKind,
+        OrgConfig,
     };
     use anyhow::{Context, Result, bail};
-    use serde::Serialize;
-    use std::collections::HashMap;
+    use indexmap::IndexMap;
+    use serde::{Deserialize, Serialize};
     use std::path::PathBuf;
+    use uuid::Uuid;
+
+    /// A parsed config plus how it got here, so the load path knows whether
+    /// an eager write-back (with its backup fence) is required.
+    pub(super) enum Loaded {
+        Current(Config),
+        Migrated {
+            config: Config,
+            /// Human-facing notes about lossy migration decisions
+            /// (e.g. merged duplicate profiles).
+            notes: Vec<String>,
+        },
+    }
 
     /// Every supported shape of `tvc.config.toml`.
     enum DiskConfig {
         /// The legacy, unversioned config schema.
         V0(v0::Config),
-        /// The current config schema, identified by `version = 1` on disk.
-        V1(Config),
+        /// The alias-keyed schema, identified by `version = 1` on disk.
+        V1(v1::Config),
+        /// The current schema, identified by `version = 2` on disk.
+        V2(Config),
     }
 
     impl DiskConfig {
@@ -93,17 +217,32 @@ mod disk {
         fn from_toml(content: &str) -> Result<Self> {
             let mut table: toml::Table =
                 toml::from_str(content).context("failed to parse config TOML")?;
-            let header = ConfigVersionHeader::take_from(&mut table)?;
+
+            // The version marker is removed before deserializing a schema
+            // payload so it cannot be captured as an unknown field in
+            // `Config::extra`.
+            let version = table
+                .remove("version")
+                .map(|value| {
+                    u16::deserialize(value)
+                        .context("config version must be an unsigned 16-bit integer")
+                })
+                .transpose()?;
+
             let config = toml::Value::Table(table);
 
-            match header.version {
+            match version {
                 None => config
                     .try_into()
                     .map(Self::V0)
                     .context("failed to parse v0 config"),
+                Some(1) => config
+                    .try_into()
+                    .map(Self::V1)
+                    .context("failed to parse v1 config"),
                 Some(CONFIG_VERSION) => {
-                    let config = config.try_into().context("failed to parse v1 config")?;
-                    Ok(Self::V1(config))
+                    let config = config.try_into().context("failed to parse v2 config")?;
+                    Ok(Self::V2(config))
                 }
                 Some(version) if version > CONFIG_VERSION => bail!(
                     "config written by a newer tvc (version {version}); this tvc supports through version {CONFIG_VERSION}"
@@ -111,108 +250,172 @@ mod disk {
                 Some(version) => bail!("unsupported tvc config version {version}"),
             }
         }
+    }
 
-        /// Convert any supported disk schema into the current runtime model.
-        fn into_current(self) -> Result<Config> {
-            let config = match self {
-                Self::V0(config) => migrate_v0(config)?,
-                Self::V1(config) => config,
-            };
+    pub(super) fn from_toml(content: &str) -> Result<Loaded> {
+        let loaded = match DiskConfig::from_toml(content)? {
+            DiskConfig::V0(config) => migrate_v1(migrate_v0(config)?),
+            DiskConfig::V1(config) => migrate_v1(config),
+            DiskConfig::V2(config) => Loaded::Current(config),
+        };
 
-            // An organization operator may only reference a registered
-            // device; rejecting a dangling serial here keeps everything
-            // downstream of the parse free of that state.
-            let dangling = config.orgs.iter().find_map(|(alias, org)| {
-                org.operators
-                    .iter()
-                    .find_map(|operator| match &operator.kind {
-                        OperatorRecordKind::Yubikey(record)
-                            if !config.yubikeys.contains(record.serial) =>
-                        {
-                            Some((alias, &operator.name, record.serial))
-                        }
-                        _ => None,
-                    })
-            });
+        let config = match &loaded {
+            Loaded::Current(config) => config,
+            Loaded::Migrated { config, .. } => config,
+        };
+        validate_yubikey_references(config)?;
 
-            if let Some((alias, name, serial)) = dangling {
-                bail!(
-                    "organization '{alias}' operator '{name}' references YubiKey {serial}, \
-                     which is not in the yubikeys registry; edit tvc.config.toml to add the \
-                     matching [[yubikeys]] entry or remove this operator record"
-                );
-            }
+        Ok(loaded)
+    }
 
-            Ok(config)
+    /// An organization operator may only reference a registered device;
+    /// rejecting a dangling serial here keeps everything downstream of the
+    /// parse free of that state.
+    fn validate_yubikey_references(config: &Config) -> Result<()> {
+        let dangling = config.orgs.iter().find_map(|(org_id, org)| {
+            org.operators
+                .iter()
+                .find_map(|operator| match &operator.kind {
+                    OperatorRecordKind::Yubikey(record)
+                        if !config.yubikeys.contains(record.serial) =>
+                    {
+                        Some((org_id, &operator.name, record.serial))
+                    }
+                    _ => None,
+                })
+        });
+
+        if let Some((org_id, name, serial)) = dangling {
+            bail!(
+                "organization '{}' operator '{name}' references YubiKey {serial}, \
+                 which is not in the yubikeys registry; edit tvc.config.toml to add the \
+                 matching [[yubikeys]] entry or remove this operator record",
+                config.display_name(*org_id)
+            );
         }
+
+        Ok(())
     }
 
-    pub(super) fn from_toml(content: &str) -> Result<Config> {
-        DiskConfig::from_toml(content)?.into_current()
-    }
-
-    /// The version marker is removed before deserializing a schema payload so
-    /// it cannot be captured as an unknown field in `Config::extra`.
-    struct ConfigVersionHeader {
-        version: Option<u16>,
-    }
-
-    impl ConfigVersionHeader {
-        fn take_from(table: &mut toml::Table) -> Result<Self> {
-            let Some(value) = table.remove("version") else {
-                return Ok(Self { version: None });
-            };
-            let version = value
-                .try_into()
-                .context("config version must be an unsigned 16-bit integer")?;
-            Ok(Self {
-                version: Some(version),
-            })
-        }
-    }
-
-    /// Serialization-only v1 envelope. Its private construction guarantees
-    /// that every saved current config is labeled with the current version.
+    /// Serialization-only envelope. Its private construction guarantees that
+    /// every saved config is labeled with the current version.
     #[derive(Serialize)]
-    struct V1Envelope<'a> {
+    struct V2Envelope<'a> {
         version: u16,
         #[serde(flatten)]
         config: &'a Config,
     }
 
     pub(super) fn to_toml(config: &Config) -> Result<String> {
-        toml::to_string_pretty(&V1Envelope {
+        toml::to_string_pretty(&V2Envelope {
             version: CONFIG_VERSION,
             config,
         })
         .context("failed to serialize config")
     }
 
-    fn migrate_v0(config: v0::Config) -> Result<Config> {
+    /// Rekey a v1 config: aliases move to the alias map, orgs and the side
+    /// maps key by organization ID. A v1 organization registered under
+    /// several aliases collapses to one entry — the first profile in file
+    /// order wins — and every alias survives as a name for it; dropped
+    /// profiles are reported in the notes (their key files are left on disk
+    /// untouched).
+    fn migrate_v1(config: v1::Config) -> Loaded {
+        let mut aliases = Aliases::default();
+        let mut orgs: IndexMap<Uuid, OrgConfig> = IndexMap::new();
+        let mut notes = Vec::new();
+
+        for (alias, org) in config.orgs {
+            aliases.bind(alias.clone(), org.id);
+
+            let v1::OrgConfig {
+                id,
+                api_key_path,
+                api_base_url,
+                default_operator_kind,
+                operators,
+                extra,
+            } = org;
+
+            if orgs.contains_key(&id) {
+                // The alias keeps working (it now names the kept profile);
+                // only this profile's settings and key-file registration are
+                // superseded, and its files stay on disk.
+                notes.push(format!(
+                    "merged duplicate profile '{alias}' for organization {id}: the alias now \
+                     names the kept profile; key files at {} were left on disk",
+                    api_key_path.display()
+                ));
+            } else {
+                orgs.insert(
+                    id,
+                    OrgConfig {
+                        api_key_path,
+                        api_base_url,
+                        default_operator_kind,
+                        operators,
+                        extra,
+                    },
+                );
+            }
+        }
+
+        let active_org = config
+            .active_org
+            .and_then(|alias| aliases.resolve(&alias).map(|resolved| resolved.id()));
+
+        fn rekey<V>(
+            map: std::collections::HashMap<String, V>,
+            aliases: &Aliases,
+        ) -> std::collections::HashMap<Uuid, V> {
+            map.into_iter()
+                .filter_map(|(alias, value)| {
+                    aliases
+                        .resolve(&alias)
+                        .map(|resolved| (resolved.id(), value))
+                })
+                .collect()
+        }
+
+        Loaded::Migrated {
+            config: Config {
+                active_org,
+                orgs,
+                yubikeys: config.yubikeys,
+                last_created_app_id: rekey(config.last_created_app_id, &aliases),
+                last_operator_ids: rekey(config.last_operator_ids, &aliases),
+                aliases,
+                extra: config.extra,
+            },
+            notes,
+        }
+    }
+
+    fn migrate_v0(config: v0::Config) -> Result<v1::Config> {
         let orgs = config
             .orgs
             .into_iter()
             .map(|(alias, org)| migrate_v0_org(&alias, org).map(|org| (alias, org)))
-            .collect::<Result<HashMap<_, _>>>()?;
+            .collect::<Result<IndexMap<_, _>>>()?;
 
-        Ok(Config {
+        Ok(v1::Config {
             active_org: config.active_org,
             orgs,
-            yubikeys: YubiKeyRegistry::default(),
+            yubikeys: super::YubiKeyRegistry::default(),
             last_created_app_id: config.last_created_app_id,
             last_operator_ids: config.last_operator_ids,
             extra: config.extra,
         })
     }
 
-    fn migrate_v0_org(alias: &str, mut table: toml::Table) -> Result<OrgConfig> {
+    fn migrate_v0_org(alias: &str, mut table: toml::Table) -> Result<v1::OrgConfig> {
         let operator_key_path = table.remove("operator_key_path").with_context(|| {
             format!("v0 config for organization '{alias}' is missing operator_key_path")
         })?;
         let operator_key_path: PathBuf = operator_key_path.try_into().with_context(|| {
             format!("invalid operator_key_path in v0 config for organization '{alias}'")
         })?;
-        let mut org: OrgConfig = toml::Value::Table(table)
+        let mut org: v1::OrgConfig = toml::Value::Table(table)
             .try_into()
             .with_context(|| format!("failed to migrate v0 config for organization '{alias}'"))?;
 
@@ -221,24 +424,68 @@ mod disk {
         Ok(org)
     }
 
-    pub(super) mod v0 {
+    /// The alias-keyed v1 schema (read-only: parsed for migration).
+    mod v1 {
+        use super::super::{OperatorKind, OperatorRecord, YubiKeyRegistry};
+        use indexmap::IndexMap;
         use serde::Deserialize;
         use std::collections::HashMap;
+        use std::path::PathBuf;
+        use uuid::Uuid;
 
-        /// Legacy top-level schema. Organization tables remain untyped until
-        /// migration extracts `operator_key_path` and parses the current shape.
         #[derive(Deserialize)]
         pub(super) struct Config {
             #[serde(default)]
             pub(super) active_org: Option<String>,
             #[serde(default)]
-            pub(super) orgs: HashMap<String, toml::Table>,
+            pub(super) orgs: IndexMap<String, OrgConfig>,
             #[serde(default)]
-            pub(super) last_created_app_id: HashMap<String, String>,
+            pub(super) yubikeys: YubiKeyRegistry,
             #[serde(default)]
-            pub(super) last_operator_ids: HashMap<String, Vec<String>>,
-            /// Unknown root values are carried into the current config so a
-            /// migration does not discard data owned by another writer.
+            pub(super) last_created_app_id: HashMap<String, Uuid>,
+            #[serde(default)]
+            pub(super) last_operator_ids: HashMap<String, Vec<Uuid>>,
+            #[serde(default, flatten)]
+            pub(super) extra: toml::Table,
+        }
+
+        #[derive(Deserialize)]
+        pub(super) struct OrgConfig {
+            pub(super) id: Uuid,
+            pub(super) api_key_path: PathBuf,
+            #[serde(default = "super::super::default_api_base_url")]
+            pub(super) api_base_url: String,
+            #[serde(default)]
+            pub(super) default_operator_kind: OperatorKind,
+            #[serde(default)]
+            pub(super) operators: Vec<OperatorRecord>,
+            #[serde(default, flatten)]
+            pub(super) extra: toml::Table,
+        }
+    }
+
+    pub(super) mod v0 {
+        use indexmap::IndexMap;
+        use serde::Deserialize;
+        use std::collections::HashMap;
+        use uuid::Uuid;
+
+        /// Legacy top-level schema. Organization tables remain untyped until
+        /// migration extracts `operator_key_path` and parses the v1 shape.
+        #[derive(Deserialize)]
+        pub(super) struct Config {
+            #[serde(default)]
+            pub(super) active_org: Option<String>,
+            /// File order is preserved: the duplicate-organization merge keeps
+            /// the first profile in file order, for v0 exactly as for v1.
+            #[serde(default)]
+            pub(super) orgs: IndexMap<String, toml::Table>,
+            #[serde(default)]
+            pub(super) last_created_app_id: HashMap<String, Uuid>,
+            #[serde(default)]
+            pub(super) last_operator_ids: HashMap<String, Vec<Uuid>>,
+            /// Unknown root values are carried forward so a migration does not
+            /// discard data owned by another writer.
             #[serde(default, flatten)]
             pub(super) extra: toml::Table,
         }
@@ -359,12 +606,12 @@ pub struct HostedOperatorRecord {
     pub extra: toml::Table,
 }
 
-/// Configuration for a single organization.
+/// Configuration for a single organization, keyed by its organization ID in
+/// [`Config::orgs`]; the ID is deliberately not repeated here so identity has
+/// exactly one home. Human names live in [`Config::aliases`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct OrgConfig {
-    /// The Turnkey organization ID
-    pub id: String,
     /// Path to the API key file
     pub api_key_path: PathBuf,
     /// API base URL for this organization
@@ -454,6 +701,24 @@ impl OrgConfig {
             (None, _) => Err(SelectLocalOperatorError::NoLocalOperator),
             (Some(_), Some(_)) => Err(SelectLocalOperatorError::MultipleLocalOperators),
         }
+    }
+
+    /// Whether this profile's key files sit exactly in `dir` under the
+    /// default file names — i.e. `dir` is a default-layout directory the
+    /// profile owns. A profile with no local operators only needs its API key
+    /// there.
+    pub(crate) fn has_default_layout_at(&self, dir: &Path) -> bool {
+        let operator_key = dir.join(OPERATOR_KEY_FILE);
+
+        self.api_key_path == dir.join(API_KEY_FILE)
+            && self
+                .operators
+                .iter()
+                .filter_map(|operator| match &operator.kind {
+                    OperatorRecordKind::Local(local) => Some(&local.key_path),
+                    _ => None,
+                })
+                .all(|key_path| *key_path == operator_key)
     }
 
     /// The hosted operator registry entries, each with its kind-specific
@@ -553,6 +818,35 @@ fn default_api_base_url() -> String {
     API_BASE_URL_PROD.to_string()
 }
 
+/// A user-supplied organization reference, as taken by `--org` flags.
+///
+/// Organization IDs are UUIDs, so anything that parses as one is an ID and
+/// everything else is a profile alias; parsing never fails.
+#[derive(Debug, Clone)]
+pub enum OrgQuery {
+    Id(Uuid),
+    Alias(String),
+}
+
+impl FromStr for OrgQuery {
+    type Err = Infallible;
+
+    fn from_str(query: &str) -> Result<Self, Infallible> {
+        Ok(Uuid::parse_str(query)
+            .map(Self::Id)
+            .unwrap_or_else(|_| Self::Alias(query.to_string())))
+    }
+}
+
+impl Display for OrgQuery {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Id(id) => id.fmt(f),
+            Self::Alias(alias) => alias.fmt(f),
+        }
+    }
+}
+
 /// Returns the base config directory: `~/.config/turnkey/`
 pub fn config_dir() -> Result<PathBuf> {
     let home = std::env::var("HOME").context("HOME environment variable not set")?;
@@ -569,24 +863,121 @@ pub fn orgs_dir() -> Result<PathBuf> {
     Ok(config_dir()?.join(ORGS_DIR))
 }
 
-/// Returns the default directory for a specific org: `~/.config/turnkey/orgs/<alias>/`
-pub fn default_org_dir(alias: &str) -> Result<PathBuf> {
-    Ok(orgs_dir()?.join(alias))
+/// Returns the default directory for a specific org: `~/.config/turnkey/orgs/<org-id>/`
+pub fn default_org_dir(org_id: Uuid) -> Result<PathBuf> {
+    Ok(orgs_dir()?.join(org_id.to_string()))
 }
 
 /// Returns the default API key path for an org
-pub fn default_api_key_path(alias: &str) -> Result<PathBuf> {
-    Ok(default_org_dir(alias)?.join(API_KEY_FILE))
+pub fn default_api_key_path(org_id: Uuid) -> Result<PathBuf> {
+    Ok(default_org_dir(org_id)?.join(API_KEY_FILE))
 }
 
 /// Returns the default operator key path for an org
-pub fn default_operator_key_path(alias: &str) -> Result<PathBuf> {
-    Ok(default_org_dir(alias)?.join(OPERATOR_KEY_FILE))
+pub fn default_operator_key_path(org_id: Uuid) -> Result<PathBuf> {
+    Ok(default_org_dir(org_id)?.join(OPERATOR_KEY_FILE))
+}
+
+/// The legacy default directory for a profile: `~/.config/turnkey/orgs/<alias>/`.
+/// Never used for new profiles; still recognized so deletion cleans it up and
+/// interactive login can migrate it to the id-keyed layout.
+pub(crate) fn legacy_org_dir(alias: &str) -> Result<PathBuf> {
+    Ok(orgs_dir()?.join(alias))
 }
 
 impl Config {
-    pub fn from_toml(content: &str) -> Result<Self> {
-        disk::from_toml(content)
+    /// Load the config at `path`, or return the default when no file exists.
+    ///
+    /// Older schemas are migrated eagerly behind a backup fence: the original
+    /// file is renamed to `<name>.backup`, the migrated config is written,
+    /// and only after a successful write is the backup removed. An existing
+    /// backup file therefore means a previous migration crashed, and loading
+    /// refuses to proceed until it is resolved manually.
+    pub async fn load_from_path(path: &Path) -> Result<Self> {
+        let backup_path = backup_file_path(path);
+
+        if backup_path.exists() {
+            bail!(
+                r#"found {backup} from an interrupted config migration.
+
+Compare it with {config} (the backup is the pre-migration version; the config
+file may be missing or already migrated), keep the right contents at
+{config}, delete {backup}, and re-run."#,
+                backup = backup_path.display(),
+                config = path.display(),
+            );
+        }
+
+        debug!(config_path = %path.display(), "loading tvc config");
+
+        if !path.exists() {
+            debug!(config_path = %path.display(), "tvc config not found; using defaults");
+            let config = Config::default();
+            config.save_to_path(path).await?;
+            return Ok(config);
+        }
+
+        let content = tokio::fs::read_to_string(path)
+            .await
+            .with_context(|| format!("failed to read config file: {}", path.display()))?;
+        let loaded = disk::from_toml(&content)
+            .with_context(|| format!("failed to parse config file: {}", path.display()))?;
+
+        let config = match loaded {
+            disk::Loaded::Current(config) => config,
+            disk::Loaded::Migrated { config, notes } => {
+                config
+                    .persist_migration(path, &backup_path)
+                    .await
+                    .with_context(|| {
+                        format!("failed to migrate config file: {}", path.display())
+                    })?;
+
+                // One-time migration event with user-relevant, lossy
+                // decisions (merged duplicates, orphaned key files): loading
+                // has no shell handle, tracing defaults to off, and the
+                // stdout contract stays untouched — so stderr directly is
+                // the only channel that reliably reaches the user.
+                #[allow(clippy::print_stderr)]
+                for note in &notes {
+                    eprintln!("config migration: {note}");
+                }
+
+                config
+            }
+        };
+
+        debug!(
+            config_path = %path.display(),
+            active_org = ?config.active_org,
+            org_count = config.orgs.len(),
+            "loaded tvc config"
+        );
+
+        Ok(config)
+    }
+
+    /// The eager-migration backup fence: park the original, write the
+    /// migrated config, and only then remove the original. A crash between
+    /// any two steps leaves the pre-migration contents recoverable at one of
+    /// the two paths, and the backup's presence blocks the next load.
+    async fn persist_migration(&self, path: &Path, backup_path: &Path) -> Result<()> {
+        tokio::fs::rename(path, backup_path)
+            .await
+            .with_context(|| format!("failed to back up config to {}", backup_path.display()))?;
+
+        self.save_to_path(path).await?;
+
+        tokio::fs::remove_file(backup_path).await.with_context(|| {
+            format!(
+                "failed to remove migration backup {}",
+                backup_path.display()
+            )
+        })?;
+
+        debug!(config_path = %path.display(), "eagerly migrated config schema");
+
+        Ok(())
     }
 
     /// Save config to disk
@@ -623,27 +1014,80 @@ impl Config {
         Ok(())
     }
 
-    /// Get the active organization config, if any
-    pub fn active_org_config(&self) -> Option<(&String, &OrgConfig)> {
-        let alias = self.active_org.as_ref()?;
-        self.orgs.get(alias).map(|config| (alias, config))
+    /// Resolve an org query to a configured organization, remembering the
+    /// typed name for output echoing. `None` covers an unknown alias, an
+    /// unknown ID, and an alias whose organization table is missing.
+    pub fn resolve(&self, query: &OrgQuery) -> Option<(Resolved<'_>, &OrgConfig)> {
+        let resolved = match query {
+            OrgQuery::Alias(name) => self.aliases.resolve(name)?,
+            OrgQuery::Id(id) => Resolved::from(*id),
+        };
+
+        self.orgs.get(&resolved.id()).map(|org| (resolved, org))
     }
 
-    /// Add or update an organization with default key paths, starting with
-    /// the given operator backend as its default.
+    /// The active organization as a [`Resolved`] reference. The user typed
+    /// nothing to echo, so it is named by its first alias when one exists —
+    /// the human name — and by its ID otherwise.
+    pub fn resolve_active(&self) -> Option<(Resolved<'_>, &OrgConfig)> {
+        let (id, org) = self.active_org_config()?;
+        let name = self.aliases.names_of(id).next();
+        Some((Resolved { name, id }, org))
+    }
+
+    /// The name to show for an organization the user did not name themselves:
+    /// its first alias, else the bare ID.
+    pub fn display_name(&self, id: Uuid) -> String {
+        self.aliases
+            .names_of(id)
+            .next()
+            .map(str::to_string)
+            .unwrap_or_else(|| id.to_string())
+    }
+
+    /// Get the active organization config, if any
+    pub fn active_org_config(&self) -> Option<(Uuid, &OrgConfig)> {
+        let id = self.active_org?;
+        self.orgs.get(&id).map(|config| (id, config))
+    }
+
+    /// Organizations whose key files sit exactly in the legacy alias-keyed
+    /// default layout, as `(alias, org_id)` pairs in config order — the
+    /// candidates interactive login migrates to the id-keyed layout. A name
+    /// that spells its own organization ID (the two layouts coincide) is not
+    /// a candidate.
+    pub(crate) fn legacy_layout_profiles(&self) -> Result<Vec<(String, Uuid)>> {
+        self.aliases
+            .iter()
+            .map(|(name, id)| {
+                let legacy = legacy_org_dir(name)?;
+                let migrates = legacy != default_org_dir(id)?
+                    && self
+                        .orgs
+                        .get(&id)
+                        .is_some_and(|org| org.has_default_layout_at(&legacy));
+                Ok(migrates.then(|| (name.to_string(), id)))
+            })
+            .filter_map(Result::transpose)
+            .collect()
+    }
+
+    /// Register an organization with default key paths, starting with the
+    /// given operator backend as its default. An existing entry for the same
+    /// organization is replaced wholesale; names are bound separately through
+    /// [`Config::aliases`].
     pub fn add_org(
         &mut self,
-        alias: &str,
-        org_id: String,
+        org_id: Uuid,
         api_base_url: String,
         operator: NewOrgOperator,
     ) -> Result<()> {
-        debug!(org_alias = alias, %api_base_url, "adding organization config");
+        debug!(%org_id, %api_base_url, "adding organization config");
 
         let (default_operator_kind, operators) = match operator {
             NewOrgOperator::LocalKeyFile => (
                 OperatorKind::Local,
-                vec![OperatorRecord::local(default_operator_key_path(alias)?)],
+                vec![OperatorRecord::local(default_operator_key_path(org_id)?)],
             ),
             NewOrgOperator::Yubikey(serial) => {
                 (OperatorKind::Yubikey, vec![OperatorRecord::yubikey(serial)])
@@ -651,83 +1095,80 @@ impl Config {
         };
 
         let org_config = OrgConfig {
-            id: org_id,
-            api_key_path: default_api_key_path(alias)?,
+            api_key_path: default_api_key_path(org_id)?,
             api_base_url,
             default_operator_kind,
             operators,
             extra: toml::Table::new(),
         };
-        self.orgs.insert(alias.to_string(), org_config);
+        self.orgs.insert(org_id, org_config);
         Ok(())
     }
 
-    /// Remove an organization from the config, along with the convenience state
-    /// (last app ID, last operator IDs) tracked for it. If the removed org was
-    /// the active one, the active org is cleared.
+    /// Remove an organization: its registry entry, every alias bound to it,
+    /// and the convenience state tracked for it. If it was the active org,
+    /// the active org is cleared.
     ///
-    /// Returns the removed [`OrgConfig`], or `None` if no org with that alias
-    /// was configured. This only touches the config registry; deleting the
-    /// org's key files on disk is the caller's responsibility.
-    pub fn remove_org(&mut self, alias: &str) -> Option<OrgConfig> {
-        let removed = self.orgs.remove(alias)?;
-        debug!(org_alias = alias, "removing organization config");
-        self.last_created_app_id.remove(alias);
-        self.last_operator_ids.remove(alias);
-        if self.active_org.as_deref() == Some(alias) {
+    /// Returns the removed [`OrgConfig`] and the unbound aliases, or `None`
+    /// if the organization is not configured. This only touches the config;
+    /// deleting key files on disk is the caller's responsibility.
+    pub fn remove_org(&mut self, org_id: Uuid) -> Option<(OrgConfig, Vec<String>)> {
+        let removed = self.orgs.shift_remove(&org_id)?;
+        debug!(%org_id, "removing organization config");
+        let unbound = self.aliases.unbind_all(org_id);
+        self.last_created_app_id.remove(&org_id);
+        self.last_operator_ids.remove(&org_id);
+
+        if self.active_org == Some(org_id) {
             self.active_org = None;
         }
-        Some(removed)
+
+        Some((removed, unbound))
     }
 
     /// Set the active organization
-    pub fn set_active_org(&mut self, alias: &str) -> Result<()> {
-        debug!(org_alias = alias, "setting active organization");
-        if !self.orgs.contains_key(alias) {
-            bail!("organization '{}' not found in config", alias);
+    pub fn set_active_org(&mut self, org_id: Uuid) -> Result<()> {
+        debug!(%org_id, "setting active organization");
+        if !self.orgs.contains_key(&org_id) {
+            bail!("organization '{org_id}' not found in config");
         }
-        self.active_org = Some(alias.to_string());
+        self.active_org = Some(org_id);
         Ok(())
     }
 
-    /// Get list of configured org aliases
-    pub fn org_aliases(&self) -> Vec<&String> {
-        self.orgs.keys().collect()
-    }
-
     /// Store the last created app ID for the active org
-    pub fn set_last_app_id(&mut self, app_id: &str) -> Result<()> {
-        let alias = self
-            .active_org
-            .as_ref()
-            .context("no active organization set")?;
-        self.last_created_app_id
-            .insert(alias.clone(), app_id.to_string());
+    pub fn set_last_app_id(&mut self, app_id: Uuid) -> Result<()> {
+        let org_id = self.active_org.context("no active organization set")?;
+        self.last_created_app_id.insert(org_id, app_id);
         Ok(())
     }
 
     /// Get the last created app ID for the active org, if any
-    pub fn get_last_app_id(&self) -> Option<String> {
-        let alias = self.active_org.as_ref()?;
-        self.last_created_app_id.get(alias).cloned()
+    pub fn get_last_app_id(&self) -> Option<Uuid> {
+        self.last_created_app_id.get(&self.active_org?).copied()
     }
 
     /// Store the last manifest set operator IDs for the active org
-    pub fn set_last_operator_ids(&mut self, operator_ids: &[String]) -> Result<()> {
-        let alias = self
-            .active_org
-            .as_ref()
-            .context("no active organization set")?;
-        self.last_operator_ids
-            .insert(alias.clone(), operator_ids.to_vec());
+    pub fn set_last_operator_ids(&mut self, operator_ids: Vec<Uuid>) -> Result<()> {
+        let org_id = self.active_org.context("no active organization set")?;
+        self.last_operator_ids.insert(org_id, operator_ids);
         Ok(())
     }
 
     /// Get the last manifest set operator IDs for the active org
-    pub fn get_last_operator_ids(&self) -> Option<Vec<String>> {
-        let alias = self.active_org.as_ref()?;
-        self.last_operator_ids.get(alias).cloned()
+    pub fn get_last_operator_ids(&self) -> Option<&[Uuid]> {
+        self.last_operator_ids
+            .get(&self.active_org?)
+            .map(Vec::as_slice)
     }
+}
+
+/// The eager-migration backup path for a config file:
+/// `tvc.config.toml.backup` next to `tvc.config.toml`.
+fn backup_file_path(config_path: &Path) -> PathBuf {
+    let mut backup = config_path.as_os_str().to_owned();
+    backup.push(".backup");
+    PathBuf::from(backup)
 }
 
 #[cfg(test)]
@@ -735,103 +1176,546 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
+    const ORG_1: Uuid = Uuid::from_u128(1);
+    const ORG_2: Uuid = Uuid::from_u128(2);
+    const OPERATOR_ID: Uuid = Uuid::from_u128(0x123);
+    const APP_ID: Uuid = Uuid::from_u128(0x321);
+
+    fn test_org(api_base_url: &str, dir: &Path) -> OrgConfig {
+        OrgConfig {
+            api_key_path: dir.join("api_key.json"),
+            api_base_url: api_base_url.to_string(),
+            default_operator_kind: OperatorKind::Local,
+            operators: vec![OperatorRecord::local(dir.join("operator.json"))],
+            extra: toml::Table::new(),
+        }
+    }
+
+    /// Parse a config that must already be the current schema.
+    fn parse_current(content: &str) -> Result<Config> {
+        match disk::from_toml(content)? {
+            disk::Loaded::Current(config) => Ok(config),
+            disk::Loaded::Migrated { .. } => panic!("fixture must be the current schema"),
+        }
+    }
+
+    #[test]
+    fn aliases_resolve_remembers_the_typed_name() {
+        let mut aliases = Aliases::default();
+        aliases.bind("prod".to_string(), ORG_1);
+
+        let resolved = aliases.resolve("prod").expect("bound name resolves");
+
+        assert_eq!(resolved.id(), ORG_1);
+        assert_eq!(resolved.to_string(), "prod");
+        assert!(aliases.resolve("staging").is_none());
+    }
+
+    #[test]
+    fn resolved_from_an_id_displays_the_id() {
+        let resolved = Resolved::from(ORG_1);
+
+        assert_eq!(resolved.name(), None);
+        assert_eq!(resolved.to_string(), ORG_1.to_string());
+    }
+
+    #[test]
+    fn names_of_lists_synonyms_in_config_order() {
+        let mut aliases = Aliases::default();
+        aliases.bind("prod".to_string(), ORG_1);
+        aliases.bind("staging".to_string(), ORG_2);
+        aliases.bind("production".to_string(), ORG_1);
+
+        let names = aliases.names_of(ORG_1).collect::<Vec<_>>();
+
+        assert_eq!(names, ["prod", "production"]);
+    }
+
+    #[test]
+    fn bind_returns_the_previous_target_and_unbind_all_drops_names() {
+        let mut aliases = Aliases::default();
+        assert_eq!(aliases.bind("prod".to_string(), ORG_1), None);
+        assert_eq!(aliases.bind("prod".to_string(), ORG_2), Some(ORG_1));
+
+        aliases.bind("backup".to_string(), ORG_2);
+
+        assert_eq!(aliases.unbind_all(ORG_2), ["prod", "backup"]);
+        assert_eq!(aliases.names_of(ORG_2).count(), 0);
+    }
+
+    #[test]
+    fn config_resolve_rejects_a_dangling_alias() {
+        let mut config = Config::default();
+        config.aliases.bind("prod".to_string(), ORG_1);
+
+        // The alias points at an organization with no registry entry.
+        let Ok(query) = OrgQuery::from_str("prod");
+        assert!(config.resolve(&query).is_none());
+    }
+
     const V0_CONFIG: &str = r#"
 active_org = "default"
 future_root = "keep-root"
 
 [orgs.default]
-id = "org-123"
+id = "00000000-0000-0000-0000-000000000001"
 api_key_path = "/keys/api.json"
 operator_key_path = "/keys/operator.json"
 future_org = 42
 
 [last_created_app_id]
-default = "app-123"
+default = "00000000-0000-0000-0000-000000000321"
 
 [last_operator_ids]
-default = ["operator-123"]
-"#;
-
-    const MIGRATED_V1_CONFIG: &str = r#"
-version = 1
-active_org = "default"
-future_root = "keep-root"
-
-[orgs.default]
-id = "org-123"
-api_key_path = "/keys/api.json"
-api_base_url = "https://api.turnkey.com"
-default_operator_kind = "local"
-future_org = 42
-
-[[orgs.default.operators]]
-name = "default"
-kind = "local"
-key_path = "/keys/operator.json"
-
-[last_created_app_id]
-default = "app-123"
-
-[last_operator_ids]
-default = ["operator-123"]
+default = ["00000000-0000-0000-0000-000000000123"]
 "#;
 
     #[tokio::test]
-    async fn migrates_v0_in_memory_and_writes_v1_lazily() {
+    async fn migrates_v0_to_v2_eagerly_with_backup_lifecycle() {
         let temp = TempDir::new().unwrap();
         let path = temp.path().join("tvc.config.toml");
         tokio::fs::write(&path, V0_CONFIG).await.unwrap();
 
-        let content = tokio::fs::read_to_string(&path).await.unwrap();
-        let config = Config::from_toml(&content).unwrap();
-        let original = tokio::fs::read_to_string(&path).await.unwrap();
-        assert_eq!(original, V0_CONFIG);
+        let config = Config::load_from_path(&path).await.unwrap();
 
-        let org = &config.orgs["default"];
-        assert_eq!(org.default_operator_kind, OperatorKind::Local);
-        assert_eq!(org.operators.len(), 1);
-        assert_eq!(org.operators[0].name, DEFAULT_OPERATOR_NAME);
-        let OperatorRecordKind::Local(local) = &org.operators[0].kind else {
-            panic!("migrated operator must be local");
-        };
-        assert_eq!(local.key_path, PathBuf::from("/keys/operator.json"));
+        assert_eq!(config.aliases.resolve("default").unwrap().id(), ORG_1);
+        assert_eq!(config.active_org, Some(ORG_1));
+        assert_eq!(
+            config.orgs[&ORG_1].api_key_path,
+            PathBuf::from("/keys/api.json")
+        );
+        assert_eq!(
+            config.orgs[&ORG_1].extra["future_org"],
+            toml::Value::Integer(42)
+        );
+        assert_eq!(
+            config.extra["future_root"],
+            toml::Value::String("keep-root".into())
+        );
+        assert_eq!(config.last_created_app_id[&ORG_1], Uuid::from_u128(0x321));
+        assert_eq!(
+            config.last_operator_ids[&ORG_1],
+            vec![Uuid::from_u128(0x123)]
+        );
 
-        config.save_to_path(&path).await.unwrap();
+        // Eagerly rewritten: the file on disk is v2 and the backup is gone.
         let saved = tokio::fs::read_to_string(&path).await.unwrap();
-        let actual = disk::from_toml(&saved).unwrap();
-        let expected = disk::from_toml(MIGRATED_V1_CONFIG).unwrap();
-        assert_eq!(actual, expected);
+        assert!(saved.contains("version = 2"), "{saved}");
+        assert!(!backup_file_path(&path).exists());
+
+        // A second load takes the already-current path and changes nothing.
+        let reloaded = Config::load_from_path(&path).await.unwrap();
+        assert_eq!(reloaded, config);
+    }
+
+    const V1_DUPLICATES: &str = r#"
+version = 1
+active_org = "alias-a"
+
+[orgs.alias-a]
+id = "00000000-0000-0000-0000-000000000001"
+api_key_path = "/keys/a/api.json"
+api_base_url = "https://a.example"
+
+[orgs.alias-b]
+id = "00000000-0000-0000-0000-000000000001"
+api_key_path = "/keys/b/api.json"
+api_base_url = "https://b.example"
+"#;
+
+    #[tokio::test]
+    async fn v1_duplicates_merge_to_the_first_profile_keeping_every_alias() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("tvc.config.toml");
+        tokio::fs::write(&path, V1_DUPLICATES).await.unwrap();
+
+        let config = Config::load_from_path(&path).await.unwrap();
+
+        // The first profile in file order wins; both names survive.
+        assert_eq!(config.orgs.len(), 1);
+        assert_eq!(config.orgs[&ORG_1].api_base_url, "https://a.example");
+        assert_eq!(config.aliases.resolve("alias-a").unwrap().id(), ORG_1);
+        assert_eq!(config.aliases.resolve("alias-b").unwrap().id(), ORG_1);
+        assert_eq!(config.active_org, Some(ORG_1));
+    }
+
+    #[tokio::test]
+    async fn migrates_v1_to_v2_eagerly_with_backup_lifecycle() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("tvc.config.toml");
+        tokio::fs::write(
+            &path,
+            format!(
+                r#"
+version = 1
+active_org = "prod"
+future_root = "keep-root"
+
+[orgs.prod]
+id = "00000000-0000-0000-0000-000000000001"
+api_key_path = "/keys/api.json"
+future_org = 42
+
+[last_created_app_id]
+prod = "{APP_ID}"
+
+[last_operator_ids]
+prod = ["{OPERATOR_ID}"]
+"#
+            ),
+        )
+        .await
+        .unwrap();
+
+        let config = Config::load_from_path(&path).await.unwrap();
+
+        // Registry and side maps re-key from alias to organization ID, and
+        // unknown fields survive at both levels.
+        assert_eq!(config.aliases.resolve("prod").unwrap().id(), ORG_1);
+        assert_eq!(config.active_org, Some(ORG_1));
+        assert_eq!(config.last_created_app_id[&ORG_1], APP_ID);
+        assert_eq!(config.last_operator_ids[&ORG_1], vec![OPERATOR_ID]);
+        assert_eq!(
+            config.orgs[&ORG_1].extra["future_org"],
+            toml::Value::Integer(42)
+        );
+        assert_eq!(
+            config.extra["future_root"],
+            toml::Value::String("keep-root".into())
+        );
+
+        // Eagerly rewritten: the file on disk is v2 and the backup is gone.
+        let saved = tokio::fs::read_to_string(&path).await.unwrap();
+        assert!(saved.contains("version = 2"), "{saved}");
+        assert!(!backup_file_path(&path).exists());
+
+        let reloaded = Config::load_from_path(&path).await.unwrap();
+        assert_eq!(reloaded, config);
+    }
+
+    /// The fence blocks even when the config file itself already carries the
+    /// migrated schema: a crash between writing the new file and removing
+    /// the backup must surface, not be silently absorbed.
+    #[tokio::test]
+    async fn an_existing_backup_blocks_even_an_already_migrated_config() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("tvc.config.toml");
+
+        let mut config = Config::default();
+        config
+            .add_org(
+                ORG_1,
+                API_BASE_URL_PROD.to_string(),
+                NewOrgOperator::LocalKeyFile,
+            )
+            .unwrap();
+        config.save_to_path(&path).await.unwrap();
+        tokio::fs::write(backup_file_path(&path), V0_CONFIG)
+            .await
+            .unwrap();
+
+        let error = Config::load_from_path(&path)
+            .await
+            .expect_err("backup must block");
+
+        assert!(
+            error.to_string().contains("interrupted config migration"),
+            "{error}"
+        );
+    }
+
+    /// Deleting the backup — the manual fix for a crash after the migrated
+    /// file was written — unblocks loading with the migration intact.
+    #[tokio::test]
+    async fn removing_the_backup_recovers_the_post_write_crash_window() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("tvc.config.toml");
+        tokio::fs::write(&path, V0_CONFIG).await.unwrap();
+        let migrated = Config::load_from_path(&path).await.unwrap();
+
+        // Recreate the crash window: the migrated file was written but the
+        // process died before the backup was removed.
+        tokio::fs::write(backup_file_path(&path), V0_CONFIG)
+            .await
+            .unwrap();
+        Config::load_from_path(&path)
+            .await
+            .expect_err("fence engaged");
+
+        tokio::fs::remove_file(backup_file_path(&path))
+            .await
+            .unwrap();
+
+        assert_eq!(Config::load_from_path(&path).await.unwrap(), migrated);
+    }
+
+    /// Restoring the backup over the config path — the manual fix for a
+    /// crash between parking the original and writing the new file — re-runs
+    /// the migration cleanly.
+    #[tokio::test]
+    async fn restoring_the_backup_recovers_the_pre_write_crash_window() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("tvc.config.toml");
+        // The crash window: original parked at the backup path, no config.
+        tokio::fs::write(backup_file_path(&path), V0_CONFIG)
+            .await
+            .unwrap();
+        Config::load_from_path(&path)
+            .await
+            .expect_err("fence engaged");
+
+        tokio::fs::rename(backup_file_path(&path), &path)
+            .await
+            .unwrap();
+
+        let config = Config::load_from_path(&path).await.unwrap();
+
+        assert_eq!(config.active_org, Some(ORG_1));
+        assert!(
+            tokio::fs::read_to_string(&path)
+                .await
+                .unwrap()
+                .contains("version = 2")
+        );
+        assert!(!backup_file_path(&path).exists());
+    }
+
+    /// v0 kept its organizations in file order too: a duplicated
+    /// organization ID merges to the first profile in file order, exactly as
+    /// it does for v1, not to a hash-ordered arbitrary one.
+    #[tokio::test]
+    async fn v0_duplicate_org_ids_merge_to_the_first_profile_in_file_order() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("tvc.config.toml");
+        tokio::fs::write(
+            &path,
+            r#"
+[orgs.first]
+id = "00000000-0000-0000-0000-000000000001"
+api_key_path = "/keys/first/api.json"
+operator_key_path = "/keys/first/operator.json"
+
+[orgs.second]
+id = "00000000-0000-0000-0000-000000000001"
+api_key_path = "/keys/second/api.json"
+operator_key_path = "/keys/second/operator.json"
+"#,
+        )
+        .await
+        .unwrap();
+
+        let config = Config::load_from_path(&path).await.unwrap();
+
+        assert_eq!(config.orgs.len(), 1);
+        assert_eq!(
+            config.orgs[&ORG_1].api_key_path,
+            PathBuf::from("/keys/first/api.json")
+        );
+        // Both names survive as aliases for the kept profile.
+        assert_eq!(config.aliases.resolve("first").unwrap().id(), ORG_1);
+        assert_eq!(config.aliases.resolve("second").unwrap().id(), ORG_1);
     }
 
     #[test]
-    fn rejects_malformed_version() {
-        let error = disk::from_toml("version = \"one\"").expect_err("malformed version must fail");
+    fn v0_missing_operator_key_path_names_the_organization() {
+        let error = disk::from_toml(
+            r#"
+[orgs.prod]
+id = "00000000-0000-0000-0000-000000000001"
+api_key_path = "/keys/api.json"
+"#,
+        )
+        .map(|_| ())
+        .expect_err("v0 without operator_key_path must fail");
+
         assert!(
-            error
+            format!("{error:#}")
+                .contains("v0 config for organization 'prod' is missing operator_key_path"),
+            "{error:#}"
+        );
+    }
+
+    /// Side-map entries whose alias has no surviving profile are dropped —
+    /// there is no organization ID to re-key them under.
+    #[tokio::test]
+    async fn v1_side_maps_drop_entries_for_unknown_aliases() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("tvc.config.toml");
+        tokio::fs::write(
+            &path,
+            format!(
+                r#"
+version = 1
+
+[orgs.prod]
+id = "00000000-0000-0000-0000-000000000001"
+api_key_path = "/keys/api.json"
+
+[last_created_app_id]
+ghost = "{APP_ID}"
+
+[last_operator_ids]
+prod = ["{OPERATOR_ID}"]
+"#
+            ),
+        )
+        .await
+        .unwrap();
+
+        let config = Config::load_from_path(&path).await.unwrap();
+
+        assert!(config.last_created_app_id.is_empty());
+        assert_eq!(config.last_operator_ids[&ORG_1], vec![OPERATOR_ID]);
+    }
+
+    /// An active_org naming an alias with no profile cannot survive the
+    /// re-keying; the migrated config simply has no active organization.
+    #[tokio::test]
+    async fn v1_dangling_active_org_migrates_to_none() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("tvc.config.toml");
+        tokio::fs::write(
+            &path,
+            r#"
+version = 1
+active_org = "ghost"
+
+[orgs.prod]
+id = "00000000-0000-0000-0000-000000000001"
+api_key_path = "/keys/api.json"
+"#,
+        )
+        .await
+        .unwrap();
+
+        let config = Config::load_from_path(&path).await.unwrap();
+
+        assert_eq!(config.active_org, None);
+        assert_eq!(config.aliases.resolve("prod").unwrap().id(), ORG_1);
+    }
+
+    #[tokio::test]
+    async fn an_existing_backup_blocks_loading() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("tvc.config.toml");
+        tokio::fs::write(&path, V0_CONFIG).await.unwrap();
+        tokio::fs::write(backup_file_path(&path), "old contents")
+            .await
+            .unwrap();
+
+        let error = Config::load_from_path(&path)
+            .await
+            .expect_err("backup file must block the load");
+
+        assert!(
+            error.to_string().contains("interrupted config migration"),
+            "{error}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_backup_without_a_config_still_blocks_instead_of_defaulting() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("tvc.config.toml");
+        tokio::fs::write(backup_file_path(&path), "old contents")
+            .await
+            .unwrap();
+
+        let error = Config::load_from_path(&path)
+            .await
+            .expect_err("the user's data is in the backup; a fresh default would hide it");
+
+        assert!(
+            error.to_string().contains("interrupted config migration"),
+            "{error}"
+        );
+    }
+
+    #[tokio::test]
+    async fn v2_round_trips_without_a_migration() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("tvc.config.toml");
+
+        let mut config = Config::default();
+        config
+            .add_org(
+                ORG_1,
+                API_BASE_URL_PROD.to_string(),
+                NewOrgOperator::LocalKeyFile,
+            )
+            .unwrap();
+        config.aliases.bind("prod".to_string(), ORG_1);
+        config.set_active_org(ORG_1).unwrap();
+
+        config.save_to_path(&path).await.unwrap();
+        let loaded = Config::load_from_path(&path).await.unwrap();
+
+        assert_eq!(loaded, config);
+        assert!(!backup_file_path(&path).exists());
+    }
+
+    #[test]
+    fn rejects_malformed_and_newer_versions() {
+        let malformed = disk::from_toml("version = \"one\"")
+            .map(|_| ())
+            .expect_err("malformed must fail");
+        assert!(
+            malformed
                 .to_string()
                 .contains("config version must be an unsigned 16-bit integer")
         );
+
+        let newer = disk::from_toml("version = 3")
+            .map(|_| ())
+            .expect_err("newer must fail");
+        assert!(
+            newer.to_string().contains("written by a newer tvc"),
+            "{newer}"
+        );
+    }
+
+    #[test]
+    fn remove_org_unbinds_every_alias_and_clears_active() {
+        let mut config = Config::default();
+        config
+            .add_org(
+                ORG_1,
+                API_BASE_URL_PROD.to_string(),
+                NewOrgOperator::LocalKeyFile,
+            )
+            .unwrap();
+        config.aliases.bind("prod".to_string(), ORG_1);
+        config.aliases.bind("production".to_string(), ORG_1);
+        config.set_active_org(ORG_1).unwrap();
+
+        let (_, unbound) = config.remove_org(ORG_1).expect("org is configured");
+
+        assert_eq!(unbound, ["prod", "production"]);
+        assert_eq!(config.active_org, None);
+        assert!(config.aliases.resolve("prod").is_none());
     }
 
     /// Serials are deliberately non-canonical (uppercase, unpadded) to pin
     /// the parse-then-canonicalize behavior on save.
-    fn v1_yubikey_config() -> String {
+    fn v2_yubikey_config() -> String {
         format!(
             r#"
-version = 1
-active_org = "default"
+version = 2
+active_org = "11111111-1111-4111-8111-111111111111"
+
+[aliases]
+default = "11111111-1111-4111-8111-111111111111"
 
 [[yubikeys]]
 serial = "1C95C1F"
 public_key = "{}"
 future_entry = "keep"
 
-[orgs.default]
-id = "org-123"
+[orgs.11111111-1111-4111-8111-111111111111]
 api_key_path = "/keys/api.json"
 default_operator_kind = "yubikey"
 
-[[orgs.default.operators]]
+[[orgs.11111111-1111-4111-8111-111111111111.operators]]
 name = "yubikey"
 kind = "yubikey"
 serial = "1C95C1F"
@@ -842,13 +1726,14 @@ serial = "1C95C1F"
 
     #[test]
     fn round_trips_yubikey_registry_and_operator_records() {
-        let config = disk::from_toml(&v1_yubikey_config()).unwrap();
+        let config = parse_current(&v2_yubikey_config()).unwrap();
 
         let serial = YubiKeySerial::from(0x01c9_5c1f);
         let entry = config.yubikeys.get(serial).unwrap();
         assert_eq!(entry.public_key.to_string(), "07".repeat(130));
 
-        let org = &config.orgs["default"];
+        let org_id: Uuid = "11111111-1111-4111-8111-111111111111".parse().unwrap();
+        let org = &config.orgs[&org_id];
         assert_eq!(org.default_operator_kind, OperatorKind::Yubikey);
         let OperatorRecordKind::Yubikey(record) = &org.operators[0].kind else {
             panic!("operator must be a yubikey record");
@@ -861,12 +1746,12 @@ serial = "1C95C1F"
         assert!(saved.contains("kind = \"yubikey\""));
         assert!(saved.contains("default_operator_kind = \"yubikey\""));
         assert!(saved.contains("future_entry = \"keep\""));
-        assert_eq!(disk::from_toml(&saved).unwrap(), config);
+        assert_eq!(parse_current(&saved).unwrap(), config);
     }
 
     #[test]
     fn empty_registry_stays_off_disk() {
-        let config = disk::from_toml(MIGRATED_V1_CONFIG).unwrap();
+        let config = Config::default();
 
         assert!(!disk::to_toml(&config).unwrap().contains("yubikeys"));
     }
@@ -878,7 +1763,8 @@ serial = "1C95C1F"
             "07".repeat(130)
         );
 
-        let error = disk::from_toml(&format!("version = 1\n{entry}{entry}"))
+        let error = disk::from_toml(&format!("version = 2\n{entry}{entry}"))
+            .map(|_| ())
             .expect_err("duplicate serials must fail");
 
         assert!(
@@ -890,18 +1776,21 @@ serial = "1C95C1F"
     fn rejects_a_dangling_yubikey_operator_reference() {
         let error = disk::from_toml(
             r#"
-version = 1
+version = 2
 
-[orgs.default]
-id = "org-123"
+[aliases]
+default = "11111111-1111-4111-8111-111111111111"
+
+[orgs.11111111-1111-4111-8111-111111111111]
 api_key_path = "/keys/api.json"
 
-[[orgs.default.operators]]
+[[orgs.11111111-1111-4111-8111-111111111111.operators]]
 name = "yubikey"
 kind = "yubikey"
 serial = "01c95c1f"
 "#,
         )
+        .map(|_| ())
         .expect_err("a reference without a registry entry must fail");
 
         assert_eq!(
@@ -911,9 +1800,9 @@ serial = "01c95c1f"
              [[yubikeys]] entry or remove this operator record"
         );
     }
+
     fn yubikey_org(serials: &[u32]) -> OrgConfig {
         OrgConfig {
-            id: "org-123".to_string(),
             api_key_path: PathBuf::from("/keys/api.json"),
             api_base_url: default_api_base_url(),
             default_operator_kind: OperatorKind::Yubikey,
@@ -1003,11 +1892,9 @@ serial = "01c95c1f"
             YubiKeySerial::from(0x01c9_5c1f),
             QosOperatorPublicKey::try_from([7u8; 130].as_slice()).unwrap(),
         );
-        config
-            .orgs
-            .insert("default".to_string(), yubikey_org(&[0x01c9_5c1f]));
+        config.orgs.insert(ORG_1, yubikey_org(&[0x01c9_5c1f]));
 
-        let removed = config.remove_org("default").unwrap();
+        let (removed, _) = config.remove_org(ORG_1).unwrap();
 
         assert_eq!(removed.operators.len(), 1);
         assert!(config.orgs.is_empty());
@@ -1031,18 +1918,40 @@ serial = "01c95c1f"
     }
 
     #[test]
+    fn has_default_layout_at_requires_both_default_file_names() {
+        let dir = Path::new("/keys/org");
+        let org = test_org(API_BASE_URL_PROD, dir);
+
+        assert!(org.has_default_layout_at(dir));
+        assert!(!org.has_default_layout_at(Path::new("/keys/other")));
+
+        let custom_operator = OrgConfig {
+            operators: vec![OperatorRecord::local(PathBuf::from(
+                "/elsewhere/operator.json",
+            ))],
+            ..org.clone()
+        };
+        assert!(!custom_operator.has_default_layout_at(dir));
+
+        let custom_api_key = OrgConfig {
+            api_key_path: PathBuf::from("/elsewhere/api_key.json"),
+            ..org
+        };
+        assert!(!custom_api_key.has_default_layout_at(dir));
+    }
+
+    #[test]
     fn add_org_with_a_yubikey_starts_on_the_yubikey_backend() {
         let mut config = Config::default();
         config
             .add_org(
-                "default",
-                "org-123".to_string(),
+                ORG_1,
                 API_BASE_URL_PROD.to_string(),
                 NewOrgOperator::Yubikey(YubiKeySerial::from(0x01c9_5c1f)),
             )
             .unwrap();
 
-        let org = &config.orgs["default"];
+        let org = &config.orgs[&ORG_1];
         assert_eq!(org.default_operator_kind, OperatorKind::Yubikey);
         assert_eq!(
             org.operators,

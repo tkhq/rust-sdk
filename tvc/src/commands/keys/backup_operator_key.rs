@@ -2,9 +2,9 @@
 //! user-chosen destination.
 
 use crate::{
-    commands::{Run, login::find_org},
+    commands::{Run, login::resolve_org_query},
     config::turnkey::{
-        Config, QosOperatorPublicKey, SelectLocalOperatorError, StoredQosOperatorKey,
+        Config, OrgQuery, QosOperatorPublicKey, SelectLocalOperatorError, StoredQosOperatorKey,
     },
     outcome::Outcome,
     output::StdCtx,
@@ -16,6 +16,7 @@ use serde::Serialize;
 use std::{
     fmt::{self, Display, Formatter},
     path::PathBuf,
+    str::FromStr,
 };
 
 /// Back up a local operator key by copying its key file to a chosen
@@ -25,8 +26,8 @@ use std::{
 pub struct Args {
     /// Organization alias or ID whose operator key to back up.
     /// Defaults to the active organization.
-    #[arg(long, env = "TVC_ORG", value_name = "ORG")]
-    org: Option<String>,
+    #[arg(long, env = "TVC_ORG", value_name = "ORG", value_parser = OrgQuery::from_str)]
+    org: Option<OrgQuery>,
     /// Destination file for the backup copy.
     #[arg(short, long, value_name = "PATH", env = "TVC_OPERATOR_KEY_BACKUP_OUT")]
     output: Option<PathBuf>,
@@ -48,17 +49,15 @@ impl Run for Args {
             return Err(error_required_in_non_interactive("--output"));
         }
 
-        let (alias, org_config) = match &self.org {
-            Some(query) => find_org(&config, query).ok_or_else(|| {
-                anyhow!(
-                    "Login profile '{query}' not found. \
-                     Run `tvc login` to see configured profiles."
-                )
-            })?,
-            None => config
-                .active_org_config()
-                .ok_or_else(|| anyhow!("No active organization. Run `tvc login` first."))?,
-        };
+        let (resolved, org_config) = self
+            .org
+            .as_ref()
+            .map(|query| resolve_org_query(&config, query))
+            .unwrap_or_else(|| {
+                config
+                    .resolve_active()
+                    .ok_or_else(|| anyhow!("No active organization. Run `tvc login` first."))
+            })?;
 
         let (_, local) = org_config
             .select_local_operator()
@@ -68,13 +67,13 @@ impl Run for Args {
                 // missing-operator error.
                 SelectLocalOperatorError::NoLocalOperator => {
                     anyhow::Error::new(error).context(format!(
-                        "org '{alias}' has no local operator key file to back up; hosted \
+                        "org '{resolved}' has no local operator key file to back up; hosted \
                          operators' private keys are held by Turnkey, and YubiKey operators' \
                          private keys never leave the device — neither can be exported"
                     ))
                 }
                 SelectLocalOperatorError::MultipleLocalOperators => {
-                    anyhow::Error::new(error).context(format!("org '{alias}'"))
+                    anyhow::Error::new(error).context(format!("org '{resolved}'"))
                 }
             })?;
         let source = &local.key_path;
@@ -108,11 +107,11 @@ impl Run for Args {
             }
             // No --output: the shared interactive flow. Declining the
             // overwrite cancels the command - backing up is all it does.
-            None => prompt_for_backup_destination(alias)?
+            None => prompt_for_backup_destination(&resolved.to_string())?
                 .ok_or_else(|| anyhow!("operation cancelled by user: backup"))?,
         };
 
-        back_up(alias.to_string(), source.clone(), destination).await
+        back_up(resolved.to_string(), source.clone(), destination).await
     }
 }
 

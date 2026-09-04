@@ -1,6 +1,9 @@
 mod common;
 
+const ORG_TEST: &str = "33333333-3333-4333-8333-333333333333";
+
 use assert_cmd::cargo::cargo_bin_cmd;
+use indexmap::IndexMap;
 use predicates::prelude::*;
 use std::collections::HashMap;
 use std::fs;
@@ -50,7 +53,7 @@ fn write_config(home: &TempDir, config: &Config) {
     fs::write(
         config_dir.join("tvc.config.toml"),
         format!(
-            r#"version = 1
+            r#"version = 2
 {}"#,
             toml::to_string_pretty(config).unwrap()
         ),
@@ -64,7 +67,7 @@ fn authenticated_command(home: &TempDir, api_base_url: &str) -> assert_cmd::Comm
     command
         .env_clear()
         .env("HOME", home.path())
-        .env("TVC_ORG_ID", "org-test")
+        .env("TVC_ORG_ID", ORG_TEST)
         .env(
             "TVC_API_KEY_PUBLIC",
             hex::encode(stamper.compressed_public_key()),
@@ -128,12 +131,12 @@ fn deployment_response(
     serde_json::to_string(&GetTvcDeploymentResponse {
         tvc_deployment: Some(TvcDeployment {
             id: DEPLOYMENT_ID.to_string(),
-            organization_id: "org-test".to_string(),
+            organization_id: ORG_TEST.parse().unwrap(),
             app_id: "app-test".to_string(),
             manifest_set: Some(TvcOperatorSet {
                 id: "manifest-set-test".to_string(),
                 name: "manifest-set".to_string(),
-                organization_id: "org-test".to_string(),
+                organization_id: ORG_TEST.parse().unwrap(),
                 operators: vec![
                     TvcOperator {
                         id: HOSTED_OPERATOR_ID.to_string(),
@@ -175,12 +178,11 @@ fn deployment_response(
 
 fn write_hosted_config(home: &TempDir) {
     let public = fixture_manifest_member_key(0);
-    let config = Config {
-        active_org: Some("test".to_string()),
-        orgs: HashMap::from([(
-            "test".to_string(),
+    let mut config = Config {
+        active_org: Some(ORG_TEST.parse().unwrap()),
+        orgs: IndexMap::from([(
+            ORG_TEST.parse().unwrap(),
             OrgConfig {
-                id: "org-test".to_string(),
                 api_key_path: home.path().join("api-key.json"),
                 api_base_url: "https://api.turnkey.com".to_string(),
                 default_operator_kind: OperatorKind::Hosted,
@@ -200,6 +202,9 @@ fn write_hosted_config(home: &TempDir) {
         )]),
         ..Config::default()
     };
+    config
+        .aliases
+        .bind("test".to_string(), ORG_TEST.parse().unwrap());
     write_config(home, &config);
 }
 
@@ -264,7 +269,7 @@ fn selected_yubikey_without_a_prompt_reports_the_pin_requirement() {
     common::write_yubikey_only_config_with_public_key(
         temp.path(),
         "test",
-        "org-test",
+        ORG_TEST,
         fixture_manifest_member_key(0),
     );
 
@@ -291,12 +296,11 @@ fn deploy_id_and_serial_resolve_one_operator_identity_by_public_key() {
     let hosted_key = fixture_manifest_member_key(0);
     let yubikey_key = fixture_manifest_member_key(2);
     let serial = YubiKeySerial::from(0x01c9_5c1f);
-    let config = Config {
-        active_org: Some("test".to_string()),
-        orgs: HashMap::from([(
-            "test".to_string(),
+    let mut config = Config {
+        active_org: Some(ORG_TEST.parse().unwrap()),
+        orgs: IndexMap::from([(
+            ORG_TEST.parse().unwrap(),
             OrgConfig {
-                id: "org-test".to_string(),
                 api_key_path: temp.path().join("api-key.json"),
                 api_base_url: "http://127.0.0.1:1".to_string(),
                 default_operator_kind: OperatorKind::Hosted,
@@ -332,14 +336,17 @@ fn deploy_id_and_serial_resolve_one_operator_identity_by_public_key() {
         .try_into()
         .unwrap(),
         last_operator_ids: HashMap::from([(
-            "test".to_string(),
+            ORG_TEST.parse().unwrap(),
             vec![
-                "66666666-6666-4666-8666-666666666666".to_string(),
-                "77777777-7777-4777-8777-777777777777".to_string(),
+                "66666666-6666-4666-8666-666666666666".parse().unwrap(),
+                "77777777-7777-4777-8777-777777777777".parse().unwrap(),
             ],
         )]),
         ..Config::default()
     };
+    config
+        .aliases
+        .bind("test".to_string(), ORG_TEST.parse().unwrap());
     write_config(&temp, &config);
 
     let body = deployment_response(hosted_key, yubikey_key);
@@ -371,7 +378,7 @@ fn deploy_id_and_serial_resolve_one_operator_identity_by_public_key() {
 #[test]
 fn an_unknown_yubikey_serial_is_rejected_before_manifest_io() {
     let temp = TempDir::new().unwrap();
-    common::write_yubikey_only_config(temp.path(), "test", "org-test");
+    common::write_yubikey_only_config(temp.path(), "test", ORG_TEST);
 
     cargo_bin_cmd!("tvc")
         .env("HOME", temp.path())
@@ -487,12 +494,11 @@ fn malformed_config_fails_before_dispatch_even_with_explicit_seed() {
 #[test]
 fn remembered_operator_ids_are_not_approval_candidates() {
     let temp = TempDir::new().unwrap();
-    let config = Config {
-        active_org: Some("test".to_string()),
-        orgs: HashMap::from([(
-            "test".to_string(),
+    let mut config = Config {
+        active_org: Some(ORG_TEST.parse().unwrap()),
+        orgs: IndexMap::from([(
+            ORG_TEST.parse().unwrap(),
             OrgConfig {
-                id: "org-test".to_string(),
                 api_key_path: temp.path().join("api-key.json"),
                 api_base_url: "https://api.turnkey.com".to_string(),
                 default_operator_kind: OperatorKind::Local,
@@ -500,9 +506,15 @@ fn remembered_operator_ids_are_not_approval_candidates() {
                 extra: toml::Table::new(),
             },
         )]),
-        last_operator_ids: HashMap::from([("test".to_string(), vec!["not-a-uuid".to_string()])]),
+        last_operator_ids: HashMap::from([(
+            ORG_TEST.parse().unwrap(),
+            vec!["99999999-9999-4999-8999-999999999999".parse().unwrap()],
+        )]),
         ..Config::default()
     };
+    config
+        .aliases
+        .bind("test".to_string(), ORG_TEST.parse().unwrap());
     write_config(&temp, &config);
 
     cargo_bin_cmd!("tvc")
@@ -534,12 +546,11 @@ fn malformed_registered_local_operator_id_is_reported() {
         .unwrap(),
     )
     .unwrap();
-    let config = Config {
-        active_org: Some("test".to_string()),
-        orgs: HashMap::from([(
-            "test".to_string(),
+    let mut config = Config {
+        active_org: Some(ORG_TEST.parse().unwrap()),
+        orgs: IndexMap::from([(
+            ORG_TEST.parse().unwrap(),
             OrgConfig {
-                id: "org-test".to_string(),
                 api_key_path: temp.path().join("api-key.json"),
                 api_base_url: "https://api.turnkey.com".to_string(),
                 default_operator_kind: OperatorKind::Local,
@@ -556,6 +567,9 @@ fn malformed_registered_local_operator_id_is_reported() {
         )]),
         ..Config::default()
     };
+    config
+        .aliases
+        .bind("test".to_string(), ORG_TEST.parse().unwrap());
     write_config(&temp, &config);
 
     cargo_bin_cmd!("tvc")
@@ -588,12 +602,11 @@ fn manifest_membership_controls_signer_resolution_in_mixed_registry() {
         .unwrap(),
     )
     .unwrap();
-    let config = Config {
-        active_org: Some("test".to_string()),
-        orgs: HashMap::from([(
-            "test".to_string(),
+    let mut config = Config {
+        active_org: Some(ORG_TEST.parse().unwrap()),
+        orgs: IndexMap::from([(
+            ORG_TEST.parse().unwrap(),
             OrgConfig {
-                id: "org-test".to_string(),
                 api_key_path: temp.path().join("api-key.json"),
                 api_base_url: "https://api.turnkey.com".to_string(),
                 default_operator_kind: OperatorKind::Local,
@@ -623,11 +636,14 @@ fn manifest_membership_controls_signer_resolution_in_mixed_registry() {
             },
         )]),
         last_operator_ids: HashMap::from([(
-            "test".to_string(),
-            vec![HOSTED_OPERATOR_ID.to_string()],
+            ORG_TEST.parse().unwrap(),
+            vec![HOSTED_OPERATOR_ID.parse().unwrap()],
         )]),
         ..Config::default()
     };
+    config
+        .aliases
+        .bind("test".to_string(), ORG_TEST.parse().unwrap());
     write_config(&temp, &config);
 
     cargo_bin_cmd!("tvc")

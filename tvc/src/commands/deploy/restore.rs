@@ -39,7 +39,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Resul
 
     let result = auth
         .client
-        .restore_tvc_deployment(auth.org_id, timestamp_ms, intent)
+        .restore_tvc_deployment(auth.org_id.to_string(), timestamp_ms, intent)
         .await
         .context("failed to restore TVC deployment")?;
 

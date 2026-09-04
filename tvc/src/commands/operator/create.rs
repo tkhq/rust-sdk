@@ -186,13 +186,13 @@ impl Run for Args {
     async fn run(self, ctx: &mut StdCtx, mut config: Config) -> Result<CreateOutcome> {
         match CreatePlan::try_from(self)? {
             CreatePlan::Hosted { spec, make_default } => {
-                let (alias, configured_org_id) = config
+                let (org_id, _) = config
                     .active_org_config()
-                    .map(|(alias, org)| (alias.clone(), org.id.as_str()))
                     .context("No active organization. Run `tvc login` first.")?;
+                let org_display = config.display_name(org_id);
 
                 let auth = build_client(&config).await?;
-                ensure_authenticated_org(&auth.org_id, configured_org_id)?;
+                ensure_authenticated_org(auth.org_id, org_id)?;
 
                 let HostedOperatorSpec { name, wallet, path } = spec;
 
@@ -210,7 +210,7 @@ impl Run for Args {
 
                 let result = auth
                     .client
-                    .create_tvc_operator(auth.org_id.clone(), timestamp_ms()?, intent)
+                    .create_tvc_operator(auth.org_id.to_string(), timestamp_ms()?, intent)
                     .await
                     .map_err(|error| hosted_activity_error("create hosted TVC operator", error))?;
 
@@ -222,8 +222,8 @@ impl Run for Args {
 
                 let record = OperatorRecord::try_from(result)?;
 
-                let org = config.orgs.get_mut(&alias).with_context(|| {
-                    format!("active organization '{alias}' disappeared from config")
+                let org = config.orgs.get_mut(&org_id).with_context(|| {
+                    format!("active organization '{org_display}' disappeared from config")
                 })?;
                 org.operators.push(record.clone());
 
@@ -239,14 +239,14 @@ impl Run for Args {
                 if let Err(save_error) = config.save().await {
                     let record = config
                         .orgs
-                        .get(&alias)
+                        .get(&org_id)
                         .and_then(|org| org.operators.last())
                         .with_context(|| {
                             format!(
-                                "hosted operator disappeared from active organization '{alias}'"
+                                "hosted operator disappeared from active organization '{org_display}'"
                             )
                         })?;
-                    let recovery = recovery_toml(&alias, record)?;
+                    let recovery = recovery_toml(org_id, record)?;
                     let default_note = if make_default {
                         "\n\nAlso set default_operator_kind = \"hosted\" in the organization's table."
                     } else {
@@ -286,10 +286,10 @@ Do not retry creation blindly; doing so would create another remote operator. Re
                     return Err(prompts::error_required_in_non_interactive("--serial"));
                 }
 
-                let (org_alias, org) = config
+                let (org_id, org) = config
                     .active_org_config()
                     .context("No active organization. Run `tvc login` first.")?;
-                let org_alias = org_alias.clone();
+                let org_alias = config.display_name(org_id);
 
                 let serial = match serial {
                     Some(serial) => {
@@ -328,6 +328,7 @@ Do not retry creation blindly; doing so would create another remote operator. Re
                     record,
                     serial,
                     make_default,
+                    org_id,
                     org_alias,
                 };
                 let added = create.execute(&mut config)?;
@@ -335,7 +336,7 @@ Do not retry creation blindly; doing so would create another remote operator. Re
                 // Nothing is persisted yet; re-running is safe because a
                 // duplicate serial is refused before another record is added.
                 let record_recovery = recovery_toml(
-                    &added.org_alias,
+                    org_id,
                     &OperatorRecord {
                         name: added.name.clone(),
                         kind: OperatorRecordKind::Yubikey(YubiKeyOperatorRecord {
@@ -369,6 +370,8 @@ struct YubikeyCreate {
     record: OperatorRecord,
     serial: YubiKeySerial,
     make_default: bool,
+    org_id: Uuid,
+    /// Display name for the organization in messages.
     org_alias: String,
 }
 
@@ -386,7 +389,7 @@ impl YubikeyCreate {
         })?;
         let operator_public_key = entry.public_key;
 
-        let org = config.orgs.get_mut(&self.org_alias).with_context(|| {
+        let org = config.orgs.get_mut(&self.org_id).with_context(|| {
             format!(
                 "active organization '{}' disappeared from config",
                 self.org_alias
@@ -405,7 +408,6 @@ impl YubikeyCreate {
             serial: self.serial,
             operator_public_key,
             made_default: self.make_default,
-            org_alias: self.org_alias,
         })
     }
 }
@@ -454,8 +456,6 @@ pub struct YubikeyOperatorAdded {
     /// The composite `encrypt_public ‖ sign_public` operator key.
     operator_public_key: QosOperatorPublicKey,
     made_default: bool,
-    #[serde(skip)]
-    org_alias: String,
 }
 
 impl From<YubikeyOperatorAdded> for Outcome {
@@ -501,13 +501,11 @@ enum HostedOperatorWallet {
     Existing(Uuid),
 }
 
-fn recovery_toml(alias: &str, record: &OperatorRecord) -> Result<String> {
-    let quoted_alias = serde_json::to_string(alias)
-        .context("failed to quote organization alias for recovery record")?;
+fn recovery_toml(org_id: Uuid, record: &OperatorRecord) -> Result<String> {
     let record =
         toml::to_string_pretty(record).context("failed to serialize operator recovery record")?;
     Ok(format!(
-        r#"[[orgs.{quoted_alias}.operators]]
+        r#"[[orgs."{org_id}".operators]]
 {}"#,
         record.trim()
     ))
@@ -519,7 +517,7 @@ mod tests {
     use crate::config::turnkey::{HostedOperatorRecord, OrgConfig};
     use crate::yubikey::SlotStatus;
     use crate::yubikey::test_support::{self, FakeDevice};
-    use std::collections::HashMap;
+    use indexmap::IndexMap;
     use std::path::PathBuf;
 
     fn hosted_record() -> OperatorRecord {
@@ -549,9 +547,12 @@ mod tests {
 
         let expected = hosted_record();
         let recovery: Recovery =
-            toml::from_str(&recovery_toml("default", &expected).unwrap()).unwrap();
+            toml::from_str(&recovery_toml(Uuid::from_u128(0x123), &expected).unwrap()).unwrap();
 
-        assert_eq!(recovery.orgs["default"].operators, vec![expected]);
+        assert_eq!(
+            recovery.orgs[&Uuid::from_u128(0x123).to_string()].operators,
+            vec![expected]
+        );
     }
 
     fn args(kind: CreateKind) -> Args {
@@ -616,11 +617,10 @@ mod tests {
 
     fn config_with_active_org() -> Config {
         Config {
-            active_org: Some("default".to_string()),
-            orgs: HashMap::from([(
-                "default".to_string(),
+            active_org: Some(Uuid::from_u128(0x123)),
+            orgs: IndexMap::from([(
+                Uuid::from_u128(0x123),
                 OrgConfig {
-                    id: "org-123".to_string(),
                     api_key_path: PathBuf::from("api-key.json"),
                     api_base_url: "https://api.turnkey.com".to_string(),
                     default_operator_kind: OperatorKind::Local,
@@ -638,7 +638,7 @@ mod tests {
         name: Option<String>,
         make_default: bool,
     ) -> YubikeyCreate {
-        let record = config.orgs["default"]
+        let record = config.orgs[&Uuid::from_u128(0x123)]
             .new_yubikey_operator(serial, name)
             .unwrap();
 
@@ -646,6 +646,7 @@ mod tests {
             record,
             serial,
             make_default,
+            org_id: Uuid::from_u128(0x123),
             org_alias: "default".to_string(),
         }
     }
@@ -665,7 +666,7 @@ mod tests {
         assert_eq!(added.serial, test_support::serial());
         assert_eq!(added.operator_public_key, composite);
 
-        let org = &config.orgs["default"];
+        let org = &config.orgs[&Uuid::from_u128(0x123)];
         assert_eq!(org.default_operator_kind, OperatorKind::Local);
         assert_eq!(
             org.operators,
@@ -678,12 +679,12 @@ mod tests {
         let mut config = config_with_active_org();
         config
             .orgs
-            .get_mut("default")
+            .get_mut(&Uuid::from_u128(0x123))
             .unwrap()
             .operators
             .push(OperatorRecord::yubikey(test_support::serial()));
 
-        let error = config.orgs["default"]
+        let error = config.orgs[&Uuid::from_u128(0x123)]
             .new_yubikey_operator(test_support::serial(), None)
             .unwrap_err();
 

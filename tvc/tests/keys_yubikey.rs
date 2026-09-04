@@ -6,8 +6,8 @@
 //! the yubikey module and its ignored hardware cycle.
 
 use assert_cmd::cargo::cargo_bin_cmd;
+use indexmap::IndexMap;
 use predicates::prelude::*;
-use std::collections::HashMap;
 use std::fs;
 use tempfile::TempDir;
 use tvc::config::turnkey::{
@@ -23,7 +23,7 @@ fn write_config(home: &TempDir, config: &Config) {
     fs::create_dir_all(&turnkey_dir).unwrap();
     fs::write(
         turnkey_dir.join("tvc.config.toml"),
-        format!("version = 1\n{}", toml::to_string_pretty(config).unwrap()),
+        format!("version = 2\n{}", toml::to_string_pretty(config).unwrap()),
     )
     .unwrap();
 }
@@ -43,7 +43,6 @@ fn config_with_registered_device() -> Config {
 
 fn org_with_yubikey_operator() -> OrgConfig {
     OrgConfig {
-        id: "org-test".to_string(),
         api_key_path: "/keys/api.json".into(),
         api_base_url: "http://127.0.0.1:1".to_string(),
         default_operator_kind: Default::default(),
@@ -128,10 +127,17 @@ fn unregister_refuses_an_unregistered_serial() {
 #[test]
 fn unregister_refuses_a_device_an_organization_references() {
     let temp = TempDir::new().unwrap();
-    let config = Config {
-        orgs: HashMap::from([("test".to_string(), org_with_yubikey_operator())]),
+    let mut config = Config {
+        orgs: IndexMap::from([(
+            "33333333-3333-4333-8333-333333333333".parse().unwrap(),
+            org_with_yubikey_operator(),
+        )]),
         ..config_with_registered_device()
     };
+    config.aliases.bind(
+        "test".to_string(),
+        "33333333-3333-4333-8333-333333333333".parse().unwrap(),
+    );
     write_config(&temp, &config);
 
     cargo_bin_cmd!("tvc")
@@ -192,6 +198,5 @@ fn unregister_removes_only_the_local_registry_entry() {
         ));
 
     let saved = fs::read_to_string(temp.path().join(".config/turnkey/tvc.config.toml")).unwrap();
-    let config = Config::from_toml(&saved).unwrap();
-    assert!(!config.yubikeys.contains(SERIAL.parse().unwrap()));
+    assert!(!saved.contains(SERIAL), "{saved}");
 }
