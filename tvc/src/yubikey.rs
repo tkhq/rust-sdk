@@ -550,6 +550,72 @@ impl SlotsError {
     }
 }
 
+fn classify_readable_certificate(
+    slot: QosSlot,
+    certificate: Certificate,
+    metadata: impl FnOnce() -> Result<SlotMetadata, PivError>,
+) -> Result<SlotStatus, DeviceError> {
+    let subject = certificate.subject();
+
+    if subject != QOS_CERTIFICATE_SUBJECT {
+        return Ok(SlotStatus::Foreign { subject });
+    }
+
+    let metadata = metadata().map_err(|source| DeviceError::ReadSlotMetadata { slot, source })?;
+    let CertificateSlot {
+        slot: _,
+        public_key_info: _,
+        verifying_key,
+    } = CertificateSlot::try_from((slot, metadata))?;
+    let issuer = certificate.issuer();
+
+    if issuer != subject {
+        return Err(DeviceError::CertificateNotSelfIssued {
+            slot,
+            subject,
+            issuer,
+        });
+    }
+
+    let certificate_key = VerifyingKey::try_from(certificate.subject_pki())
+        .map_err(|source| DeviceError::MalformedCertificatePublicKey { slot, source })?;
+
+    if certificate_key != verifying_key {
+        return Err(DeviceError::CertificatePublicKeyMismatch { slot });
+    }
+
+    let signed = certificate
+        .cert
+        .tbs_certificate
+        .to_der()
+        .map_err(|source| DeviceError::EncodeCertificate { slot, source })?;
+    let signature = DerSignature::from_bytes(certificate.cert.signature.raw_bytes())
+        .map_err(|source| DeviceError::InvalidCertificateSignature { slot, source })?;
+    verifying_key
+        .verify(&signed, &signature)
+        .map_err(|source| DeviceError::InvalidCertificateSignature { slot, source })?;
+
+    Ok(SlotStatus::QosProvisioned)
+}
+
+fn classify_unreadable_certificate<T>(
+    slot: QosSlot,
+    certificate_error: PivError,
+    metadata: impl FnOnce() -> Result<T, PivError>,
+) -> Result<SlotStatus, DeviceError> {
+    match certificate_error {
+        PivError::InvalidObject | PivError::NotFound => match metadata() {
+            Ok(_) => Ok(SlotStatus::KeyWithoutCertificate),
+            Err(PivError::NotFound) => Ok(SlotStatus::Empty),
+            Err(metadata_error @ (PivError::GenericError | PivError::NotSupported)) => {
+                Ok(SlotStatus::UnknownWithoutCertificate { metadata_error })
+            }
+            Err(source) => Err(DeviceError::ReadSlotMetadata { slot, source }),
+        },
+        source => Err(DeviceError::ReadCertificate { slot, source }),
+    }
+}
+
 fn validate_slot_status(
     slot: QosSlot,
     status: Result<SlotStatus, DeviceError>,
@@ -620,63 +686,12 @@ pub(crate) trait DeviceOps {
 impl DeviceOps for YubiKey {
     fn slot_status(&mut self, slot: QosSlot) -> Result<SlotStatus, DeviceError> {
         match Certificate::read(self, slot.slot_id()) {
-            Ok(certificate) => {
-                let subject = certificate.subject();
-
-                if subject != QOS_CERTIFICATE_SUBJECT {
-                    return Ok(SlotStatus::Foreign { subject });
-                }
-
-                let metadata = piv::metadata(self, slot.slot_id())
-                    .map_err(|source| DeviceError::ReadSlotMetadata { slot, source })?;
-                let CertificateSlot {
-                    slot: _,
-                    public_key_info: _,
-                    verifying_key,
-                } = CertificateSlot::try_from((slot, metadata))?;
-                let issuer = certificate.issuer();
-
-                if issuer != subject {
-                    return Err(DeviceError::CertificateNotSelfIssued {
-                        slot,
-                        subject,
-                        issuer,
-                    });
-                }
-
-                let certificate_key =
-                    VerifyingKey::try_from(certificate.subject_pki()).map_err(|source| {
-                        DeviceError::MalformedCertificatePublicKey { slot, source }
-                    })?;
-
-                if certificate_key != verifying_key {
-                    return Err(DeviceError::CertificatePublicKeyMismatch { slot });
-                }
-
-                let signed = certificate
-                    .cert
-                    .tbs_certificate
-                    .to_der()
-                    .map_err(|source| DeviceError::EncodeCertificate { slot, source })?;
-                let signature = DerSignature::from_bytes(certificate.cert.signature.raw_bytes())
-                    .map_err(|source| DeviceError::InvalidCertificateSignature { slot, source })?;
-                verifying_key
-                    .verify(&signed, &signature)
-                    .map_err(|source| DeviceError::InvalidCertificateSignature { slot, source })?;
-
-                Ok(SlotStatus::QosProvisioned)
-            }
-            Err(PivError::InvalidObject | PivError::NotFound) => {
-                match piv::metadata(self, slot.slot_id()) {
-                    Ok(_) => Ok(SlotStatus::KeyWithoutCertificate),
-                    Err(PivError::NotFound) => Ok(SlotStatus::Empty),
-                    Err(metadata_error @ (PivError::GenericError | PivError::NotSupported)) => {
-                        Ok(SlotStatus::UnknownWithoutCertificate { metadata_error })
-                    }
-                    Err(source) => Err(DeviceError::ReadSlotMetadata { slot, source }),
-                }
-            }
-            Err(source) => Err(DeviceError::ReadCertificate { slot, source }),
+            Ok(certificate) => classify_readable_certificate(slot, certificate, || {
+                piv::metadata(self, slot.slot_id())
+            }),
+            Err(source) => classify_unreadable_certificate(slot, source, || {
+                piv::metadata(self, slot.slot_id())
+            }),
         }
     }
 
@@ -728,8 +743,11 @@ mod tests {
     use p256::{PublicKey, ecdsa::SigningKey};
     use qos_p256::{P256Pair, P256Public};
 
-    fn certificate_metadata() -> SlotMetadata {
-        let signing_key = SigningKey::from_bytes((&[42u8; 32]).into()).unwrap();
+    fn signing_key(byte: u8) -> SigningKey {
+        SigningKey::from_bytes((&[byte; 32]).into()).unwrap()
+    }
+
+    fn certificate_metadata_for(signing_key: &SigningKey) -> SlotMetadata {
         let public = SubjectPublicKeyInfoOwned::from_key(*signing_key.verifying_key()).unwrap();
 
         SlotMetadata {
@@ -739,6 +757,35 @@ mod tests {
             public: Some(public),
             default: None,
             retries: None,
+        }
+    }
+
+    fn certificate_metadata() -> SlotMetadata {
+        certificate_metadata_for(&signing_key(42))
+    }
+
+    fn certificate(
+        subject: &str,
+        issuer: Option<&str>,
+        subject_key: &SigningKey,
+        signer: &SigningKey,
+    ) -> Certificate {
+        let subject = Name::from_str(subject).unwrap();
+        let issuer = issuer.map(|issuer| Name::from_str(issuer).unwrap());
+        let public_key_info =
+            SubjectPublicKeyInfoOwned::from_key(*subject_key.verifying_key()).unwrap();
+        let builder = CertificateBuilder::new(
+            Profile::Manual { issuer },
+            SerialNumber::from(42u32),
+            Validity::from_now(Duration::from_secs(60)).unwrap(),
+            subject,
+            public_key_info,
+            signer,
+        )
+        .unwrap();
+
+        Certificate {
+            cert: builder.build::<DerSignature>().unwrap(),
         }
     }
 
@@ -826,6 +873,205 @@ mod tests {
             DeviceError::MalformedSlotPublicKey {
                 slot: QosSlot::Signing,
                 ..
+            }
+        ));
+    }
+
+    #[test]
+    fn a_valid_quorumos_certificate_is_recognized() {
+        let key = signing_key(42);
+        let certificate = certificate(QOS_CERTIFICATE_SUBJECT, None, &key, &key);
+
+        let status = classify_readable_certificate(QosSlot::Signing, certificate, || {
+            Ok(certificate_metadata_for(&key))
+        })
+        .unwrap();
+
+        assert_eq!(status, SlotStatus::QosProvisioned);
+    }
+
+    #[test]
+    fn another_subject_is_foreign_without_reading_metadata() {
+        let key = signing_key(42);
+        let certificate = certificate("CN=SomeoneElse", None, &key, &key);
+
+        let status = classify_readable_certificate(QosSlot::Signing, certificate, || {
+            panic!("a foreign certificate must not trigger a metadata query")
+        })
+        .unwrap();
+
+        assert_eq!(
+            status,
+            SlotStatus::Foreign {
+                subject: "CN=SomeoneElse".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn a_quorumos_certificate_must_be_self_signed() {
+        let subject_key = signing_key(42);
+        let issuer_key = signing_key(43);
+        let certificate = certificate(
+            QOS_CERTIFICATE_SUBJECT,
+            Some("CN=SomeoneElse"),
+            &subject_key,
+            &issuer_key,
+        );
+
+        let error = classify_readable_certificate(QosSlot::Signing, certificate, || {
+            Ok(certificate_metadata_for(&subject_key))
+        })
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            DeviceError::CertificateNotSelfIssued {
+                slot: QosSlot::Signing,
+                subject,
+                issuer,
+            } if subject == QOS_CERTIFICATE_SUBJECT && issuer == "CN=SomeoneElse"
+        ));
+    }
+
+    #[test]
+    fn a_quorumos_certificate_must_match_the_device_key() {
+        let certificate_key = signing_key(42);
+        let device_key = signing_key(43);
+        let certificate = certificate(
+            QOS_CERTIFICATE_SUBJECT,
+            None,
+            &certificate_key,
+            &certificate_key,
+        );
+
+        let error = classify_readable_certificate(QosSlot::KeyAgreement, certificate, || {
+            Ok(certificate_metadata_for(&device_key))
+        })
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            DeviceError::CertificatePublicKeyMismatch {
+                slot: QosSlot::KeyAgreement,
+            }
+        ));
+    }
+
+    #[test]
+    fn a_quorumos_certificate_must_have_a_well_formed_p256_key() {
+        let key = signing_key(42);
+        let mut certificate = certificate(QOS_CERTIFICATE_SUBJECT, None, &key, &key);
+        certificate
+            .cert
+            .tbs_certificate
+            .subject_public_key_info
+            .subject_public_key =
+            x509_cert::der::asn1::BitString::from_bytes(&[0x04, 0x01, 0x02]).unwrap();
+
+        let error = classify_readable_certificate(QosSlot::Signing, certificate, || {
+            Ok(certificate_metadata_for(&key))
+        })
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            DeviceError::MalformedCertificatePublicKey {
+                slot: QosSlot::Signing,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn a_quorumos_certificate_signature_must_match_its_key() {
+        let subject_key = signing_key(42);
+        let signer = signing_key(43);
+        let certificate = certificate(QOS_CERTIFICATE_SUBJECT, None, &subject_key, &signer);
+
+        let error = classify_readable_certificate(QosSlot::Signing, certificate, || {
+            Ok(certificate_metadata_for(&subject_key))
+        })
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            DeviceError::InvalidCertificateSignature {
+                slot: QosSlot::Signing,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn no_certificate_and_no_key_is_proven_empty() {
+        for absent in [PivError::NotFound, PivError::InvalidObject] {
+            let status = classify_unreadable_certificate(QosSlot::Signing, absent, || {
+                Err::<(), _>(PivError::NotFound)
+            })
+            .unwrap();
+
+            assert_eq!(status, SlotStatus::Empty);
+        }
+    }
+
+    #[test]
+    fn a_key_without_a_readable_certificate_is_distinguished_from_empty() {
+        for unreadable in [PivError::NotFound, PivError::InvalidObject] {
+            let status =
+                classify_unreadable_certificate(QosSlot::KeyAgreement, unreadable, || Ok(()))
+                    .unwrap();
+
+            assert_eq!(status, SlotStatus::KeyWithoutCertificate);
+        }
+    }
+
+    #[test]
+    fn an_ambiguous_metadata_failure_is_an_unknown_certless_slot() {
+        for metadata_error in [PivError::GenericError, PivError::NotSupported] {
+            let status =
+                classify_unreadable_certificate(QosSlot::Signing, PivError::InvalidObject, || {
+                    Err::<(), _>(metadata_error)
+                })
+                .unwrap();
+
+            assert_eq!(
+                status,
+                SlotStatus::UnknownWithoutCertificate { metadata_error }
+            );
+        }
+    }
+
+    #[test]
+    fn a_specific_metadata_failure_is_preserved() {
+        let error =
+            classify_unreadable_certificate(QosSlot::Signing, PivError::InvalidObject, || {
+                Err::<(), _>(PivError::WrongPin { tries: 2 })
+            })
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            DeviceError::ReadSlotMetadata {
+                slot: QosSlot::Signing,
+                source: PivError::WrongPin { tries: 2 },
+            }
+        ));
+    }
+
+    #[test]
+    fn a_certificate_read_failure_is_preserved_without_reading_metadata() {
+        let error =
+            classify_unreadable_certificate::<()>(QosSlot::Signing, PivError::GenericError, || {
+                panic!("a certificate transport failure must not trigger a metadata query")
+            })
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            DeviceError::ReadCertificate {
+                slot: QosSlot::Signing,
+                source: PivError::GenericError,
             }
         ));
     }
