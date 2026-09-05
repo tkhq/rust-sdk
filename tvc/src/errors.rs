@@ -92,6 +92,12 @@ impl Classification {
 /// status; callers still render the complete original chain.
 pub fn classify(error: &anyhow::Error) -> Classification {
     for cause in error.chain() {
+        if cause
+            .downcast_ref::<crate::shared_auth::InvalidAuthInput>()
+            .is_some()
+        {
+            return Classification::new(ErrorCode::InvalidInput, None);
+        }
         if cause.downcast_ref::<MissingResource>().is_some() {
             return Classification::new(ErrorCode::NotFound, None);
         }

@@ -23,4 +23,10 @@ pub mod prompts;
 pub(crate) mod provisioning;
 pub mod pull_secret;
 pub(crate) mod quorum_key_metadata;
+pub mod shared_resources;
 pub mod util;
+
+pub mod shared_auth;
+pub mod shared_key_generation;
+pub mod shared_operations;
+pub mod shared_wallets;

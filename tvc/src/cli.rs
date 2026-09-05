@@ -6,7 +6,7 @@ use crate::errors::strip_ansi;
 use crate::outcome::Outcome;
 use crate::output::{ColorChoice, Ctx, ErrorMessage, MessageFormat, Shell, StdCtx};
 use anyhow::Context;
-use clap::{ArgAction, Parser, Subcommand, builder::BoolishValueParser, error::ErrorKind};
+use clap::{ArgAction, Args, Parser, Subcommand, builder::BoolishValueParser, error::ErrorKind};
 use std::ffi::OsString;
 use std::io::Write;
 use std::path::PathBuf;
@@ -68,6 +68,16 @@ Output format:
 #[derive(Debug, Parser)]
 #[command(about = "CLI for building with Turnkey Verifiable Cloud", long_about = LONG_ABOUT)]
 pub struct Cli {
+    #[command(flatten)]
+    output: OutputOptions,
+
+    #[command(subcommand)]
+    command: Commands,
+}
+
+/// Presentation settings shared by both command entry points.
+#[derive(Debug, Args)]
+struct OutputOptions {
     /// Disable interactive prompts and fail fast when required values are missing.
     #[arg(
         long,
@@ -85,9 +95,287 @@ pub struct Cli {
     /// Control ANSI color in user-facing output.
     #[arg(long, global = true, value_enum, default_value_t = ColorChoice::Auto)]
     color: ColorChoice,
+}
 
+async fn run_resource(
+    prepared: anyhow::Result<crate::shared_resources::PreparedResource>,
+    options: &crate::shared_auth::AuthOptions,
+) -> anyhow::Result<crate::shared_operations::OperationOutput> {
+    let prepared = prepared?;
+    let auth = crate::shared_auth::resolve(options).await?;
+    prepared.run(auth).await
+}
+
+impl OutputOptions {
+    fn emit_operation(
+        self,
+        result: anyhow::Result<crate::shared_operations::OperationOutput>,
+    ) -> ExitCode {
+        let failed = result.as_ref().is_ok_and(|result| result.failed());
+        let emitted = self.emit_shared(result);
+        if failed { ExitCode::FAILURE } else { emitted }
+    }
+
+    fn emit_shared<M: serde::Serialize + std::fmt::Display>(
+        self,
+        result: anyhow::Result<M>,
+    ) -> ExitCode {
+        let mut shell = Shell::standard(self.message_format, self.color);
+        match result {
+            Ok(message) => {
+                if shell.emit(&message).is_ok() {
+                    ExitCode::SUCCESS
+                } else {
+                    ExitCode::FAILURE
+                }
+            }
+            Err(error) => {
+                if shell.message_format().is_json() {
+                    #[derive(serde::Serialize)]
+                    struct SharedError {
+                        #[serde(rename = "schemaVersion")]
+                        schema_version: u32,
+                        #[serde(flatten)]
+                        error: ErrorMessage,
+                    }
+                    impl std::fmt::Display for SharedError {
+                        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                            std::fmt::Display::fmt(&self.error, f)
+                        }
+                    }
+                    let _ = shell.emit(&SharedError {
+                        schema_version: 1,
+                        error: ErrorMessage::from_error(&error),
+                    });
+                } else {
+                    let _ = shell.human().error(&error);
+                }
+                ExitCode::FAILURE
+            }
+        }
+    }
+}
+
+/// Unified Turnkey CLI entry point.
+#[derive(Debug, Parser)]
+#[command(name = "tk", about = "CLI for building with Turnkey")]
+pub struct TkCli {
+    #[command(flatten)]
+    auth: crate::shared_auth::AuthOptions,
+    #[command(flatten)]
+    output: OutputOptions,
     #[command(subcommand)]
-    command: Commands,
+    command: TkCommands,
+}
+
+#[derive(Debug, Subcommand)]
+enum TkCommands {
+    /// Send an arbitrary signed API request.
+    Request(crate::shared_operations::RequestArgs),
+    /// Inspect, approve, reject, and wait for activities.
+    Activity {
+        #[command(subcommand)]
+        command: crate::shared_operations::ActivityCommand,
+    },
+    /// Manage users and user tags.
+    User(crate::shared_resources::UserArgs),
+    /// Manage policies and inspect evaluations.
+    Policy(crate::shared_resources::PolicyArgs),
+    /// Manage registered API credentials.
+    ApiKey {
+        #[command(subcommand)]
+        command: SharedApiKeyCommand,
+    },
+    /// Manage wallets and accounts.
+    Wallet {
+        #[command(subcommand)]
+        command: crate::shared_wallets::WalletCommand,
+    },
+    /// Sign payloads and serialized transactions.
+    Sign {
+        #[command(subcommand)]
+        command: crate::shared_wallets::SignCommand,
+    },
+    /// Authenticate using an existing API credential.
+    Login(crate::shared_auth::LoginArgs),
+    /// Verify the selected identity remotely.
+    Whoami,
+    /// Manage shared API authentication.
+    Auth {
+        #[command(subcommand)]
+        command: crate::shared_auth::AuthCommand,
+    },
+    /// Manage named API identities.
+    Profile {
+        #[command(subcommand)]
+        command: crate::shared_auth::ProfileCommand,
+    },
+    /// Build with Turnkey Verifiable Cloud.
+    Tvc {
+        #[command(subcommand)]
+        command: CloudCommands,
+    },
+    /// Print the CLI version.
+    Version,
+}
+
+#[derive(Debug, Subcommand)]
+enum SharedApiKeyCommand {
+    /// Generate a protected local credential file without registration.
+    Generate(crate::shared_key_generation::GenerateArgs),
+    #[command(flatten)]
+    Remote(crate::shared_resources::ApiKeyCommand),
+}
+
+#[derive(Debug, Subcommand)]
+enum CloudCommands {
+    /// Manage hosted TVC operators.
+    Operator {
+        #[command(subcommand)]
+        command: OperatorCommands,
+    },
+    /// Manage deployments.
+    Deploy {
+        #[command(subcommand)]
+        command: DeployCommands,
+    },
+    /// Manage applications.
+    App {
+        #[command(subcommand)]
+        command: AppCommands,
+    },
+    /// Manage TVC operator and quorum keys.
+    Keys {
+        #[command(subcommand)]
+        command: KeysCommands,
+    },
+}
+
+impl TkCli {
+    /// Parse and execute a unified command using the shared runtime.
+    pub async fn run() -> ExitCode {
+        let args = match Self::try_parse() {
+            Ok(args) => args,
+            Err(error) => return handle_parse_error(error),
+        };
+        let command = match args.command {
+            TkCommands::Request(request) => {
+                let prepared = match request.prepare() {
+                    Ok(prepared) => prepared,
+                    Err(error) => return args.output.emit_operation(Ok(error)),
+                };
+                let result = async {
+                    let auth = crate::shared_auth::resolve(&args.auth).await?;
+                    Ok(prepared
+                        .run(&auth.org_id, &auth.api_base_url, &auth.stamper)
+                        .await)
+                }
+                .await;
+                return args.output.emit_operation(result);
+            }
+            TkCommands::Activity { command } => {
+                let result = async {
+                    let auth = crate::shared_auth::resolve(&args.auth).await?;
+                    Ok(crate::shared_operations::run_activity(
+                        command,
+                        &auth.org_id,
+                        &auth.api_base_url,
+                        &auth.stamper,
+                    )
+                    .await)
+                }
+                .await;
+                return args.output.emit_operation(result);
+            }
+            TkCommands::User(user) => {
+                return args
+                    .output
+                    .emit_operation(run_resource(user.prepare(), &args.auth).await);
+            }
+            TkCommands::Policy(policy) => {
+                return args
+                    .output
+                    .emit_operation(run_resource(policy.prepare(), &args.auth).await);
+            }
+            TkCommands::ApiKey { command } => {
+                let result = match command {
+                    SharedApiKeyCommand::Generate(args) => args.run(),
+                    SharedApiKeyCommand::Remote(command) => {
+                        run_resource(
+                            crate::shared_resources::ApiKeyArgs::from(command).prepare(),
+                            &args.auth,
+                        )
+                        .await
+                    }
+                };
+                return args.output.emit_operation(result);
+            }
+            TkCommands::Wallet { command } => {
+                let result = async {
+                    let prepared = command.prepare()?;
+                    let auth = crate::shared_auth::resolve(&args.auth).await?;
+                    prepared.run(auth).await
+                }
+                .await;
+                return args.output.emit_operation(result);
+            }
+            TkCommands::Sign { command } => {
+                let result = async {
+                    let prepared = command.prepare()?;
+                    let auth = crate::shared_auth::resolve(&args.auth).await?;
+                    prepared.run(auth).await
+                }
+                .await;
+                return args.output.emit_operation(result);
+            }
+            TkCommands::Login(login) => {
+                return args.output.emit_shared(
+                    crate::shared_auth::run_auth(
+                        crate::shared_auth::AuthCommand::Login(login),
+                        &args.auth,
+                    )
+                    .await,
+                );
+            }
+            TkCommands::Whoami => {
+                return args.output.emit_shared(
+                    crate::shared_auth::run_auth(
+                        crate::shared_auth::AuthCommand::Whoami,
+                        &args.auth,
+                    )
+                    .await,
+                );
+            }
+            TkCommands::Auth { command } => {
+                return args
+                    .output
+                    .emit_shared(crate::shared_auth::run_auth(command, &args.auth).await);
+            }
+            TkCommands::Profile { command } => {
+                return args
+                    .output
+                    .emit_shared(crate::shared_auth::run_profile(command, &args.auth).await);
+            }
+            TkCommands::Tvc { command } => {
+                if args.auth.has_selection() {
+                    return args.output.emit_shared::<crate::shared_auth::AuthOutput>(Err(crate::shared_auth::InvalidAuthInput("shared identity selectors are not yet supported by tk tvc; use the existing TVC environment/configuration".into()).into()));
+                }
+                match command {
+                    CloudCommands::Operator { command } => Commands::Operator { command },
+                    CloudCommands::Deploy { command } => Commands::Deploy { command },
+                    CloudCommands::App { command } => Commands::App { command },
+                    CloudCommands::Keys { command } => Commands::Keys { command },
+                }
+            }
+            TkCommands::Version => Commands::Version,
+        };
+        Cli {
+            output: args.output,
+            command,
+        }
+        .run_parsed()
+        .await
+    }
 }
 
 impl Cli {
@@ -97,16 +385,21 @@ impl Cli {
             Ok(args) => args,
             Err(error) => return handle_parse_error(error),
         };
+        args.run_parsed().await
+    }
+
+    async fn run_parsed(self) -> ExitCode {
+        let args = self;
         debug!(
             command = args.command.name(),
-            non_interactive = args.non_interactive,
-            message_format = ?args.message_format,
-            color = ?args.color,
+            non_interactive = args.output.non_interactive,
+            message_format = ?args.output.message_format,
+            color = ?args.output.color,
             "dispatching"
         );
 
-        let shell = Shell::standard(args.message_format, args.color);
-        let mut ctx = Ctx::new(shell, args.non_interactive);
+        let shell = Shell::standard(args.output.message_format, args.output.color);
+        let mut ctx = Ctx::new(shell, args.output.non_interactive);
         let result = args.command.run(&mut ctx).await;
         match result {
             Ok(outcome) => {
