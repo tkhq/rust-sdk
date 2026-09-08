@@ -8,9 +8,9 @@ use crate::{
     },
     outcome::Outcome,
     output::{Ctx, StdCtx},
-    yubikey::{self, ConnectedYubiKeys, DeviceError, DeviceOps},
+    yubikey::{self, DeviceError, DeviceOps, YubiKeySelectionError},
 };
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Args as ClapArgs;
 use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
@@ -82,7 +82,26 @@ impl Args {
         D: DeviceOps,
         O: FnOnce(YubiKeySerial) -> Result<D, DeviceError>,
     {
-        let serial = ConnectedYubiKeys::from(ctx.connected_yubikeys()?).choose(self.serial)?;
+        let serial = match ctx.connected_yubikeys()?.choose(self.serial) {
+            Ok(serial) => serial,
+            Err(YubiKeySelectionError::NoneConnected) => bail!("no YubiKey is connected"),
+            Err(YubiKeySelectionError::NotConnected {
+                requested,
+                connected,
+            }) => {
+                if connected.is_empty() {
+                    bail!("YubiKey {requested} is not connected");
+                }
+
+                bail!("YubiKey {requested} is not connected; connected: {connected}")
+            }
+            Err(YubiKeySelectionError::Ambiguous { connected }) => {
+                bail!(
+                    "multiple YubiKeys are connected (serials {connected}); unplug all but the one \
+                     to use and try again, or pass --serial"
+                )
+            }
+        };
 
         // Reading the slot certificates needs neither the PIN nor a touch,
         // so the refresh itself also runs non-interactively.
@@ -144,7 +163,7 @@ mod tests {
     use crate::yubikey::test_support::{FakeDevice, serial};
 
     fn test_ctx() -> Ctx<Vec<u8>, Vec<u8>> {
-        Ctx::new(TestShell::default(), false).with_yubikey_discovery(|| Ok(vec![serial()]))
+        Ctx::new(TestShell::default(), false).with_yubikey_discovery(|| Ok(vec![serial()].into()))
     }
 
     fn provisioned_device() -> FakeDevice {

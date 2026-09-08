@@ -1,6 +1,6 @@
 //! In-memory device fake shared by unit tests across the crate.
 
-use super::{DeviceError, DeviceOps, DeviceStatus, Pin, QosSlot, SlotStatus};
+use super::{DeviceError, DeviceOps, Pin, QosSlot, SlotStatus};
 use crate::config::turnkey::{QosOperatorPublicKey, YubiKeySerial};
 use p256::{PublicKey, ecdh::diffie_hellman};
 use qos_client::yubikey::YubiKeyError;
@@ -19,17 +19,16 @@ pub(crate) fn serial() -> YubiKeySerial {
 /// In-memory [`DeviceOps`] implementation: per-slot state and a software
 /// P-256 pair standing in for the on-device keys.
 pub(crate) struct FakeDevice {
-    status: DeviceStatus,
+    signing: SlotStatus,
+    key_agreement: SlotStatus,
     pair: P256Pair,
 }
 
 impl FakeDevice {
     pub(crate) fn new(signing: SlotStatus, key_agreement: SlotStatus) -> Self {
         Self {
-            status: DeviceStatus {
-                signing,
-                key_agreement,
-            },
+            signing,
+            key_agreement,
             pair: P256Pair::generate().expect("software key generation"),
         }
     }
@@ -42,8 +41,8 @@ impl FakeDevice {
 
     fn slot_status_mut(&mut self, slot: QosSlot) -> &mut SlotStatus {
         match slot {
-            QosSlot::Signing => &mut self.status.signing,
-            QosSlot::KeyAgreement => &mut self.status.key_agreement,
+            QosSlot::Signing => &mut self.signing,
+            QosSlot::KeyAgreement => &mut self.key_agreement,
         }
     }
 
@@ -78,16 +77,9 @@ impl DeviceOps for FakeDevice {
         Ok(self.slot_status_mut(slot).clone())
     }
 
-    fn device_status(&mut self) -> Result<DeviceStatus, DeviceError> {
-        Ok(self.status.clone())
-    }
-
     fn pair_public_key(&mut self) -> Result<QosOperatorPublicKey, DeviceError> {
-        if self.status
-            == (DeviceStatus {
-                signing: SlotStatus::QosProvisioned,
-                key_agreement: SlotStatus::QosProvisioned,
-            })
+        if self.signing == SlotStatus::QosProvisioned
+            && self.key_agreement == SlotStatus::QosProvisioned
         {
             Ok(self.operator_public_key())
         } else {

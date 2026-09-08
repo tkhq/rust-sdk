@@ -55,20 +55,30 @@ const QOS_CERTIFICATE_SUBJECT: &str = "CN=QuorumOS";
 /// certificates.
 const CERTIFICATE_VALIDITY_SECS: u64 = 10 * 60 * 60 * 24 * 365;
 
-/// Serials of the connected YubiKeys, skipping smartcards that are not
-/// YubiKeys. The real implementation behind the discovery effect on
+/// Serials of the connected YubiKeys, skipping readers without the PIV
+/// applet. The real implementation behind the discovery effect on
 /// [`crate::output::Ctx`].
-pub(crate) fn connected_serials() -> Result<Vec<YubiKeySerial>, DeviceError> {
+pub(crate) fn connected_serials() -> Result<ConnectedYubiKeys, DeviceError> {
     let mut context = Context::open().map_err(DeviceError::Discovery)?;
     let readers = context.iter().map_err(DeviceError::Discovery)?;
 
-    Ok(readers
-        .filter_map(|reader| reader.open().ok())
-        .map(|yubikey| YubiKeySerial::from(yubikey.serial().0))
-        .collect())
+    readers
+        .filter_map(|reader| match reader.open() {
+            Ok(yubikey) => Some(Ok(YubiKeySerial::from(yubikey.serial().0))),
+            // The dependency cannot distinguish a non-YubiKey smartcard from
+            // a YubiKey with PIV disabled; both report a missing PIV applet.
+            Err(PivError::AppletNotFound { applet_name: "PIV" }) => None,
+            Err(source) => Some(Err(DeviceError::OpenReader {
+                reader: reader.name().into_owned(),
+                source,
+            })),
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map(ConnectedYubiKeys::from)
 }
 
 /// The connected YubiKey serials captured by one discovery pass.
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) struct ConnectedYubiKeys(Vec<YubiKeySerial>);
 
 impl From<Vec<YubiKeySerial>> for ConnectedYubiKeys {
@@ -81,37 +91,56 @@ impl ConnectedYubiKeys {
     /// Choose an explicit connected serial or the sole connected device.
     /// Several devices are refused because a serial-only prompt cannot
     /// identify which physical stick the user intends to touch.
-    pub(crate) fn choose(&self, explicit: Option<YubiKeySerial>) -> anyhow::Result<YubiKeySerial> {
-        let serials = || {
+    pub(crate) fn choose(
+        self,
+        explicit: Option<YubiKeySerial>,
+    ) -> Result<YubiKeySerial, YubiKeySelectionError> {
+        match explicit {
+            Some(serial) if self.0.contains(&serial) => Ok(serial),
+            Some(requested) => Err(YubiKeySelectionError::NotConnected {
+                requested,
+                connected: self,
+            }),
+            None => match self.0.as_slice() {
+                [] => Err(YubiKeySelectionError::NoneConnected),
+                [sole] => Ok(*sole),
+                _ => Err(YubiKeySelectionError::Ambiguous { connected: self }),
+            },
+        }
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl Display for ConnectedYubiKeys {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
             self.0
                 .iter()
                 .map(ToString::to_string)
                 .collect::<Vec<_>>()
                 .join(", ")
-        };
-
-        match explicit {
-            Some(serial) if self.0.contains(&serial) => Ok(serial),
-            Some(serial) => {
-                let connected = if self.0.is_empty() {
-                    String::new()
-                } else {
-                    format!("; connected: {}", serials())
-                };
-
-                anyhow::bail!("YubiKey {serial} is not connected{connected}")
-            }
-            None => match self.0.as_slice() {
-                [] => anyhow::bail!("no YubiKey is connected"),
-                [sole] => Ok(*sole),
-                _ => anyhow::bail!(
-                    "multiple YubiKeys are connected (serials {}); unplug all but \
-                     the one to use and try again, or pass --serial",
-                    serials()
-                ),
-            },
-        }
+        )
     }
+}
+
+/// A device-selection outcome that command boundaries can render with their
+/// own remediation.
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum YubiKeySelectionError {
+    #[error("no YubiKey is connected")]
+    NoneConnected,
+    #[error("YubiKey {requested} is not connected")]
+    NotConnected {
+        requested: YubiKeySerial,
+        connected: ConnectedYubiKeys,
+    },
+    #[error("multiple YubiKeys are connected")]
+    Ambiguous { connected: ConnectedYubiKeys },
 }
 
 /// Open the device with the given serial over PC/SC.
@@ -317,53 +346,6 @@ pub(crate) enum SlotStatus {
     },
 }
 
-/// Status of both QuorumOS slots on one device.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct DeviceStatus {
-    pub signing: SlotStatus,
-    pub key_agreement: SlotStatus,
-}
-
-impl DeviceStatus {
-    fn slots(&self) -> [(QosSlot, &SlotStatus); 2] {
-        [
-            (QosSlot::Signing, &self.signing),
-            (QosSlot::KeyAgreement, &self.key_agreement),
-        ]
-    }
-
-    /// The first slot state that rules out using the device: foreign material,
-    /// or a key whose ownership cannot be proven.
-    pub(crate) fn unusable_slot(&self) -> Option<DeviceError> {
-        self.slots()
-            .into_iter()
-            .find_map(|(slot, status)| match status {
-                SlotStatus::Foreign { subject } => Some(DeviceError::ForeignSlot {
-                    slot,
-                    subject: subject.clone(),
-                }),
-                SlotStatus::KeyWithoutCertificate => {
-                    Some(DeviceError::OccupiedWithoutCertificate { slot })
-                }
-                SlotStatus::UnknownWithoutCertificate { metadata_error } => {
-                    Some(DeviceError::UnknownWithoutCertificate {
-                        slot,
-                        metadata_error: *metadata_error,
-                    })
-                }
-                SlotStatus::Empty | SlotStatus::QosProvisioned => None,
-            })
-    }
-
-    pub(crate) fn slots_with(&self, wanted: SlotStatus) -> Vec<QosSlot> {
-        self.slots()
-            .into_iter()
-            .filter(|(_, status)| **status == wanted)
-            .map(|(slot, _)| slot)
-            .collect()
-    }
-}
-
 /// A YubiKey PIV PIN, held only for the duration of device-backed operations
 /// and zeroized on drop. Never persisted.
 pub(crate) struct Pin(Zeroizing<Vec<u8>>);
@@ -386,6 +368,12 @@ impl Pin {
 pub(crate) enum DeviceError {
     #[error("failed to list YubiKey readers")]
     Discovery(#[source] PivError),
+    #[error("failed to inspect smartcard reader {reader}")]
+    OpenReader {
+        reader: String,
+        #[source]
+        source: PivError,
+    },
     #[error("no connected YubiKey has serial {serial}")]
     NotFound { serial: YubiKeySerial },
     #[error("failed to open YubiKey {serial}")]
@@ -444,11 +432,12 @@ pub(crate) enum DeviceError {
     /// existing key.
     #[error(
         "the {slot} slot has no readable QuorumOS certificate, and its key presence could not be \
-         determined ({metadata_error}); confirm firmware 5.3 or later and install the matching \
-         certificate with `ykman` before using this device with TVC"
+         determined; confirm firmware 5.3 or later and install the matching certificate with \
+         `ykman` before using this device with TVC"
     )]
     UnknownWithoutCertificate {
         slot: QosSlot,
+        #[source]
         metadata_error: PivError,
     },
     /// A slot holds material TVC does not manage; nothing was modified.
@@ -456,6 +445,23 @@ pub(crate) enum DeviceError {
         "the {slot} slot holds a non-QuorumOS certificate ({subject}); refusing to use this device"
     )]
     ForeignSlot { slot: QosSlot, subject: String },
+    #[error(
+        "the {slot} slot's QuorumOS certificate is issued by {issuer}; expected a self-signed \
+         certificate issued by {subject}"
+    )]
+    CertificateNotSelfIssued {
+        slot: QosSlot,
+        subject: String,
+        issuer: String,
+    },
+    #[error("the {slot} slot's QuorumOS certificate contains a malformed P-256 public key")]
+    MalformedCertificatePublicKey {
+        slot: QosSlot,
+        #[source]
+        source: x509_cert::spki::Error,
+    },
+    #[error("the {slot} slot's QuorumOS certificate does not match the device-generated key")]
+    CertificatePublicKeyMismatch { slot: QosSlot },
     /// The slot holds no key; the device is not fully configured.
     #[error("the {slot} slot holds no QuorumOS key")]
     EmptySlot { slot: QosSlot },
@@ -510,31 +516,58 @@ pub(crate) enum DeviceError {
     MalformedPairPublicKey(#[source] QosOperatorPublicKeyParseError),
 }
 
-/// Decision table mapping raw certificate and key-metadata outcomes to a
-/// slot classification.
-///
-/// `Certificate::read` reports an absent, unreadable, and malformed
-/// certificate identically, so those outcomes alone never prove emptiness;
-/// the (lazily consulted) key metadata must also show no key before a slot
-/// counts as [`SlotStatus::Empty`]. Pure so the ambiguous cases stay
-/// regression-tested without hardware.
-fn classify_slot(
-    slot: QosSlot,
-    certificate: Result<String, PivError>,
-    key_presence: impl FnOnce() -> Result<bool, PivError>,
-) -> Result<SlotStatus, DeviceError> {
-    match certificate {
-        Ok(subject) if subject == QOS_CERTIFICATE_SUBJECT => Ok(SlotStatus::QosProvisioned),
-        Ok(subject) => Ok(SlotStatus::Foreign { subject }),
-        Err(PivError::InvalidObject | PivError::NotFound) => match key_presence() {
-            Ok(false) => Ok(SlotStatus::Empty),
-            Ok(true) => Ok(SlotStatus::KeyWithoutCertificate),
-            Err(metadata_error @ (PivError::GenericError | PivError::NotSupported)) => {
-                Ok(SlotStatus::UnknownWithoutCertificate { metadata_error })
+/// Failures found while checking both QuorumOS slots on one device.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum SlotsError {
+    #[error(transparent)]
+    Signing(DeviceError),
+    #[error(transparent)]
+    KeyAgreement(DeviceError),
+    #[error("multiple YubiKey slot errors: {signing}; {key_agreement}")]
+    SigningAndKeyAgreement {
+        signing: Box<DeviceError>,
+        key_agreement: Box<DeviceError>,
+    },
+    #[error(transparent)]
+    PairPublicKey(DeviceError),
+}
+
+impl SlotsError {
+    pub(crate) fn contains_empty_slot(&self) -> bool {
+        match self {
+            Self::Signing(error) | Self::KeyAgreement(error) => {
+                matches!(error, DeviceError::EmptySlot { .. })
             }
-            Err(source) => Err(DeviceError::ReadSlotMetadata { slot, source }),
-        },
-        Err(source) => Err(DeviceError::ReadCertificate { slot, source }),
+            Self::SigningAndKeyAgreement {
+                signing,
+                key_agreement,
+            } => {
+                matches!(signing.as_ref(), DeviceError::EmptySlot { .. })
+                    || matches!(key_agreement.as_ref(), DeviceError::EmptySlot { .. })
+            }
+            Self::PairPublicKey(_) => false,
+        }
+    }
+}
+
+fn validate_slot_status(
+    slot: QosSlot,
+    status: Result<SlotStatus, DeviceError>,
+) -> Result<(), DeviceError> {
+    match status {
+        Ok(SlotStatus::QosProvisioned) => Ok(()),
+        Ok(SlotStatus::Empty) => Err(DeviceError::EmptySlot { slot }),
+        Ok(SlotStatus::KeyWithoutCertificate) => {
+            Err(DeviceError::OccupiedWithoutCertificate { slot })
+        }
+        Ok(SlotStatus::UnknownWithoutCertificate { metadata_error }) => {
+            Err(DeviceError::UnknownWithoutCertificate {
+                slot,
+                metadata_error,
+            })
+        }
+        Ok(SlotStatus::Foreign { subject }) => Err(DeviceError::ForeignSlot { slot, subject }),
+        Err(error) => Err(error),
     }
 }
 
@@ -543,9 +576,6 @@ fn classify_slot(
 pub(crate) trait DeviceOps {
     /// What one QuorumOS slot provably holds.
     fn slot_status(&mut self, slot: QosSlot) -> Result<SlotStatus, DeviceError>;
-
-    /// What both QuorumOS slots provably hold.
-    fn device_status(&mut self) -> Result<DeviceStatus, DeviceError>;
 
     /// The composite `encrypt_public ‖ sign_public` operator key, read from
     /// the two slot certificates.
@@ -566,41 +596,88 @@ pub(crate) trait DeviceOps {
     ) -> Result<Zeroizing<Vec<u8>>, DeviceError>;
 
     /// Verify both QuorumOS slots hold configured QuorumOS keys and return the
-    /// device's composite operator key. Refuses on foreign or empty slots.
-    fn verified_pair_public_key(&mut self) -> Result<QosOperatorPublicKey, DeviceError> {
-        let status = self.device_status()?;
+    /// device's composite operator key. Both slots are checked so callers see
+    /// every actionable configuration error in one result.
+    fn verified_pair_public_key(&mut self) -> Result<QosOperatorPublicKey, SlotsError> {
+        let signing = validate_slot_status(QosSlot::Signing, self.slot_status(QosSlot::Signing));
+        let key_agreement = validate_slot_status(
+            QosSlot::KeyAgreement,
+            self.slot_status(QosSlot::KeyAgreement),
+        );
 
-        if let Some(error) = status.unusable_slot() {
-            return Err(error);
+        match (signing, key_agreement) {
+            (Ok(()), Ok(())) => self.pair_public_key().map_err(SlotsError::PairPublicKey),
+            (Err(signing), Ok(())) => Err(SlotsError::Signing(signing)),
+            (Ok(()), Err(key_agreement)) => Err(SlotsError::KeyAgreement(key_agreement)),
+            (Err(signing), Err(key_agreement)) => Err(SlotsError::SigningAndKeyAgreement {
+                signing: Box::new(signing),
+                key_agreement: Box::new(key_agreement),
+            }),
         }
-
-        if let Some(slot) = status.slots_with(SlotStatus::Empty).into_iter().next() {
-            return Err(DeviceError::EmptySlot { slot });
-        }
-
-        self.pair_public_key()
     }
 }
 
 impl DeviceOps for YubiKey {
     fn slot_status(&mut self, slot: QosSlot) -> Result<SlotStatus, DeviceError> {
-        let certificate =
-            Certificate::read(self, slot.slot_id()).map(|certificate| certificate.subject());
+        match Certificate::read(self, slot.slot_id()) {
+            Ok(certificate) => {
+                let subject = certificate.subject();
 
-        classify_slot(slot, certificate, || {
-            match piv::metadata(self, slot.slot_id()) {
-                Ok(_) => Ok(true),
-                Err(PivError::NotFound) => Ok(false),
-                Err(source) => Err(source),
+                if subject != QOS_CERTIFICATE_SUBJECT {
+                    return Ok(SlotStatus::Foreign { subject });
+                }
+
+                let metadata = piv::metadata(self, slot.slot_id())
+                    .map_err(|source| DeviceError::ReadSlotMetadata { slot, source })?;
+                let CertificateSlot {
+                    slot: _,
+                    public_key_info: _,
+                    verifying_key,
+                } = CertificateSlot::try_from((slot, metadata))?;
+                let issuer = certificate.issuer();
+
+                if issuer != subject {
+                    return Err(DeviceError::CertificateNotSelfIssued {
+                        slot,
+                        subject,
+                        issuer,
+                    });
+                }
+
+                let certificate_key =
+                    VerifyingKey::try_from(certificate.subject_pki()).map_err(|source| {
+                        DeviceError::MalformedCertificatePublicKey { slot, source }
+                    })?;
+
+                if certificate_key != verifying_key {
+                    return Err(DeviceError::CertificatePublicKeyMismatch { slot });
+                }
+
+                let signed = certificate
+                    .cert
+                    .tbs_certificate
+                    .to_der()
+                    .map_err(|source| DeviceError::EncodeCertificate { slot, source })?;
+                let signature = DerSignature::from_bytes(certificate.cert.signature.raw_bytes())
+                    .map_err(|source| DeviceError::InvalidCertificateSignature { slot, source })?;
+                verifying_key
+                    .verify(&signed, &signature)
+                    .map_err(|source| DeviceError::InvalidCertificateSignature { slot, source })?;
+
+                Ok(SlotStatus::QosProvisioned)
             }
-        })
-    }
-
-    fn device_status(&mut self) -> Result<DeviceStatus, DeviceError> {
-        Ok(DeviceStatus {
-            signing: self.slot_status(QosSlot::Signing)?,
-            key_agreement: self.slot_status(QosSlot::KeyAgreement)?,
-        })
+            Err(PivError::InvalidObject | PivError::NotFound) => {
+                match piv::metadata(self, slot.slot_id()) {
+                    Ok(_) => Ok(SlotStatus::KeyWithoutCertificate),
+                    Err(PivError::NotFound) => Ok(SlotStatus::Empty),
+                    Err(metadata_error @ (PivError::GenericError | PivError::NotSupported)) => {
+                        Ok(SlotStatus::UnknownWithoutCertificate { metadata_error })
+                    }
+                    Err(source) => Err(DeviceError::ReadSlotMetadata { slot, source }),
+                }
+            }
+            Err(source) => Err(DeviceError::ReadCertificate { slot, source }),
+        }
     }
 
     fn pair_public_key(&mut self) -> Result<QosOperatorPublicKey, DeviceError> {
@@ -782,8 +859,11 @@ mod tests {
             .unwrap_err();
 
         assert_eq!(
-            error.to_string(),
-            "YubiKey deadbeef is not connected; connected: 01c95c1f"
+            error,
+            YubiKeySelectionError::NotConnected {
+                requested: YubiKeySerial::from(0xdead_beef),
+                connected: connected(&[0x01c9_5c1f]),
+            }
         );
     }
 
@@ -793,7 +873,13 @@ mod tests {
             .choose(Some(YubiKeySerial::from(0xdead_beef)))
             .unwrap_err();
 
-        assert_eq!(error.to_string(), "YubiKey deadbeef is not connected");
+        assert_eq!(
+            error,
+            YubiKeySelectionError::NotConnected {
+                requested: YubiKeySerial::from(0xdead_beef),
+                connected: connected(&[]),
+            }
+        );
     }
 
     #[test]
@@ -807,7 +893,7 @@ mod tests {
     fn no_connected_device_is_refused() {
         let error = connected(&[]).choose(None).unwrap_err();
 
-        assert_eq!(error.to_string(), "no YubiKey is connected");
+        assert_eq!(error, YubiKeySelectionError::NoneConnected);
     }
 
     #[test]
@@ -817,156 +903,21 @@ mod tests {
             .unwrap_err();
 
         assert_eq!(
-            error.to_string(),
-            "multiple YubiKeys are connected (serials 01c95c1f, deadbeef); \
-             unplug all but the one to use and try again, or pass --serial"
+            error,
+            YubiKeySelectionError::Ambiguous {
+                connected: connected(&[0x01c9_5c1f, 0xdead_beef]),
+            }
         );
     }
 
     fn sole_connected_serial() -> YubiKeySerial {
-        let connected = connected_serials().unwrap();
-
-        let [serial] = connected.as_slice() else {
-            panic!("connect exactly one YubiKey; found {connected:?}");
-        };
-
-        *serial
-    }
-
-    fn qos_subject() -> Result<String, PivError> {
-        Ok(QOS_CERTIFICATE_SUBJECT.to_string())
-    }
-
-    fn metadata_untouched() -> Result<bool, PivError> {
-        panic!("a readable certificate must classify without a metadata query");
-    }
-
-    #[test]
-    fn a_quorumos_certificate_is_recognized() {
-        let status = classify_slot(QosSlot::Signing, qos_subject(), metadata_untouched).unwrap();
-
-        assert_eq!(status, SlotStatus::QosProvisioned);
-    }
-
-    #[test]
-    fn another_issuers_certificate_is_foreign() {
-        let status = classify_slot(
-            QosSlot::Signing,
-            Ok("CN=SomeoneElse".to_string()),
-            metadata_untouched,
-        )
-        .unwrap();
-
-        assert_eq!(
-            status,
-            SlotStatus::Foreign {
-                subject: "CN=SomeoneElse".to_string()
-            }
-        );
-    }
-
-    #[test]
-    fn no_certificate_and_no_key_is_proven_empty() {
-        for absent in [PivError::NotFound, PivError::InvalidObject] {
-            let status = classify_slot(QosSlot::Signing, Err(absent), || Ok(false)).unwrap();
-
-            assert_eq!(status, SlotStatus::Empty);
-        }
-    }
-
-    #[test]
-    fn a_key_without_a_readable_certificate_is_distinguished_from_empty() {
-        for unreadable in [PivError::NotFound, PivError::InvalidObject] {
-            let status =
-                classify_slot(QosSlot::KeyAgreement, Err(unreadable), || Ok(true)).unwrap();
-
-            assert_eq!(status, SlotStatus::KeyWithoutCertificate);
-        }
-    }
-
-    #[test]
-    fn an_unproven_key_is_refused() {
-        let status = DeviceStatus {
-            signing: SlotStatus::Empty,
-            key_agreement: SlotStatus::KeyWithoutCertificate,
-        };
-
-        assert!(matches!(
-            status.unusable_slot(),
-            Some(DeviceError::OccupiedWithoutCertificate {
-                slot: QosSlot::KeyAgreement
-            })
-        ));
-    }
-
-    #[test]
-    fn generic_metadata_failure_is_an_unknown_certless_slot() {
-        let status = classify_slot(QosSlot::Signing, Err(PivError::InvalidObject), || {
-            Err(PivError::GenericError)
-        })
-        .unwrap();
-
-        assert!(matches!(
-            status,
-            SlotStatus::UnknownWithoutCertificate {
-                metadata_error: PivError::GenericError
-            }
-        ));
-    }
-
-    #[test]
-    fn a_specific_metadata_failure_is_not_interpreted() {
-        let error = classify_slot(QosSlot::Signing, Err(PivError::InvalidObject), || {
-            Err(PivError::WrongPin { tries: 2 })
-        })
-        .unwrap_err();
-
-        assert!(matches!(
-            error,
-            DeviceError::ReadSlotMetadata {
-                slot: QosSlot::Signing,
-                source: PivError::WrongPin { tries: 2 }
-            }
-        ));
-    }
-
-    #[test]
-    fn a_certificate_read_failure_is_not_interpreted() {
-        let error = classify_slot(QosSlot::Signing, Err(PivError::GenericError), || {
-            panic!("a transport failure must not consult metadata")
-        })
-        .unwrap_err();
-
-        assert!(matches!(
-            error,
-            DeviceError::ReadCertificate {
-                slot: QosSlot::Signing,
-                ..
-            }
-        ));
+        connected_serials().unwrap().choose(None).unwrap()
     }
 
     fn foreign() -> SlotStatus {
         SlotStatus::Foreign {
             subject: "CN=SomeoneElse".to_string(),
         }
-    }
-
-    #[test]
-    fn slots_with_selects_by_state_in_slot_order() {
-        let status = DeviceStatus {
-            signing: SlotStatus::QosProvisioned,
-            key_agreement: SlotStatus::Empty,
-        };
-
-        assert_eq!(
-            status.slots_with(SlotStatus::Empty),
-            vec![QosSlot::KeyAgreement]
-        );
-        assert_eq!(
-            status.slots_with(SlotStatus::QosProvisioned),
-            vec![QosSlot::Signing]
-        );
     }
 
     #[test]
@@ -1061,11 +1012,60 @@ mod tests {
 
         assert!(matches!(
             error,
-            DeviceError::ForeignSlot {
+            SlotsError::Signing(DeviceError::ForeignSlot {
                 slot: QosSlot::Signing,
                 ..
+            })
+        ));
+    }
+
+    #[test]
+    fn verified_pair_public_key_reports_both_slot_errors() {
+        let mut device = FakeDevice::new(SlotStatus::Empty, SlotStatus::KeyWithoutCertificate);
+
+        let error = device.verified_pair_public_key().unwrap_err();
+        let rendered = error.to_string();
+
+        assert!(rendered.contains("the signing slot holds no QuorumOS key"));
+        assert!(rendered.contains("the key-agreement slot holds a key"));
+
+        let SlotsError::SigningAndKeyAgreement {
+            signing,
+            key_agreement,
+        } = error
+        else {
+            panic!("expected both slot errors");
+        };
+
+        assert!(matches!(
+            *signing,
+            DeviceError::EmptySlot {
+                slot: QosSlot::Signing,
             }
         ));
+        assert!(matches!(
+            *key_agreement,
+            DeviceError::OccupiedWithoutCertificate {
+                slot: QosSlot::KeyAgreement,
+            }
+        ));
+    }
+
+    #[test]
+    fn verified_pair_public_key_preserves_an_unknown_slots_metadata_error() {
+        let mut device = FakeDevice::new(
+            SlotStatus::UnknownWithoutCertificate {
+                metadata_error: PivError::GenericError,
+            },
+            SlotStatus::QosProvisioned,
+        );
+
+        let error = device.verified_pair_public_key().unwrap_err();
+
+        assert_eq!(
+            std::error::Error::source(&error).and_then(|source| source.downcast_ref::<PivError>()),
+            Some(&PivError::GenericError)
+        );
     }
 
     #[test]
@@ -1076,9 +1076,9 @@ mod tests {
 
         assert!(matches!(
             error,
-            DeviceError::EmptySlot {
-                slot: QosSlot::KeyAgreement
-            }
+            SlotsError::KeyAgreement(DeviceError::EmptySlot {
+                slot: QosSlot::KeyAgreement,
+            })
         ));
     }
 
