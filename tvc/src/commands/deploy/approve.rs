@@ -155,11 +155,11 @@ impl Run for Args {
         if !args.dry_run
             && let Some(OperatorSelector::Serial(serial)) = args.operator_selector.as_ref()
         {
-            let (alias, org) = config
+            let (org_id, org) = config
                 .active_org_config()
                 .context("--serial requires an active organization")?;
             org.select_yubikey_operator(Some(*serial))
-                .with_context(|| format!("org '{alias}'"))?;
+                .with_context(|| format!("org '{}'", config.display_name(org_id)))?;
         }
 
         let LoadedManifest {
@@ -232,7 +232,7 @@ impl Run for Args {
                     });
                 }
             } else {
-                let (_, org) = config.active_org_config().ok_or_else(|| {
+                let (org_id, org) = config.active_org_config().ok_or_else(|| {
                     anyhow::anyhow!(
                         "No active organization. Run `tvc login` first or provide \
                          --operator-seed or --operator-seed-path."
@@ -263,7 +263,7 @@ impl Run for Args {
                         }
                         OperatorRecordKind::Hosted(hosted) => {
                             let hosted = ResolvedHostedOperator::from_registry(
-                                org.id.clone(),
+                                org_id,
                                 &operator.name,
                                 hosted,
                             )?;
@@ -953,14 +953,14 @@ async fn post_approval_to_api(
 
     let result = auth
         .client
-        .create_tvc_manifest_approvals(auth.org_id.clone(), timestamp_ms, intent)
+        .create_tvc_manifest_approvals(auth.org_id.to_string(), timestamp_ms, intent)
         .await
         .context("failed to post manifest approval")?;
 
     let quorum_reached = match plan.deploy_id {
         Some(deploy_id) => {
             let request = GetTvcDeploymentRequest {
-                organization_id: auth.org_id.clone(),
+                organization_id: auth.org_id.to_string(),
                 deployment_id: deploy_id.to_string(),
             };
 
@@ -1220,7 +1220,7 @@ async fn fetch_manifest_from_deploy(
     let auth = build_client(config).await?;
 
     let request = GetTvcDeploymentRequest {
-        organization_id: auth.org_id.clone(),
+        organization_id: auth.org_id.to_string(),
         deployment_id: deploy_id.to_string(),
     };
 

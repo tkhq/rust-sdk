@@ -201,7 +201,7 @@ fn an_unregistered_serial_points_at_external_setup() {
         ));
 }
 
-/// Write a v1 config with an active local-default org and one registered
+/// Write a v2 config with an active local-default org and one registered
 /// YubiKey the org does not reference yet.
 fn write_local_org_with_registered_yubikey(home: &Path) {
     let dir = home.join(".config/turnkey");
@@ -209,18 +209,20 @@ fn write_local_org_with_registered_yubikey(home: &Path) {
     std::fs::write(
         dir.join("tvc.config.toml"),
         format!(
-            r#"version = 1
-active_org = "default"
+            r#"version = 2
+active_org = "11111111-1111-4111-8111-111111111111"
+
+[aliases]
+default = "11111111-1111-4111-8111-111111111111"
 
 [[yubikeys]]
 serial = "01c95c1f"
 public_key = "{key}"
 
-[orgs.default]
-id = "org-123"
+[orgs.11111111-1111-4111-8111-111111111111]
 api_key_path = "/keys/api.json"
 
-[[orgs.default.operators]]
+[[orgs.11111111-1111-4111-8111-111111111111.operators]]
 name = "default"
 kind = "local"
 key_path = "/keys/operator.json"
@@ -277,7 +279,11 @@ fn a_registered_serial_is_added_non_interactively_without_a_device() {
 fn a_failed_hosted_default_save_reports_the_record_and_default_kind() {
     let temp = tempfile::TempDir::new().unwrap();
     let (api_base_url, server) = spawn_create_operator_server();
-    common::write_profiles_config(temp.path(), &[("default", "org-123")], Some("default"));
+    common::write_profiles_config(
+        temp.path(),
+        &[("default", "11111111-1111-4111-8111-111111111111")],
+        Some("default"),
+    );
     common::write_profile_key_files(temp.path(), "default");
 
     let config_path = temp.path().join(".config/turnkey/tvc.config.toml");
@@ -297,7 +303,9 @@ fn a_failed_hosted_default_save_reports_the_record_and_default_kind() {
         .stderr(predicate::str::contains(
             "hosted operator 11111111-1111-4111-8111-111111111111 was created remotely",
         ))
-        .stderr(predicate::str::contains(r#"[[orgs."default".operators]]"#))
+        .stderr(predicate::str::contains(
+            r#"[[orgs."11111111-1111-4111-8111-111111111111".operators]]"#,
+        ))
         .stderr(predicate::str::contains("kind = \"hosted\""))
         .stderr(predicate::str::contains(
             "default_operator_kind = \"hosted\"",
@@ -326,7 +334,9 @@ fn a_failed_save_reports_the_recovery_record() {
         .stderr(predicate::str::contains(
             "the YubiKey operator could not be saved",
         ))
-        .stderr(predicate::str::contains(r#"[[orgs."default".operators]]"#))
+        .stderr(predicate::str::contains(
+            r#"[[orgs."11111111-1111-4111-8111-111111111111".operators]]"#,
+        ))
         .stderr(predicate::str::contains("kind = \"yubikey\""))
         .stderr(predicate::str::contains("default_operator_kind"));
 }

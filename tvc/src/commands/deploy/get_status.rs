@@ -39,7 +39,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Resul
     // are resolved INSIDE the `build-client`. Instead, all the necessary data for the client
     // should be resolved, then passed into an infallible constructor
     let auth = crate::client::build_client(&config).await?;
-    let org_id = auth.org_id.clone();
+    let org_id = auth.org_id.to_string();
 
     let deployment = fetch_tvc_deployment(&auth, org_id.clone(), deployment_id.clone()).await?;
 

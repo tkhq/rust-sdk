@@ -10,11 +10,12 @@ use crate::{
 };
 use anyhow::{Context, Result, bail};
 use chrono::Local;
-use clap::Args as ClapArgs;
+use clap::{ArgGroup, Args as ClapArgs};
 use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
 use std::path::PathBuf;
 use tracing::instrument;
+use uuid::Uuid;
 
 pub(crate) const LONG_ABOUT: &str = r#"
 Generate a deployment config file to edit, then pass to `tvc deploy create`.
@@ -26,11 +27,23 @@ placeholder template is written."#;
 
 /// Generate a template deployment configuration file.
 #[derive(Debug, ClapArgs)]
-#[command(about, long_about = None)]
+#[command(
+    about,
+    long_about = None,
+    group(
+        ArgGroup::new("app_id_source")
+            .args(["app_id", "from_deployment"])
+            .multiple(false)
+    )
+)]
 pub struct Args {
     /// Output file path.
     #[arg(short, long, value_name = "PATH", env = "TVC_DEPLOY_CONFIG_OUT")]
     pub output: Option<PathBuf>,
+
+    /// App ID to prefill in the deployment config template.
+    #[arg(long, value_name = "APP_ID", env = "TVC_APP_ID")]
+    pub app_id: Option<Uuid>,
 
     /// Seed the config from an existing deployment instead of a blank template.
     ///
@@ -39,7 +52,7 @@ pub struct Args {
     /// is tied to the container image, so recompute it if you change the image. A
     /// pull secret, if the source used one, must be re-supplied.
     #[arg(long, value_name = "DEPLOY_ID", env = "TVC_FROM_DEPLOYMENT")]
-    pub from_deployment: Option<String>,
+    pub from_deployment: Option<Uuid>,
 
     /// Walk through prompts for each field and write a filled config instead
     /// of a placeholder template.
@@ -63,6 +76,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: turnkey::Config) -> Resul
 async fn execute(ctx: &mut StdCtx, args: Args, config: &turnkey::Config) -> Result<Outcome> {
     let Args {
         output,
+        app_id,
         from_deployment,
         interactive: is_interactive,
     } = args;
@@ -80,30 +94,30 @@ async fn execute(ctx: &mut StdCtx, args: Args, config: &turnkey::Config) -> Resu
 
     let is_from_deployment = from_deployment.is_some();
 
-    // The last created app ID prefills the blank template and the interactive
-    // prompt defaults.
-    let saved_app_id = config.get_last_app_id();
+    // The last created app ID prefills a blank template when neither ID flag
+    // was given.
+    let id = from_deployment
+        .or(app_id)
+        .or_else(|| config.get_last_app_id())
+        .unwrap_or_default();
 
     // Seed the config either from an existing deployment or a blank template.
-    let mut deploy_config = match from_deployment {
-        Some(deploy_id) => {
-            // TODO (TVC-154):
-            // TL;DR split fetching the data/resources separately
-            // from building the client
-            let auth = build_client(config).await?;
-            let org_id = auth.org_id.clone();
-            let deployment = fetch_tvc_deployment(&auth, org_id, deploy_id).await?;
-            DeployConfig::try_from(deployment)?
-        }
-        None => DeployConfig::template(saved_app_id.as_deref()),
+    let mut deploy_config = if is_from_deployment {
+        // TODO (TVC-154):
+        // TL;DR split fetching the data/resources separately
+        // from building the client
+        let auth = build_client(config).await?;
+        let org_id = auth.org_id.to_string();
+        let deployment = fetch_tvc_deployment(&auth, org_id, id.to_string()).await?;
+        DeployConfig::try_from(deployment)?
+    } else {
+        DeployConfig::template(id)
     };
 
     // Optionally walk prompts to fill any remaining placeholders (e.g. the
     // expected pivot digest that `--from-deployment` deliberately leaves blank).
-    // In `--from-deployment` mode the app ID is already set, so the saved-app-id
-    // default is only consulted for a blank template.
     if is_interactive {
-        deploy_config.fill_interactively(ctx, saved_app_id.as_deref())?;
+        deploy_config.fill_interactively(ctx)?;
     }
 
     let needs_pull_secret = deploy_config.pull_secret_is_placeholder();

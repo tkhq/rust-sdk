@@ -214,30 +214,7 @@ impl Commands {
 
         let home = std::env::var("HOME").context("HOME environment variable not set")?;
         let path = PathBuf::from(home).join(CONFIG_DIR).join(CONFIG_FILE);
-        debug!(config_path = %path.display(), "loading tvc config");
-
-        let config = if !path.exists() {
-            debug!(config_path = %path.display(), "tvc config not found; using defaults");
-            let config = Config::default();
-            config.save().await?;
-            config
-        } else {
-            let content = tokio::fs::read_to_string(&path)
-                .await
-                .with_context(|| format!("failed to read config file: {}", path.display()))?;
-
-            let config = Config::from_toml(&content)
-                .with_context(|| format!("failed to parse config file: {}", path.display()))?;
-
-            debug!(
-                config_path = %path.display(),
-                active_org = ?config.active_org,
-                org_count = config.orgs.len(),
-                "loaded tvc config"
-            );
-
-            config
-        };
+        let config = Config::load_from_path(&path).await?;
 
         match command {
             Commands::Deploy { command } => match command {

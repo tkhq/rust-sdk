@@ -147,8 +147,8 @@ impl ResolvedOperator {
 }
 
 pub(crate) fn ensure_authenticated_org(
-    authenticated_org_id: &str,
-    configured_org_id: &str,
+    authenticated_org_id: Uuid,
+    configured_org_id: Uuid,
 ) -> Result<()> {
     ensure!(
         authenticated_org_id == configured_org_id,
@@ -214,7 +214,7 @@ impl SelectedYubiKey {
 /// parse at their own boundary.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct OperatorCandidate {
-    pub id: String,
+    pub id: Uuid,
     pub name: Option<String>,
     /// The key this identity is proven to use. IDs remembered from an app
     /// response predate key-aware persistence, so they deliberately carry
@@ -226,7 +226,7 @@ impl Display for OperatorCandidate {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self.name {
             Some(name) => write!(f, "{name} ({})", self.id),
-            None => f.write_str(&self.id),
+            None => write!(f, "{}", self.id),
         }
     }
 }
@@ -361,7 +361,7 @@ impl Config {
                 }
 
                 let auth = build_client(self).await?;
-                ensure_authenticated_org(&auth.org_id, hosted.organization_id())?;
+                ensure_authenticated_org(auth.org_id, hosted.organization_id())?;
 
                 Ok(ResolvedOperator {
                     name: Some(hosted.name().to_string()),
@@ -453,7 +453,7 @@ impl Config {
         let mut candidates: Vec<OperatorCandidate> = org
             .hosted_operators()
             .map(|(name, hosted)| OperatorCandidate {
-                id: hosted.operator_id.to_string(),
+                id: hosted.operator_id,
                 name: name.to_owned().into(),
                 public_key: format!("{}{}", hosted.encrypt_public_key, hosted.sign_public_key)
                     .parse()
@@ -461,15 +461,19 @@ impl Config {
             })
             .collect();
 
-        for id in self.get_last_operator_ids().unwrap_or_default() {
-            if candidates.iter().all(|candidate| candidate.id != id) {
-                candidates.push(OperatorCandidate {
-                    id,
-                    name: None,
-                    public_key: None,
-                });
-            }
-        }
+        self.get_last_operator_ids()
+            .unwrap_or_default()
+            .iter()
+            .copied()
+            .for_each(|id| {
+                if candidates.iter().all(|candidate| candidate.id != id) {
+                    candidates.push(OperatorCandidate {
+                        id,
+                        name: None,
+                        public_key: None,
+                    });
+                }
+            });
 
         candidates
     }
@@ -492,8 +496,9 @@ mod tests {
     use crate::pair::LocalPair;
     use crate::yubikey::test_support::{self, FakeDevice};
     use crate::yubikey::{Pin, SlotStatus};
+    use indexmap::IndexMap;
     use qos_p256::P256Pair;
-    use std::{collections::HashMap, path::PathBuf};
+    use std::path::PathBuf;
 
     fn public_keys() -> (String, String) {
         let first = P256Pair::generate().unwrap().public_key().to_bytes();
@@ -505,11 +510,10 @@ mod tests {
 
     fn config_with_operators(operators: Vec<OperatorRecord>) -> Config {
         Config {
-            active_org: Some("active".to_string()),
-            orgs: HashMap::from([(
-                "active".to_string(),
+            active_org: Some(Uuid::from_u128(0xA1)),
+            orgs: IndexMap::from([(
+                Uuid::from_u128(0xA1),
                 OrgConfig {
-                    id: "org-id".to_string(),
                     api_key_path: PathBuf::from("api-key.json"),
                     api_base_url: "https://api.turnkey.com".to_string(),
                     default_operator_kind: OperatorKind::Local,
@@ -559,7 +563,11 @@ mod tests {
 
     fn yubikey_default_config(serial: YubiKeySerial) -> Config {
         let mut config = config_with_operators(vec![yubikey_operator(serial)]);
-        config.orgs.get_mut("active").unwrap().default_operator_kind = OperatorKind::Yubikey;
+        config
+            .orgs
+            .get_mut(&Uuid::from_u128(0xA1))
+            .unwrap()
+            .default_operator_kind = OperatorKind::Yubikey;
         config
     }
 
@@ -709,7 +717,7 @@ mod tests {
         let mut config = registered_yubikey_config(&device);
         config
             .orgs
-            .get_mut("active")
+            .get_mut(&Uuid::from_u128(0xA1))
             .unwrap()
             .operators
             .push(hosted_operator("hosted"));
@@ -821,7 +829,11 @@ mod tests {
     #[test]
     fn operator_pair_hosted_default_is_redirected() {
         let mut config = config_with_operators(vec![hosted_operator("hosted")]);
-        config.orgs.get_mut("active").unwrap().default_operator_kind = OperatorKind::Hosted;
+        config
+            .orgs
+            .get_mut(&Uuid::from_u128(0xA1))
+            .unwrap()
+            .default_operator_kind = OperatorKind::Hosted;
 
         let error = config
             .select_operator_pair_source(None, None)
@@ -836,7 +848,11 @@ mod tests {
             yubikey_operator(test_support::serial()),
             yubikey_operator(YubiKeySerial::from(0xdead_beef)),
         ]);
-        config.orgs.get_mut("active").unwrap().default_operator_kind = OperatorKind::Yubikey;
+        config
+            .orgs
+            .get_mut(&Uuid::from_u128(0xA1))
+            .unwrap()
+            .default_operator_kind = OperatorKind::Yubikey;
         config
             .yubikeys
             .register(test_support::serial(), device.operator_public_key());
@@ -877,19 +893,21 @@ mod tests {
     fn candidates_are_registered_hosted_operators_then_saved_ids() {
         let mut config = config_with_operators(vec![local_operator(), hosted_operator("hosted")]);
         config
-            .set_last_operator_ids(&["44444444-4444-4444-8444-444444444444".to_string()])
+            .set_last_operator_ids(vec![
+                "44444444-4444-4444-8444-444444444444".parse().unwrap(),
+            ])
             .unwrap();
 
         let candidates = config.known_operator_candidates();
 
         assert_eq!(candidates.len(), 2);
-        assert_eq!(candidates[0].id, HOSTED_ID);
+        assert_eq!(candidates[0].id.to_string(), HOSTED_ID);
         assert_eq!(candidates[0].name.as_deref(), Some("hosted"));
         assert!(candidates[0].public_key.is_some());
         assert_eq!(
             candidates[1],
             OperatorCandidate {
-                id: "44444444-4444-4444-8444-444444444444".to_string(),
+                id: "44444444-4444-4444-8444-444444444444".parse().unwrap(),
                 name: None,
                 public_key: None,
             }
@@ -900,13 +918,13 @@ mod tests {
     fn candidates_dedupe_saved_ids_against_the_registry() {
         let mut config = config_with_operators(vec![hosted_operator("hosted")]);
         config
-            .set_last_operator_ids(&[HOSTED_ID.to_string()])
+            .set_last_operator_ids(vec![HOSTED_ID.parse().unwrap()])
             .unwrap();
 
         let candidates = config.known_operator_candidates();
 
         assert_eq!(candidates.len(), 1);
-        assert_eq!(candidates[0].id, HOSTED_ID);
+        assert_eq!(candidates[0].id.to_string(), HOSTED_ID);
         assert_eq!(candidates[0].name.as_deref(), Some("hosted"));
         assert!(candidates[0].public_key.is_some());
     }
@@ -919,12 +937,12 @@ mod tests {
     #[test]
     fn candidate_display_labels_named_operators() {
         let named = OperatorCandidate {
-            id: HOSTED_ID.to_string(),
+            id: HOSTED_ID.parse().unwrap(),
             name: Some("hosted".to_string()),
             public_key: None,
         };
         let unnamed = OperatorCandidate {
-            id: HOSTED_ID.to_string(),
+            id: HOSTED_ID.parse().unwrap(),
             name: None,
             public_key: None,
         };
@@ -973,11 +991,17 @@ mod tests {
 
     #[test]
     fn authenticated_org_must_match_configured_org() {
+        let authenticated = Uuid::from_u128(0xAA);
+        let configured = Uuid::from_u128(0xCC);
+
         assert_eq!(
-            ensure_authenticated_org("authenticated", "configured")
+            ensure_authenticated_org(authenticated, configured)
                 .unwrap_err()
                 .to_string(),
-            "authenticated organization (authenticated) does not match configured organization (configured)"
+            format!(
+                "authenticated organization ({authenticated}) does not match \
+                 configured organization ({configured})"
+            )
         );
     }
 }

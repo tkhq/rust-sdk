@@ -38,7 +38,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcom
 
     let result = auth
         .client
-        .delete_tvc_deployment(auth.org_id, timestamp_ms, intent)
+        .delete_tvc_deployment(auth.org_id.to_string(), timestamp_ms, intent)
         .await
         .context("failed to delete TVC deployment")?;
 

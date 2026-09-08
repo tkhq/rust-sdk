@@ -34,7 +34,7 @@ fn authenticated_command(home: &TempDir, api_base_url: &str) -> assert_cmd::Comm
     let mut command = tvc_command();
     command
         .env("HOME", home.path())
-        .env("TVC_ORG_ID", "org-test")
+        .env("TVC_ORG_ID", "33333333-3333-4333-8333-333333333333")
         .env(
             "TVC_API_KEY_PUBLIC",
             hex::encode(stamper.compressed_public_key()),

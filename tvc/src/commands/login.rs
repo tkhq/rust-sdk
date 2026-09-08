@@ -1,27 +1,33 @@
 //! Login command for authenticating with Turnkey.
 
-use crate::client::build_turnkey_client;
-use crate::commands::keys::backup_operator_key::{
-    OperatorKeyBackedUp, back_up, prompt_for_backup_destination,
+use crate::{
+    client::build_turnkey_client,
+    commands::keys::backup_operator_key::{
+        OperatorKeyBackedUp, back_up, prompt_for_backup_destination,
+    },
+    config::turnkey::{
+        API_BASE_URL_PROD, Config, KeyCurve, LocalOperatorRecord, NewOrgOperator, OperatorKind,
+        OperatorRecord, OperatorRecordKind, OrgConfig, OrgQuery, QosOperatorPublicKey, Resolved,
+        SelectYubiKeyOperatorError, StoredApiKey, StoredQosOperatorKey, YubiKeyOperatorRecord,
+        YubiKeySerial, dashboard_base_url, default_api_key_path, default_operator_key_path,
+        default_org_dir, legacy_org_dir,
+    },
+    outcome::Outcome,
+    output::{MissingRequiredInput, StdCtx},
+    prompts::{self, error_required_in_non_interactive},
+    shell_eprintln, shell_print, shell_println,
 };
-use crate::config::turnkey::{
-    API_BASE_URL_PROD, Config, KeyCurve, LocalOperatorRecord, NewOrgOperator, OperatorKind,
-    OperatorRecord, OperatorRecordKind, OrgConfig, QosOperatorPublicKey,
-    SelectYubiKeyOperatorError, StoredApiKey, StoredQosOperatorKey, YubiKeyOperatorRecord,
-    YubiKeySerial, dashboard_base_url, default_api_key_path, default_operator_key_path,
-    default_org_dir,
-};
-use crate::outcome::Outcome;
-use crate::output::{MissingRequiredInput, StdCtx};
-use crate::prompts::{self, error_required_in_non_interactive};
-use crate::{shell_eprintln, shell_print, shell_println};
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use clap::Args as ClapArgs;
 use qos_p256::P256Pair;
 use serde::Serialize;
-use std::collections::BTreeSet;
-use std::fmt::{self, Display, Formatter};
-use std::io::BufRead;
+use std::{
+    collections::BTreeSet,
+    fmt::{self, Display, Formatter},
+    io::BufRead,
+    str::FromStr,
+};
+use thiserror::Error;
 use tracing::{debug, instrument};
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use turnkey_client::generated::GetWhoamiRequest;
@@ -33,8 +39,8 @@ use uuid::Uuid;
 pub struct Args {
     /// Organization alias or ID to log in with.
     /// If not provided, will prompt interactively.
-    #[arg(long, env = "TVC_ORG")]
-    pub org: Option<String>,
+    #[arg(long, env = "TVC_ORG", value_parser = OrgQuery::from_str)]
+    pub org: Option<OrgQuery>,
     /// Turnkey API base URL. Defaults to production for newly configured orgs.
     #[arg(long, env = "TVC_API_BASE_URL", value_name = "URL")]
     pub api_base_url: Option<String>,
@@ -51,17 +57,23 @@ pub struct Args {
 pub struct DeleteArgs {
     /// Organization alias or ID of the profile to delete.
     /// If not provided, will prompt interactively.
-    #[arg(short, long, value_name = "ORG")]
-    pub org: Option<String>,
+    #[arg(short, long, value_name = "ORG", value_parser = OrgQuery::from_str)]
+    pub org: Option<OrgQuery>,
     /// Skip the confirmation prompt (required to delete in non-interactive mode).
     #[arg(short, long)]
     pub yes: bool,
 }
 
 enum OrgPlan {
-    Existing(String),
+    /// A configured organization resolved from the user's query or picked
+    /// interactively, with the name to echo in output (aliases only appear
+    /// in output when the user used one).
+    Existing { id: Uuid, name: Option<String> },
+    /// A confirmed new name for an organization that is already configured;
+    /// login binds it and proceeds against the existing entry.
+    BindAlias { id: Uuid, alias: String },
     New {
-        id: String,
+        id: Uuid,
         alias: String,
         operator: NewOrgOperatorPlan,
     },
@@ -94,7 +106,7 @@ struct LoginPlan {
 }
 
 #[instrument(skip_all)]
-pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome> {
+pub async fn run(ctx: &mut StdCtx, args: Args, mut config: Config) -> Result<Outcome> {
     debug!(
         non_interactive = ctx.is_non_interactive(),
         org_arg_present = args.org.is_some(),
@@ -103,18 +115,164 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome
     );
 
     let plan = if ctx.is_non_interactive() {
-        build_login_plan_non_interactive(args)?
+        build_login_plan_non_interactive(args, &config)?
     } else {
+        // Move legacy alias-keyed key directories to the id-keyed layout
+        // before anything resolves paths against the config.
+        let legacy_profiles = config.legacy_layout_profiles()?;
+
+        if !legacy_profiles.is_empty() {
+            migrate_legacy_key_directories(ctx, &mut config, legacy_profiles).await?;
+        }
+
         build_login_plan_interactive(ctx, args, &config)?
     };
 
     execute_login(ctx, config, plan).await
 }
 
-/// Permanently delete a saved login profile: its config entry and its API and
-/// any local operator key files on disk. YubiKey operator references vanish
-/// with the profile, but the devices and their shared registry entries are
-/// never touched.
+/// Migrate legacy alias-keyed key directories to the id-keyed layout: copy
+/// the files across (verifying every copy), rewrite the organization's
+/// paths, save, and only then delete the old directory. Every crash window
+/// therefore leaves the config pointing at files that exist — the legacy
+/// originals before the save, the verified copies after it. A failure warns
+/// and skips the organization: its legacy paths remain valid, and login must
+/// not die over a tidiness move.
+async fn migrate_legacy_key_directories(
+    ctx: &mut StdCtx,
+    config: &mut Config,
+    profiles: Vec<(String, Uuid)>,
+) -> Result<()> {
+    for (alias, org_id) in profiles {
+        let source = legacy_org_dir(&alias)?;
+        let target = default_org_dir(org_id)?;
+
+        let copied = async {
+            // A missing source with a populated target is an interrupted
+            // run's post-copy window (or an old rename-based move); there is
+            // nothing left to copy.
+            if !source.is_dir() {
+                ensure!(
+                    target.is_dir(),
+                    "the legacy directory is missing and nothing was copied to {}",
+                    target.display()
+                );
+                return Ok(());
+            }
+
+            // Only resume our own interrupted copy: every file already at
+            // the target must be an identical copy of a legacy file —
+            // anything else means the directory belongs to someone else.
+            if target.is_dir() {
+                let mut entries = tokio::fs::read_dir(&target).await?;
+
+                while let Some(entry) = entries.next_entry().await? {
+                    let name = entry.file_name();
+                    let source_file = source.join(&name);
+                    let matches = entry.file_type().await?.is_file()
+                        && tokio::fs::try_exists(&source_file).await?
+                        && tokio::fs::read(entry.path()).await?
+                            == tokio::fs::read(&source_file).await?;
+
+                    ensure!(
+                        matches,
+                        "{} already contains {}",
+                        target.display(),
+                        name.display()
+                    );
+                }
+            }
+
+            let mut names = Vec::new();
+            let mut entries = tokio::fs::read_dir(&source).await?;
+
+            while let Some(entry) = entries.next_entry().await? {
+                ensure!(
+                    entry.file_type().await?.is_file(),
+                    "{} is not a regular file",
+                    entry.path().display()
+                );
+                names.push(entry.file_name());
+            }
+
+            tokio::fs::create_dir_all(&target).await?;
+
+            for name in names {
+                let bytes = tokio::fs::read(source.join(&name)).await?;
+                let to = target.join(&name);
+
+                // Present files passed the identical-copy scan above.
+                if tokio::fs::try_exists(&to).await? {
+                    continue;
+                }
+
+                tokio::fs::write(&to, &bytes).await?;
+
+                // Verify the copy before the config ever points at it.
+                ensure!(
+                    tokio::fs::read(&to).await? == bytes,
+                    "verification failed for {}",
+                    to.display()
+                );
+            }
+
+            Ok(())
+        }
+        .await;
+
+        if let Err(error) = copied {
+            shell_eprintln!(
+                ctx,
+                "WARNING: could not move key directory {} -> {}: {error:#}. \
+                 The organization keeps its current paths.",
+                source.display(),
+                target.display()
+            )?;
+            continue;
+        }
+
+        if let Some(org) = config.orgs.get_mut(&org_id) {
+            let operator_key_path = default_operator_key_path(org_id)?;
+            org.api_key_path = default_api_key_path(org_id)?;
+            org.operators
+                .iter_mut()
+                .filter_map(|operator| match &mut operator.kind {
+                    OperatorRecordKind::Local(local) => Some(local),
+                    _ => None,
+                })
+                .for_each(|local| local.key_path = operator_key_path.clone());
+        }
+
+        config.save().await?;
+        shell_println!(
+            ctx,
+            "Moved key directory: {} -> {}",
+            source.display(),
+            target.display()
+        )?;
+
+        // The copies are saved and verified; the originals are redundant now.
+        match tokio::fs::remove_dir_all(&source).await {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                shell_eprintln!(
+                    ctx,
+                    "WARNING: could not remove the old key directory {}: {error}. \
+                     Remove it manually; the config no longer references it.",
+                    source.display()
+                )?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Permanently delete a saved organization login: its config entry, every
+/// alias bound to it, and its API and any local operator key files on disk.
+/// YubiKey operator references vanish with the login, but the devices and
+/// their shared registry entries are never touched.
 pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) -> Result<Outcome> {
     let is_non_interactive = ctx.is_non_interactive();
     debug!(
@@ -125,7 +283,7 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) 
     );
 
     // Validate inputs before any business logic: non-interactive mode cannot
-    // prompt, so it requires --org (which profile) and --yes (confirmation).
+    // prompt, so it requires --org (which organization) and --yes (confirmation).
     if is_non_interactive {
         if args.org.is_none() {
             return Err(error_required_in_non_interactive("--org"));
@@ -135,29 +293,47 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) 
         }
     }
 
-    let alias = resolve_profile_alias(&config, args.org)?;
-    let org_id = config
-        .orgs
-        .get(&alias)
-        .map(|org| org.id.clone())
-        .unwrap_or_default();
+    let (org_id, org_display, dashboard_url) = match args.org {
+        Some(query) => {
+            let (resolved, org) = resolve_org_query(&config, &query)?;
+            (
+                resolved.id(),
+                resolved.to_string(),
+                dashboard_base_url(&org.api_base_url),
+            )
+        }
+        None => {
+            // Reached only in interactive mode; a non-interactive run without
+            // --org is rejected up front before we get here.
+            if config.orgs.is_empty() {
+                bail!("No organization logins to delete.");
+            }
+
+            let row = prompts::select("Select organization to delete", org_rows(&config))?;
+            let dashboard_url = config
+                .orgs
+                .get(&row.id)
+                .map(|org| dashboard_base_url(&org.api_base_url))
+                .unwrap_or(dashboard_base_url(API_BASE_URL_PROD));
+            (
+                row.id,
+                row.name.unwrap_or_else(|| row.id.to_string()),
+                dashboard_url,
+            )
+        }
+    };
 
     // Interactive confirmation. A non-interactive run without --yes was rejected
     // up front, so reaching here with !args.yes means we can prompt.
     if !args.yes {
-        let dashboard_url = config
-            .orgs
-            .get(&alias)
-            .map(|org| dashboard_base_url(&org.api_base_url))
-            .unwrap_or_default();
         shell_eprintln!(ctx, "")?;
         shell_eprintln!(
             ctx,
-            "WARNING: This permanently deletes login profile '{alias}' ({org_id})."
+            "WARNING: This permanently deletes the login for organization '{org_display}' ({org_id})."
         )?;
         shell_eprintln!(
             ctx,
-            "  - Removes the local config entry and deletes the API and any local"
+            "  - Removes the config entry, its aliases, and deletes the API and any local"
         )?;
         shell_eprintln!(
             ctx,
@@ -175,13 +351,13 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) 
 
         let references_yubikeys = config
             .orgs
-            .get(&alias)
+            .get(&org_id)
             .is_some_and(|org| org.yubikey_operators().next().is_some());
 
         if references_yubikeys {
             shell_eprintln!(
                 ctx,
-                "  - YubiKey operator references are removed from this profile only: the"
+                "  - YubiKey operator references are removed from this login only: the"
             )?;
             shell_eprintln!(
                 ctx,
@@ -189,7 +365,7 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) 
             )?;
             shell_eprintln!(
                 ctx,
-                "    (other profiles may share them). After removing every profile reference,"
+                "    (other organizations may share them). After removing every reference,"
             )?;
             shell_eprintln!(
                 ctx,
@@ -203,14 +379,39 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) 
 
         shell_eprintln!(ctx, "")?;
         prompts::confirm_or_bail(
-            &format!("Permanently delete profile '{alias}' ({org_id}) and its key files?"),
+            &format!("Permanently delete '{org_display}' ({org_id}) and its key files?"),
             "deletion",
         )?;
     }
 
-    let removed = config
-        .remove_org(&alias)
-        .expect("alias was resolved from config");
+    let deleted = delete_org_login(ctx, &mut config, org_id).await?;
+
+    Ok(Outcome::ProfileDeleted(deleted))
+}
+
+/// Permanently delete the login for `org_id`: remove it from the config
+/// (with every alias bound to it), delete its key files when they use a
+/// default per-org directory layout (custom key paths are left on disk with
+/// a warning), then save the config. The save comes last so that dying
+/// between the file cleanup and the save leaves the login listed and the
+/// deletion retryable; the file deletion tolerates an already-missing
+/// directory for exactly that retry.
+async fn delete_org_login(
+    ctx: &mut StdCtx,
+    config: &mut Config,
+    org_id: Uuid,
+) -> Result<ProfileDeleted> {
+    // Legacy directory candidates are named by the aliases, so collect them
+    // before the removal unbinds the names.
+    let legacy_dirs = config
+        .aliases
+        .names_of(org_id)
+        .map(legacy_org_dir)
+        .collect::<Result<Vec<_>>>()?;
+
+    let Some((removed, unbound_aliases)) = config.remove_org(org_id) else {
+        bail!("Organization '{org_id}' is not configured.");
+    };
 
     // Read the API key's public key before deleting its file, so the
     // dashboard-revocation reminder below can name exactly which key to remove.
@@ -221,125 +422,135 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) 
         .flatten()
         .map(|key| key.public_key);
 
-    // The default layout stores both key files in the per-org directory, so a
-    // default profile is removed by deleting that whole directory. Custom
-    // (hand-edited) key paths are left untouched with a warning, since the user
-    // placed them deliberately and they may live outside our config tree.
-    let default_api_key = default_api_key_path(&alias)?;
-    let default_operator_key = default_operator_key_path(&alias)?;
-    let local_key_paths: Vec<_> = removed
-        .operators
-        .iter()
-        .filter_map(|operator| match &operator.kind {
-            OperatorRecordKind::Local(local) => Some(&local.key_path),
-            _ => None,
-        })
-        .collect();
-    let uses_default_layout = removed.api_key_path == default_api_key
-        && local_key_paths
-            .iter()
-            .all(|path| *path == &default_operator_key);
+    // The default layout stores both key files in one per-org directory —
+    // id-keyed today, alias-keyed before TVC-55 — so a default-layout login
+    // is removed by deleting that directory. Custom (hand-edited) key paths
+    // are left untouched with a warning, since the user placed them
+    // deliberately and they may live outside our config tree.
+    let owned_dir = std::iter::once(default_org_dir(org_id)?)
+        .chain(legacy_dirs)
+        .find(|dir| removed.has_default_layout_at(dir));
 
-    let removed_dir = if uses_default_layout {
-        let dir = default_org_dir(&alias)?;
-        match tokio::fs::remove_dir_all(&dir).await {
-            Ok(()) => Some(dir),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+    let removed_dir = match owned_dir {
+        Some(dir) => {
+            // A hand-edited config can point several organizations into one
+            // directory; deleting it would take the survivors' keys with it.
+            let still_used = config.orgs.values().any(|org| {
+                org.api_key_path.starts_with(&dir)
+                    || org.operators.iter().any(|operator| {
+                        matches!(&operator.kind, OperatorRecordKind::Local(local)
+                            if local.key_path.starts_with(&dir))
+                    })
+            });
+
+            if still_used {
                 shell_eprintln!(
                     ctx,
-                    "WARNING: key directory was not on disk: {}",
+                    "WARNING: key directory {} is still used by another organization and was NOT deleted.",
                     dir.display()
                 )?;
                 None
-            }
-            Err(e) => {
-                return Err(e)
-                    .with_context(|| format!("failed to delete key directory: {}", dir.display()));
+            } else {
+                match tokio::fs::remove_dir_all(&dir).await {
+                    Ok(()) => Some(dir),
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                        shell_eprintln!(
+                            ctx,
+                            "WARNING: key directory was not on disk: {}",
+                            dir.display()
+                        )?;
+                        None
+                    }
+                    Err(e) => {
+                        return Err(e).with_context(|| {
+                            format!("failed to delete key directory: {}", dir.display())
+                        });
+                    }
+                }
             }
         }
-    } else {
-        shell_eprintln!(
-            ctx,
-            "WARNING: custom key paths are configured and were NOT deleted."
-        )?;
-        shell_eprintln!(ctx, "Remove them manually if no longer needed:")?;
-        let custom_paths = local_key_paths
-            .into_iter()
-            .chain(Some(&removed.api_key_path))
-            .collect::<BTreeSet<_>>();
-        for path in custom_paths {
-            shell_eprintln!(ctx, "  {}", path.display())?;
+        None => {
+            shell_eprintln!(
+                ctx,
+                "WARNING: custom key paths are configured and were NOT deleted."
+            )?;
+            shell_eprintln!(ctx, "Remove them manually if no longer needed:")?;
+
+            let custom_paths = removed
+                .operators
+                .iter()
+                .filter_map(|operator| match &operator.kind {
+                    OperatorRecordKind::Local(local) => Some(&local.key_path),
+                    _ => None,
+                })
+                .chain(Some(&removed.api_key_path))
+                .collect::<BTreeSet<_>>();
+
+            for path in custom_paths {
+                shell_eprintln!(ctx, "  {}", path.display())?;
+            }
+
+            None
         }
-        None
     };
 
-    // Save last: persist the config removal only after the on-disk cleanup above
-    // succeeds, so a failure leaves the profile listed and the delete retryable.
     config.save().await?;
 
     // A local delete does not touch the dashboard-registered API key, and we
     // can't tell whether it is still there, so hedge with "may" and give steps.
-    let dashboard_url = dashboard_base_url(&removed.api_base_url);
-    let retained_yubikey_serials: Vec<YubiKeySerial> = removed
+    let retained_yubikey_serials = removed
         .yubikey_operators()
         .map(|(_, yubikey)| yubikey.serial)
-        .collect();
+        .collect::<Vec<_>>();
 
-    Ok(Outcome::ProfileDeleted(ProfileDeleted {
-        alias,
-        organization_id: removed.id,
+    Ok(ProfileDeleted {
+        aliases: unbound_aliases,
+        organization_id: org_id,
         removed_key_directory: removed_dir.map(|dir| dir.display().to_string()),
         retained_yubikey_serials,
-        dashboard_url: dashboard_url.to_string(),
+        dashboard_url: dashboard_base_url(&removed.api_base_url).to_string(),
         api_public_key,
-    }))
+    })
 }
 
-/// Resolve the alias of a configured profile to delete. Prompts interactively
-/// with a picker when no query is given; a query that matches nothing is handled
-/// by `find_org` returning `None`.
-fn resolve_profile_alias(config: &Config, org: Option<String>) -> Result<String> {
-    match org {
-        Some(query) => match find_org(config, &query) {
-            Some((alias, _)) => Ok(alias.clone()),
-            None => bail!(
-                "Login profile '{query}' not found. \
-                 Run `tvc login` to see configured profiles."
-            ),
-        },
-        None => {
-            // Reached only in interactive mode; a non-interactive run without
-            // --org is rejected up front in `run_delete` before we get here.
-            if config.orgs.is_empty() {
-                bail!("No login profiles to delete.");
-            }
-            let choices: Vec<_> = config
-                .orgs
-                .iter()
-                .map(|(alias, org)| ProfileChoice {
-                    alias: alias.as_str(),
-                    org_id: org.id.as_str(),
-                    is_active: config.active_org.as_deref() == Some(alias.as_str()),
-                })
-                .collect();
-            Ok(prompts::select("Select profile to delete", choices)?
-                .alias
-                .to_string())
-        }
-    }
+/// One picker row for an organization: its aliases (or bare ID) plus the
+/// active marker. `name` carries the first alias for output echoing.
+struct OrgRow {
+    id: Uuid,
+    name: Option<String>,
+    display: String,
 }
 
-struct ProfileChoice<'a> {
-    alias: &'a str,
-    org_id: &'a str,
-    is_active: bool,
-}
-
-impl Display for ProfileChoice<'_> {
+impl Display for OrgRow {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let suffix = if self.is_active { " (active)" } else { "" };
-        write!(f, "{} ({}){suffix}", self.alias, self.org_id)
+        self.display.fmt(f)
     }
+}
+
+fn org_rows(config: &Config) -> Vec<OrgRow> {
+    config
+        .orgs
+        .keys()
+        .map(|id| {
+            let names = config.aliases.names_of(*id).collect::<Vec<_>>();
+            let active = if config.active_org == Some(*id) {
+                " (active)"
+            } else {
+                ""
+            };
+            let display = if names.is_empty() {
+                format!("{id}{active}")
+            } else {
+                format!("{} ({id}){active}", names.join(", "))
+            };
+
+            OrgRow {
+                id: *id,
+                name: names.first().map(|name| name.to_string()),
+                display,
+            }
+        })
+        .collect()
 }
 
 fn build_login_plan_interactive(
@@ -353,14 +564,22 @@ fn build_login_plan_interactive(
         serial,
     } = args;
     let org = match org {
-        Some(query) => OrgPlan::Existing(query),
+        Some(query) => {
+            let (resolved, _) = resolve_org_query(config, &query)?;
+            OrgPlan::Existing {
+                id: resolved.id(),
+                name: resolved.name().map(str::to_string),
+            }
+        }
         None => prompt_for_org_plan(ctx, config, api_base_url.as_deref(), serial)?,
     };
 
     let yubikey_serial = match &org {
-        OrgPlan::Existing(query) => find_org(config, query)
-            .filter(|(_, org)| org.default_operator_kind == OperatorKind::Yubikey)
-            .map(|(_, org)| -> Result<YubiKeySerial> {
+        OrgPlan::Existing { id, .. } | OrgPlan::BindAlias { id, .. } => config
+            .orgs
+            .get(id)
+            .filter(|org| org.default_operator_kind == OperatorKind::Yubikey)
+            .map(|org| -> Result<YubiKeySerial> {
                 if let Some(serial) = serial {
                     return Ok(org.select_yubikey_operator(Some(serial))?.1.serial);
                 }
@@ -400,44 +619,78 @@ fn build_login_plan_interactive(
     })
 }
 
-fn build_login_plan_non_interactive(args: Args) -> Result<LoginPlan> {
-    let Some(org_query) = args.org else {
+fn build_login_plan_non_interactive(args: Args, config: &Config) -> Result<LoginPlan> {
+    let Some(query) = args.org else {
         return Err(error_required_in_non_interactive("--org"));
     };
 
+    let (resolved, _) = resolve_org_query(config, &query)?;
+
     Ok(LoginPlan {
-        org: OrgPlan::Existing(org_query),
+        org: OrgPlan::Existing {
+            id: resolved.id(),
+            name: resolved.name().map(str::to_string),
+        },
         api_base_url_override: args.api_base_url,
         api_key_policy: ApiKeyPolicy::RequireExisting,
         yubikey_serial: args.serial,
     })
 }
 
+/// Refusals from resolving an org query against the configured profiles.
+/// Typed so the remediation text lives in one place and the error keeps its
+/// shape through the `anyhow` chain.
+#[derive(Debug, Error)]
+enum ResolveError {
+    #[error(
+        "Organization '{query}' not found. \
+         Run `tvc login` without --org to set up a new organization."
+    )]
+    NotFound { query: OrgQuery },
+}
+
+/// Resolve an org query (alias or organization ID) to a configured
+/// organization. A query names at most one organization by construction, so
+/// resolution never prompts and never guesses; every org-selecting command
+/// shares it.
+pub(crate) fn resolve_org_query<'c>(
+    config: &'c Config,
+    query: &OrgQuery,
+) -> Result<(Resolved<'c>, &'c OrgConfig)> {
+    config.resolve(query).ok_or_else(|| {
+        ResolveError::NotFound {
+            query: query.clone(),
+        }
+        .into()
+    })
+}
+
 async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) -> Result<Outcome> {
-    let (alias, org_config, yubikey) = match plan.org {
-        OrgPlan::Existing(query) => {
-            let alias = match find_org(&config, &query) {
-                Some((alias, _)) => alias.clone(),
-                None => bail!(
-                    "Organization '{query}' not found. \
-                     Run `tvc login` without --org to set up a new organization."
-                ),
-            };
+    let (org_id, org_name, yubikey) = match plan.org {
+        OrgPlan::Existing { id, name } => {
             update_api_base_url_from_override(
                 &mut config,
-                &alias,
+                id,
                 plan.api_base_url_override.as_deref(),
             );
-            let org_config = config.orgs.get(&alias).unwrap().clone();
-            (alias, org_config, None)
+            (id, name, None)
+        }
+        OrgPlan::BindAlias { id, alias } => {
+            // The endpoint confirmed the binding (and any re-point); the save
+            // below persists it.
+            config.aliases.bind(alias.clone(), id);
+            update_api_base_url_from_override(
+                &mut config,
+                id,
+                plan.api_base_url_override.as_deref(),
+            );
+            (id, Some(alias), None)
         }
         OrgPlan::New {
             id,
             alias,
             operator,
         } => {
-            let api_base_url = new_org_api_base_url(plan.api_base_url_override.as_deref());
-
             // The registry entry already exists; the save below persists only
             // the new organization and its serial reference.
             let (operator, yubikey) = match operator {
@@ -460,16 +713,35 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
                 }
             };
 
-            let (alias, org_config) = generate_org(&mut config, id, alias, api_base_url, operator)?;
-            (alias, org_config, yubikey)
+            debug!(org_id = %id, org_alias = %alias, "adding organization");
+            config.add_org(
+                id,
+                new_org_api_base_url(plan.api_base_url_override.as_deref()),
+                operator,
+            )?;
+            config.aliases.bind(alias.clone(), id);
+            (id, Some(alias), yubikey)
         }
     };
 
-    shell_println!(ctx, "Selected org: {} ({})", alias, org_config.id)?;
-
-    config.set_active_org(&alias)?;
+    config.set_active_org(org_id)?;
 
     config.save().await?;
+
+    // All mutation is done, so the rest of the flow can borrow the entry;
+    // the plan was resolved against (or inserted into) this same config.
+    let Some(org_config) = config.orgs.get(&org_id) else {
+        bail!("organization '{org_id}' disappeared from the config");
+    };
+
+    // Echo the reference the user gave us: their alias when they used one,
+    // the bare ID otherwise.
+    match &org_name {
+        Some(name) => shell_println!(ctx, "Selected org: {name} ({org_id})")?,
+        None => shell_println!(ctx, "Selected org: {org_id}")?,
+    }
+
+    let org_display = org_name.clone().unwrap_or_else(|| org_id.to_string());
 
     if let Some(yubikey) = &yubikey {
         shell_println!(ctx)?;
@@ -485,7 +757,7 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
         )?;
     }
 
-    let api_key = match StoredApiKey::load(&org_config).await? {
+    let api_key = match StoredApiKey::load(org_config).await? {
         Some(api_key) => {
             debug!("using existing API key");
             shell_println!(ctx, "Using existing API key.")?;
@@ -493,14 +765,13 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
         }
         None => match plan.api_key_policy {
             ApiKeyPolicy::AllowGenerate => {
-                let api_key = generate_api_key(ctx, &org_config).await?;
+                let api_key = generate_api_key(ctx, org_config).await?;
                 wait_for_dashboard_registration(ctx)?;
                 api_key
             }
             ApiKeyPolicy::RequireExisting => bail!(
-                "API key is required in non-interactive mode for org '{}'. \
-                 Run `tvc login` interactively to generate and register one first.",
-                org_config.id
+                "API key is required in non-interactive mode for org '{org_display}'. \
+                 Run `tvc login` interactively to generate and register one first."
             ),
         },
     };
@@ -508,7 +779,7 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
     shell_println!(ctx)?;
     shell_println!(ctx, "Verifying credentials...")?;
 
-    let whoami = verify_credentials(&api_key, &org_config.id, &org_config.api_base_url).await?;
+    let whoami = verify_credentials(&api_key, org_id, &org_config.api_base_url).await?;
 
     // Login ensures the org's default backend is usable, and never crosses
     // over: a local default finds or generates the registered key file; a
@@ -519,8 +790,8 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
         OperatorKind::Local => {
             let (_, local) = org_config
                 .select_local_operator()
-                .with_context(|| format!("org '{alias}'"))?;
-            let operator_key = find_or_generate_operator_key(ctx, &alias, local).await?;
+                .with_context(|| format!("org '{org_display}'"))?;
+            let operator_key = find_or_generate_operator_key(ctx, &org_display, local).await?;
 
             LoggedInOperator::Local {
                 operator_public_key: operator_key.public_key,
@@ -530,7 +801,7 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
         OperatorKind::Hosted => {
             let (name, hosted) = org_config
                 .select_hosted_operator()
-                .with_context(|| format!("org '{alias}'"))?;
+                .with_context(|| format!("org '{org_display}'"))?;
             shell_println!(
                 ctx,
                 "Using hosted operator '{}' ({}).",
@@ -555,9 +826,9 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
                 {
                     return Err(anyhow::Error::new(error)
                         .context(MissingRequiredInput::new("--serial"))
-                        .context(format!("org '{alias}'")));
+                        .context(format!("org '{org_display}'")));
                 }
-                selected => selected.with_context(|| format!("org '{alias}'"))?,
+                selected => selected.with_context(|| format!("org '{org_display}'"))?,
             };
             let entry = config.yubikeys.get(yubikey.serial).ok_or_else(|| {
                 anyhow!(
@@ -588,7 +859,7 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
         organization_id: whoami.organization_id,
         username: whoami.username,
         user_id: whoami.user_id,
-        alias,
+        alias: org_name,
         api_public_key: api_key.public_key.clone(),
         config_file_path: crate::config::turnkey::config_file_path()?
             .display()
@@ -616,25 +887,17 @@ fn prompt_for_org_plan(
         return prompt_for_new_org_inputs(ctx, config, api_base_url_override, serial);
     }
 
-    let mut options: Vec<OrgChoice> = config
-        .orgs
-        .iter()
-        .map(|(alias, org)| {
-            let suffix = if config.active_org.as_ref() == Some(alias) {
-                " (active)"
-            } else {
-                ""
-            };
-            OrgChoice::Existing {
-                display: format!("{alias} ({}){suffix}", org.id),
-                alias: alias.clone(),
-            }
-        })
-        .collect();
+    let mut options = org_rows(config)
+        .into_iter()
+        .map(OrgChoice::Existing)
+        .collect::<Vec<_>>();
     options.push(OrgChoice::New);
 
     match prompts::select("Select organization", options)? {
-        OrgChoice::Existing { alias, .. } => Ok(OrgPlan::Existing(alias)),
+        OrgChoice::Existing(row) => Ok(OrgPlan::Existing {
+            id: row.id,
+            name: row.name,
+        }),
         OrgChoice::New => prompt_for_new_org_inputs(ctx, config, api_base_url_override, serial),
     }
 }
@@ -653,11 +916,36 @@ fn prompt_for_new_org_inputs(
     shell_println!(ctx)?;
 
     let id = prompts::text("Organization ID", None)?;
+
     if id.is_empty() {
         bail!("Organization ID is required");
     }
 
-    let alias = prompts::text("Organization alias", Some("default"))?;
+    let id: Uuid = id
+        .trim()
+        .parse()
+        .context("Organization ID must be a UUID")?;
+
+    // The registry is keyed by ID, so a second login for the same
+    // organization binds another name to the existing entry — after an
+    // explicit confirmation — instead of reconfiguring it.
+    if config.orgs.contains_key(&id) {
+        let known = config.display_name(id);
+        shell_eprintln!(
+            ctx,
+            "Organization '{id}' is already configured as '{known}'."
+        )?;
+        prompts::confirm_or_bail(
+            &format!("Bind another alias to '{known}' and log in to it?"),
+            "alias binding",
+        )?;
+
+        let alias = prompt_for_alias_binding(ctx, config, id)?;
+
+        return Ok(OrgPlan::BindAlias { id, alias });
+    }
+
+    let alias = prompt_for_alias_binding(ctx, config, id)?;
     debug!(org_alias = %alias, "user entered new organization inputs");
 
     let operator = {
@@ -716,49 +1004,51 @@ fn prompt_for_new_org_inputs(
     })
 }
 
+/// Prompt for an alias to bind to `org_id`, enforcing the binding policy:
+/// UUID-shaped names are refused outright — org queries parse UUID-shaped
+/// input as an organization ID, so such a name could never be looked up —
+/// and re-pointing a name away from another organization requires an
+/// explicit confirmation.
+fn prompt_for_alias_binding(ctx: &mut StdCtx, config: &Config, org_id: Uuid) -> Result<String> {
+    let alias = prompts::text("Organization alias", Some("default"))?;
+
+    if Uuid::parse_str(&alias).is_ok() {
+        bail!(
+            "Alias '{alias}' is UUID-shaped, so it would always resolve as an \
+             organization ID instead of a name. Choose a non-UUID alias."
+        );
+    }
+
+    if let Some(existing) = config.aliases.resolve(&alias) {
+        // Already naming this organization is a no-op, not a re-point.
+        if existing.id() != org_id {
+            shell_eprintln!(
+                ctx,
+                "Alias '{alias}' currently names organization '{}'.",
+                existing.id()
+            )?;
+            prompts::confirm_or_bail(
+                &format!("Re-point alias '{alias}' to organization '{org_id}'?"),
+                "alias re-pointing",
+            )?;
+        }
+    }
+
+    Ok(alias)
+}
+
 enum OrgChoice {
-    Existing { display: String, alias: String },
+    Existing(OrgRow),
     New,
 }
 
 impl Display for OrgChoice {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            OrgChoice::Existing { display, .. } => write!(f, "{display}"),
+            OrgChoice::Existing(row) => row.fmt(f),
             OrgChoice::New => write!(f, "[new] Add a new organization"),
         }
     }
-}
-
-pub(crate) fn find_org<'a>(config: &'a Config, org: &str) -> Option<(&'a String, &'a OrgConfig)> {
-    if let Some((alias, org_config)) = config.orgs.get_key_value(org) {
-        return Some((alias, org_config));
-    }
-
-    for (alias, org_config) in &config.orgs {
-        if org_config.id == org {
-            return Some((alias, org_config));
-        }
-    }
-
-    None
-}
-
-fn generate_org(
-    config: &mut Config,
-    id: String,
-    alias: String,
-    api_base_url: String,
-    operator: NewOrgOperator,
-) -> Result<(String, OrgConfig)> {
-    debug!(org_alias = %alias, %api_base_url, "adding organization");
-    config.add_org(&alias, id, api_base_url, operator)?;
-    let org_config = config
-        .orgs
-        .get(&alias)
-        .with_context(|| format!("organization '{alias}' disappeared from config"))?
-        .clone();
-    Ok((alias, org_config))
 }
 
 fn new_org_api_base_url(api_base_url_override: Option<&str>) -> String {
@@ -769,12 +1059,12 @@ fn new_org_api_base_url(api_base_url_override: Option<&str>) -> String {
 
 fn update_api_base_url_from_override(
     config: &mut Config,
-    alias: &str,
+    org_id: Uuid,
     api_base_url_override: Option<&str>,
 ) {
     if let Some(api_base_url) = api_base_url_override {
-        debug!(org_alias = alias, %api_base_url, "updating organization API base URL from override");
-        if let Some(org_config) = config.orgs.get_mut(alias) {
+        debug!(%org_id, %api_base_url, "updating organization API base URL from override");
+        if let Some(org_config) = config.orgs.get_mut(&org_id) {
             org_config.api_base_url = api_base_url.to_string();
         }
     }
@@ -934,7 +1224,7 @@ pub struct WhoamiResult {
 
 async fn verify_credentials(
     api_key: &StoredApiKey,
-    org_id: &str,
+    org_id: Uuid,
     api_base_url: &str,
 ) -> Result<WhoamiResult> {
     debug!(%api_base_url, "verifying credentials with whoami");
@@ -970,7 +1260,8 @@ pub struct LoggedIn {
     organization_id: String,
     username: String,
     user_id: String,
-    alias: String,
+    /// The alias the user logged in with, when they used one.
+    alias: Option<String>,
     api_public_key: String,
     config_file_path: String,
     api_key_path: String,
@@ -1018,8 +1309,8 @@ impl Default for LoggedInOperator {
 #[derive(Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProfileDeleted {
-    alias: String,
-    organization_id: String,
+    aliases: Vec<String>,
+    organization_id: Uuid,
     removed_key_directory: Option<String>,
     /// Serials of the YubiKey operators the profile referenced. The devices
     /// and their registry entries are kept; other profiles may share them.
@@ -1031,9 +1322,14 @@ pub struct ProfileDeleted {
 
 impl Display for ProfileDeleted {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let names = if self.aliases.is_empty() {
+            String::new()
+        } else {
+            format!(" ('{}')", self.aliases.join("', '"))
+        };
         let mut lines = vec![format!(
-            "Deleted login profile '{}' ({}).",
-            self.alias, self.organization_id
+            "Deleted the login for organization {}{names}.",
+            self.organization_id
         )];
 
         if let Some(directory) = &self.removed_key_directory {
@@ -1069,7 +1365,7 @@ impl Display for ProfileDeleted {
                 lines.push("  2. Delete the API key with public key:".to_string());
                 lines.push(format!("       {public_key}"));
             }
-            None => lines.push("  2. Delete the API key associated with this profile".to_string()),
+            None => lines.push("  2. Delete the API key associated with this login".to_string()),
         }
 
         f.write_str(&lines.join("\n"))
@@ -1093,7 +1389,7 @@ Credentials
             self.organization_id,
             self.username,
             self.user_id,
-            self.alias,
+            self.alias.as_deref().unwrap_or(&self.organization_id),
             self.api_public_key,
         )?;
 
@@ -1153,7 +1449,6 @@ mod tests {
         API_BASE_URL_DEV, API_BASE_URL_PREPROD, DASHBOARD_URL_DEV, DASHBOARD_URL_PREPROD,
         DASHBOARD_URL_PROD, OperatorKind, OperatorRecord,
     };
-    use std::collections::HashMap;
     use std::path::PathBuf;
 
     const OVERRIDE_URL: &str = "http://127.0.0.1:8081";
@@ -1164,7 +1459,7 @@ mod tests {
             organization_id: "org-1".to_string(),
             username: "user".to_string(),
             user_id: "user-1".to_string(),
-            alias: "prod".to_string(),
+            alias: Some("prod".to_string()),
             api_public_key: "api-key".to_string(),
             config_file_path: "/config/tvc.config.toml".to_string(),
             api_key_path: "/keys/api_key.json".to_string(),
@@ -1292,10 +1587,10 @@ mod tests {
     fn absent_override_preserves_existing_org_api_base_url() {
         let mut config = config_with_org("http://existing.example");
 
-        update_api_base_url_from_override(&mut config, "default", None);
+        update_api_base_url_from_override(&mut config, Uuid::from_u128(1), None);
 
         assert_eq!(
-            config.orgs["default"].api_base_url,
+            config.orgs[&Uuid::from_u128(1)].api_base_url,
             "http://existing.example"
         );
     }
@@ -1304,29 +1599,27 @@ mod tests {
     fn explicit_override_updates_existing_org_api_base_url() {
         let mut config = config_with_org(API_BASE_URL_PROD);
 
-        update_api_base_url_from_override(&mut config, "default", Some(OVERRIDE_URL));
+        update_api_base_url_from_override(&mut config, Uuid::from_u128(1), Some(OVERRIDE_URL));
 
-        assert_eq!(config.orgs["default"].api_base_url, OVERRIDE_URL);
+        assert_eq!(config.orgs[&Uuid::from_u128(1)].api_base_url, OVERRIDE_URL);
     }
 
     fn config_with_org(api_base_url: &str) -> Config {
-        Config {
-            active_org: Some("default".to_string()),
-            orgs: HashMap::from([(
-                "default".to_string(),
-                OrgConfig {
-                    id: "org-test".to_string(),
-                    api_key_path: PathBuf::from("api_key.json"),
-                    api_base_url: api_base_url.to_string(),
-                    default_operator_kind: OperatorKind::Local,
-                    operators: vec![OperatorRecord::local(PathBuf::from("operator.json"))],
-                    extra: toml::Table::new(),
-                },
-            )]),
-            yubikeys: Default::default(),
-            last_created_app_id: HashMap::new(),
-            last_operator_ids: HashMap::new(),
-            extra: toml::Table::new(),
-        }
+        let mut config = Config::default();
+        config.orgs.insert(
+            Uuid::from_u128(1),
+            OrgConfig {
+                api_key_path: PathBuf::from("api_key.json"),
+                api_base_url: api_base_url.to_string(),
+                default_operator_kind: OperatorKind::Local,
+                operators: vec![OperatorRecord::local(PathBuf::from("operator.json"))],
+                extra: toml::Table::new(),
+            },
+        );
+        config
+            .aliases
+            .bind("default".to_string(), Uuid::from_u128(1));
+        config.set_active_org(Uuid::from_u128(1)).unwrap();
+        config
     }
 }

@@ -4,6 +4,7 @@ use crate::{
     client::build_client,
     config::{
         app::{AppConfig, AppConfigValidationErrors, OperatorSetParams},
+        placeholder::{StringWithPlaceholder, text::FillInAppName},
         turnkey,
     },
     operator::OperatorCandidate,
@@ -19,9 +20,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
     io,
     path::{Path, PathBuf},
+    str::FromStr,
 };
 use tracing::{debug, instrument};
 use turnkey_client::generated::{CreateTvcAppIntent, TvcOperatorParams, TvcOperatorSetParams};
+use uuid::Uuid;
 
 /// Create a new TVC application from a config file.
 #[derive(Debug, ClapArgs)]
@@ -262,15 +265,20 @@ async fn run_with_app_config(
 
     let result = auth
         .client
-        .create_tvc_app(auth.org_id, timestamp_ms, intent)
+        .create_tvc_app(auth.org_id.to_string(), timestamp_ms, intent)
         .await
         .context("failed to create TVC app")?;
 
-    let app_id = result.result.app_id;
-    let operator_ids = result.result.manifest_set_operator_ids;
+    let app_id = result.result.app_id.parse()?;
+    let operator_ids = result
+        .result
+        .manifest_set_operator_ids
+        .iter()
+        .map(|id| Uuid::from_str(id))
+        .collect::<Result<Vec<_>, _>>()?;
 
-    config.set_last_app_id(&app_id)?;
-    config.set_last_operator_ids(&operator_ids)?;
+    config.set_last_app_id(app_id)?;
+    config.set_last_operator_ids(operator_ids.clone())?;
     config.save().await?;
 
     Ok(Outcome::AppCreated(AppCreated {
@@ -285,10 +293,10 @@ async fn run_with_app_config(
 #[derive(Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppCreated {
-    app_id: String,
-    name: String,
+    app_id: Uuid,
+    name: StringWithPlaceholder<FillInAppName>,
     manifest_set_id: String,
-    manifest_set_operator_ids: Vec<String>,
+    manifest_set_operator_ids: Vec<Uuid>,
     config_path: String,
 }
 
@@ -306,10 +314,16 @@ Manifest Set ID: {}"#,
         )?;
 
         if !self.manifest_set_operator_ids.is_empty() {
+            let operator_ids = self
+                .manifest_set_operator_ids
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>();
+
             write!(
                 f,
                 "\nManifest Set Operator IDs: {}",
-                self.manifest_set_operator_ids.join(", ")
+                operator_ids.join(", ")
             )?;
         }
 
@@ -328,7 +342,7 @@ fn build_create_tvc_app_intent(app_config: &AppConfig) -> CreateTvcAppIntent {
     let share_set_params = app_config.effective_share_set_params();
 
     CreateTvcAppIntent {
-        name: app_config.name.clone(),
+        name: app_config.name.to_string(),
         quorum_public_key: app_config.quorum_public_key.clone(),
         manifest_set_id: app_config.manifest_set_id.clone(),
         manifest_set_params: app_config
@@ -362,7 +376,11 @@ fn to_tvc_operator_set_params(params: &OperatorSetParams) -> TvcOperatorSetParam
                 public_key: o.public_key.clone(),
             })
             .collect(),
-        existing_operator_ids: params.existing_operator_ids.clone(),
+        existing_operator_ids: params
+            .existing_operator_ids
+            .iter()
+            .map(ToString::to_string)
+            .collect(),
     }
 }
 
@@ -376,7 +394,7 @@ mod tests {
 
     fn valid_config() -> AppConfig {
         AppConfig {
-            name: "test-app".to_string(),
+            name: "test-app".into(),
             quorum_public_key: KNOWN_QUORUM_KEY.to_string(),
             enable_egress: false,
             manifest_set_id: None,
@@ -426,7 +444,7 @@ mod tests {
                 name: "share-operator".to_string(),
                 public_key: "share-public-key".to_string(),
             }],
-            existing_operator_ids: vec!["existing-operator-id".to_string()],
+            existing_operator_ids: vec![Uuid::from_u128(9)],
         });
 
         let intent = build_create_tvc_app_intent(&config);
@@ -437,7 +455,7 @@ mod tests {
         assert_eq!(share_set_params.new_operators[0].name, "share-operator");
         assert_eq!(
             share_set_params.existing_operator_ids,
-            vec!["existing-operator-id".to_string()]
+            vec![Uuid::from_u128(9).to_string()]
         );
     }
 
@@ -554,25 +572,25 @@ mod tests {
         "07".repeat(130)
     }
 
-    fn candidate(id: &str) -> OperatorCandidate {
+    fn candidate(id: Uuid) -> OperatorCandidate {
         OperatorCandidate {
-            id: id.to_string(),
+            id,
             name: None,
             public_key: Some(operator_public_key().parse().unwrap()),
         }
     }
 
-    fn unmatched_candidate(id: &str) -> OperatorCandidate {
+    fn unmatched_candidate(id: Uuid) -> OperatorCandidate {
         OperatorCandidate {
-            id: id.to_string(),
+            id,
             name: None,
             public_key: Some("08".repeat(130).parse().unwrap()),
         }
     }
 
-    fn unknown_key_candidate(id: &str) -> OperatorCandidate {
+    fn unknown_key_candidate(id: Uuid) -> OperatorCandidate {
         OperatorCandidate {
-            id: id.to_string(),
+            id,
             name: None,
             public_key: None,
         }
@@ -583,7 +601,7 @@ mod tests {
     fn decide_reuse_keeps_config_when_flag_set() {
         let params = manifest_params_with_new_operator();
         assert_eq!(
-            decide_operator_reuse(true, Some(&params), &[candidate("op-1")]),
+            decide_operator_reuse(true, Some(&params), &[candidate(Uuid::from_u128(1))]),
             OperatorReuse::KeepConfig
         );
     }
@@ -607,8 +625,8 @@ mod tests {
                 false,
                 Some(&params),
                 &[
-                    unmatched_candidate("hosted"),
-                    unknown_key_candidate("saved")
+                    unmatched_candidate(Uuid::from_u128(0xB1)),
+                    unknown_key_candidate(Uuid::from_u128(0xB2))
                 ],
             ),
             OperatorReuse::KeepConfig
@@ -624,7 +642,7 @@ mod tests {
         });
 
         assert_eq!(
-            decide_operator_reuse(false, Some(&params), &[candidate("op-1")]),
+            decide_operator_reuse(false, Some(&params), &[candidate(Uuid::from_u128(1))]),
             OperatorReuse::KeepConfig
         );
     }
@@ -633,12 +651,12 @@ mod tests {
     #[test]
     fn decide_reuse_keeps_config_when_config_pins_existing_ids() {
         let mut params = manifest_params_with_new_operator();
-        params.existing_operator_ids = vec!["explicit-op".to_string()];
+        params.existing_operator_ids = vec![Uuid::from_u128(3)];
         assert_eq!(
             decide_operator_reuse(
                 false,
                 Some(&params),
-                &[candidate("op-1"), candidate("op-2")]
+                &[candidate(Uuid::from_u128(1)), candidate(Uuid::from_u128(2))]
             ),
             OperatorReuse::KeepConfig
         );
@@ -648,7 +666,7 @@ mod tests {
     #[test]
     fn decide_reuse_keeps_config_without_manifest_params() {
         assert_eq!(
-            decide_operator_reuse(false, None, &[candidate("op-1")]),
+            decide_operator_reuse(false, None, &[candidate(Uuid::from_u128(1))]),
             OperatorReuse::KeepConfig
         );
     }
@@ -658,8 +676,8 @@ mod tests {
     fn decide_reuse_reuses_the_sole_candidate() {
         let params = manifest_params_with_new_operator();
         assert_eq!(
-            decide_operator_reuse(false, Some(&params), &[candidate("op-1")]),
-            OperatorReuse::Reuse(candidate("op-1"))
+            decide_operator_reuse(false, Some(&params), &[candidate(Uuid::from_u128(1))]),
+            OperatorReuse::Reuse(candidate(Uuid::from_u128(1)))
         );
     }
 
@@ -668,14 +686,17 @@ mod tests {
     fn decide_reuse_returns_candidates_for_multiple_known_operators() {
         let params = manifest_params_with_new_operator();
         let candidates = [
-            candidate("op-1"),
-            unmatched_candidate("unrelated"),
-            candidate("op-2"),
-            unknown_key_candidate("saved"),
+            candidate(Uuid::from_u128(1)),
+            unmatched_candidate(Uuid::from_u128(0xB3)),
+            candidate(Uuid::from_u128(2)),
+            unknown_key_candidate(Uuid::from_u128(0xB2)),
         ];
         assert_eq!(
             decide_operator_reuse(false, Some(&params), &candidates),
-            OperatorReuse::MultipleCandidates(vec![candidate("op-1"), candidate("op-2")])
+            OperatorReuse::MultipleCandidates(vec![
+                candidate(Uuid::from_u128(1)),
+                candidate(Uuid::from_u128(2))
+            ])
         );
     }
 
@@ -684,10 +705,11 @@ mod tests {
     fn apply_operator_reuse_swaps_new_operators_for_existing_id() {
         let mut ctx = Ctx::new(EmptyShell::default(), true);
         let mut config = valid_config();
-        apply_operator_reuse(&mut ctx, &mut config, candidate("op-1")).unwrap();
+        let operator_id = Uuid::from_u128(1);
+        apply_operator_reuse(&mut ctx, &mut config, candidate(operator_id)).unwrap();
 
         let params = config.manifest_set_params.unwrap();
         assert!(params.new_operators.is_empty());
-        assert_eq!(params.existing_operator_ids, vec!["op-1".to_string()]);
+        assert_eq!(params.existing_operator_ids, vec![operator_id]);
     }
 }

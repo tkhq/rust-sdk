@@ -47,7 +47,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Resul
 
     let result = auth
         .client
-        .post_tvc_quorum_key_share(auth.org_id, timestamp_ms, intent)
+        .post_tvc_quorum_key_share(auth.org_id.to_string(), timestamp_ms, intent)
         .await
         .context("failed to post quorum key share")?;
 

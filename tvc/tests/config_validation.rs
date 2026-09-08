@@ -18,7 +18,7 @@ fn deploy_create_non_interactive_reports_all_placeholder_errors() {
     let config = NamedTempFile::new().unwrap();
     fs::write(
         config.path(),
-        serde_json::to_string_pretty(&DeployConfig::template(None)).unwrap(),
+        serde_json::to_string_pretty(&DeployConfig::template(Default::default())).unwrap(),
     )
     .unwrap();
 
@@ -30,7 +30,6 @@ fn deploy_create_non_interactive_reports_all_placeholder_errors() {
         .arg(config.path())
         .assert()
         .failure()
-        .stderr(predicate::str::contains("app_id"))
         .stderr(predicate::str::contains("pivot_container_image_url"))
         .stderr(predicate::str::contains("pivot_path"))
         .stderr(predicate::str::contains("expected_pivot_digest"))
