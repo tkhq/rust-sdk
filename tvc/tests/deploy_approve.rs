@@ -74,11 +74,7 @@ fn authenticated_command(home: &TempDir, api_base_url: &str) -> assert_cmd::Comm
     command
 }
 
-fn spawn_json_server(body: String) -> (String, JoinHandle<()>) {
-    spawn_http_server(200, body)
-}
-
-fn spawn_http_server(status: u16, body: String) -> (String, JoinHandle<()>) {
+fn spawn_json_server(status: u16, body: String) -> (String, JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
     let handle = thread::spawn(move || {
@@ -216,7 +212,7 @@ const DEPLOYMENT_404_BODY: &str = r#"{"code":5,"message":"deployment not found"}
 #[test]
 fn deployment_missing_from_the_organization_names_the_org_in_json() {
     let temp = TempDir::new().unwrap();
-    let (api_base_url, server) = spawn_http_server(404, DEPLOYMENT_404_BODY.to_string());
+    let (api_base_url, server) = spawn_json_server(404, DEPLOYMENT_404_BODY.to_string());
 
     let output = authenticated_command(&temp, &api_base_url)
         .args([
@@ -256,7 +252,7 @@ fn deployment_missing_from_the_organization_names_the_org_in_json() {
 #[test]
 fn deployment_missing_from_the_organization_hints_at_switching_org() {
     let temp = TempDir::new().unwrap();
-    let (api_base_url, server) = spawn_http_server(404, DEPLOYMENT_404_BODY.to_string());
+    let (api_base_url, server) = spawn_json_server(404, DEPLOYMENT_404_BODY.to_string());
 
     authenticated_command(&temp, &api_base_url)
         .args([
@@ -418,7 +414,7 @@ fn deploy_id_and_serial_resolve_one_operator_identity_by_public_key() {
     write_config(&temp, &config);
 
     let body = deployment_response(hosted_key, yubikey_key);
-    let (api_base_url, server) = spawn_json_server(body);
+    let (api_base_url, server) = spawn_json_server(200, body);
 
     authenticated_command(&temp, &api_base_url)
         .args([
