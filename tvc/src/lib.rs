@@ -30,3 +30,5 @@ pub mod shared_auth;
 pub mod shared_key_generation;
 pub mod shared_operations;
 pub mod shared_wallets;
+
+pub mod shared_secrets;

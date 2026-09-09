@@ -191,6 +191,11 @@ enum TkCommands {
         #[command(subcommand)]
         command: crate::shared_wallets::WalletCommand,
     },
+    /// Import, list, and securely export Secrets.
+    Secret {
+        #[command(subcommand)]
+        command: crate::shared_secrets::SecretCommand,
+    },
     /// Sign payloads and serialized transactions.
     Sign {
         #[command(subcommand)]
@@ -311,6 +316,15 @@ impl TkCli {
                 return args.output.emit_operation(result);
             }
             TkCommands::Wallet { command } => {
+                let result = async {
+                    let prepared = command.prepare()?;
+                    let auth = crate::shared_auth::resolve(&args.auth).await?;
+                    prepared.run(auth).await
+                }
+                .await;
+                return args.output.emit_operation(result);
+            }
+            TkCommands::Secret { command } => {
                 let result = async {
                     let prepared = command.prepare()?;
                     let auth = crate::shared_auth::resolve(&args.auth).await?;

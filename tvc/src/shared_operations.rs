@@ -83,6 +83,13 @@ pub struct OperationOutput {
 }
 
 impl OperationOutput {
+    pub(crate) fn data(&self) -> Option<&Value> {
+        self.data.as_deref()
+    }
+    pub(crate) fn with_data(mut self, data: Value) -> Self {
+        self.data = Some(Box::new(data));
+        self
+    }
     pub fn failed(&self) -> bool {
         self.code.is_some()
     }
@@ -124,7 +131,7 @@ impl OperationOutput {
             http_status: None,
         }
     }
-    fn fail(mut self, code: &'static str, message: &str) -> Self {
+    pub(crate) fn fail(mut self, code: &'static str, message: &str) -> Self {
         self.reason = "command_error";
         self.code = Some(code);
         self.message = Some(message.to_owned());
@@ -673,6 +680,17 @@ pub async fn submit<T: Serialize>(
         Ok(body) => body,
         Err(error) => return error,
     };
+    submit_bytes(command, path, body, api_base_url, stamper).await
+}
+
+/// Submit previously serialized bytes without changing an activity fingerprint.
+pub(crate) async fn submit_bytes(
+    command: &'static str,
+    path: &str,
+    body: String,
+    api_base_url: &str,
+    stamper: &TurnkeyP256ApiKey,
+) -> OperationOutput {
     let endpoint = match url(api_base_url, path) {
         Ok(endpoint) => endpoint,
         Err(message) => return OperationOutput::error(command, "invalid_input", message),
