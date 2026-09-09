@@ -301,7 +301,11 @@ enum Outcome {
   OUTCOME_REJECTED = 5;
   OUTCOME_ERROR = 6;
   OUTCOME_REQUIRES_AUTHENTICATORS = 7;
-  OUTCOME_TIME_INACTIVE = 8; // policy would apply (condition + consensus met) but its time window is inactive at the trusted instant
+  // A policy whose time window is inactive at the trusted instant contributes nothing to the decision.
+  // It is reported as OUTCOME_TIME_INACTIVE BEFORE its consensus and condition are evaluated; those are
+  // skipped entirely, so this outcome says nothing about whether they would have been met.
+  // A policy with no time field (time == None) is not restricted by time and is always active.
+  OUTCOME_TIME_INACTIVE = 8;
 }
 
 enum Operator {

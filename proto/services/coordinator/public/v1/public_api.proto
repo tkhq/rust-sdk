@@ -10,6 +10,7 @@ import "external/data/v1/proofs.proto";
 import "external/data/v1/session_profile.proto";
 import "external/data/v1/smart_contract_interface.proto";
 import "external/data/v1/tvc.proto";
+import "external/data/v1/velocity_control.proto";
 import "external/data/v1/wallet_account.proto";
 import "external/options/v1/options.proto";
 import "external/webauthn/v1/webauthn.proto";
@@ -517,6 +518,70 @@ service PublicApiService {
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Get details about a policy."
       summary: "Get policy"
+      tags: "Policies"
+    };
+  }
+
+  rpc CreateVelocityControl(external.activity.v1.CreateVelocityControlRequest) returns (ActivityResponse) {
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/submit/create_velocity_control"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Create a new velocity control."
+      summary: "Create velocity control"
+      tags: "Velocity Controls"
+    };
+  }
+
+  rpc DeleteVelocityControl(external.activity.v1.DeleteVelocityControlRequest) returns (ActivityResponse) {
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/submit/delete_velocity_control"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Delete an existing velocity control."
+      summary: "Delete velocity control"
+      tags: "Velocity Controls"
+    };
+  }
+
+  rpc GetVelocityControl(GetVelocityControlRequest) returns (GetVelocityControlResponse) {
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/query/get_velocity_control"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get details about a velocity control."
+      summary: "Get velocity control"
+      tags: "Velocity Controls"
+    };
+  }
+
+  rpc ListVelocityControls(ListVelocityControlsRequest) returns (ListVelocityControlsResponse) {
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/query/list_velocity_controls"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "List all velocity controls within an organization."
+      summary: "List velocity controls"
+      tags: "Velocity Controls"
+    };
+  }
+
+  rpc GetActivePolicies(GetActivePoliciesRequest) returns (GetActivePoliciesResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_active_policies"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "For each policy in an organization, report whether it is currently active based on the enclave's trusted timestamp and the policy's time window (if any). Policies without a time field are always active."
+      summary: "Get active policies"
       tags: "Policies"
     };
   }
@@ -2225,7 +2290,6 @@ service PublicApiService {
       post: "/public/v1/submit/init_import_secrets"
       body: "*"
     };
-    option (google.api.method_visibility).restriction = "INTERNAL";
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Initialize secret imports by generating Ingress Encryption Target Keys."
       summary: "Init import secrets"
@@ -2241,6 +2305,18 @@ service PublicApiService {
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Import secrets encrypted to target keys returned from InitImportSecrets."
       summary: "Import secrets"
+      tags: "Secrets"
+    };
+  }
+
+  rpc DeleteSecrets(external.activity.v1.DeleteSecretsRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/delete_secrets"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Delete secrets by their unique identifiers. All secrets must belong to the organization."
+      summary: "Delete secrets"
       tags: "Secrets"
     };
   }
@@ -2715,6 +2791,59 @@ message GetPolicyResponse {
   external.data.v1.Policy policy = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Object that codifies rules defining the actions that are permissible within an organization."}
+  ];
+}
+
+message GetVelocityControlRequest {
+  string organization_id = 1 [(google.api.field_behavior) = REQUIRED];
+  string velocity_control_id = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+message GetVelocityControlResponse {
+  external.data.v1.VelocityControl velocity_control = 1 [(google.api.field_behavior) = REQUIRED];
+}
+
+message ListVelocityControlsRequest {
+  string organization_id = 1 [(google.api.field_behavior) = REQUIRED];
+  external.options.v1.Pagination pagination_options = 2;
+}
+
+message ListVelocityControlsResponse {
+  repeated external.data.v1.VelocityControl velocity_controls = 1 [(google.api.field_behavior) = REQUIRED];
+  external.options.v1.PageInfo page_info = 2 [(google.api.field_behavior) = REQUIRED];
+}
+message GetActivePoliciesRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+  ];
+}
+
+message ActivePolicyStatus {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for the organization the policy belongs to."}
+  ];
+  string policy_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given policy."}
+  ];
+  bool active = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether the policy is currently active. A policy without a time window is always active."}
+  ];
+  optional string time_expr = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The policy's time expression, absent when the policy has no time window."}];
+  optional string error = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Set when the policy's time expression could not be evaluated; the policy is reported inactive."}];
+}
+
+message GetActivePoliciesResponse {
+  repeated ActivePolicyStatus statuses = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The active/inactive status of every policy in the organization."}
+  ];
+  uint64 evaluated_at_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The enclave's trusted timestamp (Unix epoch milliseconds) used to evaluate every policy."}
   ];
 }
 
@@ -3261,6 +3390,10 @@ message GetSwapStatusResponse {
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Normalized failure details, present whenever status is FAILED."}
   ];
+  optional string destination_address = 16 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address that receives the output asset."}
+  ];
 }
 
 message GetGasUsageRequest {
@@ -3502,7 +3635,9 @@ message GetNoncesRequest {
         "eip155:42161",
         "eip155:4217",
         "eip155:42431",
-        "eip155:421614"
+        "eip155:421614",
+        "eip155:4663",
+        "eip155:46630"
       ]
     }
   ];
@@ -3760,6 +3895,8 @@ message GetWalletAddressBalancesRequest {
         "eip155:4217",
         "eip155:42431",
         "eip155:421614",
+        "eip155:4663",
+        "eip155:46630",
         "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
         "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1"
       ]
@@ -3811,6 +3948,8 @@ message ListSupportedAssetsRequest {
         "eip155:4217",
         "eip155:42431",
         "eip155:421614",
+        "eip155:4663",
+        "eip155:46630",
         "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
         "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1"
       ]
@@ -4116,7 +4255,9 @@ message ListEthTransactionHistoryRequest {
         "eip155:42431",
         "eip155:421614",
         "eip155:56",
-        "eip155:97"
+        "eip155:97",
+        "eip155:4663",
+        "eip155:46630"
       ]
     }
   ];
