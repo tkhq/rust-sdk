@@ -757,6 +757,50 @@ mod test {
     }
 
     #[test]
+    fn secrets_reject_authenticated_invalid_targets_and_ciphertext() {
+        use p256::ecdsa::signature::Signer;
+        let enclave = EnclaveEncryptServer::from_enclave_auth_key(
+            test_quorum_private_key(),
+            "org-id".into(),
+            Some("unused-user".into()),
+        );
+        let mut ingress = secret_ingress_bundle(&enclave);
+        let mut data: serde_json::Value = serde_json::from_slice(&ingress.data).unwrap();
+        data["targetPublic"] = hex::encode([0u8; 65]).into();
+        ingress.data = serde_json::to_vec(&data).unwrap();
+        let signature: p256::ecdsa::Signature = test_quorum_private_key().sign(&ingress.data);
+        ingress.data_signature = signature.to_der().to_bytes().to_vec().into();
+        assert!(
+            ImportClient::new(&test_quorum_public_key())
+                .encrypt_secret_with_bundle(
+                    b"synthetic",
+                    &serde_json::to_string(&ingress).unwrap(),
+                    "org-id"
+                )
+                .is_err()
+        );
+
+        let mut recipient = ExportClient::new(&test_quorum_public_key());
+        let target = hex::decode(recipient.target_public_key().unwrap())
+            .unwrap()
+            .try_into()
+            .unwrap();
+        let mut export = enclave.encrypt(&target, b"synthetic").unwrap();
+        let mut data: serde_json::Value = serde_json::from_slice(&export.data).unwrap();
+        let mut ciphertext = hex::decode(data["ciphertext"].as_str().unwrap()).unwrap();
+        ciphertext[0] ^= 1;
+        data["ciphertext"] = hex::encode(ciphertext).into();
+        export.data = serde_json::to_vec(&data).unwrap();
+        let signature: p256::ecdsa::Signature = test_quorum_private_key().sign(&export.data);
+        export.data_signature = signature.to_der().to_bytes().to_vec().into();
+        assert!(
+            recipient
+                .decrypt_secret(&serde_json::to_string(&export).unwrap(), "org-id")
+                .is_err()
+        );
+    }
+
+    #[test]
     fn secrets_export_preserves_bytes_and_restores_recipient() {
         use rand_core::RngCore;
         for plaintext in [Vec::new(), vec![0, 255, 10], vec![42; 65536]] {
