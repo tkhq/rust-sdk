@@ -181,6 +181,7 @@ mod tests {
                 ready_replicas: 3,
                 desired_replicas: 3,
                 last_updated_time: None,
+                provisioning_state: None,
             }],
             targeted_deployment_id: "5376f492-d014-4e01-a6bb-20fc97448e25".to_string(),
         };

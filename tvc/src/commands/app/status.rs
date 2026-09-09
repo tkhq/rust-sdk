@@ -73,6 +73,9 @@ pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Resul
                     ready_replicas,
                     desired_replicas,
                     last_updated_time,
+                    // Deliberately not surfaced here: this report covers
+                    // replica readiness, not provisioning progress.
+                    provisioning_state: _,
                 } = deployment;
                 DeploymentReplicaStatus {
                     deployment_id,
