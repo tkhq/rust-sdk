@@ -17,7 +17,7 @@
 use crate::commands::deploy::approve::{
     ApprovalAlreadyPosted, ApprovalDryRun, ApprovalGenerated, ApprovalPosted,
 };
-use crate::commands::{app, deploy, keys, login, operator, skills, version, yubikey};
+use crate::commands::{app, config, deploy, keys, login, operator, skills, version, yubikey};
 use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
 
@@ -34,6 +34,7 @@ pub enum Outcome {
     OperatorCreated(operator::create::OperatorCreated),
     YubikeyOperatorAdded(operator::create::YubikeyOperatorAdded),
     ProfileDeleted(login::ProfileDeleted),
+    ConfigDowngraded(config::downgrade::ConfigDowngraded),
     ManifestApprovalPosted(ApprovalPosted),
     ManifestApprovalGenerated(ApprovalGenerated),
     ManifestApprovalAlreadyPosted(ApprovalAlreadyPosted),
@@ -77,6 +78,7 @@ impl Display for Outcome {
             Outcome::OperatorCreated(msg) => msg.fmt(f),
             Outcome::YubikeyOperatorAdded(msg) => msg.fmt(f),
             Outcome::ProfileDeleted(msg) => msg.fmt(f),
+            Outcome::ConfigDowngraded(msg) => msg.fmt(f),
             Outcome::ManifestApprovalPosted(msg) => msg.fmt(f),
             Outcome::ManifestApprovalGenerated(msg) => msg.fmt(f),
             Outcome::ManifestApprovalAlreadyPosted(msg) => msg.fmt(f),
