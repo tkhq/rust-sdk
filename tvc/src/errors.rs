@@ -10,6 +10,7 @@
 
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
+use std::fmt::{self, Display, Formatter};
 use std::path::Path;
 use turnkey_client::TurnkeyClientError;
 
@@ -33,6 +34,86 @@ impl MissingResource {
         Self {
             resource,
             id: id.into(),
+        }
+    }
+}
+
+/// The organization a request was scoped to, as it should read to a user: the
+/// saved login's alias alongside the ID when the credentials came from one,
+/// otherwise the bare ID (environment-variable auth carries no alias).
+#[derive(Debug)]
+pub struct OrganizationLabel {
+    alias: Option<String>,
+    id: String,
+}
+
+impl OrganizationLabel {
+    pub fn new(alias: Option<String>, id: String) -> Self {
+        Self { alias, id }
+    }
+}
+
+impl Display for OrganizationLabel {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let Self { alias, id } = self;
+        match alias {
+            Some(alias) => write!(f, "'{alias}' ({id})"),
+            None => f.write_str(id),
+        }
+    }
+}
+
+/// A lookup by ID that the backend answered with HTTP 404, annotated with the
+/// organization the request was scoped to. The usual cause is credentials that
+/// point at a different organization than the one owning the resource, so the
+/// message names that organization and [`hint`] says how to switch. The client
+/// error stays attached as the source, so [`classify`] still sees the 404 and
+/// the rendered chain keeps the response body.
+#[derive(Debug, thiserror::Error)]
+#[error("cannot find {resource} {id} in organization {organization}")]
+pub struct NotFoundInOrganization {
+    resource: &'static str,
+    id: String,
+    organization: OrganizationLabel,
+    #[source]
+    source: TurnkeyClientError,
+}
+
+impl NotFoundInOrganization {
+    pub fn new(
+        resource: &'static str,
+        id: impl Into<String>,
+        organization: OrganizationLabel,
+        source: TurnkeyClientError,
+    ) -> Self {
+        Self {
+            resource,
+            id: id.into(),
+            organization,
+            source,
+        }
+    }
+
+    /// The remedy depends on where the credentials came from: a saved login
+    /// profile (the label carries its alias) is switched with `login --org`,
+    /// while environment-variable auth takes precedence over any profile and
+    /// must be redirected through `TVC_ORG_ID`.
+    fn hint(&self) -> String {
+        let Self {
+            resource,
+            organization,
+            ..
+        } = self;
+        match organization.alias {
+            Some(_) => format!(
+                "check the active organization; if the {resource} belongs to a different one, \
+                 switch with `{} login --org <alias-or-id>`",
+                binary_name()
+            ),
+            None => format!(
+                "check TVC_ORG_ID; if the {resource} belongs to a different organization, \
+                 set it to that organization's ID"
+            ),
         }
     }
 }
@@ -103,12 +184,23 @@ pub fn classify(error: &anyhow::Error) -> Classification {
 }
 
 /// A remediation hint for recognized error causes, rendered by the human
-/// output layer beneath the error line. Today only the backend's
-/// client-version rejection produces one: the hint is the server's own
-/// message (it names the running and minimum versions), so the reader does
-/// not have to dig it out of the raw response body in the chain.
+/// output layer beneath the error line. Two causes produce one today: a
+/// resource the backend could not find in the scoped organization
+/// ([`NotFoundInOrganization`]) hints at switching organizations, and the
+/// backend's client-version rejection hints at upgrading, so the reader does
+/// not have to dig the remediation out of the raw response body in the chain.
 pub fn hint(error: &anyhow::Error) -> Option<String> {
     error.chain().find_map(|cause| {
+        if let Some(not_found) = cause.downcast_ref::<NotFoundInOrganization>() {
+            // `classify` sees through this wrapper to the client error and
+            // reports a version rejection first; keep the hint in step with it
+            // by falling through to the source when the body carries one.
+            if client_version_rejection(&not_found.source).is_none() {
+                return Some(not_found.hint());
+            }
+            return None;
+        }
+
         let _envelope = client_version_rejection(cause.downcast_ref::<TurnkeyClientError>()?)?;
         let name = binary_name();
 
@@ -336,6 +428,75 @@ mod tests {
         assert_eq!(
             classify(&error),
             Classification::new(ErrorCode::NotFound, None)
+        );
+    }
+
+    fn not_found_in_organization(alias: Option<&str>) -> anyhow::Error {
+        not_found_in_organization_with_body(alias, r#"{"message":"missing"}"#)
+    }
+
+    fn not_found_in_organization_with_body(alias: Option<&str>, body: &str) -> anyhow::Error {
+        anyhow::Error::new(NotFoundInOrganization::new(
+            "deployment",
+            "abc-123",
+            OrganizationLabel::new(alias.map(str::to_string), "org-1".to_string()),
+            TurnkeyClientError::UnexpectedHttpStatus(404, body.to_string()),
+        ))
+    }
+
+    #[test]
+    fn not_found_in_organization_keeps_not_found_classification_and_status() {
+        assert_eq!(
+            classify(&not_found_in_organization(Some("prod"))),
+            Classification::new(ErrorCode::NotFound, Some(404))
+        );
+    }
+
+    #[test]
+    fn not_found_in_organization_names_the_org_and_keeps_the_response_chain() {
+        assert_eq!(
+            render_error_chain(&not_found_in_organization(Some("prod"))),
+            r#"cannot find deployment abc-123 in organization 'prod' (org-1): HTTP response was not successful: 404 ({"message":"missing"})"#
+        );
+        assert_eq!(
+            render_error_chain(&not_found_in_organization(None)),
+            r#"cannot find deployment abc-123 in organization org-1: HTTP response was not successful: 404 ({"message":"missing"})"#
+        );
+    }
+
+    #[test]
+    fn not_found_in_organization_under_a_login_profile_hints_at_login_org() {
+        let hint = hint(&not_found_in_organization(Some("prod"))).unwrap();
+
+        assert!(
+            hint.starts_with("check the active organization"),
+            "{hint:?}"
+        );
+        assert!(hint.contains("login --org <alias-or-id>"), "{hint:?}");
+        assert!(!hint.contains("TVC_ORG_ID"), "{hint:?}");
+    }
+
+    #[test]
+    fn not_found_in_organization_under_env_auth_hints_at_tvc_org_id() {
+        let hint = hint(&not_found_in_organization(None)).unwrap();
+
+        assert!(hint.starts_with("check TVC_ORG_ID"), "{hint:?}");
+        assert!(!hint.contains("login --org"), "{hint:?}");
+    }
+
+    #[test]
+    fn version_rejection_riding_a_404_hints_at_upgrading_like_it_classifies() {
+        let error = not_found_in_organization_with_body(Some("prod"), TOO_OLD_BODY);
+
+        assert_eq!(
+            classify(&error),
+            Classification::new(ErrorCode::ClientVersionTooOld, Some(404))
+        );
+        assert_eq!(
+            hint(&error)
+                .as_deref()
+                .map(|msg| msg.contains("is older than the minimum version the backend supports")),
+            Some(true)
         );
     }
 
