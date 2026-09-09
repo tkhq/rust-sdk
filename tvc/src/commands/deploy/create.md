@@ -11,9 +11,7 @@ With `--pivot-pull-secret` it encrypts a pivot pull secret for the active org's 
 It pins the image URL to the resolved digest and submits the `create_tvc_deployment` activity.
 Typical use: after `tvc deploy init` and an edit of the generated command config, or fully flag driven in CI.
 
-Citations shorten paths under `tvc/src/`: `create.rs` means `tvc/src/commands/deploy/create.rs`.
-Other cited files keep their `tvc/src/` relative path, and generated files carry full paths.
-Dispatch: cli.rs:260-262, with `long_about = LONG_ABOUT` (create.rs:22-65) and `after_help = PORT_GUIDANCE` (commands/deploy.rs:17-23, cli.rs:406-411).
+Dispatch: cli.rs:260-262, with `long_about = LONG_ABOUT` (create.rs:22-65) and `after_help = PORT_GUIDANCE` (commands/deploy.rs:17-23, cli.rs:417-418).
 
 ## Acceptance scenario (normative)
 

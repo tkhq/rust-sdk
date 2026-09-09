@@ -121,6 +121,9 @@ Every per-command specification MUST contain these sections, in this order.
 
 The acceptance scenario is a table of concrete steps and expected observations, followed by a pass criterion.
 Test vectors are rows named `V-n`. Each vector gives concrete input values and cites the code or test that pins the observation.
+A citation names a file and a line or line range.
+A bare file name is the command's own source file, or the unique file of that name under `tvc/src/` or `tvc/tests/`.
+A relative path resolves under `tvc/src/` when it does not resolve from the repository root.
 Invariants are rows named `INV-n`. Each invariant names its enforcing mechanism.
 Prose follows the tk-brain skill `writing-executable-specifications` (04-skills/eng/writing-executable-specifications/SKILL.md): ASD-STE100, RFC 2119, no em or en dashes, no negative parallelism.
 Validate each changed specification with the skill script `scripts/check-prose.py`. Zero errors before merge.

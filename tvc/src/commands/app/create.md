@@ -129,7 +129,7 @@ A failed run follows INV-G3 and the Part 00 error taxonomy.
 |---|---|
 | `--config-file` absent and `TVC_APP_CONFIG` unset | clap usage error; exit code 2; `code` = `usage_error` in JSON mode (tvc/src/commands/app/create.rs:31-33, tvc/src/cli.rs:154-176). |
 | unreadable or unparseable command config, non-interactive mode | error `failed to read config file: <path>` or `failed to parse config file: <path>`; `code` = `command_error`; exit code 1 (tvc/src/commands/app/create.rs:209-229). |
-| invalid command config, both modes | error `invalid config file: <path>: <errors>`; `code` = `command_error`; exit code 1 (tvc/src/commands/app/create.rs:231-233). |
+| command config with a validation error other than a placeholder, both modes | error `invalid config file: <path>: <errors>`; `code` = `command_error`; exit code 1 (tvc/src/commands/app/create.rs:231-233). |
 | multiple matching reuse candidates without a usable prompt | error `multiple operator IDs use the requested manifest operator key; ...`; `code` = `command_error`; exit code 1 (tvc/src/commands/app/create.rs:85-91). |
 | no active org at bookkeeping time | error `no active organization set` after the app exists; `code` = `command_error`; exit code 1 (tvc/src/config/turnkey.rs:699-707; Gap 1). |
 | API failure | `code` = `unauthorized`, `not_found`, `api_error`, `network_error`, or `client_version_too_old` per the typed chain (tvc/src/errors.rs:93-103). |

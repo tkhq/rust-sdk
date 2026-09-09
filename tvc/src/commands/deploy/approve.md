@@ -18,7 +18,7 @@ Run the scenario from the `tvc/` crate directory, in a TTY, in human mode.
 | Step | Action | Expected observation |
 |---|---|---|
 | 1 | Point `HOME` at an empty directory. | No tvc config exists. |
-| 2 | Run `tvc deploy approve --manifest fixtures/manifest.json --operator-seed-path fixtures/seed.hex --skip-post --approval-out /tmp/approval.json`. | stdout prints the `MANIFEST APPROVAL` banner, then the `MANIFEST SCHEMA` section with `Version:       v1 (legacy)` (approve.rs:1001-1005). |
+| 2 | Run `tvc deploy approve --manifest fixtures/manifest.json --operator-seed-path fixtures/seed.hex --skip-post --approval-out /tmp/approval.json`. | stdout prints the `MANIFEST APPROVAL` banner, then the `MANIFEST SCHEMA` section with `Version:       v1 (legacy)` (approve.rs:1001-1005, 1042). |
 | 3 | Answer `y` to `Approve manifest schema and DNS?`. | The `NAMESPACE` section prints with `Name:       turnkey-prod` (approve.rs:1062-1076). |
 | 4 | Answer `y` to `Approve namespace?`, `Approve enclave configuration?`, `Approve pivot binary?`, `Approve manifest set?` (section shows `Threshold: 2 of 3`), and `Approve share set?`. | The `ALL SECTIONS APPROVED` banner prints (approve.rs:1012-1014). |
 | 5 | Let the command exit. | stdout ends with `Approval written to: /tmp/approval.json`; exit code 0; a default tvc config now exists (cli.rs:219-222). |
