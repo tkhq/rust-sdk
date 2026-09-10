@@ -69,3 +69,18 @@ pub struct SetPaymentMethodResult {
     pub card_holder_name: ::prost::alloc::string::String,
     pub card_holder_email: ::prost::alloc::string::String,
 }
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct UpdatePaymentMethodIntent {
+    /// @inject_tag: validate:"required,email,tk_email"
+    pub payment_email: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct UpdatePaymentMethodResult {
+    pub payment_email: ::prost::alloc::string::String,
+}

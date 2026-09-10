@@ -27,6 +27,8 @@ message EarnVault {
   string curator = 9 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Vault curator name(s), comma-separated when a vault has multiple. Empty for providers without curators (e.g. Aave)."}];
   string liquidity = 10 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Assets currently withdrawable from the vault without a reallocation, in raw on-chain units of the underlying asset. Empty when the provider does not report it."}];
   EarnValueDisplay liquidity_display = 11 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Normalized liquidity values for display purposes only (usd + crypto). Do not do arithmetic with these; use liquidity instead."}];
+  string force_deallocatable_liquidity = 12 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Additional assets withdrawable from the vault by force-deallocating its non-liquidity adapters at zero penalty, in raw on-chain units of the underlying asset. Additive to liquidity. Empty when the provider does not report it."}];
+  EarnValueDisplay force_deallocatable_liquidity_display = 13 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Normalized force-deallocatable liquidity values for display purposes only (usd + crypto). Do not do arithmetic with these; use force_deallocatable_liquidity instead."}];
 }
 
 // EarnVaultExposure is one underlying market a vault allocates into, and the
@@ -60,6 +62,11 @@ message EarnEnabledVault {
   string liquidity = 16 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Assets currently withdrawable from the underlying vault without a reallocation, in raw on-chain units of the underlying asset. This is the vault's liquidity, not the wrapper's balance. Empty when the provider does not report it."}];
   EarnValueDisplay liquidity_display = 17 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Normalized liquidity values for display purposes only (usd + crypto). Do not do arithmetic with these; use liquidity instead."}];
   repeated EarnVaultExposure exposures = 18 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The underlying markets the vault allocates into, ranked by supplied amount descending. Only populated when the request sets include_exposure, and only for providers that expose an allocation breakdown (Morpho)."}];
+  string force_deallocatable_liquidity = 19 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Additional assets withdrawable from the underlying vault by force-deallocating its non-liquidity adapters at zero penalty, in raw on-chain units of the underlying asset. Additive to liquidity. Empty when the provider does not report it."}];
+  EarnValueDisplay force_deallocatable_liquidity_display = 20 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Normalized force-deallocatable liquidity values for display purposes only (usd + crypto). Do not do arithmetic with these; use force_deallocatable_liquidity instead."}];
+  string deploy_status = 21 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "On-chain status of the wrapper deployment: PENDING, COMPLETED, or FAILED. Only a COMPLETED wrapper is usable. Empty when no deploy is recorded for the wrapper."}];
+  string deploy_request_id = 22 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Request id of the wrapper's most recent deploy, for polling GetEarnDeployStatus. Empty when no deploy is recorded."}];
+  string deploy_error = 23 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Failure detail when deploy_status is FAILED."}];
 }
 
 message AssetMetadata {

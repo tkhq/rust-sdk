@@ -178,6 +178,12 @@ pub mod intent {
         CreateSwapQuoteIntent(super::CreateSwapQuoteIntent),
         ImportSecretsIntent(super::ImportSecretsIntent),
         ExportSecretsIntent(super::ExportSecretsIntent),
+        CreateVelocityControlIntent(super::CreateVelocityControlIntent),
+        DeleteVelocityControlIntent(super::DeleteVelocityControlIntent),
+        UpdatePaymentMethodIntent(super::super::billing::UpdatePaymentMethodIntent),
+        CreateSwapQuoteIntentV2(super::CreateSwapQuoteIntentV2),
+        ExecuteSwapIntentV3(super::ExecuteSwapIntentV3),
+        DeleteSecretsIntent(super::DeleteSecretsIntent),
     }
 }
 #[derive(Debug)]
@@ -2799,6 +2805,10 @@ pub mod result {
         CreateSwapQuoteResult(super::CreateSwapQuoteResult),
         ImportSecretsResult(super::ImportSecretsResult),
         ExportSecretsResult(super::ExportSecretsResult),
+        CreateVelocityControlResult(super::CreateVelocityControlResult),
+        DeleteVelocityControlResult(super::DeleteVelocityControlResult),
+        UpdatePaymentMethodResult(super::super::billing::UpdatePaymentMethodResult),
+        DeleteSecretsResult(super::DeleteSecretsResult),
     }
 }
 #[derive(Debug)]
@@ -4549,6 +4559,23 @@ pub struct ImportSecretsResult {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct DeleteSecretsIntent {
+    /// @inject_tag: validate:"required,min=1,max=32,unique,dive,uuid"
+    #[serde(default)]
+    pub secret_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeleteSecretsResult {
+    #[serde(default)]
+    pub secret_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct ExportSecretsIntent {
     #[serde(default)]
     pub secrets: ::prost::alloc::vec::Vec<ExportSecretParams>,
@@ -4563,6 +4590,8 @@ pub struct ExportSecretParams {
     /// @inject_tag: validate:"hexadecimal"
     pub target_public_key: ::prost::alloc::string::String,
     pub encryption_suite: super::super::models::v1::TransportEncryptionSuite,
+    #[serde(default)]
+    pub request_context: ::prost::alloc::vec::Vec<super::super::models::v1::KeyValue>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -4571,6 +4600,47 @@ pub struct ExportSecretParams {
 pub struct ExportSecretsResult {
     #[serde(default)]
     pub secret_payloads: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateVelocityControlIntent {
+    /// Human-readable name for the Velocity Control.
+    pub name: ::prost::alloc::string::String,
+    /// Data source for the Velocity Control.
+    #[serde(default)]
+    pub data_source: ::core::option::Option<
+        super::super::super::external::data::v1::VelocityControlDataSource,
+    >,
+    /// Aggregation expression that the Velocity Control evaluates.
+    #[serde(default)]
+    pub aggregation: ::core::option::Option<
+        super::super::super::external::data::v1::VelocityControlAggregation,
+    >,
+    /// Identifier for the Velocity Control. Policies reference it as `controls.<identifier>`. It must be unique within the Organization.
+    pub identifier: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateVelocityControlResult {
+    pub velocity_control_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeleteVelocityControlIntent {
+    pub velocity_control_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeleteVelocityControlResult {
+    pub velocity_control_id: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -4785,6 +4855,36 @@ pub struct ExecuteSwapIntentV2 {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct ExecuteSwapIntentV3 {
+    /// @inject_tag: validate:"required"
+    pub quote_id: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub input_token: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub input_amount: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub output_token: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub quoted_output_amount: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub min_output_amount: ::prost::alloc::string::String,
+    /// proto3 optional tracks presence; REQUIRED is the API contract and Go rejects unset.
+    /// @inject_tag: validate:"required"
+    #[serde(default)]
+    pub sponsor: ::core::option::Option<bool>,
+    #[serde(default)]
+    pub evm_nonce: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub recent_blockhash: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub gas_station_nonce: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub destination_address: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct CreateSwapQuoteIntent {
     /// @inject_tag: validate:"required"
     pub sign_with: ::prost::alloc::string::String,
@@ -4796,6 +4896,24 @@ pub struct CreateSwapQuoteIntent {
     pub input_amount: ::prost::alloc::string::String,
     #[serde(default)]
     pub slippage_bps: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateSwapQuoteIntentV2 {
+    /// @inject_tag: validate:"required"
+    pub sign_with: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub input_token: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub output_token: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub input_amount: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub slippage_bps: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub destination_address: ::core::option::Option<::prost::alloc::string::String>,
 }
 /// Type of Activity, such as Add User, or Sign Transaction.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -5127,6 +5245,18 @@ pub enum ActivityType {
     ImportSecrets = 162,
     #[serde(rename = "ACTIVITY_TYPE_EXPORT_SECRETS")]
     ExportSecrets = 163,
+    #[serde(rename = "ACTIVITY_TYPE_CREATE_VELOCITY_CONTROL")]
+    CreateVelocityControl = 164,
+    #[serde(rename = "ACTIVITY_TYPE_DELETE_VELOCITY_CONTROL")]
+    DeleteVelocityControl = 165,
+    #[serde(rename = "ACTIVITY_TYPE_UPDATE_PAYMENT_METHOD")]
+    UpdatePaymentMethod = 166,
+    #[serde(rename = "ACTIVITY_TYPE_CREATE_SWAP_QUOTE_V2")]
+    CreateSwapQuoteV2 = 167,
+    #[serde(rename = "ACTIVITY_TYPE_EXECUTE_SWAP_V3")]
+    ExecuteSwapV3 = 168,
+    #[serde(rename = "ACTIVITY_TYPE_DELETE_SECRETS")]
+    DeleteSecrets = 169,
 }
 impl ActivityType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -5322,6 +5452,12 @@ impl ActivityType {
             Self::CreateSwapQuote => "ACTIVITY_TYPE_CREATE_SWAP_QUOTE",
             Self::ImportSecrets => "ACTIVITY_TYPE_IMPORT_SECRETS",
             Self::ExportSecrets => "ACTIVITY_TYPE_EXPORT_SECRETS",
+            Self::CreateVelocityControl => "ACTIVITY_TYPE_CREATE_VELOCITY_CONTROL",
+            Self::DeleteVelocityControl => "ACTIVITY_TYPE_DELETE_VELOCITY_CONTROL",
+            Self::UpdatePaymentMethod => "ACTIVITY_TYPE_UPDATE_PAYMENT_METHOD",
+            Self::CreateSwapQuoteV2 => "ACTIVITY_TYPE_CREATE_SWAP_QUOTE_V2",
+            Self::ExecuteSwapV3 => "ACTIVITY_TYPE_EXECUTE_SWAP_V3",
+            Self::DeleteSecrets => "ACTIVITY_TYPE_DELETE_SECRETS",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -5550,6 +5686,12 @@ impl ActivityType {
             "ACTIVITY_TYPE_CREATE_SWAP_QUOTE" => Some(Self::CreateSwapQuote),
             "ACTIVITY_TYPE_IMPORT_SECRETS" => Some(Self::ImportSecrets),
             "ACTIVITY_TYPE_EXPORT_SECRETS" => Some(Self::ExportSecrets),
+            "ACTIVITY_TYPE_CREATE_VELOCITY_CONTROL" => Some(Self::CreateVelocityControl),
+            "ACTIVITY_TYPE_DELETE_VELOCITY_CONTROL" => Some(Self::DeleteVelocityControl),
+            "ACTIVITY_TYPE_UPDATE_PAYMENT_METHOD" => Some(Self::UpdatePaymentMethod),
+            "ACTIVITY_TYPE_CREATE_SWAP_QUOTE_V2" => Some(Self::CreateSwapQuoteV2),
+            "ACTIVITY_TYPE_EXECUTE_SWAP_V3" => Some(Self::ExecuteSwapV3),
+            "ACTIVITY_TYPE_DELETE_SECRETS" => Some(Self::DeleteSecrets),
             _ => None,
         }
     }
