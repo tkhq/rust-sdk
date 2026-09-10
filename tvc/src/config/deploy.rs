@@ -48,6 +48,12 @@ pub struct DeployConfig {
     /// choice to the backend default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub replicas: Option<u32>,
+    /// Enclave instance size CPU cound.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instance_size_cpus: Option<u32>,
+    /// Enclave instance size RAM in Gi.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instance_size_ram: Option<u32>,
 }
 
 /// Build a config seeded from an existing deployment, for use as a template.
@@ -92,6 +98,8 @@ impl TryFrom<TvcDeployment> for DeployConfig {
             health_check_type,
             health_check_port,
             public_ingress_port,
+            instance_size_cpus,
+            instance_size_ram,
         } = pivot_container
             .ok_or_else(|| anyhow!("deployment {id} has no pivot container spec"))?;
 
@@ -114,6 +122,8 @@ impl TryFrom<TvcDeployment> for DeployConfig {
             health_check_port,
             public_ingress_port,
             replicas: None,
+            instance_size_cpus: Some(instance_size_cpus),
+            instance_size_ram: Some(instance_size_ram),
         })
     }
 }
@@ -135,6 +145,8 @@ impl DeployConfig {
             health_check_port: 3000,
             public_ingress_port: 3000,
             replicas: None,
+            instance_size_cpus: None,
+            instance_size_ram: None,
         }
     }
 
@@ -256,8 +268,21 @@ impl DeployConfig {
                 placeholder: PULL_SECRET_PLACEHOLDER.to_string(),
             });
         }
+        if !valid_instance_size(self.instance_size_cpus, self.instance_size_ram) {
+            errors.push(DeployConfigValidationError::InvalidInstanceSize)
+        }
 
         DeployConfigValidationErrors::ok_or_errors(errors)
+    }
+}
+
+fn valid_instance_size(cpus: Option<u32>, ram: Option<u32>) -> bool {
+    match (cpus, ram) {
+        (None, None) => true,         // defaults
+        (Some(2), Some(1)) => true,   // small
+        (Some(6), Some(24)) => true,  // medium
+        (Some(14), Some(48)) => true, // large
+        (_, _) => false,
     }
 }
 
@@ -275,6 +300,10 @@ pub enum DeployConfigValidationError {
          --pivot-pull-secret <PATH> or remove pivotContainerEncryptedPullSecret for public images"
     )]
     PullSecretPlaceholder { placeholder: String },
+    #[error(
+        "instance_size_cpu and instance_size_ram need to be empty or one of\n\tinstanceSizeCPU: 2, instanceSizeRam: 1\n\tinstanceSizeCPU: 6, instanceSizeRam: 24\n\tinstanceSizeCPU: 14, instanceSizeRam: 48"
+    )]
+    InvalidInstanceSize,
 }
 
 impl DeployConfigValidationError {
@@ -363,6 +392,8 @@ mod tests {
                 health_check_type: TvcHealthCheckType::Http,
                 health_check_port: 8080,
                 public_ingress_port: 9090,
+                instance_size_cpus: 2,
+                instance_size_ram: 8,
             }),
             created_at: None,
             updated_at: None,
