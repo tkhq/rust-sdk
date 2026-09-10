@@ -317,6 +317,17 @@ impl Commands {
             Commands::Skills { command } => match command {
                 SkillsCommands::Save(args) => commands::skills::save::run(args),
             },
+            Commands::Secrets { command } => match command {
+                SecretsCommands::Import(args) => {
+                    commands::secrets::import::run(ctx, args, config).await
+                }
+                SecretsCommands::Export(args) => {
+                    commands::secrets::export::run(ctx, args, config).await
+                }
+                SecretsCommands::List(args) => {
+                    commands::secrets::list::run(ctx, args, config).await
+                }
+            },
             Commands::Version => commands::version::run(),
         }
     }
@@ -361,6 +372,11 @@ enum Commands {
         #[command(subcommand)]
         command: SkillsCommands,
     },
+    /// Manage secrets in Turnkey secret storage.
+    Secrets {
+        #[command(subcommand)]
+        command: SecretsCommands,
+    },
     /// Print the tvc CLI version.
     Version,
 }
@@ -380,6 +396,7 @@ impl Commands {
             Commands::Keys { command } => command.name(),
             Commands::Yubikey { command } => command.name(),
             Commands::Skills { command } => command.name(),
+            Commands::Secrets { command } => command.name(),
             Commands::Version => "version",
         }
     }
@@ -462,6 +479,29 @@ enum AppCommands {
     SetLiveDeploy(commands::app::set_live_deploy::Args),
     /// Delete an app and all of its deployments.
     Delete(commands::app::delete::Args),
+}
+
+#[derive(Debug, Subcommand)]
+enum SecretsCommands {
+    /// Import one secret value into Turnkey secret storage.
+    #[command(long_about = commands::secrets::import::LONG_ABOUT)]
+    Import(commands::secrets::import::Args),
+    /// Export one secret value from Turnkey secret storage.
+    #[command(long_about = commands::secrets::export::LONG_ABOUT)]
+    Export(commands::secrets::export::Args),
+    /// List secret metadata for the active organization.
+    #[command(long_about = commands::secrets::list::LONG_ABOUT)]
+    List(commands::secrets::list::Args),
+}
+
+impl SecretsCommands {
+    fn name(&self) -> &'static str {
+        match self {
+            SecretsCommands::Import(_) => "secrets import",
+            SecretsCommands::Export(_) => "secrets export",
+            SecretsCommands::List(_) => "secrets list",
+        }
+    }
 }
 
 #[derive(Debug, Subcommand)]

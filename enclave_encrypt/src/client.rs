@@ -164,6 +164,16 @@ impl ExportClient {
             .map_err(|e| EnclaveEncryptError::InvalidUtf8Bytes(e.to_string()))?;
         Ok(phrase.to_string())
     }
+
+    /// Decrypts a JSON-encoded secret export bundle, verifying that it was
+    /// produced for `organization_id`, and returns the secret as a string.
+    pub fn decrypt_secret<S: AsRef<str>, T: AsRef<str>>(
+        &mut self,
+        export_bundle: S,
+        organization_id: T,
+    ) -> Result<String, EnclaveEncryptError> {
+        self.decrypt_wallet_mnemonic_phrase(export_bundle, organization_id)
+    }
 }
 
 /// Abstraction over `EnclaveEncryptClient` for private key or wallet import flows.
@@ -277,6 +287,19 @@ impl ImportClient {
 
         serde_json::to_string(&encrypted)
             .map_err(|e| EnclaveEncryptError::CannotSerializeBundle(e.to_string()))
+    }
+
+    /// Encrypts a secret to the signer-signed public key in a JSON-encoded
+    /// import bundle, verifying the bundle was produced for `organization_id`
+    /// (secrets ingress is org-scoped, not user-scoped). Returns the encrypted
+    /// payload for an `IMPORT_SECRETS` activity.
+    pub fn encrypt_secret_bundle<S: AsRef<str>, T: AsRef<str>, U: AsRef<str>>(
+        &mut self,
+        secret: S,
+        import_bundle: T,
+        organization_id: U,
+    ) -> Result<String, EnclaveEncryptError> {
+        self.encrypt_wallet_with_bundle(secret, import_bundle, organization_id, "")
     }
 }
 
