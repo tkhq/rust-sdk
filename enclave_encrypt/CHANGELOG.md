@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.16.0](https://github.com/tkhq/rust-sdk/compare/turnkey_enclave_encrypt-v0.15.0...turnkey_enclave_encrypt-v0.16.0) - 2026-09-10
+
+### Other
+
+- *(enclave-encrypt)* add secret-named encrypt_secret_bundle / decrypt_secret wrappers and use them in the secrets flow
+
 ## [0.15.0](https://github.com/tkhq/rust-sdk/compare/turnkey_enclave_encrypt-v0.14.0...turnkey_enclave_encrypt-v0.15.0) - 2026-08-28
 
 ### Other

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.16.0](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.15.0...turnkey_client-v0.16.0) - 2026-09-10
+
+### Other
+
+- Merge pull-request #271
+- add instance size as deployment option
+
 ## [0.15.0](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.14.0...turnkey_client-v0.15.0) - 2026-08-28
 
 ### Other
