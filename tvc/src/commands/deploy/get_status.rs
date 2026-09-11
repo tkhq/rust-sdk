@@ -41,7 +41,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Resul
     let auth = crate::client::build_client(&config).await?;
     let org_id = auth.org_id.clone();
 
-    let deployment = fetch_tvc_deployment(&auth, org_id.clone(), deployment_id.clone()).await?;
+    let deployment = fetch_tvc_deployment(&auth, deployment_id.clone()).await?;
 
     let app_request = GetAppStatusRequest {
         organization_id: org_id.clone(),

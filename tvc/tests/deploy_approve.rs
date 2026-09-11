@@ -74,7 +74,7 @@ fn authenticated_command(home: &TempDir, api_base_url: &str) -> assert_cmd::Comm
     command
 }
 
-fn spawn_json_server(body: String) -> (String, JoinHandle<()>) {
+fn spawn_json_server(status: u16, body: String) -> (String, JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
     let handle = thread::spawn(move || {
@@ -111,7 +111,7 @@ fn spawn_json_server(body: String) -> (String, JoinHandle<()>) {
         drop(reader);
 
         let response = format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            "HTTP/1.1 {status} Test\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
             body.len()
         );
         stream.write_all(response.as_bytes()).unwrap();
@@ -201,6 +201,51 @@ fn write_hosted_config(home: &TempDir) {
         ..Config::default()
     };
     write_config(home, &config);
+}
+
+const DEPLOYMENT_404_BODY: &str = r#"{"code":5,"message":"deployment not found"}"#;
+
+/// A 404 on the deployment fetch names the organization the credentials are
+/// scoped to, since a mismatched organization is the usual cause, while keeping
+/// the `not_found` classification, the HTTP status, and the server's response
+/// in the chain.
+#[test]
+fn deployment_missing_from_the_organization_names_the_org_in_json() {
+    let temp = TempDir::new().unwrap();
+    let (api_base_url, server) = spawn_json_server(404, DEPLOYMENT_404_BODY.to_string());
+
+    let output = authenticated_command(&temp, &api_base_url)
+        .args([
+            "deploy",
+            "approve",
+            "--deploy-id",
+            DEPLOYMENT_ID,
+            "--dry-run",
+            "--dangerous-skip-interactive",
+            "--message-format",
+            "json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .clone();
+    server.join().unwrap();
+
+    assert!(output.stderr.is_empty());
+    let message: serde_json::Value =
+        serde_json::from_str(String::from_utf8(output.stdout).unwrap().trim_end()).unwrap();
+    assert_eq!(
+        message,
+        serde_json::json!({
+            "reason": "command_error",
+            "code": "not_found",
+            "httpStatus": 404,
+            "message": format!(
+                "cannot find deployment {DEPLOYMENT_ID} in organization org-test: \
+                 HTTP response was not successful: 404 ({DEPLOYMENT_404_BODY})"
+            ),
+        })
+    );
 }
 
 #[test]
@@ -343,7 +388,7 @@ fn deploy_id_and_serial_resolve_one_operator_identity_by_public_key() {
     write_config(&temp, &config);
 
     let body = deployment_response(hosted_key, yubikey_key);
-    let (api_base_url, server) = spawn_json_server(body);
+    let (api_base_url, server) = spawn_json_server(200, body);
 
     authenticated_command(&temp, &api_base_url)
         .args([

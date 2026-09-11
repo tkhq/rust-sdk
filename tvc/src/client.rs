@@ -1,13 +1,13 @@
 //! Client utilities for authenticated API calls.
 
 use crate::config::turnkey::{Config, StoredApiKey};
-use crate::errors::MissingResource;
+use crate::errors::{MissingResource, NotFoundInOrganization};
 use anyhow::{Context, Result, anyhow, bail};
 use reqwest::header::{HeaderMap, HeaderValue};
 use tracing::{debug, instrument};
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use turnkey_client::{
-    TurnkeyClient,
+    TurnkeyClient, TurnkeyClientError,
     generated::{
         GetTvcAppRequest, GetTvcDeploymentRequest,
         external::data::v1::{TvcApp, TvcDeployment},
@@ -79,20 +79,37 @@ pub async fn fetch_tvc_app(auth: &AuthenticatedClient, app_id: &str) -> Result<T
         .ok_or_else(|| MissingResource::new("app", app_id).into())
 }
 
+/// Fetch a deployment in the client's organization.
+///
+/// A 404 becomes a [`NotFoundInOrganization`] naming that organization: the
+/// usual cause is credentials scoped to a different organization than the one
+/// owning the deployment, and the bare status would not say so.
 #[instrument(skip_all)]
 pub async fn fetch_tvc_deployment(
     auth: &AuthenticatedClient,
-    organization_id: String,
     deployment_id: String,
 ) -> Result<TvcDeployment> {
-    let response = auth
-        .client
-        .get_tvc_deployment(GetTvcDeploymentRequest {
-            organization_id,
-            deployment_id: deployment_id.clone(),
-        })
-        .await
-        .with_context(|| format!("failed to fetch deployment {deployment_id}"))?;
+    let request = GetTvcDeploymentRequest {
+        organization_id: auth.org_id.clone(),
+        deployment_id: deployment_id.clone(),
+    };
+
+    let response = match auth.client.get_tvc_deployment(request).await {
+        Ok(response) => response,
+        Err(source @ TurnkeyClientError::UnexpectedHttpStatus(404, _)) => {
+            return Err(NotFoundInOrganization::new(
+                "deployment",
+                deployment_id,
+                auth.org_id.clone(),
+                source,
+            )
+            .into());
+        }
+        Err(error) => {
+            return Err(anyhow::Error::new(error)
+                .context(format!("failed to fetch deployment {deployment_id}")));
+        }
+    };
 
     response
         .tvc_deployment
