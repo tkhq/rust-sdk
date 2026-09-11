@@ -138,7 +138,7 @@ Errors classify into a `code`. Common ones and first move:
 - **`missing_required_input`** — a required flag/value was absent in non-interactive mode. The message names it; supply the flag or its `TVC_*` env var.
 - **`usage_error`** — bad flag or subcommand (clap parse error), exit 2. Re-check the command against this skill.
 - **`unauthorized`** (HTTP 401/403) — credential or permission problem. Verify `TVC_ORG_ID`/`TVC_API_KEY_*` or your `tvc login` profile, and that the key has permission for the action.
-- **`not_found`** (HTTP 404) — wrong `--app-id`/`--deploy-id`, the resource has no state yet, or (when the message reads `cannot find deployment <id> in organization <org>`) credentials scoped to a different organization than the deployment's. Check the organization first, then the ID.
+- **`not_found`** (HTTP 404) — wrong `--app-id`/`--deploy-id`, the resource has no state yet, or (when the message reads `cannot find deployment <id> in organization <org-id>`) credentials scoped to a different organization than the deployment's. Check the organization first, then the ID.
 - **`approval_required`** — the manifest needs more approvals before it can proceed. Collect additional operator approvals.
 - **`network_error`** — connect/timeout/DNS; the request never reached the server. Check `TVC_API_BASE_URL` and connectivity, then retry.
 - **`api_error`** — other non-2xx from the API; read the `message` (it now carries the server's error body).

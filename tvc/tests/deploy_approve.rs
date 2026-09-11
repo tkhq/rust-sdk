@@ -206,9 +206,9 @@ fn write_hosted_config(home: &TempDir) {
 const DEPLOYMENT_404_BODY: &str = r#"{"code":5,"message":"deployment not found"}"#;
 
 /// A 404 on the deployment fetch names the organization the credentials are
-/// scoped to, since a mismatched active organization is the usual cause, while
-/// keeping the `not_found` classification, the HTTP status, and the server's
-/// response in the chain.
+/// scoped to, since a mismatched organization is the usual cause, while keeping
+/// the `not_found` classification, the HTTP status, and the server's response
+/// in the chain.
 #[test]
 fn deployment_missing_from_the_organization_names_the_org_in_json() {
     let temp = TempDir::new().unwrap();
@@ -246,32 +246,6 @@ fn deployment_missing_from_the_organization_names_the_org_in_json() {
             ),
         })
     );
-}
-
-/// The human rendering adds a hint pointing at the organization switch.
-#[test]
-fn deployment_missing_from_the_organization_hints_at_switching_org() {
-    let temp = TempDir::new().unwrap();
-    let (api_base_url, server) = spawn_json_server(404, DEPLOYMENT_404_BODY.to_string());
-
-    authenticated_command(&temp, &api_base_url)
-        .args([
-            "deploy",
-            "approve",
-            "--deploy-id",
-            DEPLOYMENT_ID,
-            "--dry-run",
-            "--dangerous-skip-interactive",
-        ])
-        .assert()
-        .code(1)
-        .stderr(predicate::str::contains(format!(
-            "error: cannot find deployment {DEPLOYMENT_ID} in organization org-test"
-        )))
-        .stderr(predicate::str::contains(
-            "hint: check TVC_ORG_ID; if the deployment belongs to a different organization",
-        ));
-    server.join().unwrap();
 }
 
 #[test]

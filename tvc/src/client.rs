@@ -1,7 +1,7 @@
 //! Client utilities for authenticated API calls.
 
 use crate::config::turnkey::{Config, StoredApiKey};
-use crate::errors::{MissingResource, NotFoundInOrganization, OrganizationLabel};
+use crate::errors::{MissingResource, NotFoundInOrganization};
 use anyhow::{Context, Result, anyhow, bail};
 use reqwest::header::{HeaderMap, HeaderValue};
 use tracing::{debug, instrument};
@@ -29,9 +29,6 @@ pub struct AuthenticatedClient {
     pub client: TurnkeyClient<TurnkeyP256ApiKey>,
     /// The organization ID for API calls.
     pub org_id: String,
-    /// Alias of the saved login profile the credentials came from, for
-    /// user-facing messages. `None` when they came from environment variables.
-    pub org_alias: Option<String>,
     /// The API base URL for the active org. Used for environment-specific behavior.
     pub api_base_url: String,
 }
@@ -51,27 +48,19 @@ pub struct AuthenticatedClient {
 pub async fn build_client(config: &Config) -> Result<AuthenticatedClient> {
     debug!("building authenticated Turnkey client");
 
-    let (org_alias, (org_id, api_base_url, api_key_public, api_key_private)) =
+    let (org_id, api_base_url, api_key_public, api_key_private) =
         match load_credentials_from_env_vars()? {
             Some(creds) => {
                 debug!(auth_source = "env", "using env auth credentials");
-                (None, creds)
+                creds
             }
             None => {
                 debug!(auth_source = "config", "using local config credentials");
-                let creds = load_credentials_from_config(config).await?;
-                // The loader only succeeds with an active profile, so this is its alias.
-                (config.active_org.clone(), creds)
+                load_credentials_from_config(config).await?
             }
         };
 
-    build_authed_client(
-        &org_id,
-        org_alias,
-        &api_base_url,
-        &api_key_public,
-        &api_key_private,
-    )
+    build_authed_client(&org_id, &api_base_url, &api_key_public, &api_key_private)
 }
 
 #[instrument(skip_all)]
@@ -111,7 +100,7 @@ pub async fn fetch_tvc_deployment(
             return Err(NotFoundInOrganization::new(
                 "deployment",
                 deployment_id,
-                OrganizationLabel::new(auth.org_alias.clone(), auth.org_id.clone()),
+                auth.org_id.clone(),
                 source,
             )
             .into());
@@ -184,7 +173,6 @@ pub(crate) fn build_turnkey_client(
 #[instrument(skip_all)]
 fn build_authed_client(
     org_id: &str,
-    org_alias: Option<String>,
     api_base_url: &str,
     api_key_public: &str,
     api_key_private: &str,
@@ -201,7 +189,6 @@ fn build_authed_client(
     Ok(AuthenticatedClient {
         client,
         org_id: org_id.to_string(),
-        org_alias,
         api_base_url: api_base_url.to_string(),
     })
 }

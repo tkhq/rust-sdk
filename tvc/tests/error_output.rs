@@ -226,8 +226,8 @@ fn http_status_errors_emit_stable_codes_status_and_full_chain() {
         assert_eq!(message["code"], expected_code);
         assert_eq!(message["httpStatus"], status);
         let rendered = message["message"].as_str().unwrap();
-        // A 404 is annotated with the organization the request was scoped to
-        // (the env-auth org ID here); every other status keeps the plain wrapper.
+        // A 404 is annotated with the organization the request was scoped to;
+        // every other status keeps the plain wrapper.
         let expected_prefix = if status == 404 {
             format!("cannot find deployment {DEPLOYMENT_ID} in organization org-test")
         } else {
@@ -303,16 +303,14 @@ fn human_and_json_runtime_errors_render_identical_message_text() {
     human_server.join().unwrap();
 
     assert!(human_output.stdout.is_empty());
-    let stderr = String::from_utf8(human_output.stderr).unwrap();
-    let (error_line, hint_line) = stderr
-        .trim_end_matches('\n')
-        .split_once('\n')
-        .expect("stderr should carry an error line and a hint line");
     assert_eq!(
-        error_line,
-        format!("error: {}", json_message["message"].as_str().unwrap())
+        String::from_utf8(human_output.stderr).unwrap(),
+        format!(
+            r#"error: {}
+"#,
+            json_message["message"].as_str().unwrap()
+        )
     );
-    assert!(hint_line.starts_with("hint: "), "{hint_line:?}");
 }
 
 const CLIENT_VERSION_TOO_OLD_BODY: &str = r#"{"code":3,"message":"tvc 0.12.0 is older than the minimum version this backend supports (0.12.2); upgrade tvc to the latest release","details":[],"turnkeyErrorCode":"TVC_CLIENT_VERSION_TOO_OLD"}"#;
