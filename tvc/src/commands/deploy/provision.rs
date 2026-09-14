@@ -80,9 +80,8 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome
     let auth = build_client(&config).await?;
     ensure_authenticated_org(&auth.org_id, operator.organization_id())?;
 
+    let deployment = fetch_tvc_deployment(&auth, deploy_id.to_string()).await?;
     let details = fetch_provisioning_details(&auth, &deploy_id).await?;
-    let deployment =
-        fetch_tvc_deployment(&auth, auth.org_id.clone(), deploy_id.to_string()).await?;
     let TvcManifest {
         id: _,
         manifest: deployment_manifest,

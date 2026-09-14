@@ -37,6 +37,39 @@ impl MissingResource {
     }
 }
 
+/// A lookup by ID that the backend answered with HTTP 404, annotated with the
+/// organization the request was scoped to. The usual cause is credentials that
+/// point at a different organization than the one owning the resource, so the
+/// message names the organization the caller's own credentials are scoped to
+/// (never any other). The client error stays attached as the source, so
+/// [`classify`] still sees the 404 and the rendered chain keeps the response
+/// body.
+#[derive(Debug, thiserror::Error)]
+#[error("cannot find {resource} {id} in organization {organization_id}")]
+pub struct NotFoundInOrganization {
+    resource: &'static str,
+    id: String,
+    organization_id: String,
+    #[source]
+    source: TurnkeyClientError,
+}
+
+impl NotFoundInOrganization {
+    pub fn new(
+        resource: &'static str,
+        id: impl Into<String>,
+        organization_id: impl Into<String>,
+        source: TurnkeyClientError,
+    ) -> Self {
+        Self {
+            resource,
+            id: id.into(),
+            organization_id: organization_id.into(),
+            source,
+        }
+    }
+}
+
 /// The stable, machine-readable classification of a runtime error, carried in
 /// the `code` field of a `command_error` (or `missing_required_input`) message.
 ///
@@ -341,6 +374,47 @@ mod tests {
         assert_eq!(
             classify(&error),
             Classification::new(ErrorCode::NotFound, None)
+        );
+    }
+
+    fn not_found_in_organization(body: &str) -> anyhow::Error {
+        anyhow::Error::new(NotFoundInOrganization::new(
+            "deployment",
+            "abc-123",
+            "org-1",
+            TurnkeyClientError::UnexpectedHttpStatus(404, body.to_string()),
+        ))
+    }
+
+    #[test]
+    fn not_found_in_organization_keeps_not_found_classification_and_status() {
+        assert_eq!(
+            classify(&not_found_in_organization(r#"{"message":"missing"}"#)),
+            Classification::new(ErrorCode::NotFound, Some(404))
+        );
+    }
+
+    #[test]
+    fn not_found_in_organization_names_the_org_and_keeps_the_response_chain() {
+        assert_eq!(
+            render_error_chain(&not_found_in_organization(r#"{"message":"missing"}"#)),
+            r#"cannot find deployment abc-123 in organization org-1: HTTP response was not successful: 404 ({"message":"missing"})"#
+        );
+    }
+
+    #[test]
+    fn version_rejection_riding_a_404_hints_at_upgrading_like_it_classifies() {
+        let error = not_found_in_organization(TOO_OLD_BODY);
+
+        assert_eq!(
+            classify(&error),
+            Classification::new(ErrorCode::ClientVersionTooOld, Some(404))
+        );
+        assert_eq!(
+            hint(&error)
+                .as_deref()
+                .map(|msg| msg.contains("is older than the minimum version the backend supports")),
+            Some(true)
         );
     }
 

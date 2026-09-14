@@ -226,10 +226,14 @@ fn http_status_errors_emit_stable_codes_status_and_full_chain() {
         assert_eq!(message["code"], expected_code);
         assert_eq!(message["httpStatus"], status);
         let rendered = message["message"].as_str().unwrap();
-        assert!(
-            rendered.contains(&format!("failed to fetch deployment {DEPLOYMENT_ID}")),
-            "{rendered:?}"
-        );
+        // A 404 is annotated with the organization the request was scoped to;
+        // every other status keeps the plain wrapper.
+        let expected_prefix = if status == 404 {
+            format!("cannot find deployment {DEPLOYMENT_ID} in organization org-test")
+        } else {
+            format!("failed to fetch deployment {DEPLOYMENT_ID}")
+        };
+        assert!(rendered.starts_with(&expected_prefix), "{rendered:?}");
         assert!(rendered.contains(&status.to_string()), "{rendered:?}");
         assert!(rendered.contains(&server_message), "{rendered:?}");
     }

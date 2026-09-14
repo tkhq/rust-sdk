@@ -2,7 +2,7 @@
 
 use crate::{
     approvals::{ApprovalVerdict, OperatorApproval, ValidatedManifest},
-    client::build_client,
+    client::{build_client, fetch_tvc_deployment},
     commands::Run,
     config::turnkey::{
         Config, OperatorRecordKind, QosOperatorPublicKey, StoredQosOperatorKey, YubiKeySerial,
@@ -1218,21 +1218,7 @@ async fn fetch_manifest_from_deploy(
     shell_println!(ctx, "Fetching deployment {deploy_id}...")?;
 
     let auth = build_client(config).await?;
-
-    let request = GetTvcDeploymentRequest {
-        organization_id: auth.org_id.clone(),
-        deployment_id: deploy_id.to_string(),
-    };
-
-    let response = auth
-        .client
-        .get_tvc_deployment(request)
-        .await
-        .with_context(|| format!("failed to fetch deployment {deploy_id}"))?;
-
-    let deployment = response
-        .tvc_deployment
-        .ok_or_else(|| MissingResource::new("deployment", deploy_id.to_string()))?;
+    let deployment = fetch_tvc_deployment(&auth, deploy_id.to_string()).await?;
     let TvcDeployment {
         manifest,
         manifest_set,

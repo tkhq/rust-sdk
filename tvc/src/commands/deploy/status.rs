@@ -1,17 +1,15 @@
 //! Deploy status command.
 
-use anyhow::Context;
 use clap::Args as ClapArgs;
 use qos_core::protocol::services::boot::VersionedManifest;
 use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
 use tracing::debug;
-use turnkey_client::generated::GetTvcDeploymentRequest;
 use turnkey_client::generated::external::data::v1::{TvcDeployment, TvcManifest};
 use uuid::Uuid;
 
 use crate::approvals::{ApprovalValidationWithMeta, OperatorApproval, ValidatedManifest};
-use crate::client::fetch_tvc_app;
+use crate::client::{fetch_tvc_app, fetch_tvc_deployment};
 use crate::commands::app_status::TimestampPayload;
 use crate::commands::display::{OrUnknown, format_egress_enabled, yes_no};
 use crate::config::turnkey::Config;
@@ -34,22 +32,7 @@ pub struct Args {
 #[instrument(skip_all)]
 pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Result<Outcome> {
     let auth = crate::client::build_client(&config).await?;
-    let deploy_id = args.deploy_id.to_string();
-
-    let request = GetTvcDeploymentRequest {
-        organization_id: auth.org_id.clone(),
-        deployment_id: deploy_id.clone(),
-    };
-
-    let response = auth
-        .client
-        .get_tvc_deployment(request)
-        .await
-        .with_context(|| format!("failed to fetch deployment {deploy_id}"))?;
-
-    let deployment = response
-        .tvc_deployment
-        .ok_or_else(|| MissingResource::new("deployment", args.deploy_id))?;
+    let deployment = fetch_tvc_deployment(&auth, args.deploy_id.to_string()).await?;
 
     // Exhaustive destructure (rather than `..`) so a new `TvcDeployment` field
     // forces a compile error here and forces a deliberate decision about usage
