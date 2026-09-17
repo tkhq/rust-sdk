@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.16.0](https://github.com/tkhq/rust-sdk/compare/tvc-v0.15.0...tvc-v0.16.0) - 2026-09-17
+
+### Added
+
+- *(tvc)* add skills save command to install bundled agent skills
+- *(tvc)* add tvc-deployments agent skill
+
+### Fixed
+
+- *(tvc)* name the scoped organization when a deployment fetch 404s
+
+### Other
+
+- fix enclave size info proto and data source
+- Merge pull request #278 from tkhq/am/tvc-338/deploy-approve-clear-not-found-error
+- *(tvc)* drop the org alias from the deployment not-found error
+- *(tvc-deployments)* explain the org-scoped not_found message and deployment discovery
+- *(tvc)* route deploy status through the shared deployment fetch
+- *(tvc)* rustfmt skills_save tests
+- *(tvc)* point AGENTS.md at the bundled agent skills and their sync rules
+- rm mention of merging imports from AGENTS.md
+- *(tvc)* force use of modern file layout
+
 ## [0.15.0](https://github.com/tkhq/rust-sdk/compare/tvc-v0.14.0...tvc-v0.15.0) - 2026-08-28
 
 ### Added
