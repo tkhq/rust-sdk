@@ -1105,6 +1105,10 @@ pub struct TvcDeployment {
     pub delete: bool,
     #[serde(default)]
     pub debug_mode: bool,
+    #[serde(default)]
+    pub instance_size_cpus: u32,
+    #[serde(default)]
+    pub instance_size_ram: u32,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -1122,10 +1126,6 @@ pub struct TvcContainerSpec {
     pub health_check_port: u32,
     #[serde(default)]
     pub public_ingress_port: u32,
-    #[serde(default)]
-    pub instance_size_cpus: u32,
-    #[serde(default)]
-    pub instance_size_ram: u32,
 }
 #[derive(Debug)]
 #[serde_with::serde_as]

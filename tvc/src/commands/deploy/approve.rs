@@ -1233,6 +1233,8 @@ async fn fetch_manifest_from_deploy(
         updated_at: _,
         delete: _,
         debug_mode: _,
+        instance_size_cpus: _,
+        instance_size_ram: _,
     } = deployment;
     let TvcManifest {
         id: manifest_id,

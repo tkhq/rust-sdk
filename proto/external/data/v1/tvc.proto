@@ -100,6 +100,14 @@ message TvcDeployment {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether this deployment is running in debug mode. Debug-mode deployments expose enclave logs and cannot be remotely attested."}
   ];
+  uint32 instance_size_cpus = 16 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The instance cpu count for this enclave."}
+  ];
+  uint32 instance_size_ram = 17 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The instance memory size in GiB for this enclave."}
+  ];
 }
 
 message TvcContainerSpec {
@@ -130,14 +138,6 @@ message TvcContainerSpec {
   uint32 public_ingress_port = 7 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The port to use for public ingress to this executable."}
-  ];
-  uint32 instance_size_cpus = 8 [
-    (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The instance cpu count for this enclave."}
-  ];
-  uint32 instance_size_ram = 9 [
-    (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The instance memory size in GiB for this enclave."}
   ];
 }
 
