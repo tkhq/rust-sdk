@@ -168,6 +168,8 @@ fn deployment_response(
             updated_at: None,
             delete: false,
             debug_mode: false,
+            instance_size_cpus: 2,
+            instance_size_ram: 1,
         }),
     })
     .unwrap()

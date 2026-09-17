@@ -82,6 +82,8 @@ impl TryFrom<TvcDeployment> for DeployConfig {
             qos_version,
             pivot_container,
             manifest,
+            instance_size_cpus,
+            instance_size_ram,
             ..
         } = deployment;
 
@@ -98,8 +100,6 @@ impl TryFrom<TvcDeployment> for DeployConfig {
             health_check_type,
             health_check_port,
             public_ingress_port,
-            instance_size_cpus,
-            instance_size_ram,
         } = pivot_container
             .ok_or_else(|| anyhow!("deployment {id} has no pivot container spec"))?;
 
@@ -392,13 +392,13 @@ mod tests {
                 health_check_type: TvcHealthCheckType::Http,
                 health_check_port: 8080,
                 public_ingress_port: 9090,
-                instance_size_cpus: 2,
-                instance_size_ram: 8,
             }),
             created_at: None,
             updated_at: None,
             delete: false,
             debug_mode: false,
+            instance_size_cpus: 2,
+            instance_size_ram: 1,
         }
     }
 

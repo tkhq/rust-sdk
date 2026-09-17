@@ -50,6 +50,8 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Result
         manifest_set: _,
         share_set: _,
         manifest_approvals,
+        instance_size_cpus: _,
+        instance_size_ram: _,
     } = deployment;
 
     let TvcManifest {
