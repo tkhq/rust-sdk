@@ -1,0 +1,234 @@
+# Skill Drift Check — Valet-powered semantic ruling
+#
+# Detects when CLI command source changes without a matching skill update.
+# The cargo test `embedded_manifest_matches_skills_dir` enforces FILE-LIST
+# parity; this workflow checks SEMANTIC parity — whether the skill prose
+# still describes the CLI's actual behavior after a command changes.
+#
+# Required secrets (configure in Settings → Secrets and variables → Actions):
+#   VALET_URL      — Base URL of the Valet instance (e.g. https://valet.example.com)
+#   VALET_API_KEY  — API key for Valet; the CLI passes it as `x-api-key`
+#
+# No session ID is needed: `valet send` defaults to the caller's orchestrator,
+# and each invocation lands on a fresh thread. When team credentials land
+# (TKAI-205), switch the key to a team-scoped key so the prompt routes to a
+# TVC team orchestrator instead of a personal one.
+#
+# This workflow is intentionally non-blocking: it posts a comment but does
+# not gate merge. Add it to required checks only after the Valet integration
+# is stable and the team is comfortable with the signal.
+
+name: Skill Drift Check
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tvc/src/commands/**'
+      - 'tvc/skills/**'
+
+jobs:
+  skill-drift-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changes
+        id: detect
+        run: |
+          CHANGED=$(git diff --name-only origin/main...HEAD -- tvc/src/commands/ tvc/skills/)
+          if [ -z "$CHANGED" ]; then
+            echo "No relevant changes detected."
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Changed files:"
+            echo "$CHANGED"
+            echo "$CHANGED" > /tmp/changed-files.txt
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Collect context
+        if: steps.detect.outputs.has_changes == 'true'
+        run: |
+          # Diff of command source changes
+          git diff origin/main...HEAD -- tvc/src/commands/ > /tmp/command-diff.patch
+
+          # Diff of skill changes (may be empty if only commands changed)
+          git diff origin/main...HEAD -- tvc/skills/ > /tmp/skill-diff.patch
+
+          # Full current skill content (post-PR)
+          {
+            echo "=== SKILL.md ==="
+            cat tvc/skills/tvc-deployments/SKILL.md
+            echo ""
+            for f in tvc/skills/tvc-deployments/references/*.md; do
+              echo "=== $(basename "$f") ==="
+              cat "$f"
+              echo ""
+            done
+          } > /tmp/skill-content.txt
+
+      # TODO: Install the valet CLI. Three candidate mechanisms:
+      #   1. tkhq/setup-valet@v1 composite action (does not exist yet)
+      #   2. Direct binary download from GitHub releases
+      #   3. npm i -g @valet/cli
+      # For now this step verifies the CLI is on PATH and fails loudly if not.
+      - name: Install valet CLI
+        if: steps.detect.outputs.has_changes == 'true'
+        run: |
+          if ! command -v valet &> /dev/null; then
+            echo "::error::valet CLI not found on PATH. Install it before this step runs."
+            echo "::error::See the TODO in this workflow for install options."
+            exit 1
+          fi
+          valet --version
+
+      - name: Build prompt
+        if: steps.detect.outputs.has_changes == 'true'
+        run: |
+          {
+            cat <<'PROMPT_HEADER'
+          You are reviewing a pull request to tkhq/rust-sdk. The repo rule from AGENTS.md states:
+
+          > When changing the CLI surface or behavior — commands, flags, outcome reasons, error codes, output fields — update skills/tvc-deployments/ in the same change. The skill is user-facing documentation of exactly this crate; letting it drift defeats the version pinning.
+
+          Your job: determine whether the skill documentation still accurately describes the CLI after these changes, or whether it has drifted.
+
+          ## Changed files
+
+          ```
+          PROMPT_HEADER
+            cat /tmp/changed-files.txt
+            cat <<'PROMPT_MID_1'
+          ```
+
+          ## Command source diff
+
+          ```diff
+          PROMPT_MID_1
+            cat /tmp/command-diff.patch
+            cat <<'PROMPT_MID_2'
+          ```
+
+          ## Skill file diff (changes to skills in this PR, may be empty)
+
+          ```diff
+          PROMPT_MID_2
+            cat /tmp/skill-diff.patch
+            cat <<'PROMPT_MID_3'
+          ```
+
+          ## Current skill content (post-PR)
+
+          PROMPT_MID_3
+            cat /tmp/skill-content.txt
+            cat <<'PROMPT_TAIL'
+
+          ## Instructions
+
+          1. Analyze the command diff for CLI surface changes: new/removed/renamed commands, changed flags or arguments, new or changed outcome `reason` values, new or changed error `code` values, changed output fields or formats, changed defaults or behavior.
+          2. For each CLI surface change found, check whether the current skill content (SKILL.md and references/) accurately documents it.
+          3. If the skill was also updated in this PR (skill diff is non-empty), evaluate whether that update is sufficient.
+          4. Render your ruling as structured output.
+
+          Respond with EXACTLY this format:
+
+          VERDICT: PASS or FAIL
+
+          EXPLANATION:
+          <your explanation — what changed in the CLI, whether the skill covers it, and what is missing if FAIL>
+
+          Rules for your verdict:
+          - PASS: The command changes are internal-only (refactors, bug fixes, test changes) with no user-facing CLI surface change, OR every CLI surface change is already reflected in the skill content.
+          - FAIL: A user-facing CLI surface change is not reflected in the skill content.
+          PROMPT_TAIL
+          } > /tmp/prompt.txt
+
+      - name: Send to Valet for semantic ruling
+        if: steps.detect.outputs.has_changes == 'true'
+        id: valet
+        env:
+          VALET_URL: ${{ secrets.VALET_URL }}
+          VALET_API_KEY: ${{ secrets.VALET_API_KEY }}
+        run: |
+          # valet send reads VALET_URL and VALET_API_KEY from the environment.
+          # --json emits NDJSON: one JSON object per line with streaming events.
+          # text_delta events carry the agent's response incrementally.
+          valet send --json < /tmp/prompt.txt > /tmp/valet-stream.ndjson
+
+          # Reconstruct the agent's full text from streamed text_delta events.
+          RULING=$(jq -r 'select(.type == "text_delta") | .delta // .text // ""' /tmp/valet-stream.ndjson | awk 'BEGIN{ORS=""} {print}')
+
+          # Fallback: if no text_delta events found (schema drift), dump raw stream
+          if [ -z "$RULING" ]; then
+            RULING=$(cat /tmp/valet-stream.ndjson)
+          fi
+
+          # Parse verdict from the ruling text
+          if echo "$RULING" | grep -q "VERDICT: PASS"; then
+            VERDICT="PASS"
+          elif echo "$RULING" | grep -q "VERDICT: FAIL"; then
+            VERDICT="FAIL"
+          else
+            VERDICT="UNKNOWN"
+          fi
+
+          # Write outputs (use delimiter for multiline)
+          echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
+          {
+            echo "ruling<<RULING_EOF"
+            echo "$RULING"
+            echo "RULING_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Post PR comment
+        if: steps.detect.outputs.has_changes == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const verdict = '${{ steps.valet.outputs.verdict }}';
+            const ruling = `${{ steps.valet.outputs.ruling }}`;
+
+            const emoji = verdict === 'PASS' ? '✅' : verdict === 'FAIL' ? '❌' : '⚠️';
+            const body = [
+              `## 🔍 Skill Drift Check`,
+              ``,
+              `**Verdict: ${emoji} ${verdict}**`,
+              ``,
+              ruling,
+              ``,
+              `---`,
+              `*Checked by Valet — tvc skill drift check*`,
+            ].join('\n');
+
+            // Find and update existing comment, or create new one
+            const marker = '## 🔍 Skill Drift Check';
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body.startsWith(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
