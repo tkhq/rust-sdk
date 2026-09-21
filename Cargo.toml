@@ -51,6 +51,9 @@ thiserror = { version = "2.0.12", default-features = false }
 anyhow = { version = "1.0", default-features = false }
 tracing = { version = "0.1.41", default-features = false, features = ["attributes", "std"] }
 tracing-subscriber = { version = "0.3.23", default-features = false, features = ["ansi", "env-filter", "fmt"] }
+opentelemetry = { version = "0.32", default-features = false, features = ["trace"] }
+opentelemetry_sdk = { version = "0.32", default-features = false, features = ["trace"] }
+opentelemetry-http = { version = "0.32", default-features = false }
 
 # Web/HTTP
 mime = { version = "0.3.17", default-features = false }
