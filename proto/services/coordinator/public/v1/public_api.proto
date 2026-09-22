@@ -1822,6 +1822,18 @@ service PublicApiService {
     };
   }
 
+  rpc EarnClaimRewards(external.activity.v1.EarnClaimRewardsRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/earn_claim_rewards"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Claim the Merkl protocol rewards attributed to a wallet's Earn positions. The claim is signed by the wallet itself and every reward token is transferred to it; see ListEarnRewards for what is claimable."
+      summary: "Claim Earn rewards"
+      tags: "Earn"
+    };
+  }
+
   rpc ListEarnVaults(ListEarnVaultsRequest) returns (ListEarnVaultsResponse) {
     option (google.api.http) = {
       post: "/public/v1/query/list_earn_vaults"
@@ -1858,6 +1870,18 @@ service PublicApiService {
     };
   }
 
+  rpc ListEarnRewards(ListEarnRewardsRequest) returns (ListEarnRewardsResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/list_earn_rewards"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "List the protocol rewards (e.g. MORPHO and third-party campaign tokens, distributed off-chain via Merkl) attributed to a wallet: claimable, lifetime claimed, and pending amounts per reward token."
+      summary: "List Earn rewards"
+      tags: "Earn"
+    };
+  }
+
   rpc GetEarnWithdrawStatus(GetEarnWithdrawStatusRequest) returns (GetEarnWithdrawStatusResponse) {
     option (google.api.http) = {
       post: "/public/v1/query/get_earn_withdraw_status"
@@ -1890,6 +1914,18 @@ service PublicApiService {
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Poll the status of a fee claim by its claim_request_id."
       summary: "Get Earn claim fees status"
+      tags: "Earn"
+    };
+  }
+
+  rpc GetEarnClaimRewardsStatus(GetEarnClaimRewardsStatusRequest) returns (GetEarnClaimRewardsStatusResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_earn_claim_rewards_status"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Poll the status of a rewards claim by its claim_request_id."
+      summary: "Get Earn claim rewards status"
       tags: "Earn"
     };
   }
@@ -2003,7 +2039,6 @@ service PublicApiService {
   }
 
   rpc CreateTvcOperator(external.activity.v1.CreateTvcOperatorRequest) returns (ActivityResponse) {
-    option (google.api.method_visibility).restriction = "INTERNAL";
     option (google.api.http) = {
       post: "/public/v1/submit/create_tvc_operator"
       body: "*"
@@ -2023,6 +2058,30 @@ service PublicApiService {
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Delete a TVC App and all of its deployments"
       summary: "Delete a TVC App and all of its deployments"
+      tags: "TVC"
+    };
+  }
+
+  rpc GetTvcQuorumKeys(GetTvcQuorumKeysRequest) returns (GetTvcQuorumKeysResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/list_tvc_quorum_keys"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "List all hosted TVC quorum keys within an organization, newest first."
+      summary: "List TVC quorum keys"
+      tags: "TVC"
+    };
+  }
+
+  rpc GetTvcOperators(GetTvcOperatorsRequest) returns (GetTvcOperatorsResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/list_tvc_operators"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "List all TVC operators within an organization, newest first."
+      summary: "List TVC operators"
       tags: "TVC"
     };
   }
@@ -2148,8 +2207,6 @@ service PublicApiService {
   }
 
   rpc GetTvcDeploymentProvisioningDetails(GetTvcDeploymentProvisioningDetailsRequest) returns (GetTvcDeploymentProvisioningDetailsResponse) {
-    // TODO(tvc): remove when provisioning flow is fully usable
-    option (google.api.method_visibility).restriction = "INTERNAL";
     option (google.api.http) = {
       post: "/public/v1/query/get_tvc_deployment_provisioning_details"
       body: "*"
@@ -2174,8 +2231,6 @@ service PublicApiService {
   }
 
   rpc PostTvcQuorumKeyShare(external.activity.v1.PostTvcQuorumKeyShareRequest) returns (ActivityResponse) {
-    // TODO(tvc): remove when provisioning flow is fully usable
-    option (google.api.method_visibility).restriction = "INTERNAL";
     option (google.api.http) = {
       post: "/public/v1/submit/post_tvc_quorum_key_share"
       body: "*"
@@ -2188,7 +2243,6 @@ service PublicApiService {
   }
 
   rpc CreateTvcQuorumKey(external.activity.v1.CreateTvcQuorumKeyRequest) returns (ActivityResponse) {
-    option (google.api.method_visibility).restriction = "INTERNAL";
     option (google.api.http) = {
       post: "/public/v1/submit/create_tvc_quorum_key"
       body: "*"
@@ -2201,7 +2255,6 @@ service PublicApiService {
   }
 
   rpc ReEncryptTvcQuorumKeyShare(external.activity.v1.ReEncryptTvcQuorumKeyShareRequest) returns (ActivityResponse) {
-    option (google.api.method_visibility).restriction = "INTERNAL";
     option (google.api.http) = {
       post: "/public/v1/submit/re_encrypt_tvc_quorum_key_share"
       body: "*"
@@ -3498,6 +3551,45 @@ message ListEarnPositionsResponse {
   repeated EarnPosition positions = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The wallet's active Earn positions."}];
 }
 
+message ListEarnRewardsRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string wallet_address = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The wallet address to return rewards for."}
+  ];
+  optional string caip2 = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional filter: only return rewards on this chain (e.g. 'eip155:8453'). When unset, every chain the organization has deployed Earn wrappers on is queried."}];
+}
+
+// EarnReward is one wallet's rewards in one token on one chain: incentives on
+// top of vault yield, attributed off-chain by Merkl.
+message EarnReward {
+  string caip2 = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-2 chain the reward is claimable on (e.g. 'eip155:8453')."}];
+  string caip19 = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-19 asset ID of the reward token (e.g. 'eip155:8453/erc20:0xBAa5...'). Reward tokens are campaign-specific and unrelated to the position's underlying asset."}];
+  string symbol = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Symbol of the reward token (e.g. 'MORPHO'), as reported by Merkl."}];
+  int32 decimals = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Decimals of the reward token."}];
+  string claimable = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Amount claimable now, in raw on-chain units of the reward token."}];
+  string claimed = 6 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Lifetime amount already claimed, in raw on-chain units of the reward token."}];
+  string pending = 7 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Amount accrued but not yet claimable (not yet in a live on-chain merkle root; roots update roughly every 8 hours), in raw on-chain units of the reward token."}];
+  EarnRewardDisplay display = 8 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "USD + crypto renderings for display only. Do not do arithmetic with these."}];
+}
+
+// EarnRewardDisplay renders a reward's amounts in USD and token units, for display only.
+message EarnRewardDisplay {
+  string claimable_usd = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Claimable amount in USD, for display only. Empty when the token is unpriced."}];
+  string claimable_crypto = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Claimable amount in the reward token's own units, for display only."}];
+  string claimed_usd = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Lifetime claimed amount in USD, for display only. Empty when the token is unpriced."}];
+  string claimed_crypto = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Lifetime claimed amount in the reward token's own units, for display only."}];
+  string pending_usd = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Pending amount in USD, for display only. Empty when the token is unpriced."}];
+  string pending_crypto = 6 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Pending amount in the reward token's own units, for display only."}];
+}
+
+message ListEarnRewardsResponse {
+  repeated EarnReward rewards = 1 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The wallet's rewards, one entry per (chain, reward token), sorted by chain then token. Entries where every amount is zero are omitted."}];
+}
+
 message GetEarnWithdrawStatusRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
@@ -3523,6 +3615,33 @@ message GetEarnWithdrawStatusResponse {
   ];
   optional string withdraw_tx_hash = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Transaction hash of the withdrawal, once available."}];
   optional string error = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Reason the withdrawal transaction failed, when status is FAILED."}];
+}
+
+message GetEarnClaimRewardsStatusRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string claim_request_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The claim_request_id returned by EarnClaimRewards."}
+  ];
+}
+
+message GetEarnClaimRewardsStatusResponse {
+  string status = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Status of the rewards claim."
+      enum: [
+        "PENDING",
+        "COMPLETED",
+        "FAILED"
+      ]
+    }
+  ];
+  optional string claim_tx_hash = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Transaction hash of the rewards claim, once available."}];
+  optional string error = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Reason the rewards claim transaction failed, when status is FAILED."}];
 }
 
 message GetClaimEarnFeesStatusRequest {
@@ -3637,7 +3756,9 @@ message GetNoncesRequest {
         "eip155:42431",
         "eip155:421614",
         "eip155:4663",
-        "eip155:46630"
+        "eip155:46630",
+        "eip155:5042",
+        "eip155:5042002"
       ]
     }
   ];
@@ -3897,6 +4018,8 @@ message GetWalletAddressBalancesRequest {
         "eip155:421614",
         "eip155:4663",
         "eip155:46630",
+        "eip155:5042",
+        "eip155:5042002",
         "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
         "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1"
       ]
@@ -3915,6 +4038,7 @@ message AssetBalance {
   int32 decimals = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The number of decimals this asset uses"}];
   AssetBalanceDisplay display = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Normalized balance values for display purposes only. Do not do any arithmetic or calculations with these, as the results could be imprecise. Use the balance field instead."}];
   string name = 6 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The asset name"}];
+  string token_program = 7 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Solana token program address that owns this mint, inferred from getTokenAccountsByOwner. TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA for classic SPL Token, TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb for Token-2022. Empty for native SOL and non-Solana assets."}];
 }
 
 message AssetBalanceDisplay {
@@ -3950,6 +4074,8 @@ message ListSupportedAssetsRequest {
         "eip155:421614",
         "eip155:4663",
         "eip155:46630",
+        "eip155:5042",
+        "eip155:5042002",
         "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
         "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1"
       ]
@@ -4257,7 +4383,9 @@ message ListEthTransactionHistoryRequest {
         "eip155:56",
         "eip155:97",
         "eip155:4663",
-        "eip155:46630"
+        "eip155:46630",
+        "eip155:5042",
+        "eip155:5042002"
       ]
     }
   ];
@@ -4353,6 +4481,10 @@ message EthTransactionHistoryItem {
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Turnkey-specific metadata for transactions originated by Turnkey."}
   ];
+  optional bool execution_failed = 10 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether the transaction failed during on-chain execution. Omitted when execution outcome is unavailable."}
+  ];
 }
 
 message SolTransactionHistoryItem {
@@ -4397,6 +4529,10 @@ message SolTransactionHistoryItem {
   TransactionHistoryTurnkey turnkey = 9 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Turnkey-specific metadata for transactions originated by Turnkey."}
+  ];
+  optional bool execution_failed = 10 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether the transaction failed during on-chain execution. Omitted when execution outcome is unavailable."}
   ];
 }
 
@@ -4527,4 +4663,26 @@ message GetTvcQosVersionsResponse {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Latest recommended QOS version for new TVC deployments."}
   ];
+}
+
+message GetTvcQuorumKeysRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+  ];
+}
+
+message GetTvcQuorumKeysResponse {
+  repeated external.data.v1.TvcQuorumKey tvc_quorum_keys = 1 [(google.api.field_behavior) = REQUIRED];
+}
+
+message GetTvcOperatorsRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+  ];
+}
+
+message GetTvcOperatorsResponse {
+  repeated external.data.v1.TvcOperator tvc_operators = 1 [(google.api.field_behavior) = REQUIRED];
 }

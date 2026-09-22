@@ -184,6 +184,7 @@ pub mod intent {
         CreateSwapQuoteIntentV2(super::CreateSwapQuoteIntentV2),
         ExecuteSwapIntentV3(super::ExecuteSwapIntentV3),
         DeleteSecretsIntent(super::DeleteSecretsIntent),
+        EarnClaimRewardsIntent(super::EarnClaimRewardsIntent),
     }
 }
 #[derive(Debug)]
@@ -1480,6 +1481,19 @@ pub struct EarnSetWrapperStateIntent {
 pub struct ClaimEarnFeesIntent {
     /// @inject_tag: validate:"required"
     pub wrapper_address: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct EarnClaimRewardsIntent {
+    /// @inject_tag: validate:"required"
+    pub sign_with: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub chain_caip2: ::prost::alloc::string::String,
+    /// If true, Turnkey acts as fee payer via Gas Station.
+    #[serde(default)]
+    pub sponsor: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -2813,6 +2827,7 @@ pub mod result {
         DeleteVelocityControlResult(super::DeleteVelocityControlResult),
         UpdatePaymentMethodResult(super::super::billing::UpdatePaymentMethodResult),
         DeleteSecretsResult(super::DeleteSecretsResult),
+        EarnClaimRewardsResult(super::EarnClaimRewardsResult),
     }
 }
 #[derive(Debug)]
@@ -3868,6 +3883,13 @@ pub struct EarnSetWrapperStateResult {
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct ClaimEarnFeesResult {
+    pub claim_request_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct EarnClaimRewardsResult {
     pub claim_request_id: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
@@ -5261,6 +5283,8 @@ pub enum ActivityType {
     ExecuteSwapV3 = 168,
     #[serde(rename = "ACTIVITY_TYPE_DELETE_SECRETS")]
     DeleteSecrets = 169,
+    #[serde(rename = "ACTIVITY_TYPE_EARN_CLAIM_REWARDS")]
+    EarnClaimRewards = 170,
 }
 impl ActivityType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -5462,6 +5486,7 @@ impl ActivityType {
             Self::CreateSwapQuoteV2 => "ACTIVITY_TYPE_CREATE_SWAP_QUOTE_V2",
             Self::ExecuteSwapV3 => "ACTIVITY_TYPE_EXECUTE_SWAP_V3",
             Self::DeleteSecrets => "ACTIVITY_TYPE_DELETE_SECRETS",
+            Self::EarnClaimRewards => "ACTIVITY_TYPE_EARN_CLAIM_REWARDS",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -5696,6 +5721,7 @@ impl ActivityType {
             "ACTIVITY_TYPE_CREATE_SWAP_QUOTE_V2" => Some(Self::CreateSwapQuoteV2),
             "ACTIVITY_TYPE_EXECUTE_SWAP_V3" => Some(Self::ExecuteSwapV3),
             "ACTIVITY_TYPE_DELETE_SECRETS" => Some(Self::DeleteSecrets),
+            "ACTIVITY_TYPE_EARN_CLAIM_REWARDS" => Some(Self::EarnClaimRewards),
             _ => None,
         }
     }

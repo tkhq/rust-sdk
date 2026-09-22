@@ -344,6 +344,10 @@
       "intentType": "ClaimEarnFeesIntent",
       "resultType": "ClaimEarnFeesResult"
     },
+    "ACTIVITY_TYPE_EARN_CLAIM_REWARDS": {
+      "intentType": "EarnClaimRewardsIntent",
+      "resultType": "EarnClaimRewardsResult"
+    },
     "ACTIVITY_TYPE_EARN_DEPLOY_WRAPPER": {
       "intentType": "EarnDeployWrapperIntent",
       "resultType": "EarnDeployWrapperResult"

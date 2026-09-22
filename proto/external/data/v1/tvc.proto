@@ -202,6 +202,15 @@ message TvcOperator {
   ];
   Timestamp created_at = 4 [(google.api.field_behavior) = REQUIRED];
   Timestamp updated_at = 5 [(google.api.field_behavior) = REQUIRED];
+  string encrypt_public_key = 6 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Encryption public key for this TVC Operator."}
+  ];
+  string sign_public_key = 7 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Signing public key for this TVC Operator."}
+  ];
+  optional string key_source = 8 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Source of the operator keys: EXTERNAL_KEY or ORG_WALLET_ACCOUNT. Absent for legacy operators whose source was not recorded."}];
 }
 
 message TvcManifest {
@@ -279,4 +288,13 @@ message LogLine {
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "One log line, exactly as the application printed it (without the trailing newline)"}
   ];
   Timestamp ts = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "When the line was logged. Stable across replays, so lines can be chronologically merged across pods"}];
+}
+
+message TvcQuorumKey {
+  string id = 1 [(google.api.field_behavior) = REQUIRED];
+  string public_key = 2 [(google.api.field_behavior) = REQUIRED];
+  uint32 threshold = 3 [(google.api.field_behavior) = REQUIRED];
+  repeated string operator_ids = 4 [(google.api.field_behavior) = REQUIRED];
+  Timestamp created_at = 5 [(google.api.field_behavior) = REQUIRED];
+  Timestamp updated_at = 6 [(google.api.field_behavior) = REQUIRED];
 }
