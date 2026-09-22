@@ -3786,6 +3786,46 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
+    /// Claim Earn rewards
+    ///
+    /// Claim the Merkl protocol rewards attributed to a wallet's Earn positions. The claim is signed by the wallet itself and every reward token is transferred to it; see ListEarnRewards for what is claimable.
+    pub async fn earn_claim_rewards(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::EarnClaimRewardsIntent,
+    ) -> Result<ActivityResult<immutable_activity::EarnClaimRewardsResult>, TurnkeyClientError>
+    {
+        let request = external_activity::EarnClaimRewardsRequest {
+            r#type: "ACTIVITY_TYPE_EARN_CLAIM_REWARDS".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(&request, "/public/v1/submit/earn_claim_rewards".to_string())
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::EarnClaimRewardsResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
     /// Get Earn vault catalog
     ///
     /// Get the catalog of all wrappable yield vaults across supported chains, enriched with live TVL and APY. Annotates which vaults the organization has already enabled.
@@ -3817,6 +3857,16 @@ impl<S: Stamp> TurnkeyClient<S> {
         request: coordinator::ListEarnPositionsRequest,
     ) -> Result<coordinator::ListEarnPositionsResponse, TurnkeyClientError> {
         self.process_request(&request, "/public/v1/query/list_earn_positions".to_string())
+            .await
+    }
+    /// List Earn rewards
+    ///
+    /// List the protocol rewards (e.g. MORPHO and third-party campaign tokens, distributed off-chain via Merkl) attributed to a wallet: claimable, lifetime claimed, and pending amounts per reward token.
+    pub async fn list_earn_rewards(
+        &self,
+        request: coordinator::ListEarnRewardsRequest,
+    ) -> Result<coordinator::ListEarnRewardsResponse, TurnkeyClientError> {
+        self.process_request(&request, "/public/v1/query/list_earn_rewards".to_string())
             .await
     }
     /// Get Earn withdraw status
@@ -3855,6 +3905,19 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(
             &request,
             "/public/v1/query/get_claim_earn_fees_status".to_string(),
+        )
+        .await
+    }
+    /// Get Earn claim rewards status
+    ///
+    /// Poll the status of a rewards claim by its claim_request_id.
+    pub async fn get_earn_claim_rewards_status(
+        &self,
+        request: coordinator::GetEarnClaimRewardsStatusRequest,
+    ) -> Result<coordinator::GetEarnClaimRewardsStatusResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/get_earn_claim_rewards_status".to_string(),
         )
         .await
     }
@@ -4183,6 +4246,29 @@ impl<S: Stamp> TurnkeyClient<S> {
             status: activity.status,
             app_proofs: activity.app_proofs,
         })
+    }
+    /// List TVC quorum keys
+    ///
+    /// List all hosted TVC quorum keys within an organization, newest first.
+    pub async fn get_tvc_quorum_keys(
+        &self,
+        request: coordinator::GetTvcQuorumKeysRequest,
+    ) -> Result<coordinator::GetTvcQuorumKeysResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/list_tvc_quorum_keys".to_string(),
+        )
+        .await
+    }
+    /// List TVC operators
+    ///
+    /// List all TVC operators within an organization, newest first.
+    pub async fn get_tvc_operators(
+        &self,
+        request: coordinator::GetTvcOperatorsRequest,
+    ) -> Result<coordinator::GetTvcOperatorsResponse, TurnkeyClientError> {
+        self.process_request(&request, "/public/v1/query/list_tvc_operators".to_string())
+            .await
     }
     /// List TVC Apps
     ///

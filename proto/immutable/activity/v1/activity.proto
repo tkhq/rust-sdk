@@ -198,6 +198,7 @@ enum ActivityType {
   ACTIVITY_TYPE_CREATE_SWAP_QUOTE_V2 = 167;
   ACTIVITY_TYPE_EXECUTE_SWAP_V3 = 168;
   ACTIVITY_TYPE_DELETE_SECRETS = 169;
+  ACTIVITY_TYPE_EARN_CLAIM_REWARDS = 170;
 }
 
 // The current processing status of an Activity.
@@ -398,6 +399,7 @@ message Intent {
     CreateSwapQuoteIntentV2 create_swap_quote_intent_v2 = 168;
     ExecuteSwapIntentV3 execute_swap_intent_v3 = 169;
     DeleteSecretsIntent delete_secrets_intent = 170;
+    EarnClaimRewardsIntent earn_claim_rewards_intent = 171;
   }
   reserved 148;
   reserved "upsert_earn_client_fee_config_intent";
@@ -1600,7 +1602,7 @@ message SolSendTransactionIntent {
   string unsigned_transaction = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      description: "Base64-encoded serialized unsigned Solana transaction"
+      description: "Hex-encoded serialized unsigned Solana transaction in full wire format. Legacy/V0 transactions allow 1232 bytes. V1 allows 4096 bytes with up to 12 trailing 64-byte signature slots, including the paymaster for sponsored transactions. Fill unsigned slots with zeroes."
       title: ""
     }
   ];
@@ -1653,7 +1655,7 @@ message SolSendTransactionIntentV2 {
   string unsigned_transaction = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      description: "Hex-encoded serialized unsigned Solana transaction (full wire format with zeroed signature placeholders)"
+      description: "Hex-encoded serialized unsigned Solana transaction in full wire format. Legacy/V0 transactions allow 1232 bytes. V1 allows 4096 bytes with up to 12 trailing 64-byte signature slots, including the paymaster for sponsored transactions. Fill unsigned slots with zeroes."
       title: ""
     }
   ];
@@ -1662,7 +1664,7 @@ message SolSendTransactionIntentV2 {
   repeated string sign_withs = 2 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      description: "Ordered Solana signer addresses Turnkey signs with. Between 1 and 16 signers. For sponsored transactions this must list every required signer of the transaction in transaction order."
+      description: "Ordered Solana signer addresses Turnkey signs with. Between 1 and 16 signers for legacy/V0, or up to 12 for V1 (11 when sponsored). For sponsored transactions this must list every required signer of the transaction in transaction order."
       title: ""
     }
   ];
@@ -1743,7 +1745,9 @@ message EthSendTransactionIntent {
         "eip155:42431",
         "eip155:421614",
         "eip155:4663",
-        "eip155:46630"
+        "eip155:46630",
+        "eip155:5042",
+        "eip155:5042002"
       ]
     }
   ];
@@ -1882,7 +1886,9 @@ message EthSendTransactionIntentV2 {
         "eip155:42431",
         "eip155:421614",
         "eip155:4663",
-        "eip155:46630"
+        "eip155:46630",
+        "eip155:5042",
+        "eip155:5042002"
       ]
     }
   ];
@@ -3005,6 +3011,35 @@ message ClaimEarnFeesIntent {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
       description: "Address of the deployed Earn wrapper to claim fees for. Must be one of the org's deployed wrappers."
+      title: ""
+    }
+  ];
+}
+
+message EarnClaimRewardsIntent {
+  // @inject_tag: validate:"required"
+  string sign_with = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "A Turnkey-managed wallet address the rewards are attributed to. The claim transaction is signed by this wallet and the Merkl Distributor transfers every reward token to it."
+      title: ""
+    }
+  ];
+
+  // @inject_tag: validate:"required"
+  string chain_caip2 = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "CAIP-2 chain to claim rewards on (e.g. 'eip155:8453'). Rewards accrue per chain; see ListEarnRewards."
+      title: ""
+    }
+  ];
+
+  // If true, Turnkey acts as fee payer via Gas Station.
+  optional bool sponsor = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Whether to sponsor this transaction via Gas Station."
       title: ""
     }
   ];
@@ -4792,7 +4827,9 @@ message EthSendRawTransactionIntent {
         "eip155:42431",
         "eip155:421614",
         "eip155:4663",
-        "eip155:46630"
+        "eip155:46630",
+        "eip155:5042",
+        "eip155:5042002"
       ]
     }
   ];
@@ -5345,6 +5382,7 @@ message Result {
     DeleteVelocityControlResult delete_velocity_control_result = 146;
     immutable.activity.billing.UpdatePaymentMethodResult update_payment_method_result = 147;
     DeleteSecretsResult delete_secrets_result = 148;
+    EarnClaimRewardsResult earn_claim_rewards_result = 149;
   }
   reserved 127;
   reserved "upsert_earn_client_fee_config_result";
@@ -6532,6 +6570,13 @@ message ClaimEarnFeesResult {
   string claim_request_id = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Identifier to poll claim status and tx hash via GetClaimEarnFeesStatus."}
+  ];
+}
+
+message EarnClaimRewardsResult {
+  string claim_request_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Identifier to poll claim status and tx hash via GetEarnClaimRewardsStatus."}
   ];
 }
 
@@ -7894,7 +7939,9 @@ message EthUndelegate7702Intent {
         "eip155:42161",
         "eip155:421614",
         "eip155:4663",
-        "eip155:46630"
+        "eip155:46630",
+        "eip155:5042",
+        "eip155:5042002"
       ]
     }
   ];

@@ -1174,6 +1174,10 @@ pub struct TvcOperator {
     pub created_at: ::core::option::Option<Timestamp>,
     #[serde(default)]
     pub updated_at: ::core::option::Option<Timestamp>,
+    pub encrypt_public_key: ::prost::alloc::string::String,
+    pub sign_public_key: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub key_source: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[serde_with::serde_as]
@@ -1223,6 +1227,22 @@ pub struct LogLine {
     pub content: ::prost::alloc::string::String,
     #[serde(default)]
     pub ts: ::core::option::Option<Timestamp>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct TvcQuorumKey {
+    pub id: ::prost::alloc::string::String,
+    pub public_key: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub threshold: u32,
+    #[serde(default)]
+    pub operator_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub created_at: ::core::option::Option<Timestamp>,
+    #[serde(default)]
+    pub updated_at: ::core::option::Option<Timestamp>,
 }
 /// ProvisioningState describes the observed quorum-key provisioning progress of
 /// a TVC deployment.
