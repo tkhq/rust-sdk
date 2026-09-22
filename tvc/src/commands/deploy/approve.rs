@@ -766,6 +766,9 @@ impl TryFrom<TvcOperator> for DeploymentOperator {
             public_key,
             created_at: _,
             updated_at: _,
+            encrypt_public_key: _,
+            sign_public_key: _,
+            key_source: _,
         } = operator;
         let id = id
             .parse()

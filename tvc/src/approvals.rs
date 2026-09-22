@@ -97,6 +97,9 @@ impl TryFrom<TvcOperatorApproval> for OperatorApproval {
             public_key,
             created_at: _,
             updated_at: _,
+            encrypt_public_key: _,
+            sign_public_key: _,
+            key_source: _,
         } = operator;
 
         let operator_id = operator_id.parse::<Uuid>().map_err(|source| {
@@ -470,6 +473,9 @@ mod tests {
                 public_key,
                 created_at: None,
                 updated_at: None,
+                encrypt_public_key: String::new(),
+                sign_public_key: String::new(),
+                key_source: None,
             }),
             approval: signature,
             created_at: None,
