@@ -40,16 +40,9 @@ const TARGET_VERSION: u16 = 1;
 /// crash window leaves either the untouched original or its copy.
 pub async fn run() -> Result<ConfigDowngraded> {
     let config_path = config_file_path()?;
-
-    let sibling = |suffix: &str| {
-        let mut name = config_path.as_os_str().to_owned();
-        name.push(suffix);
-        PathBuf::from(name)
-    };
-
-    let fence_path = sibling(".backup");
-    let backup_path = sibling(".v2");
-    let staging_path = sibling(".tmp");
+    let fence_path = config_path.with_added_extension("backup");
+    let backup_path = config_path.with_added_extension("v2");
+    let staging_path = config_path.with_added_extension("tmp");
 
     if fence_path.exists() {
         bail!(

@@ -60,6 +60,8 @@ Resolution order:
 
 For interactive/local setup, `tvc login --org <alias> --api-base-url <url>` persists a profile to disk. Env vars always win over disk config when all three are present.
 
+`tvc profile delete` keeps a key directory when another saved profile still references a key inside it.
+
 Credentials cannot be created non-interactively: `tvc login`'s key generation needs a human (TTY prompts plus manual dashboard registration). If neither env vars nor a profile are provisioned, stop and ask the user, do not retry `tvc login`.
 
 ## Output contract (read this before parsing anything)
