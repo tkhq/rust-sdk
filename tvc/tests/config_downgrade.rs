@@ -118,6 +118,65 @@ fn downgrades_a_v2_config_in_place_and_keeps_the_v2_copy() {
 }
 
 #[test]
+fn deleting_a_downgraded_uuid_profile_keeps_keys_used_by_another_profile() {
+    let temp = TempDir::new().unwrap();
+    let org_dir = turnkey_dir(temp.path()).join("orgs").join(ORG_ID);
+    fs::create_dir_all(&org_dir).unwrap();
+    fs::write(org_dir.join("api_key.json"), "shared api key").unwrap();
+    fs::write(org_dir.join("operator.json"), "shared operator key").unwrap();
+    write_config(
+        temp.path(),
+        &format!(
+            r#"
+version = 2
+active_org = "{ORG_ID}"
+
+[aliases]
+{ORG_ID} = "{ORG_ID}"
+rich = "{ORG_ID}"
+
+[orgs.{ORG_ID}]
+api_key_path = "{api_key}"
+default_operator_kind = "local"
+
+[[orgs.{ORG_ID}.operators]]
+name = "default"
+kind = "local"
+key_path = "{operator_key}"
+"#,
+            api_key = org_dir.join("api_key.json").display(),
+            operator_key = org_dir.join("operator.json").display(),
+        ),
+    );
+
+    downgrade(temp.path()).success();
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env("TVC_NON_INTERACTIVE", "1")
+        .args(["profile", "delete", "--org", ORG_ID, "--yes"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Do not revoke it"))
+        .stderr(predicate::str::contains("still used by profile 'rich'"));
+
+    assert_eq!(
+        fs::read_to_string(org_dir.join("api_key.json")).unwrap(),
+        "shared api key"
+    );
+    assert_eq!(
+        fs::read_to_string(org_dir.join("operator.json")).unwrap(),
+        "shared operator key"
+    );
+    let saved: toml::Table =
+        toml::from_str(&fs::read_to_string(config_path(temp.path())).unwrap()).unwrap();
+    assert!(saved["orgs"].get(ORG_ID).is_none());
+    assert_eq!(
+        saved["orgs"]["rich"]["api_key_path"].as_str(),
+        Some(org_dir.join("api_key.json").to_str().unwrap())
+    );
+}
+
+#[test]
 fn json_output_reports_config_downgraded() {
     let temp = TempDir::new().unwrap();
     write_config(temp.path(), &v2_config(temp.path()));
