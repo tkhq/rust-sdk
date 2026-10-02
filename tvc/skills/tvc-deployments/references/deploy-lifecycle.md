@@ -43,7 +43,7 @@ tvc app create --config-file app.json --message-format json   # reason: app_crea
 `app create` output carries `appId`, `manifestSetId`, and `manifestSetOperatorIds`. Save the `appId` **and** the `manifestSetOperatorIds`: the latter are the operator ids allowed to approve this app's deployments, this output is the only place that returns them, and step 4 needs one.
 
 - `--config-file` / `-c` is **required** for `app create` (env `TVC_APP_CONFIG`).
-- `--no-operator-reuse` forces a fresh operator set instead of reusing an existing one.
+- `--no-operator-reuse` stops the CLI from swapping an existing operator id into the config before sending it. The backend still returns the existing operator when the key *and* operator name match, and reuses an operator set with identical members, threshold, and name; a new operator record appears only when the operator name differs.
 
 ## 3. Create a deployment
 
@@ -71,7 +71,8 @@ tvc deploy approve \
   --message-format json
 ```
 
-- `--operator-id` must be one of the app's `manifestSetOperatorIds` from the `app create` output. The `operatorId` printed by `operator create` qualifies only if that operator's key was actually wired into the manifest set. Omitting the flag works when the CLI knows exactly one candidate operator; with several, non-interactive mode fails asking for `--operator-id`.
+- `--operator-id` should be one of the app's `manifestSetOperatorIds` from the `app create` output. The `operatorId` printed by `operator create` qualifies only if that operator's key was actually wired into the manifest set. Omitting the flag works when the CLI knows exactly one candidate operator; with several, non-interactive mode fails asking for `--operator-id`.
+- The backend dedupes operators on public key plus operator name, so reusing a key under a *different* operator name in a new app gives it a new operator id. Passing an earlier app's id fails, but when `--deploy-id` is given the CLI looks the id up in the organization's operators and, when its key belongs to this deployment's manifest set, the `command_error` message names the right id: `operator <name> (<id>) has the same public key, pass --operator-id <id>`. Retry with that id; nothing is signed or posted on your behalf. When the id is unknown to the organization, or its key is not in the manifest set, the message instead ends with `manifest-set operators: <name> (<id>), ...`; pick one of those ids. The unknown-id message reads `operator ID <id> was not found in organization <org-id>`, where `<org-id>` is the organization the credentials are scoped to: an operator id from another organization is invisible here, so check `TVC_ORG_ID` / the active `tvc login` profile before assuming the id is wrong. This lookup needs the deployment, so with `--manifest` the id is posted as given.
 - Success: `reason: manifest_approval_posted`. Read its `quorumReached` field, which is a **nullable boolean, so treat it as tri-state**:
   - `true` — approval quorum is met; move on to polling `get-status`.
   - `false` — the deployment still needs more operator approvals before it can proceed; collect them via further `deploy approve` calls.
