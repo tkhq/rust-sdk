@@ -188,11 +188,12 @@ impl Run for Args {
                 };
             let explicit_selected = explicit_pair.is_some();
 
-            // Bind `--operator-id` to this deployment's manifest set. Operator
-            // records are minted per app, so an ID from another app can name a
-            // key this manifest set carries under a different ID. Such an ID
-            // is refused, but the organization's operator records reveal which
-            // manifest-set operator to pass instead.
+            // Bind `--operator-id` to this deployment's manifest set. The
+            // backend keys operator records on public key plus name, so one
+            // key reused under another name in another app carries a
+            // different ID there. Such an ID is refused, but the
+            // organization's operator records reveal which manifest-set
+            // operator to pass instead.
             let requested_approval_key = match (fetched.as_ref(), requested_operator_id) {
                 (Some(fetched), Some(operator_id)) => {
                     match fetched.operator_with_id(operator_id)? {
