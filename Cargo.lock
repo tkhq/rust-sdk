@@ -2708,9 +2708,9 @@ dependencies = [
 
 [[package]]
 name = "qos_client"
-version = "0.14.1"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dcb31eba79d3ab4533165b2a1832b212a7850c7ba514f946d03f3eb11b2a5231"
+checksum = "fe123899c909fc1dd31dcf0a89ba1bb0fad696164d29884e34008c4109b94f7b"
 dependencies = [
  "aws-nitro-enclaves-nsm-api",
  "borsh",
@@ -2733,9 +2733,9 @@ dependencies = [
 
 [[package]]
 name = "qos_core"
-version = "0.14.1"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6003cf9954f1890c6065faaf11150526a0035753b7dcafa492b74bb1eeaca315"
+checksum = "9317cea3f8ee83cfa422348f0708e3208067443278c9eb2fae2d8c409e3cf418"
 dependencies = [
  "aws-nitro-enclaves-nsm-api",
  "borsh",
@@ -2758,9 +2758,9 @@ dependencies = [
 
 [[package]]
 name = "qos_crypto"
-version = "0.14.1"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8cbbc2790bb3f9175fa6819860ff5c2c480f413275a8630143715488f46a067e"
+checksum = "7fa3ace40d33bac234bc83e13777268dbdbf716667b921f73305eaf83da0cffc"
 dependencies = [
  "rand 0.9.2",
  "sha2",
@@ -2771,18 +2771,18 @@ dependencies = [
 
 [[package]]
 name = "qos_hex"
-version = "0.14.1"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ce8ff826544cdba595de1e96d7c1158c380ff8775d9424a23a6be9380e38a79"
+checksum = "e93d654c3d1e0a9264aa284246311993aa5f63309daf5988ed7623eb02e57a57"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "qos_json"
-version = "0.14.1"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f6e579b3cf18c4a431dcf571e96161b2a48a969ec004d22e8f0316c18a55c32"
+checksum = "c07853e47a8f634ab05e841839c9b0ec8d02c7286c0d83a79c7ff14dc213d56a"
 dependencies = [
  "qos_hex",
  "serde",
@@ -2792,9 +2792,9 @@ dependencies = [
 
 [[package]]
 name = "qos_nsm"
-version = "0.14.1"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91a34ad6650a2e2dd308bcc2e1eed21123348baac3f25c14e397dfc7807ac7c3"
+checksum = "afe741f5a8cb8d7bee426eda43e44aa09ad42166fe47b976db974e8780e2101e"
 dependencies = [
  "aws-nitro-enclaves-cose",
  "aws-nitro-enclaves-nsm-api",
@@ -2811,9 +2811,9 @@ dependencies = [
 
 [[package]]
 name = "qos_p256"
-version = "0.14.1"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f99b975811441f64011a00010766cf7921eab8717b89ea5a3499a0005d8a9a93"
+checksum = "a044456faf2ee8923d53c52b8c1496d6d5eb941e5950c2aa48e642a67f8411ea"
 dependencies = [
  "aes-gcm",
  "borsh",
