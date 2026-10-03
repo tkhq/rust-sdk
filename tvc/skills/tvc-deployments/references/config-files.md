@@ -43,7 +43,7 @@ Almost every deploy field also has a CLI flag / env var; flags override the file
 | `--expected-pivot-digest` | `TVC_EXPECTED_PIVOT_DIGEST` | Expected digest of the pivot binary (integrity pin) |
 | `--pivot-path` | `TVC_PIVOT_PATH` | Path to the pivot binary inside the image |
 | `--pivot-args` | `TVC_PIVOT_ARGS` | Args passed to the pivot (repeatable) |
-| `--qos-version` | `TVC_QOS_VERSION` | QOS version to run |
+| `--qos-version` | `TVC_QOS_VERSION` | QOS version to run; defaults to `0.15.0` for fresh scaffolds and flag-only deployments |
 | `--health-check-port` | `TVC_HEALTH_CHECK_PORT` | Port the health check probes |
 | *(none)* | *(none)* | `healthCheckType` is config-file only: `TVC_HEALTH_CHECK_TYPE_HTTP` (default) or `TVC_HEALTH_CHECK_TYPE_GRPC`. There is no flag and no env var, so it must be set in `deploy.json`. |
 | `--public-ingress-port` | `TVC_PUBLIC_INGRESS_PORT` | Public ingress port |

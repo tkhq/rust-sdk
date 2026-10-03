@@ -21,7 +21,7 @@ use uuid::Uuid;
 const PULL_SECRET_PLACEHOLDER: &str = "<REMOVE_ME_IF_PIVOT_CONTAINER_URL_IS_PUBLIC>";
 
 /// Default QOS version selected for new deployments.
-pub const DEFAULT_QOS_VERSION: &str = "0.12.1";
+pub const DEFAULT_QOS_VERSION: &str = "0.15.0";
 
 /// Deployment configuration loaded from JSON file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
