@@ -106,7 +106,7 @@ mod disk {
                     Ok(Self::V1(config))
                 }
                 Some(version) if version > CONFIG_VERSION => bail!(
-                    "config written by a newer tvc (version {version}); this tvc supports through version {CONFIG_VERSION}"
+                    "config written by a newer tvc (version {version}); this tvc supports through version {CONFIG_VERSION}; run `tvc config downgrade` to rewrite it for this release (the current file is kept as a copy)"
                 ),
                 Some(version) => bail!("unsupported tvc config version {version}"),
             }

@@ -161,7 +161,7 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) 
         )?;
         shell_eprintln!(
             ctx,
-            "    operator key files from disk. This cannot be undone."
+            "    operator key files from disk unless another profile uses the directory."
         )?;
         shell_eprintln!(
             ctx,
@@ -220,6 +220,11 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) 
         .ok()
         .flatten()
         .map(|key| key.public_key);
+    let shared_api_key_profile = config
+        .orgs
+        .iter()
+        .find(|(_, org)| org.api_key_path == removed.api_key_path)
+        .map(|(other_alias, _)| other_alias.clone());
 
     // The default layout stores both key files in the per-org directory, so a
     // default profile is removed by deleting that whole directory. Custom
@@ -242,19 +247,37 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) 
 
     let removed_dir = if uses_default_layout {
         let dir = default_org_dir(&alias)?;
-        match tokio::fs::remove_dir_all(&dir).await {
-            Ok(()) => Some(dir),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                shell_eprintln!(
-                    ctx,
-                    "WARNING: key directory was not on disk: {}",
-                    dir.display()
-                )?;
-                None
-            }
-            Err(e) => {
-                return Err(e)
-                    .with_context(|| format!("failed to delete key directory: {}", dir.display()));
+        let other_profile = config.orgs.iter().find(|(_, org)| {
+            org.api_key_path.starts_with(&dir)
+                || org.operators.iter().any(|operator| match &operator.kind {
+                    OperatorRecordKind::Local(local) => local.key_path.starts_with(&dir),
+                    OperatorRecordKind::Hosted(_) | OperatorRecordKind::Yubikey(_) => false,
+                })
+        });
+
+        if let Some((other_alias, _)) = other_profile {
+            shell_eprintln!(
+                ctx,
+                "WARNING: key directory {} is still used by profile '{other_alias}' and was NOT deleted.",
+                dir.display()
+            )?;
+            None
+        } else {
+            match tokio::fs::remove_dir_all(&dir).await {
+                Ok(()) => Some(dir),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    shell_eprintln!(
+                        ctx,
+                        "WARNING: key directory was not on disk: {}",
+                        dir.display()
+                    )?;
+                    None
+                }
+                Err(e) => {
+                    return Err(e).with_context(|| {
+                        format!("failed to delete key directory: {}", dir.display())
+                    });
+                }
             }
         }
     } else {
@@ -292,6 +315,7 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) 
         retained_yubikey_serials,
         dashboard_url: dashboard_url.to_string(),
         api_public_key,
+        shared_api_key_profile,
     }))
 }
 
@@ -1027,6 +1051,8 @@ pub struct ProfileDeleted {
     retained_yubikey_serials: Vec<YubiKeySerial>,
     dashboard_url: String,
     api_public_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    shared_api_key_profile: Option<String>,
 }
 
 impl Display for ProfileDeleted {
@@ -1054,22 +1080,34 @@ impl Display for ProfileDeleted {
             ));
         }
 
-        lines.extend([
-            String::new(),
-            "IMPORTANT: The API key may still be registered on the Turnkey dashboard.".to_string(),
-            "It will remain valid until it is manually removed. To remove it:".to_string(),
-            format!(
-                "  1. Go to {}/dashboard/v2/users and click your user",
-                self.dashboard_url
-            ),
-        ]);
+        if let Some(other_alias) = &self.shared_api_key_profile {
+            lines.extend([
+                String::new(),
+                format!("The API key is still used by profile '{other_alias}'."),
+                "Do not revoke it from the Turnkey dashboard while that profile needs it."
+                    .to_string(),
+            ]);
+        } else {
+            lines.extend([
+                String::new(),
+                "IMPORTANT: The API key may still be registered on the Turnkey dashboard."
+                    .to_string(),
+                "It will remain valid until it is manually removed. To remove it:".to_string(),
+                format!(
+                    "  1. Go to {}/dashboard/v2/users and click your user",
+                    self.dashboard_url
+                ),
+            ]);
 
-        match &self.api_public_key {
-            Some(public_key) => {
-                lines.push("  2. Delete the API key with public key:".to_string());
-                lines.push(format!("       {public_key}"));
+            match &self.api_public_key {
+                Some(public_key) => {
+                    lines.push("  2. Delete the API key with public key:".to_string());
+                    lines.push(format!("       {public_key}"));
+                }
+                None => {
+                    lines.push("  2. Delete the API key associated with this profile".to_string())
+                }
             }
-            None => lines.push("  2. Delete the API key associated with this profile".to_string()),
         }
 
         f.write_str(&lines.join("\n"))
