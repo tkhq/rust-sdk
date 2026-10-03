@@ -280,7 +280,7 @@ fn classify_turnkey_client_error(error: &TurnkeyClientError) -> Classification {
         TurnkeyClientError::MissingContentTypeHeader
         | TurnkeyClientError::HeaderToStrError(_)
         | TurnkeyClientError::HeaderFromStrError(_)
-        | TurnkeyClientError::UnexpectedMimeType(_)
+        | TurnkeyClientError::UnexpectedMimeType(_, _)
         | TurnkeyClientError::Decode(_, _)
         | TurnkeyClientError::ActivityFailed(_)
         | TurnkeyClientError::UnexpectedActivityStatus(_)
@@ -520,7 +520,10 @@ mod tests {
             TurnkeyClientError::MissingContentTypeHeader,
             TurnkeyClientError::HeaderToStrError("invalid header".to_string()),
             TurnkeyClientError::HeaderFromStrError("invalid MIME type".to_string()),
-            TurnkeyClientError::UnexpectedMimeType("text/plain".to_string()),
+            TurnkeyClientError::UnexpectedMimeType(
+                "text/plain".to_string(),
+                "success but not JSON".to_string(),
+            ),
             TurnkeyClientError::Decode("invalid JSON".to_string(), decode_error),
             TurnkeyClientError::MissingActivity,
             TurnkeyClientError::MissingResult,
