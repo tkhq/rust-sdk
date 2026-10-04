@@ -411,9 +411,9 @@ impl Run for Args {
                         );
                     }
 
-                    let pin = Pin::from(prompts::password(
-                        "YubiKey PIV PIN (touch the device each time it blinks)",
-                    )?);
+                    let pin = Pin::try_from(prompts::password(
+                        "Enter YubiKey PIV PIN and press Enter, then touch the device each time it blinks",
+                    )?)?;
 
                     OperatorSelection::Yubikey {
                         name: candidate.name,

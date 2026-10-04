@@ -61,9 +61,9 @@ impl Args {
         let mut yubikey = yubikey::open(serial)?;
         let signing = yubikey.certificate_slot(QosSlot::Signing)?;
         let key_agreement = yubikey.certificate_slot(QosSlot::KeyAgreement)?;
-        let pin = Pin::from(prompts::password(
-            "YubiKey PIV PIN (touch the device once for each certificate)",
-        )?);
+        let pin = Pin::try_from(prompts::password(
+            "Enter YubiKey PIV PIN and press Enter, then touch the device once for each certificate",
+        )?)?;
 
         let signing_certificate = signing.create_certificate(&mut yubikey, &pin)?;
         let key_agreement_certificate = key_agreement.create_certificate(&mut yubikey, &pin)?;
