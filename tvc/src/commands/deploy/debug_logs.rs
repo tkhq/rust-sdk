@@ -131,7 +131,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Result
     let auth = crate::client::build_client(&config).await?;
 
     let request = DebugLogQueryRequest {
-        organization_id: auth.org_id,
+        organization_id: auth.org_id.to_string(),
         deployment_id: args.deploy_id.to_string(),
         poll: args.poll,
         poll_interval_seconds: args.poll_interval_seconds,

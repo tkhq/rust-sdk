@@ -8,7 +8,6 @@
 
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
-use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use tempfile::{NamedTempFile, TempDir};
@@ -16,6 +15,7 @@ use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use tvc::config::turnkey::{
     Config, KeyCurve, OperatorKind, OperatorRecord, OrgConfig, StoredApiKey,
 };
+use uuid::Uuid;
 
 const NON_INTERACTIVE_ENV: &str = "TVC_NON_INTERACTIVE";
 const LOCAL_API_BASE_URL: &str = "http://127.0.0.1:1";
@@ -32,33 +32,30 @@ fn write_config(
     home: &TempDir,
     api_key_path: std::path::PathBuf,
     operator_key_path: std::path::PathBuf,
-    last_operator_ids: Vec<String>,
+    last_operator_ids: Vec<Uuid>,
 ) {
     let turnkey_dir = home.path().join(".config").join("turnkey");
     fs::create_dir_all(&turnkey_dir).unwrap();
 
-    let config = Config {
-        active_org: Some("test".to_string()),
-        orgs: HashMap::from([(
-            "test".to_string(),
-            OrgConfig {
-                id: "org-test".to_string(),
-                api_key_path,
-                api_base_url: LOCAL_API_BASE_URL.to_string(),
-                default_operator_kind: OperatorKind::Local,
-                operators: vec![OperatorRecord::local(operator_key_path)],
-                extra: toml::Table::new(),
-            },
-        )]),
-        yubikeys: Default::default(),
-        last_created_app_id: HashMap::new(),
-        last_operator_ids: HashMap::from([("test".to_string(), last_operator_ids)]),
-        extra: toml::Table::new(),
-    };
+    let org_id: Uuid = "10000000-0000-4000-8000-000000000001".parse().unwrap();
+    let mut config = Config::default();
+    config.orgs.insert(
+        org_id,
+        OrgConfig {
+            api_key_path,
+            api_base_url: LOCAL_API_BASE_URL.to_string(),
+            default_operator_kind: OperatorKind::Local,
+            operators: vec![OperatorRecord::local(operator_key_path)],
+            extra: toml::Table::new(),
+        },
+    );
+    config.aliases.bind("test".to_string(), org_id);
+    config.set_active_org(org_id).unwrap();
+    config.last_operator_ids.insert(org_id, last_operator_ids);
 
     fs::write(
         turnkey_dir.join("tvc.config.toml"),
-        format!("version = 1\n{}", toml::to_string_pretty(&config).unwrap()),
+        format!("version = 2\n{}", toml::to_string_pretty(&config).unwrap()),
     )
     .unwrap();
 }
@@ -248,8 +245,8 @@ fn app_init_interactive_conflicts_with_non_interactive_env() {
         ));
 }
 
-/// `deploy create` with no config file and no required fields can't prompt for
-/// the missing values, so it bails naming every field the user still has to set.
+/// `deploy create` with no config file requires --app-id up front; with it
+/// but nothing else, it bails naming every field the user still has to set.
 #[test]
 fn deploy_create_without_required_fields_bails_naming_each_field() {
     let temp = TempDir::new().unwrap();
@@ -261,7 +258,17 @@ fn deploy_create_without_required_fields_bails_naming_each_field() {
         .arg("create")
         .assert()
         .failure()
-        .stderr(predicate::str::contains("app_id"))
+        .stderr(predicate::str::contains("--app-id is a required argument"));
+
+    cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env(NON_INTERACTIVE_ENV, "1")
+        .arg("deploy")
+        .arg("create")
+        .arg("--app-id")
+        .arg("11111111-1111-4111-8111-111111111111")
+        .assert()
+        .failure()
         .stderr(predicate::str::contains("pivot_container_image_url"))
         .stderr(predicate::str::contains("pivot_path"))
         .stderr(predicate::str::contains("expected_pivot_digest"));
@@ -279,7 +286,7 @@ fn deploy_create_pull_secret_placeholder_bails_when_non_interactive() {
     // init-time sentinel that the user must resolve to null (public) or a real
     // encrypted secret (private).
     let config = r#"{
-        "appId": "file-app-id",
+        "appId": "33333333-3333-4333-8333-333333333333",
         "qosVersion": "file-qos",
         "pivotContainerImageUrl": "file-image",
         "pivotPath": "file-path",
@@ -347,8 +354,8 @@ fn approve_explicit_seed_does_not_inherit_a_saved_operator_id() {
         api_key_path.clone(),
         operator_key_path,
         vec![
-            "11111111-1111-4111-8111-111111111111".to_string(),
-            "22222222-2222-4222-8222-222222222222".to_string(),
+            "11111111-1111-4111-8111-111111111111".parse().unwrap(),
+            "22222222-2222-4222-8222-222222222222".parse().unwrap(),
         ],
     );
     write_api_key(&api_key_path);

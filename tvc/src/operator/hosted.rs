@@ -162,7 +162,7 @@ impl TryFrom<CreateOperatorRequestResult> for OperatorRecord {
 /// Its keys are parsed exactly once, at resolution.
 #[cfg_attr(test, derive(Debug, PartialEq, Eq))]
 pub(crate) struct ResolvedHostedOperator {
-    organization_id: String,
+    organization_id: Uuid,
     name: String,
     operator_id: Uuid,
     keys: OperatorKeyPair,
@@ -171,7 +171,7 @@ pub(crate) struct ResolvedHostedOperator {
 impl ResolvedHostedOperator {
     /// Parse and validate a hosted registry record into a resolved operator.
     pub(crate) fn from_registry(
-        organization_id: String,
+        organization_id: Uuid,
         name: &str,
         record: &HostedOperatorRecord,
     ) -> Result<Self> {
@@ -210,8 +210,8 @@ impl ResolvedHostedOperator {
         })
     }
 
-    pub(crate) fn organization_id(&self) -> &str {
-        &self.organization_id
+    pub(crate) fn organization_id(&self) -> Uuid {
+        self.organization_id
     }
 
     pub(crate) fn name(&self) -> &str {
@@ -242,7 +242,7 @@ impl Config {
         &self,
         operator_id: &Uuid,
     ) -> Result<Option<ResolvedHostedOperator>> {
-        let Some((_, org)) = self.active_org_config() else {
+        let Some((org_id, org)) = self.active_org_config() else {
             return Ok(None);
         };
 
@@ -253,9 +253,7 @@ impl Config {
         match (matches.next(), matches.next()) {
             (None, _) => Ok(None),
             (Some((name, hosted)), None) => Ok(Some(ResolvedHostedOperator::from_registry(
-                org.id.clone(),
-                name,
-                hosted,
+                org_id, name, hosted,
             )?)),
             (Some(_), Some(_)) => bail!("multiple hosted operators have ID {operator_id}"),
         }
@@ -266,12 +264,15 @@ impl Config {
         &self,
         operator_id: &Uuid,
     ) -> Result<ResolvedHostedOperator> {
-        let (alias, _) = self
+        let (org_id_active, _) = self
             .active_org_config()
             .context("No active organization. Run `tvc login` first.")?;
 
         self.find_hosted_operator(operator_id)?.ok_or_else(|| {
-            anyhow!("hosted operator ID '{operator_id}' was not found in org '{alias}'")
+            anyhow!(
+                "hosted operator ID '{operator_id}' was not found in org '{}'",
+                self.display_name(org_id_active)
+            )
         })
     }
 
@@ -318,7 +319,7 @@ impl Signer for HostedSigner {
             let result = self
                 .auth
                 .client
-                .sign_raw_payload(self.auth.org_id.clone(), timestamp_ms()?, intent)
+                .sign_raw_payload(self.auth.org_id.to_string(), timestamp_ms()?, intent)
                 .await
                 .map_err(|error| {
                     hosted_activity_error("sign manifest with hosted operator", error)
@@ -370,8 +371,8 @@ mod tests {
         LocalOperatorRecord, OperatorKind, OrgConfig, SelectHostedOperatorError,
     };
     use crate::operator::OperatorPublicKeyParseError;
+    use indexmap::IndexMap;
     use qos_p256::P256Pair;
-    use std::collections::HashMap;
     use std::path::PathBuf;
 
     const OPERATOR_ID: &str = "11111111-1111-4111-8111-111111111111";
@@ -396,12 +397,11 @@ mod tests {
     }
 
     fn config_with_operators(operators: Vec<OperatorRecord>) -> Config {
-        Config {
-            active_org: Some("active".to_string()),
-            orgs: HashMap::from([(
-                "active".to_string(),
+        let mut config = Config {
+            active_org: Some(Uuid::from_u128(0xA1)),
+            orgs: IndexMap::from([(
+                Uuid::from_u128(0xA1),
                 OrgConfig {
-                    id: "org-id".to_string(),
                     api_key_path: PathBuf::from("api-key.json"),
                     api_base_url: "https://api.turnkey.com".to_string(),
                     default_operator_kind: OperatorKind::Local,
@@ -410,7 +410,11 @@ mod tests {
                 },
             )]),
             ..Config::default()
-        }
+        };
+        config
+            .aliases
+            .bind("active".to_string(), Uuid::from_u128(0xA1));
+        config
     }
 
     fn hosted_operator(name: &str, record: HostedOperatorRecord) -> OperatorRecord {
@@ -439,7 +443,7 @@ mod tests {
         let record = hosted_record();
         let operator_id = Uuid::parse_str(OPERATOR_ID).unwrap();
         let expected = ResolvedHostedOperator {
-            organization_id: "org-id".to_string(),
+            organization_id: Uuid::from_u128(0xA1),
             name: "hosted".to_string(),
             operator_id,
             keys: OperatorKeyPair {
@@ -486,10 +490,9 @@ mod tests {
         );
 
         let mut cross_org = config_with_operators(Vec::new());
-        let mut inactive_org = cross_org.orgs["active"].clone();
-        inactive_org.id = "inactive-org-id".to_string();
+        let mut inactive_org = cross_org.orgs[&Uuid::from_u128(0xA1)].clone();
         inactive_org.operators = vec![hosted_operator("hosted", hosted_record())];
-        cross_org.orgs.insert("inactive".to_string(), inactive_org);
+        cross_org.orgs.insert(Uuid::from_u128(0x1AC), inactive_org);
         assert_eq!(
             cross_org
                 .resolve_hosted_operator_encrypt_key(&operator_id)
@@ -538,7 +541,7 @@ mod tests {
             }),
         };
         let config = config_with_operators(vec![local, hosted_operator("hosted", hosted_record())]);
-        let org = &config.orgs["active"];
+        let org = &config.orgs[&Uuid::from_u128(0xA1)];
 
         let (name, hosted) = org.select_hosted_operator().unwrap();
 
@@ -549,7 +552,7 @@ mod tests {
     #[test]
     fn selecting_a_hosted_operator_requires_one_to_exist() {
         let config = config_with_operators(Vec::new());
-        let org = &config.orgs["active"];
+        let org = &config.orgs[&Uuid::from_u128(0xA1)];
 
         assert!(matches!(
             org.select_hosted_operator(),
@@ -563,7 +566,7 @@ mod tests {
             hosted_operator("first", hosted_record()),
             hosted_operator("second", hosted_record()),
         ]);
-        let org = &config.orgs["active"];
+        let org = &config.orgs[&Uuid::from_u128(0xA1)];
 
         assert!(matches!(
             org.select_hosted_operator(),
@@ -575,12 +578,11 @@ mod tests {
     fn hosted_operator_lookup_is_scoped_to_active_organization() {
         let operator_id = Uuid::parse_str(OPERATOR_ID).unwrap();
         let config = Config {
-            active_org: Some("active".to_string()),
-            orgs: HashMap::from([
+            active_org: Some(Uuid::from_u128(0xAC)),
+            orgs: IndexMap::from([
                 (
-                    "active".to_string(),
+                    Uuid::from_u128(0xAC),
                     OrgConfig {
-                        id: "active-org".to_string(),
                         api_key_path: "active-api.json".into(),
                         api_base_url: "https://api.turnkey.com".to_string(),
                         default_operator_kind: OperatorKind::Local,
@@ -589,9 +591,8 @@ mod tests {
                     },
                 ),
                 (
-                    "inactive".to_string(),
+                    Uuid::from_u128(0x1AC),
                     OrgConfig {
-                        id: "inactive-org".to_string(),
                         api_key_path: "inactive-api.json".into(),
                         api_base_url: "https://api.turnkey.com".to_string(),
                         default_operator_kind: OperatorKind::Hosted,

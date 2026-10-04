@@ -48,7 +48,7 @@ mod tests {
 
     #[test]
     fn port_summary_explains_shared_port() {
-        let config = DeployConfig::template(None);
+        let config = DeployConfig::template(Default::default());
 
         let summary = format_port_summary(&config);
 
@@ -61,7 +61,7 @@ mod tests {
 
     #[test]
     fn port_summary_explains_split_ports() {
-        let mut config = DeployConfig::template(None);
+        let mut config = DeployConfig::template(Default::default());
         config.public_ingress_port = 8080;
         config.health_check_port = 9090;
 

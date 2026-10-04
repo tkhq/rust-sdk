@@ -12,6 +12,7 @@ use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use turnkey_client::TurnkeyClientError;
+use uuid::Uuid;
 
 /// Cap on rendered error messages. Large enough for any real API error body
 /// (typical Turnkey error JSON is < 1 KB); small enough that a runaway body
@@ -49,7 +50,7 @@ impl MissingResource {
 pub struct NotFoundInOrganization {
     resource: &'static str,
     id: String,
-    organization_id: String,
+    organization_id: Uuid,
     #[source]
     source: TurnkeyClientError,
 }
@@ -58,13 +59,13 @@ impl NotFoundInOrganization {
     pub fn new(
         resource: &'static str,
         id: impl Into<String>,
-        organization_id: impl Into<String>,
+        organization_id: Uuid,
         source: TurnkeyClientError,
     ) -> Self {
         Self {
             resource,
             id: id.into(),
-            organization_id: organization_id.into(),
+            organization_id,
             source,
         }
     }
@@ -381,7 +382,7 @@ mod tests {
         anyhow::Error::new(NotFoundInOrganization::new(
             "deployment",
             "abc-123",
-            "org-1",
+            "11111111-1111-4111-8111-111111111111".parse().unwrap(),
             TurnkeyClientError::UnexpectedHttpStatus(404, body.to_string()),
         ))
     }
@@ -398,7 +399,7 @@ mod tests {
     fn not_found_in_organization_names_the_org_and_keeps_the_response_chain() {
         assert_eq!(
             render_error_chain(&not_found_in_organization(r#"{"message":"missing"}"#)),
-            r#"cannot find deployment abc-123 in organization org-1: HTTP response was not successful: 404 ({"message":"missing"})"#
+            r#"cannot find deployment abc-123 in organization 11111111-1111-4111-8111-111111111111: HTTP response was not successful: 404 ({"message":"missing"})"#
         );
     }
 

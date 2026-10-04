@@ -3,13 +3,13 @@
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
 use qos_p256::P256Pair;
-use std::collections::HashMap;
 use std::path::Path;
 use tempfile::TempDir;
 use tvc::config::app::KNOWN_QUORUM_KEY;
 use tvc::config::turnkey::{
     Config, HostedOperatorRecord, OperatorKind, OperatorRecord, OperatorRecordKind, OrgConfig,
 };
+use uuid::Uuid;
 
 const NON_INTERACTIVE_ENV: &str = "TVC_NON_INTERACTIVE";
 
@@ -23,53 +23,50 @@ fn write_two_candidate_config(home: &Path) -> String {
     let composite = hex::encode(P256Pair::generate().unwrap().public_key().to_bytes());
     let (encrypt_public_key, sign_public_key) = composite.split_at(composite.len() / 2);
 
-    let config = Config {
-        active_org: Some("hosted-org".to_string()),
-        orgs: HashMap::from([(
-            "hosted-org".to_string(),
-            OrgConfig {
-                id: "44444444-4444-4444-8444-444444444444".to_string(),
-                api_key_path: turnkey_dir.join("orgs/hosted-org/api_key.json"),
-                api_base_url: "http://127.0.0.1:1".to_string(),
-                default_operator_kind: OperatorKind::Hosted,
-                operators: vec![
-                    OperatorRecord {
-                        name: "hosted-op".to_string(),
-                        kind: OperatorRecordKind::Hosted(HostedOperatorRecord {
-                            operator_id: "11111111-1111-4111-8111-111111111111".parse().unwrap(),
-                            wallet_id: "22222222-2222-4222-8222-222222222222".parse().unwrap(),
-                            path: "m/5527107'/0'/0'".to_string(),
-                            encrypt_public_key: encrypt_public_key.to_string(),
-                            sign_public_key: sign_public_key.to_string(),
-                            extra: toml::Table::new(),
-                        }),
-                    },
-                    OperatorRecord {
-                        name: "hosted-op-2".to_string(),
-                        kind: OperatorRecordKind::Hosted(HostedOperatorRecord {
-                            operator_id: "33333333-3333-4333-8333-333333333333".parse().unwrap(),
-                            wallet_id: "55555555-5555-4555-8555-555555555555".parse().unwrap(),
-                            path: "m/5527107'/0'/0'".to_string(),
-                            encrypt_public_key: encrypt_public_key.to_string(),
-                            sign_public_key: sign_public_key.to_string(),
-                            extra: toml::Table::new(),
-                        }),
-                    },
-                ],
-                extra: toml::Table::new(),
-            },
-        )]),
-        yubikeys: Default::default(),
-        last_created_app_id: HashMap::new(),
-        last_operator_ids: HashMap::from([(
-            "hosted-org".to_string(),
-            vec!["66666666-6666-4666-8666-666666666666".to_string()],
-        )]),
-        extra: toml::Table::new(),
-    };
+    let org_id: Uuid = "44444444-4444-4444-8444-444444444444".parse().unwrap();
+    let mut config = Config::default();
+    config.orgs.insert(
+        org_id,
+        OrgConfig {
+            api_key_path: turnkey_dir.join("orgs/hosted-org/api_key.json"),
+            api_base_url: "http://127.0.0.1:1".to_string(),
+            default_operator_kind: OperatorKind::Hosted,
+            operators: vec![
+                OperatorRecord {
+                    name: "hosted-op".to_string(),
+                    kind: OperatorRecordKind::Hosted(HostedOperatorRecord {
+                        operator_id: "11111111-1111-4111-8111-111111111111".parse().unwrap(),
+                        wallet_id: "22222222-2222-4222-8222-222222222222".parse().unwrap(),
+                        path: "m/5527107'/0'/0'".to_string(),
+                        encrypt_public_key: encrypt_public_key.to_string(),
+                        sign_public_key: sign_public_key.to_string(),
+                        extra: toml::Table::new(),
+                    }),
+                },
+                OperatorRecord {
+                    name: "hosted-op-2".to_string(),
+                    kind: OperatorRecordKind::Hosted(HostedOperatorRecord {
+                        operator_id: "33333333-3333-4333-8333-333333333333".parse().unwrap(),
+                        wallet_id: "55555555-5555-4555-8555-555555555555".parse().unwrap(),
+                        path: "m/5527107'/0'/0'".to_string(),
+                        encrypt_public_key: encrypt_public_key.to_string(),
+                        sign_public_key: sign_public_key.to_string(),
+                        extra: toml::Table::new(),
+                    }),
+                },
+            ],
+            extra: toml::Table::new(),
+        },
+    );
+    config.aliases.bind("hosted-org".to_string(), org_id);
+    config.set_active_org(org_id).unwrap();
+    config.last_operator_ids.insert(
+        org_id,
+        vec!["66666666-6666-4666-8666-666666666666".parse().unwrap()],
+    );
     std::fs::write(
         turnkey_dir.join("tvc.config.toml"),
-        format!("version = 1\n{}", toml::to_string_pretty(&config).unwrap()),
+        format!("version = 2\n{}", toml::to_string_pretty(&config).unwrap()),
     )
     .unwrap();
 

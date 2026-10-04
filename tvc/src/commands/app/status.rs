@@ -36,7 +36,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Resul
     let app_id = args.app_id.to_string();
 
     let request = GetAppStatusRequest {
-        organization_id: auth.org_id.clone(),
+        organization_id: auth.org_id.to_string(),
         app_id: app_id.clone(),
     };
 

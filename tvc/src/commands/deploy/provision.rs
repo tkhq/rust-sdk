@@ -78,7 +78,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome
 
     let operator = config.resolve_hosted_operator(&operator_id)?;
     let auth = build_client(&config).await?;
-    ensure_authenticated_org(&auth.org_id, operator.organization_id())?;
+    ensure_authenticated_org(auth.org_id, operator.organization_id())?;
 
     let deployment = fetch_tvc_deployment(&auth, deploy_id.to_string()).await?;
     let details = fetch_provisioning_details(&auth, &deploy_id).await?;
@@ -103,7 +103,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome
     )?;
     let result = auth
         .client
-        .re_encrypt_tvc_quorum_key_share(auth.org_id, timestamp_ms()?, intent)
+        .re_encrypt_tvc_quorum_key_share(auth.org_id.to_string(), timestamp_ms()?, intent)
         .await
         .map_err(|error| hosted_activity_error("re-encrypt hosted TVC quorum-key share", error))?;
     let output = validate_result(result.result)?;
@@ -181,9 +181,10 @@ mod tests {
     use crate::config::turnkey::{
         HostedOperatorRecord, OperatorKind, OperatorRecord, OperatorRecordKind, OrgConfig,
     };
+    use indexmap::IndexMap;
     use qos_core::protocol::services::boot::VersionedManifestEnvelope;
     use serde::Deserialize;
-    use std::{collections::HashMap, path::PathBuf};
+    use std::path::PathBuf;
 
     const DEPLOYMENT_ID: &str = "33333333-3333-4333-8333-333333333333";
     const OPERATOR_ID: &str = "11111111-1111-4111-8111-111111111111";
@@ -245,11 +246,10 @@ mod tests {
         };
 
         Config {
-            active_org: Some("active".to_string()),
-            orgs: HashMap::from([(
-                "active".to_string(),
+            active_org: Some(Uuid::from_u128(0xA1)),
+            orgs: IndexMap::from([(
+                Uuid::from_u128(0xA1),
                 OrgConfig {
-                    id: "org-id".to_string(),
                     api_key_path: PathBuf::from("api-key.json"),
                     api_base_url: "https://api.turnkey.com".to_string(),
                     default_operator_kind: OperatorKind::Hosted,
