@@ -313,26 +313,37 @@ fn resolve_profile_alias(config: &Config, org: Option<String>) -> Result<String>
             if config.orgs.is_empty() {
                 bail!("No login profiles to delete.");
             }
-            let choices: Vec<_> = config
-                .orgs
-                .iter()
-                .map(|(alias, org)| ProfileChoice {
-                    alias: alias.as_str(),
-                    org_id: org.id.as_str(),
-                    is_active: config.active_org.as_deref() == Some(alias.as_str()),
-                })
-                .collect();
-            Ok(prompts::select("Select profile to delete", choices)?
-                .alias
-                .to_string())
+            Ok(
+                prompts::select("Select profile to delete", profile_choices(config))?
+                    .alias
+                    .to_string(),
+            )
         }
     }
 }
 
+/// One configured profile as the selection prompts list it.
 struct ProfileChoice<'a> {
     alias: &'a str,
     org_id: &'a str,
     is_active: bool,
+}
+
+/// The configured profiles in presentation order: the active profile first,
+/// then the rest by alias. The registry is a hash map, so without this sort
+/// the list would come out in a different order on every run.
+fn profile_choices(config: &Config) -> Vec<ProfileChoice<'_>> {
+    let mut choices: Vec<_> = config
+        .orgs
+        .iter()
+        .map(|(alias, org)| ProfileChoice {
+            alias: alias.as_str(),
+            org_id: org.id.as_str(),
+            is_active: config.active_org.as_deref() == Some(alias.as_str()),
+        })
+        .collect();
+    choices.sort_by(|a, b| (!a.is_active, a.alias).cmp(&(!b.is_active, b.alias)));
+    choices
 }
 
 impl Display for ProfileChoice<'_> {
@@ -616,19 +627,11 @@ fn prompt_for_org_plan(
         return prompt_for_new_org_inputs(ctx, config, api_base_url_override, serial);
     }
 
-    let mut options: Vec<OrgChoice> = config
-        .orgs
-        .iter()
-        .map(|(alias, org)| {
-            let suffix = if config.active_org.as_ref() == Some(alias) {
-                " (active)"
-            } else {
-                ""
-            };
-            OrgChoice::Existing {
-                display: format!("{alias} ({}){suffix}", org.id),
-                alias: alias.clone(),
-            }
+    let mut options: Vec<OrgChoice> = profile_choices(config)
+        .into_iter()
+        .map(|choice| OrgChoice::Existing {
+            display: choice.to_string(),
+            alias: choice.alias.to_string(),
         })
         .collect();
     options.push(OrgChoice::New);
@@ -1307,6 +1310,71 @@ mod tests {
         update_api_base_url_from_override(&mut config, "default", Some(OVERRIDE_URL));
 
         assert_eq!(config.orgs["default"].api_base_url, OVERRIDE_URL);
+    }
+
+    fn org_config(id: &str) -> OrgConfig {
+        OrgConfig {
+            id: id.to_string(),
+            api_key_path: PathBuf::from("api_key.json"),
+            api_base_url: API_BASE_URL_PROD.to_string(),
+            default_operator_kind: OperatorKind::Local,
+            operators: vec![OperatorRecord::local(PathBuf::from("operator.json"))],
+            extra: toml::Table::new(),
+        }
+    }
+
+    /// The active profile leads the selection lists and the rest follow by
+    /// alias, whatever order the hash map yields them in.
+    #[test]
+    fn profile_choices_list_the_active_profile_first_then_by_alias() {
+        let config = Config {
+            active_org: Some("mid".to_string()),
+            orgs: HashMap::from([
+                ("zeta".to_string(), org_config("org-zeta")),
+                ("mid".to_string(), org_config("org-mid")),
+                ("alpha".to_string(), org_config("org-alpha")),
+            ]),
+            ..Config::default()
+        };
+
+        let choices = profile_choices(&config);
+
+        assert_eq!(
+            choices
+                .iter()
+                .map(|choice| (choice.alias, choice.is_active))
+                .collect::<Vec<_>>(),
+            vec![("mid", true), ("alpha", false), ("zeta", false)]
+        );
+        assert_eq!(
+            choices.iter().map(ToString::to_string).collect::<Vec<_>>(),
+            vec![
+                "mid (org-mid) (active)",
+                "alpha (org-alpha)",
+                "zeta (org-zeta)",
+            ]
+        );
+    }
+
+    /// Without an active profile the list is simply alphabetical.
+    #[test]
+    fn profile_choices_fall_back_to_alias_order_without_an_active_profile() {
+        let config = Config {
+            active_org: None,
+            orgs: HashMap::from([
+                ("zeta".to_string(), org_config("org-zeta")),
+                ("alpha".to_string(), org_config("org-alpha")),
+            ]),
+            ..Config::default()
+        };
+
+        assert_eq!(
+            profile_choices(&config)
+                .iter()
+                .map(|choice| choice.alias)
+                .collect::<Vec<_>>(),
+            vec!["alpha", "zeta"]
+        );
     }
 
     fn config_with_org(api_base_url: &str) -> Config {
