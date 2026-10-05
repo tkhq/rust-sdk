@@ -148,6 +148,13 @@ fn deployment_response(
     hosted_key: QosOperatorPublicKey,
     yubikey_key: QosOperatorPublicKey,
 ) -> String {
+    deployment_response_with_manifest_set(vec![
+        tvc_operator(HOSTED_OPERATOR_ID, "hosted", hosted_key),
+        tvc_operator(YUBIKEY_OPERATOR_ID, "yubikey-op", yubikey_key),
+    ])
+}
+
+fn deployment_response_with_manifest_set(operators: Vec<TvcOperator>) -> String {
     serde_json::to_string(&GetTvcDeploymentResponse {
         tvc_deployment: Some(TvcDeployment {
             id: DEPLOYMENT_ID.to_string(),
@@ -157,10 +164,7 @@ fn deployment_response(
                 id: "manifest-set-test".to_string(),
                 name: "manifest-set".to_string(),
                 organization_id: "org-test".to_string(),
-                operators: vec![
-                    tvc_operator(HOSTED_OPERATOR_ID, "hosted", hosted_key),
-                    tvc_operator(YUBIKEY_OPERATOR_ID, "yubikey-op", yubikey_key),
-                ],
+                operators,
                 threshold: 2,
                 created_at: None,
                 updated_at: None,
@@ -590,6 +594,62 @@ fn a_foreign_operator_id_whose_key_is_outside_the_manifest_set_is_rejected() {
             "operator ID {FOREIGN_OPERATOR_ID} is not in the deployment's manifest set and no \
              manifest-set operator shares its public key; manifest-set operators: \
              hosted ({HOSTED_OPERATOR_ID}), yubikey-op ({YUBIKEY_OPERATOR_ID})"
+        )));
+
+    server.join().unwrap();
+}
+
+/// Several manifest-set operators can carry one key under different names.
+/// A foreign ID with that key is refused naming only those operators.
+#[test]
+fn a_foreign_operator_id_matching_several_manifest_set_operators_lists_only_those() {
+    const SECOND_OPERATOR_ID: &str = "99999999-9999-4999-8999-999999999999";
+
+    let temp = TempDir::new().unwrap();
+    let hosted_key = fixture_manifest_member_key(0);
+    let yubikey_key = fixture_manifest_member_key(2);
+    let serial = YubiKeySerial::from(0x01c9_5c1f);
+    write_config(
+        &temp,
+        &yubikey_config(&temp, hosted_key, yubikey_key, serial),
+    );
+
+    let (api_base_url, server) = spawn_json_server(vec![
+        (
+            GET_DEPLOYMENT_PATH,
+            200,
+            deployment_response_with_manifest_set(vec![
+                tvc_operator(HOSTED_OPERATOR_ID, "hosted", hosted_key),
+                tvc_operator(YUBIKEY_OPERATOR_ID, "yubikey-op", yubikey_key),
+                tvc_operator(SECOND_OPERATOR_ID, "yubikey-op-renamed", yubikey_key),
+            ]),
+        ),
+        (
+            LIST_OPERATORS_PATH,
+            200,
+            operators_response(vec![
+                tvc_operator(YUBIKEY_OPERATOR_ID, "yubikey-op", yubikey_key),
+                tvc_operator(FOREIGN_OPERATOR_ID, "old-app-op", yubikey_key),
+            ]),
+        ),
+    ]);
+
+    authenticated_command(&temp, &api_base_url)
+        .args([
+            "deploy",
+            "approve",
+            "--deploy-id",
+            DEPLOYMENT_ID,
+            "--operator-id",
+            FOREIGN_OPERATOR_ID,
+            "--dangerous-skip-interactive",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(format!(
+            "operator ID {FOREIGN_OPERATOR_ID} is not in the deployment's manifest set and \
+             several manifest-set operators share its public key; pass one of: \
+             yubikey-op ({YUBIKEY_OPERATOR_ID}), yubikey-op-renamed ({SECOND_OPERATOR_ID})"
         )));
 
     server.join().unwrap();

@@ -9,8 +9,8 @@ use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use turnkey_client::{
     TurnkeyClient, TurnkeyClientError,
     generated::{
-        GetTvcAppRequest, GetTvcDeploymentRequest, GetTvcOperatorsRequest,
-        external::data::v1::{TvcApp, TvcDeployment, TvcOperator},
+        GetTvcAppRequest, GetTvcDeploymentRequest,
+        external::data::v1::{TvcApp, TvcDeployment},
     },
 };
 
@@ -77,20 +77,6 @@ pub async fn fetch_tvc_app(auth: &AuthenticatedClient, app_id: &str) -> Result<T
     response
         .tvc_app
         .ok_or_else(|| MissingResource::new("app", app_id).into())
-}
-
-/// List every operator in the client's organization, newest first.
-#[instrument(skip_all)]
-pub async fn fetch_tvc_operators(auth: &AuthenticatedClient) -> Result<Vec<TvcOperator>> {
-    let response = auth
-        .client
-        .get_tvc_operators(GetTvcOperatorsRequest {
-            organization_id: auth.org_id.clone(),
-        })
-        .await
-        .context("failed to list operators")?;
-
-    Ok(response.tvc_operators)
 }
 
 /// Fetch a deployment in the client's organization.
