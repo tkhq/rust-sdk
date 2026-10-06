@@ -6,20 +6,21 @@ pub struct TokenUsage {
     pub r#type: UsageType,
     pub token_id: ::prost::alloc::string::String,
     #[serde(default)]
+    #[serde(flatten)]
     pub usage: ::core::option::Option<token_usage::Usage>,
 }
 /// Nested message and enum types in `TokenUsage`.
 pub mod token_usage {
     #[derive(::serde::Serialize, ::serde::Deserialize)]
     #[derive(Clone, PartialEq)]
+    #[serde(rename_all = "camelCase")]
     #[derive(Debug)]
     pub enum Usage {
-        #[serde(rename = "USAGE_SIGNUP")]
         Signup(super::SignupUsage),
-        #[serde(rename = "USAGE_LOGIN")]
         Login(super::LoginUsage),
-        #[serde(rename = "USAGE_SIGNUP_V2")]
         SignupV2(super::SignupUsageV2),
+        LoginV2(super::LoginUsageV2),
+        SignupV3(super::SignupUsageV3),
     }
 }
 #[derive(Debug)]
@@ -68,6 +69,44 @@ pub struct SignupUsageV2 {
 #[derive(Clone, PartialEq)]
 pub struct LoginUsage {
     pub public_key: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct LoginUsageV2 {
+    pub organization_id: ::prost::alloc::string::String,
+    pub public_key: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub invalidate_existing: ::core::option::Option<bool>,
+    #[serde(default)]
+    pub expiration_seconds: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub session_profile_id: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SignupUsageV3 {
+    pub parent_organization_id: ::prost::alloc::string::String,
+    pub sub_organization_name: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub root_users: ::prost::alloc::vec::Vec<
+        super::super::activity::v1::RootUserParamsV5,
+    >,
+    #[serde(default)]
+    pub root_quorum_threshold: i32,
+    #[serde(default)]
+    pub wallet: ::core::option::Option<super::super::activity::v1::WalletParams>,
+    #[serde(default)]
+    pub disable_email_recovery: ::core::option::Option<bool>,
+    #[serde(default)]
+    pub disable_email_auth: ::core::option::Option<bool>,
+    #[serde(default)]
+    pub disable_sms_auth: ::core::option::Option<bool>,
+    #[serde(default)]
+    pub disable_otp_email_auth: ::core::option::Option<bool>,
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]

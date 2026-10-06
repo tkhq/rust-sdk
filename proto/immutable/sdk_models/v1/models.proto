@@ -27,6 +27,8 @@ message TokenUsage {
     SignupUsage signup = 3;
     LoginUsage login = 4;
     SignupUsageV2 signup_v2 = 5;
+    LoginUsageV2 login_v2 = 6;
+    SignupUsageV3 signup_v3 = 7;
   }
 }
 
@@ -51,4 +53,24 @@ message LoginUsage {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Public key for authentication"}
   ];
+}
+
+message LoginUsageV2 {
+  string organization_id = 1 [(google.api.field_behavior) = REQUIRED];
+  string public_key = 2 [(google.api.field_behavior) = REQUIRED];
+  optional bool invalidate_existing = 3;
+  optional string expiration_seconds = 4;
+  optional string session_profile_id = 5;
+}
+
+message SignupUsageV3 {
+  string parent_organization_id = 1 [(google.api.field_behavior) = REQUIRED];
+  string sub_organization_name = 2 [(google.api.field_behavior) = REQUIRED];
+  repeated immutable.activity.v1.RootUserParamsV5 root_users = 3 [(google.api.field_behavior) = REQUIRED];
+  int32 root_quorum_threshold = 4 [(google.api.field_behavior) = REQUIRED];
+  optional immutable.activity.v1.WalletParams wallet = 5;
+  optional bool disable_email_recovery = 6;
+  optional bool disable_email_auth = 7;
+  optional bool disable_sms_auth = 8;
+  optional bool disable_otp_email_auth = 9;
 }

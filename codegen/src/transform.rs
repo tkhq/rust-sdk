@@ -94,6 +94,15 @@ fn mutate_enum(enum_item: &syn::ItemEnum) -> TokenStream {
     });
 
     let enum_name_upper = ident.to_string().to_shouty_snake_case();
+    let is_token_usage = ident == "Usage"
+        && enum_item
+            .variants
+            .iter()
+            .any(|variant| variant.ident == "LoginV2")
+        && enum_item
+            .variants
+            .iter()
+            .any(|variant| variant.ident == "SignupV3");
 
     let variants = enum_item.variants.iter().map(|v| {
         let mut v = v.clone();
@@ -107,11 +116,11 @@ fn mutate_enum(enum_item: &syn::ItemEnum) -> TokenStream {
             variant_name.to_string().to_shouty_snake_case()
         );
 
-        // A bit of a special case, but it doesn't make sense to rename result::Inner, intent::Inner, or TokenOrClaim
-        // which are complex enums we flatten at serialization/parsing time.
+        // A bit of a special case, but it doesn't make sense to rename result::Inner, intent::Inner,
+        // TokenOrClaims, or TokenUsage's flattened usage oneof with protobuf enum prefixes.
         // TODO: would be nice to filter this in a more generic way: basically if the enum isn't a "simple" enum, we shouldn't
         // have to individually rename the variants
-        if ident != "Inner" && ident != "TokenOrClaims" {
+        if ident != "Inner" && ident != "TokenOrClaims" && !is_token_usage {
             let rename_attr: syn::Attribute = syn::parse_quote!(
                 #[serde(rename = #full_name)]
             );
@@ -121,9 +130,9 @@ fn mutate_enum(enum_item: &syn::ItemEnum) -> TokenStream {
         quote! { #v }
     });
 
-    // Another quick special case: Result::Inner and Intent::Inner and TokenOrClaims require #[serde(rename_all = "camelCase")]
+    // Another quick special case: flattened oneofs use camelCase protobuf JSON keys.
     // We also derive "Debug", it's very useful to be able to serialize activities in a pinch.
-    if ident == "Inner" || ident == "TokenOrClaims" {
+    if ident == "Inner" || ident == "TokenOrClaims" || is_token_usage {
         attrs.push(quote! {
             #[serde(rename_all = "camelCase")]
             #[derive(Debug)]
@@ -196,12 +205,15 @@ fn mutate_struct(struct_value: &syn::ItemStruct) -> TokenStream {
                 ));
             }
 
-            // Flatten out Result::inner and Intent::inner since we have no "inner" key in the JSON responses we return or expect!
-            // We also flatten out "tokenOrClaims" (part of Oauth params v2) for the same reason.
+            // Flatten protobuf JSON oneofs that do not have wrapper keys on the wire.
             if field
                 .ident
                 .as_ref()
-                .map(|i| i == "inner" || i == "token_or_claims")
+                .map(|i| {
+                    i == "inner"
+                        || i == "token_or_claims"
+                        || (struct_ident == "TokenUsage" && i == "usage")
+                })
                 .unwrap_or(false)
             {
                 field.attrs.push(syn::parse_quote!(
