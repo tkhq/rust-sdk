@@ -88,6 +88,18 @@ const TURNKEY_RUST_SDK_USER_AGENT: &str =
 /// Maximum number of redirects followed for a single request.
 const MAX_REDIRECTS: usize = 10;
 
+/// How much of an unexpected-MIME response body to carry in the error.
+const UNEXPECTED_MIME_BODY_PREVIEW_CHARS: usize = 200;
+
+/// Returns the head of `body`, bounded so that a large HTML page from a proxy
+/// or captive portal cannot flood an error message. Truncates on a character
+/// boundary, never mid-character.
+fn unexpected_mime_body_preview(body: &str) -> String {
+    body.chars()
+        .take(UNEXPECTED_MIME_BODY_PREVIEW_CHARS)
+        .collect()
+}
+
 #[derive(Debug, Error)]
 pub enum TurnkeyClientError {
     #[error("Client builder is missing its API key. Call .api_key(...) to configure it.")]
@@ -111,8 +123,8 @@ pub enum TurnkeyClientError {
     #[error("HTTP response header could not be parsed from str: {0}")]
     HeaderFromStrError(String),
 
-    #[error("HTTP response MIME type is not application/json (found {0})")]
-    UnexpectedMimeType(String),
+    #[error("HTTP response MIME type is not application/json (found {0}); response body head: {1}")]
+    UnexpectedMimeType(String, String),
 
     #[error("Failed to decode response {0} ({1})")]
     Decode(String, serde_json::Error),
@@ -473,8 +485,14 @@ impl<S: Stamp> TurnkeyClient<S> {
         }
 
         if content_type != mime::APPLICATION_JSON {
+            // A proxy or captive portal can answer with 2xx and an HTML body
+            // ("you must be logged in"), so the mime type alone does not
+            // distinguish that from a genuine server change. Carry the head of
+            // the body in the error so it is visible to anyone who displays
+            // or logs it.
             return Err(TurnkeyClientError::UnexpectedMimeType(
                 content_type.to_string(),
+                unexpected_mime_body_preview(&text),
             ));
         }
 
@@ -785,11 +803,77 @@ mod test {
             .await;
 
         match result.unwrap_err() {
-            TurnkeyClientError::UnexpectedMimeType(mime_type) => {
+            TurnkeyClientError::UnexpectedMimeType(mime_type, body) => {
                 assert_eq!(mime_type, "text/plain");
+                assert_eq!(body, "success but not JSON");
             }
             other => panic!("unexpected error: {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn test_unexpected_mime_type_carries_captive_portal_body_head() {
+        let (client, server) = setup_client_and_server().await;
+
+        // A captive portal or HTTP(S) proxy answering with 2xx and HTML. This
+        // is the case from #14: the mime type alone is indistinguishable from
+        // a genuine server change, so the body head has to be visible in the
+        // error the SDK hands back.
+        let response = ResponseTemplate::new(200).set_body_raw(
+            "<html><body>You must be logged in to the network</body></html>",
+            "text/html",
+        );
+        Mock::given(method("POST"))
+            .respond_with(response)
+            .mount(&server)
+            .await;
+
+        let result = client
+            .process_activity(simple_activity_intent(), "/sign_raw_payload".to_string())
+            .await;
+
+        let err = result.unwrap_err();
+        match &err {
+            TurnkeyClientError::UnexpectedMimeType(mime_type, body) => {
+                assert_eq!(mime_type, "text/html");
+                assert_eq!(
+                    body,
+                    "<html><body>You must be logged in to the network</body></html>"
+                );
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+
+        // The body head must also reach a caller that only stringifies the
+        // error, since that is how SDK users surface it to end users.
+        let rendered = err.to_string();
+        assert!(rendered.contains("text/html"), "{rendered}");
+        assert!(
+            rendered.contains("You must be logged in to the network"),
+            "{rendered}"
+        );
+    }
+
+    #[test]
+    fn unexpected_mime_body_preview_is_bounded_and_never_splits_a_character() {
+        // Longer than the 200-char preview, so truncation must kick in.
+        let long = "a".repeat(1_000);
+        assert_eq!(unexpected_mime_body_preview(&long).chars().count(), 200);
+
+        // Under the limit is passed through untouched.
+        let short = "you must be logged in";
+        assert_eq!(unexpected_mime_body_preview(short), short);
+
+        // Multi-byte characters are never split mid-character: 300 emoji is
+        // 1200 bytes, so the cap must cut on a character boundary and still
+        // yield exactly 200 whole characters.
+        let multibyte = "\u{1f600}".repeat(300);
+        let preview = unexpected_mime_body_preview(&multibyte);
+        assert_eq!(preview.chars().count(), 200);
+        assert!(preview.chars().all(|c| c == '\u{1f600}'));
+
+        // Empty body is a valid input, not a panic.
+        assert_eq!(unexpected_mime_body_preview(""), "");
     }
 
     #[tokio::test]
