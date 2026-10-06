@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.17.0](https://github.com/tkhq/rust-sdk/compare/turnkey_enclave_encrypt-v0.16.0...turnkey_enclave_encrypt-v0.17.0) - 2026-10-06
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.16.0](https://github.com/tkhq/rust-sdk/compare/turnkey_enclave_encrypt-v0.15.0...turnkey_enclave_encrypt-v0.16.0) - 2026-09-17
 
 ### Other
