@@ -58,7 +58,7 @@ struct AttestationSummary {
     share_set_approvals: Vec<ApprovalSummary>,
 }
 
-const SUMMARY_PCR_MAX_INDEX: usize = 17;
+const SUMMARY_PCR_MAX_INDEX: usize = 18;
 
 /// Run the deploy provisioning-details command.
 #[instrument(skip_all)]
