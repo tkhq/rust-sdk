@@ -936,6 +936,26 @@ fn login_picker_lists_the_active_profile_first_then_by_alias() {
     session.exp_eof().unwrap();
 }
 
+/// Without an active profile, such as right after the active one was
+/// deleted, the picker is simply in alias order.
+#[test]
+fn login_picker_without_an_active_profile_lists_profiles_by_alias() {
+    let temp = tempfile::TempDir::new().unwrap();
+    common::write_profiles_config(temp.path(), ORDERED_PROFILES, None);
+
+    let mut session = spawn_with_home(temp.path(), &["login"]);
+
+    session.exp_string("Select organization").unwrap();
+    exp_wrapped(&mut session, "alpha (org-alpha)");
+    exp_wrapped(&mut session, "mid (org-mid)");
+    exp_wrapped(&mut session, "zeta (org-zeta)");
+    exp_wrapped(&mut session, "[new] Add a new organization");
+
+    session.send("\x1b").unwrap();
+    session.flush().unwrap();
+    session.exp_eof().unwrap();
+}
+
 /// The delete-profile picker uses the same order as the login picker.
 #[test]
 fn profile_delete_picker_lists_the_active_profile_first_then_by_alias() {
