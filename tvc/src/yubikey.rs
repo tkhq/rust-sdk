@@ -370,7 +370,7 @@ pub(crate) enum PinError {
          press Enter, then touch the device only when prompted"
     )]
     LooksLikeOtp,
-    #[error("the PIN you entered is {len} characters; a PIV PIN is at most {PIN_MAX_LEN}")]
+    #[error("the PIN you entered is {len} bytes; a PIV PIN is at most {PIN_MAX_LEN} bytes")]
     TooLong { len: usize },
 }
 
@@ -1242,7 +1242,7 @@ mod tests {
         );
         assert_eq!(
             error.to_string(),
-            "the PIN you entered is 9 characters; a PIV PIN is at most 8"
+            "the PIN you entered is 9 bytes; a PIV PIN is at most 8 bytes"
         );
     }
 }
