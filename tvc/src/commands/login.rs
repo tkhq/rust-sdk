@@ -313,7 +313,8 @@ fn resolve_profile_alias(config: &Config, org: Option<String>) -> Result<String>
             if config.orgs.is_empty() {
                 bail!("No login profiles to delete.");
             }
-            let choices: Vec<_> = config
+            // Active profile first, then the rest in config order.
+            let (active, others): (Vec<_>, Vec<_>) = config
                 .orgs
                 .iter()
                 .map(|(alias, org)| ProfileChoice {
@@ -321,7 +322,8 @@ fn resolve_profile_alias(config: &Config, org: Option<String>) -> Result<String>
                     org_id: org.id.as_str(),
                     is_active: config.active_org.as_deref() == Some(alias.as_str()),
                 })
-                .collect();
+                .partition(|choice| choice.is_active);
+            let choices: Vec<_> = active.into_iter().chain(others).collect();
             Ok(prompts::select("Select profile to delete", choices)?
                 .alias
                 .to_string())
@@ -616,19 +618,22 @@ fn prompt_for_org_plan(
         return prompt_for_new_org_inputs(ctx, config, api_base_url_override, serial);
     }
 
-    let mut options: Vec<OrgChoice> = config
+    // Active profile first, then the rest in config order.
+    let (active, others): (Vec<_>, Vec<_>) = config
         .orgs
         .iter()
-        .map(|(alias, org)| {
-            let suffix = if config.active_org.as_ref() == Some(alias) {
-                " (active)"
-            } else {
-                ""
-            };
-            OrgChoice::Existing {
-                display: format!("{alias} ({}){suffix}", org.id),
-                alias: alias.clone(),
-            }
+        .map(|(alias, org)| ProfileChoice {
+            alias: alias.as_str(),
+            org_id: org.id.as_str(),
+            is_active: config.active_org.as_deref() == Some(alias.as_str()),
+        })
+        .partition(|choice| choice.is_active);
+    let mut options: Vec<OrgChoice> = active
+        .into_iter()
+        .chain(others)
+        .map(|choice| OrgChoice::Existing {
+            display: choice.to_string(),
+            alias: choice.alias.to_string(),
         })
         .collect();
     options.push(OrgChoice::New);
@@ -1153,7 +1158,7 @@ mod tests {
         API_BASE_URL_DEV, API_BASE_URL_PREPROD, DASHBOARD_URL_DEV, DASHBOARD_URL_PREPROD,
         DASHBOARD_URL_PROD, OperatorKind, OperatorRecord,
     };
-    use std::collections::HashMap;
+    use std::collections::{BTreeMap, HashMap};
     use std::path::PathBuf;
 
     const OVERRIDE_URL: &str = "http://127.0.0.1:8081";
@@ -1312,7 +1317,7 @@ mod tests {
     fn config_with_org(api_base_url: &str) -> Config {
         Config {
             active_org: Some("default".to_string()),
-            orgs: HashMap::from([(
+            orgs: BTreeMap::from([(
                 "default".to_string(),
                 OrgConfig {
                     id: "org-test".to_string(),
