@@ -168,9 +168,9 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Result
                 );
             }
 
-            let pin = Pin::from(prompts::password(
-                "YubiKey PIV PIN (touch the device each time it blinks)",
-            )?);
+            let pin = Pin::try_from(prompts::password(
+                "Enter YubiKey PIV PIN and press Enter, then touch the device each time it blinks",
+            )?)?;
 
             Ok(SelectedYubiKey::new(selected.1.serial, pin))
         })
@@ -598,7 +598,7 @@ mod tests {
             .resolve_yubikey(
                 serial(),
                 device,
-                Pin::from(String::from_utf8(PIN.to_vec()).unwrap()),
+                Pin::try_from(String::from_utf8(PIN.to_vec()).unwrap()).unwrap(),
             )
             .await
             .unwrap();
