@@ -3,7 +3,7 @@
 #![allow(dead_code)]
 
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     fs,
     path::{Path, PathBuf},
 };
@@ -29,7 +29,7 @@ pub fn write_profiles_config(home: &Path, profiles: &[(&str, &str)], active_org:
     let turnkey_dir = home.join(".config/turnkey");
     fs::create_dir_all(&turnkey_dir).unwrap();
 
-    let orgs: HashMap<_, _> = profiles
+    let orgs: BTreeMap<_, _> = profiles
         .iter()
         .map(|(alias, org_id)| {
             let dir = org_dir(home, alias);
@@ -82,7 +82,7 @@ pub fn write_hosted_only_config(home: &Path, alias: &str, org_id: &str) {
 
     let config = Config {
         active_org: Some(alias.to_string()),
-        orgs: HashMap::from([(
+        orgs: BTreeMap::from([(
             alias.to_string(),
             OrgConfig {
                 id: org_id.to_string(),
@@ -148,7 +148,7 @@ pub fn write_yubikey_only_config_with_public_key(
 
     let config = Config {
         active_org: Some(alias.to_string()),
-        orgs: HashMap::from([(
+        orgs: BTreeMap::from([(
             alias.to_string(),
             OrgConfig {
                 id: org_id.to_string(),
@@ -202,7 +202,7 @@ pub fn write_yubikey_shared_config(home: &Path, profiles: &[(&str, &str)]) {
     )
     .unwrap();
 
-    let orgs: HashMap<_, _> = profiles
+    let orgs: BTreeMap<_, _> = profiles
         .iter()
         .map(|(alias, org_id)| {
             (

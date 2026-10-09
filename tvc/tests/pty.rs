@@ -12,7 +12,7 @@ mod common;
 
 use qos_p256::P256Pair;
 use rexpect::session::PtySession;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
 use std::path::Path;
@@ -457,7 +457,7 @@ fn write_hosted_org_config(home: &Path, saved_operator_ids: &[&str]) -> String {
 
     let config = Config {
         active_org: Some("hosted-org".to_string()),
-        orgs: HashMap::from([(
+        orgs: BTreeMap::from([(
             "hosted-org".to_string(),
             OrgConfig {
                 id: ORG_HOSTED.to_string(),
@@ -785,7 +785,7 @@ fn login_selects_among_multiple_yubikey_operators() {
     };
     let mut config = Config {
         active_org: Some("yk-org".to_string()),
-        orgs: HashMap::from([(
+        orgs: BTreeMap::from([(
             "yk-org".to_string(),
             OrgConfig {
                 id: "org-e2e".to_string(),

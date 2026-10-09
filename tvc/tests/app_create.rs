@@ -3,7 +3,7 @@
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
 use qos_p256::P256Pair;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use tempfile::TempDir;
 use tvc::config::app::KNOWN_QUORUM_KEY;
@@ -25,7 +25,7 @@ fn write_two_candidate_config(home: &Path) -> String {
 
     let config = Config {
         active_org: Some("hosted-org".to_string()),
-        orgs: HashMap::from([(
+        orgs: BTreeMap::from([(
             "hosted-org".to_string(),
             OrgConfig {
                 id: "44444444-4444-4444-8444-444444444444".to_string(),
