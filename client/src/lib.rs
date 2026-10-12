@@ -26,6 +26,7 @@ use turnkey_enclave_encrypt::errors::EnclaveEncryptError;
 use turnkey_enclave_encrypt::{
     ExportClient, ImportClient, QuorumPublicKey, ServerTargetData, ServerTargetMsgV1,
 };
+use zeroize::Zeroizing;
 
 /// Result of an activity request, containing both the typed result and activity metadata.
 ///
@@ -575,12 +576,88 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Takes a slice so that any number of secrets exports in a single
     /// activity. The singular name is only because `export_secrets` is the
     /// generated method this one is built on.
+    ///
+    /// Each secret must be valid UTF-8, and the returned `String`s are not
+    /// wiped on drop. For key material and any secret that is not text, use
+    /// [`TurnkeyClient::export_secret_bytes`] instead.
     pub async fn export_secret(
         &self,
         organization_id: String,
         secret_ids: &[impl AsRef<str>],
         signer_quorum_public_key: &QuorumPublicKey,
     ) -> Result<ActivityResult<Vec<String>>, TurnkeyClientError> {
+        let (recipients, batch) = self
+            .export_secret_bundles(
+                organization_id.clone(),
+                secret_ids,
+                signer_quorum_public_key,
+            )
+            .await?;
+
+        let plaintexts = batch
+            .result
+            .into_iter()
+            .zip(recipients)
+            .map(|(payload, mut recipient)| recipient.decrypt_secret(payload, &organization_id))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(ActivityResult {
+            result: plaintexts,
+            activity_id: batch.activity_id,
+            status: batch.status,
+            app_proofs: batch.app_proofs,
+        })
+    }
+
+    /// Exports secrets and returns their decrypted raw bytes, in the order of
+    /// `secret_ids`.
+    ///
+    /// Same flow as [`TurnkeyClient::export_secret`]: one activity for the
+    /// whole slice, one fresh target key per secret. The difference is what
+    /// comes back. Each plaintext is returned as bytes, with no UTF-8 or
+    /// length check, wrapped in [`Zeroizing`] so it is wiped from memory when
+    /// dropped. Use this for key material (a DER-encoded key, for example) and
+    /// for any secret that is not text.
+    pub async fn export_secret_bytes(
+        &self,
+        organization_id: String,
+        secret_ids: &[impl AsRef<str>],
+        signer_quorum_public_key: &QuorumPublicKey,
+    ) -> Result<ActivityResult<Vec<Zeroizing<Vec<u8>>>>, TurnkeyClientError> {
+        let (recipients, batch) = self
+            .export_secret_bundles(
+                organization_id.clone(),
+                secret_ids,
+                signer_quorum_public_key,
+            )
+            .await?;
+
+        let plaintexts = batch
+            .result
+            .into_iter()
+            .zip(recipients)
+            .map(|(payload, mut recipient)| {
+                recipient.decrypt_secret_bytes(payload, &organization_id)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(ActivityResult {
+            result: plaintexts,
+            activity_id: batch.activity_id,
+            status: batch.status,
+            app_proofs: batch.app_proofs,
+        })
+    }
+
+    /// Runs one `export_secrets` activity for `secret_ids` and returns the
+    /// still-encrypted bundles, in order, together with the one-shot
+    /// [`ExportClient`] that can decrypt each of them.
+    async fn export_secret_bundles(
+        &self,
+        organization_id: String,
+        secret_ids: &[impl AsRef<str>],
+        signer_quorum_public_key: &QuorumPublicKey,
+    ) -> Result<(Vec<ExportClient>, ActivityResult<Vec<String>>), TurnkeyClientError> {
         let timestamp_ms = self.current_timestamp();
 
         let mut recipients = Vec::with_capacity(secret_ids.len());
@@ -598,7 +675,7 @@ impl<S: Stamp> TurnkeyClient<S> {
 
         let batch = self
             .export_secrets(
-                organization_id.clone(),
+                organization_id,
                 timestamp_ms,
                 ExportSecretsIntent { secrets },
             )
@@ -613,18 +690,15 @@ impl<S: Stamp> TurnkeyClient<S> {
             ));
         }
 
-        let plaintexts = secret_payloads
-            .into_iter()
-            .zip(&mut recipients)
-            .map(|(payload, recipient)| recipient.decrypt_secret(payload, &organization_id))
-            .collect::<Result<Vec<_>, _>>()?;
-
-        Ok(ActivityResult {
-            result: plaintexts,
-            activity_id: batch.activity_id,
-            status: batch.status,
-            app_proofs: batch.app_proofs,
-        })
+        Ok((
+            recipients,
+            ActivityResult {
+                result: secret_payloads,
+                activity_id: batch.activity_id,
+                status: batch.status,
+                app_proofs: batch.app_proofs,
+            },
+        ))
     }
 }
 
@@ -1423,6 +1497,68 @@ mod test {
                 .unwrap();
 
             assert_eq!(result.result, vec!["super secret", "other secret"]);
+        }
+
+        #[tokio::test]
+        async fn export_secret_bytes_decrypts_binary_payloads() {
+            let (client, server) = setup_client_and_server().await;
+
+            // Not valid UTF-8, and longer than any fixed-size key.
+            let mut binary_secret = vec![0x00u8, 0xff, 0x80, 0xfe, 0xc0, 0x00];
+            binary_secret.extend((0u8..=255).cycle().take(1200));
+            assert!(std::str::from_utf8(&binary_secret).is_err());
+            let expected = binary_secret.clone();
+
+            Mock::given(method("POST"))
+                .and(path("/public/v1/submit/export_secrets"))
+                .respond_with(move |request: &wiremock::Request| {
+                    let export_request: ExportSecretsRequest =
+                        serde_json::from_slice(&request.body).unwrap();
+                    let secrets = export_request.parameters.unwrap().secrets;
+                    assert_eq!(secrets.len(), 1);
+                    assert_eq!(secrets[0].secret_id, "secret-der");
+
+                    let target: P256Public = hex::decode(&secrets[0].target_public_key)
+                        .unwrap()
+                        .try_into()
+                        .unwrap();
+                    let enclave = EnclaveEncryptServer::from_enclave_auth_key(
+                        test_quorum_private_key(),
+                        "org-1".to_string(),
+                        None,
+                    );
+                    let payload =
+                        serde_json::to_string(&enclave.encrypt(&target, &binary_secret).unwrap())
+                            .unwrap();
+
+                    ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                        "activity": {
+                            "type": "ACTIVITY_TYPE_EXPORT_SECRETS",
+                            "status": "ACTIVITY_STATUS_COMPLETED",
+                            "id": "activity-export",
+                            "organizationId": "org-1",
+                            "fingerprint": "fingerprint",
+                            "result": {
+                                "exportSecretsResult": {"secretPayloads": [payload]},
+                            }
+                        }
+                    }))
+                })
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let result = client
+                .export_secret_bytes(
+                    "org-1".to_string(),
+                    &["secret-der"],
+                    &test_quorum_public_key(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(result.result.len(), 1);
+            assert_eq!(*result.result[0], expected);
         }
     }
 
