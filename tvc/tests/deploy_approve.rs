@@ -10,7 +10,7 @@ use std::thread::{self, JoinHandle};
 use tempfile::TempDir;
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use turnkey_client::generated::{
-    GetTvcDeploymentResponse,
+    GetTvcDeploymentResponse, GetTvcOperatorsResponse,
     external::data::v1::{TvcDeployment, TvcManifest, TvcOperator, TvcOperatorSet},
 };
 use tvc::config::turnkey::{
@@ -42,7 +42,11 @@ const LOCAL_OPERATOR_ID: &str = "33333333-3333-4333-8333-333333333333";
 const DEPLOYMENT_ID: &str = "bb4c572f-0609-4b1d-b8b5-4dc83dbc89de";
 const MANIFEST_ID: &str = "22222222-2222-4222-8222-222222222222";
 const YUBIKEY_OPERATOR_ID: &str = "44444444-4444-4444-8444-444444444444";
+/// An operator record minted for another app, so absent from the fixture
+/// deployment's manifest set.
+const FOREIGN_OPERATOR_ID: &str = "88888888-8888-4888-8888-888888888888";
 const GET_DEPLOYMENT_PATH: &str = "/public/v1/query/get_tvc_deployment";
+const LIST_OPERATORS_PATH: &str = "/public/v1/query/list_tvc_operators";
 
 fn write_config(home: &TempDir, config: &Config) {
     let config_dir = home.path().join(".config/turnkey");
@@ -74,57 +78,83 @@ fn authenticated_command(home: &TempDir, api_base_url: &str) -> assert_cmd::Comm
     command
 }
 
-fn spawn_json_server(status: u16, body: String) -> (String, JoinHandle<()>) {
+/// Serve `responses` to consecutive connections, in order, asserting each
+/// request's path. Every response closes its connection, so the next request
+/// arrives on a fresh one.
+fn spawn_json_server(responses: Vec<(&'static str, u16, String)>) -> (String, JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
     let handle = thread::spawn(move || {
-        let (mut stream, _) = listener.accept().unwrap();
-        let mut reader = BufReader::new(stream.try_clone().unwrap());
+        for (path, status, body) in responses {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
 
-        let mut request_line = String::new();
-        reader.read_line(&mut request_line).unwrap();
-        assert_eq!(
-            request_line.split_whitespace().nth(1),
-            Some(GET_DEPLOYMENT_PATH)
-        );
+            let mut request_line = String::new();
+            reader.read_line(&mut request_line).unwrap();
+            assert_eq!(request_line.split_whitespace().nth(1), Some(path));
 
-        let mut content_length = 0;
+            let mut content_length = 0;
 
-        loop {
-            let mut header = String::new();
-            reader.read_line(&mut header).unwrap();
+            loop {
+                let mut header = String::new();
+                reader.read_line(&mut header).unwrap();
 
-            if header == "\r\n" {
-                break;
+                if header == "\r\n" {
+                    break;
+                }
+
+                if let Some(value) = header
+                    .strip_prefix("content-length:")
+                    .or_else(|| header.strip_prefix("Content-Length:"))
+                {
+                    content_length = value.trim().parse().unwrap();
+                }
             }
 
-            if let Some(value) = header
-                .strip_prefix("content-length:")
-                .or_else(|| header.strip_prefix("Content-Length:"))
-            {
-                content_length = value.trim().parse().unwrap();
-            }
+            let mut request_body = vec![0; content_length];
+            reader.read_exact(&mut request_body).unwrap();
+            drop(reader);
+
+            let response = format!(
+                "HTTP/1.1 {status} Test\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            stream.write_all(response.as_bytes()).unwrap();
+            stream.flush().unwrap();
         }
-
-        let mut request_body = vec![0; content_length];
-        reader.read_exact(&mut request_body).unwrap();
-        drop(reader);
-
-        let response = format!(
-            "HTTP/1.1 {status} Test\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-            body.len()
-        );
-        stream.write_all(response.as_bytes()).unwrap();
-        stream.flush().unwrap();
     });
 
     (format!("http://{address}"), handle)
+}
+
+fn tvc_operator(id: &str, name: &str, public_key: QosOperatorPublicKey) -> TvcOperator {
+    TvcOperator {
+        id: id.to_string(),
+        name: name.to_string(),
+        public_key: public_key.to_string(),
+        created_at: None,
+        updated_at: None,
+        encrypt_public_key: hex::encode(&public_key.as_bytes()[..65]),
+        sign_public_key: hex::encode(&public_key.as_bytes()[65..]),
+        key_source: None,
+    }
+}
+
+fn operators_response(tvc_operators: Vec<TvcOperator>) -> String {
+    serde_json::to_string(&GetTvcOperatorsResponse { tvc_operators }).unwrap()
 }
 
 fn deployment_response(
     hosted_key: QosOperatorPublicKey,
     yubikey_key: QosOperatorPublicKey,
 ) -> String {
+    deployment_response_with_manifest_set(vec![
+        tvc_operator(HOSTED_OPERATOR_ID, "hosted", hosted_key),
+        tvc_operator(YUBIKEY_OPERATOR_ID, "yubikey-op", yubikey_key),
+    ])
+}
+
+fn deployment_response_with_manifest_set(operators: Vec<TvcOperator>) -> String {
     serde_json::to_string(&GetTvcDeploymentResponse {
         tvc_deployment: Some(TvcDeployment {
             id: DEPLOYMENT_ID.to_string(),
@@ -134,28 +164,7 @@ fn deployment_response(
                 id: "manifest-set-test".to_string(),
                 name: "manifest-set".to_string(),
                 organization_id: "org-test".to_string(),
-                operators: vec![
-                    TvcOperator {
-                        id: HOSTED_OPERATOR_ID.to_string(),
-                        name: "hosted".to_string(),
-                        public_key: hosted_key.to_string(),
-                        created_at: None,
-                        updated_at: None,
-                        encrypt_public_key: hex::encode(&hosted_key.as_bytes()[..65]),
-                        sign_public_key: hex::encode(&hosted_key.as_bytes()[65..]),
-                        key_source: None,
-                    },
-                    TvcOperator {
-                        id: YUBIKEY_OPERATOR_ID.to_string(),
-                        name: "yubikey-op".to_string(),
-                        public_key: yubikey_key.to_string(),
-                        created_at: None,
-                        updated_at: None,
-                        encrypt_public_key: hex::encode(&yubikey_key.as_bytes()[..65]),
-                        sign_public_key: hex::encode(&yubikey_key.as_bytes()[65..]),
-                        key_source: None,
-                    },
-                ],
+                operators,
                 threshold: 2,
                 created_at: None,
                 updated_at: None,
@@ -220,7 +229,11 @@ const DEPLOYMENT_404_BODY: &str = r#"{"code":5,"message":"deployment not found"}
 #[test]
 fn deployment_missing_from_the_organization_names_the_org_in_json() {
     let temp = TempDir::new().unwrap();
-    let (api_base_url, server) = spawn_json_server(404, DEPLOYMENT_404_BODY.to_string());
+    let (api_base_url, server) = spawn_json_server(vec![(
+        GET_DEPLOYMENT_PATH,
+        404,
+        DEPLOYMENT_404_BODY.to_string(),
+    )]);
 
     let output = authenticated_command(&temp, &api_base_url)
         .args([
@@ -338,13 +351,16 @@ fn selected_yubikey_without_a_prompt_reports_the_pin_requirement() {
 
 /// The selected serial narrows the locally available signers; its public key
 /// then derives the server operator UUID from the fetched deployment.
-#[test]
-fn deploy_id_and_serial_resolve_one_operator_identity_by_public_key() {
-    let temp = TempDir::new().unwrap();
-    let hosted_key = fixture_manifest_member_key(0);
-    let yubikey_key = fixture_manifest_member_key(2);
-    let serial = YubiKeySerial::from(0x01c9_5c1f);
-    let config = Config {
+/// A registry whose only manifest-set signer is a YubiKey carrying
+/// `yubikey_key`; the hosted record's key is a member too, but under a name
+/// that no test selects.
+fn yubikey_config(
+    temp: &TempDir,
+    hosted_key: QosOperatorPublicKey,
+    yubikey_key: QosOperatorPublicKey,
+    serial: YubiKeySerial,
+) -> Config {
+    Config {
         active_org: Some("test".to_string()),
         orgs: HashMap::from([(
             "test".to_string(),
@@ -392,11 +408,22 @@ fn deploy_id_and_serial_resolve_one_operator_identity_by_public_key() {
             ],
         )]),
         ..Config::default()
-    };
-    write_config(&temp, &config);
+    }
+}
+
+#[test]
+fn deploy_id_and_serial_resolve_one_operator_identity_by_public_key() {
+    let temp = TempDir::new().unwrap();
+    let hosted_key = fixture_manifest_member_key(0);
+    let yubikey_key = fixture_manifest_member_key(2);
+    let serial = YubiKeySerial::from(0x01c9_5c1f);
+    write_config(
+        &temp,
+        &yubikey_config(&temp, hosted_key, yubikey_key, serial),
+    );
 
     let body = deployment_response(hosted_key, yubikey_key);
-    let (api_base_url, server) = spawn_json_server(200, body);
+    let (api_base_url, server) = spawn_json_server(vec![(GET_DEPLOYMENT_PATH, 200, body)]);
 
     authenticated_command(&temp, &api_base_url)
         .args([
@@ -417,6 +444,213 @@ fn deploy_id_and_serial_resolve_one_operator_identity_by_public_key() {
             "a YubiKey operator needs its PIN typed at an interactive prompt",
         ))
         .stderr(predicate::str::contains("multiple configured operators").not());
+
+    server.join().unwrap();
+}
+
+/// Operator records are minted per app, so an operator ID from an earlier app
+/// is foreign to this deployment's manifest set even when its key is a
+/// member. The CLI refuses such an ID and names the manifest-set operator
+/// that carries the same key, before any signer is selected.
+#[test]
+fn a_foreign_operator_id_is_refused_naming_the_manifest_set_operator_with_its_key() {
+    let temp = TempDir::new().unwrap();
+    let hosted_key = fixture_manifest_member_key(0);
+    let yubikey_key = fixture_manifest_member_key(2);
+    let serial = YubiKeySerial::from(0x01c9_5c1f);
+    write_config(
+        &temp,
+        &yubikey_config(&temp, hosted_key, yubikey_key, serial),
+    );
+
+    let (api_base_url, server) = spawn_json_server(vec![
+        (
+            GET_DEPLOYMENT_PATH,
+            200,
+            deployment_response(hosted_key, yubikey_key),
+        ),
+        (
+            LIST_OPERATORS_PATH,
+            200,
+            operators_response(vec![
+                tvc_operator(YUBIKEY_OPERATOR_ID, "yubikey-op", yubikey_key),
+                tvc_operator(FOREIGN_OPERATOR_ID, "old-app-op", yubikey_key),
+                tvc_operator(HOSTED_OPERATOR_ID, "hosted", hosted_key),
+            ]),
+        ),
+    ]);
+
+    authenticated_command(&temp, &api_base_url)
+        .args([
+            "deploy",
+            "approve",
+            "--deploy-id",
+            DEPLOYMENT_ID,
+            "--operator-id",
+            FOREIGN_OPERATOR_ID,
+            "--dangerous-skip-interactive",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(format!(
+            "operator ID {FOREIGN_OPERATOR_ID} is not in the deployment's manifest set; operator \
+             yubikey-op ({YUBIKEY_OPERATOR_ID}) has the same public key, \
+             pass --operator-id {YUBIKEY_OPERATOR_ID}"
+        )))
+        .stderr(predicate::str::contains("YubiKey").not());
+
+    server.join().unwrap();
+}
+
+#[test]
+fn an_operator_id_unknown_to_the_organization_lists_the_manifest_set_operators() {
+    let temp = TempDir::new().unwrap();
+    let hosted_key = fixture_manifest_member_key(0);
+    let yubikey_key = fixture_manifest_member_key(2);
+    let serial = YubiKeySerial::from(0x01c9_5c1f);
+    write_config(
+        &temp,
+        &yubikey_config(&temp, hosted_key, yubikey_key, serial),
+    );
+
+    let (api_base_url, server) = spawn_json_server(vec![
+        (
+            GET_DEPLOYMENT_PATH,
+            200,
+            deployment_response(hosted_key, yubikey_key),
+        ),
+        (
+            LIST_OPERATORS_PATH,
+            200,
+            operators_response(vec![
+                tvc_operator(YUBIKEY_OPERATOR_ID, "yubikey-op", yubikey_key),
+                tvc_operator(HOSTED_OPERATOR_ID, "hosted", hosted_key),
+            ]),
+        ),
+    ]);
+
+    authenticated_command(&temp, &api_base_url)
+        .args([
+            "deploy",
+            "approve",
+            "--deploy-id",
+            DEPLOYMENT_ID,
+            "--operator-id",
+            FOREIGN_OPERATOR_ID,
+            "--dangerous-skip-interactive",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(format!(
+            "operator ID {FOREIGN_OPERATOR_ID} was not found in organization org-test (not in \
+             the deployment's manifest set or the organization's operators); manifest-set \
+             operators: hosted ({HOSTED_OPERATOR_ID}), yubikey-op ({YUBIKEY_OPERATOR_ID})"
+        )));
+
+    server.join().unwrap();
+}
+
+#[test]
+fn a_foreign_operator_id_whose_key_is_outside_the_manifest_set_is_rejected() {
+    let temp = TempDir::new().unwrap();
+    let hosted_key = fixture_manifest_member_key(0);
+    let yubikey_key = fixture_manifest_member_key(2);
+    let serial = YubiKeySerial::from(0x01c9_5c1f);
+    write_config(
+        &temp,
+        &yubikey_config(&temp, hosted_key, yubikey_key, serial),
+    );
+
+    let (api_base_url, server) = spawn_json_server(vec![
+        (
+            GET_DEPLOYMENT_PATH,
+            200,
+            deployment_response(hosted_key, yubikey_key),
+        ),
+        (
+            LIST_OPERATORS_PATH,
+            200,
+            operators_response(vec![tvc_operator(
+                FOREIGN_OPERATOR_ID,
+                "old-app-op",
+                fixture_manifest_member_key(1),
+            )]),
+        ),
+    ]);
+
+    authenticated_command(&temp, &api_base_url)
+        .args([
+            "deploy",
+            "approve",
+            "--deploy-id",
+            DEPLOYMENT_ID,
+            "--operator-id",
+            FOREIGN_OPERATOR_ID,
+            "--dangerous-skip-interactive",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(format!(
+            "operator ID {FOREIGN_OPERATOR_ID} is not in the deployment's manifest set and no \
+             manifest-set operator shares its public key; manifest-set operators: \
+             hosted ({HOSTED_OPERATOR_ID}), yubikey-op ({YUBIKEY_OPERATOR_ID})"
+        )));
+
+    server.join().unwrap();
+}
+
+/// Several manifest-set operators can carry one key under different names.
+/// A foreign ID with that key is refused naming only those operators.
+#[test]
+fn a_foreign_operator_id_matching_several_manifest_set_operators_lists_only_those() {
+    const SECOND_OPERATOR_ID: &str = "99999999-9999-4999-8999-999999999999";
+
+    let temp = TempDir::new().unwrap();
+    let hosted_key = fixture_manifest_member_key(0);
+    let yubikey_key = fixture_manifest_member_key(2);
+    let serial = YubiKeySerial::from(0x01c9_5c1f);
+    write_config(
+        &temp,
+        &yubikey_config(&temp, hosted_key, yubikey_key, serial),
+    );
+
+    let (api_base_url, server) = spawn_json_server(vec![
+        (
+            GET_DEPLOYMENT_PATH,
+            200,
+            deployment_response_with_manifest_set(vec![
+                tvc_operator(HOSTED_OPERATOR_ID, "hosted", hosted_key),
+                tvc_operator(YUBIKEY_OPERATOR_ID, "yubikey-op", yubikey_key),
+                tvc_operator(SECOND_OPERATOR_ID, "yubikey-op-renamed", yubikey_key),
+            ]),
+        ),
+        (
+            LIST_OPERATORS_PATH,
+            200,
+            operators_response(vec![
+                tvc_operator(YUBIKEY_OPERATOR_ID, "yubikey-op", yubikey_key),
+                tvc_operator(FOREIGN_OPERATOR_ID, "old-app-op", yubikey_key),
+            ]),
+        ),
+    ]);
+
+    authenticated_command(&temp, &api_base_url)
+        .args([
+            "deploy",
+            "approve",
+            "--deploy-id",
+            DEPLOYMENT_ID,
+            "--operator-id",
+            FOREIGN_OPERATOR_ID,
+            "--dangerous-skip-interactive",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(format!(
+            "operator ID {FOREIGN_OPERATOR_ID} is not in the deployment's manifest set and \
+             several manifest-set operators share its public key; pass one of: \
+             yubikey-op ({YUBIKEY_OPERATOR_ID}), yubikey-op-renamed ({SECOND_OPERATOR_ID})"
+        )));
 
     server.join().unwrap();
 }

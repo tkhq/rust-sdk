@@ -28,6 +28,7 @@ use qos_core::protocol::services::boot::{
 use serde::Serialize;
 use std::collections::HashSet;
 use std::fmt::{self, Formatter, Write};
+use std::mem;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
     ops::Deref,
@@ -38,7 +39,8 @@ use turnkey_client::generated::external::data::v1::{
     TvcDeployment, TvcManifest, TvcOperator, TvcOperatorSet,
 };
 use turnkey_client::generated::{
-    CreateTvcManifestApprovalsIntent, GetTvcDeploymentRequest, TvcManifestApproval,
+    CreateTvcManifestApprovalsIntent, GetTvcDeploymentRequest, GetTvcOperatorsRequest,
+    TvcManifestApproval,
 };
 use uuid::Uuid;
 
@@ -188,22 +190,84 @@ impl Run for Args {
                 };
             let explicit_selected = explicit_pair.is_some();
 
-            let requested_approval_key = match (fetched.as_ref(), requested_operator_id) {
-                (Some(fetched), Some(operator_id)) => {
-                    let matches = fetched
+            // Bind `--operator-id` to this deployment's manifest set. The
+            // backend keys operator records on public key plus name, so one
+            // key reused under another name in another app carries a
+            // different ID there. Such an ID is refused, but the
+            // organization's operator records reveal which manifest-set
+            // operator to pass instead.
+            let requested_approval_key = match (requested_operator_id, fetched.as_mut()) {
+                (Some(operator_id), Some(deployment)) => {
+                    // Listed before the lookup so a failed request is
+                    // reported as one rather than surfacing from inside a
+                    // refusal of the ID.
+                    let auth = build_client(&config).await?;
+                    let organization_operators = auth
+                        .client
+                        .get_tvc_operators(GetTvcOperatorsRequest {
+                            organization_id: auth.org_id.clone(),
+                        })
+                        .await
+                        .context("failed to list operators")?
+                        .tvc_operators
+                        .into_iter()
+                        .map(DeploymentOperator::try_from)
+                        .collect::<Result<Vec<_>, _>>()?;
+
+                    let mut matches = deployment
                         .operators
                         .iter()
-                        .filter(|operator| operator.id == operator_id)
-                        .collect::<Vec<_>>();
+                        .filter(|operator| operator.id == operator_id);
 
-                    match matches.as_slice() {
-                        [operator] => Some(operator.public_key),
-                        [] => bail!(
-                            "operator ID {operator_id} is not in the deployment's manifest set"
-                        ),
-                        _ => bail!(
-                            "deployment manifest set contains multiple operators with ID {operator_id}"
-                        ),
+                    match (matches.next(), matches.next()) {
+                        (Some(operator), None) => Some(operator.public_key),
+                        (None, _) => {
+                            // Every refusal below ends the command, so the
+                            // manifest set moves into it.
+                            let manifest_set = mem::take(&mut deployment.operators);
+                            let Some(requested) = organization_operators
+                                .into_iter()
+                                .find(|operator| operator.id == operator_id)
+                            else {
+                                return Err(RequestedOperatorError::UnknownOperator {
+                                    operator_id,
+                                    organization_id: auth.org_id,
+                                    manifest_set: manifest_set.into(),
+                                }
+                                .into());
+                            };
+
+                            // The requested record was minted for another
+                            // app; name the manifest-set operator carrying
+                            // its key when there is exactly one, otherwise
+                            // the operators that would qualify.
+                            let (same_key, others): (Vec<_>, Vec<_>) = manifest_set
+                                .into_iter()
+                                .partition(|operator| operator.public_key == requested.public_key);
+                            let error = match <[DeploymentOperator; 1]>::try_from(same_key) {
+                                Ok([operator]) => RequestedOperatorError::SameKeyOperator {
+                                    operator_id,
+                                    operator: Box::new(operator),
+                                },
+                                // Nothing shares the key, so `others` is the
+                                // whole manifest set.
+                                Err(same_key) if same_key.is_empty() => {
+                                    RequestedOperatorError::PublicKeyNotInManifestSet {
+                                        operator_id,
+                                        manifest_set: others.into(),
+                                    }
+                                }
+                                Err(same_key) => RequestedOperatorError::AmbiguousPublicKey {
+                                    operator_id,
+                                    candidates: same_key.into(),
+                                },
+                            };
+
+                            return Err(error.into());
+                        }
+                        (Some(_), Some(_)) => {
+                            return Err(RequestedOperatorError::DuplicateId { operator_id }.into());
+                        }
                     }
                 }
                 _ => None,
@@ -737,19 +801,26 @@ impl fmt::Display for ApprovalOperatorCandidate {
     }
 }
 
-/// One server-side manifest-set operator, parsed at the deployment boundary.
-#[derive(Clone)]
+/// One server-side operator record (a manifest-set member or an
+/// organization operator), parsed at the API boundary.
+#[derive(Clone, Debug)]
 struct DeploymentOperator {
     id: Uuid,
     name: String,
     public_key: QosOperatorPublicKey,
 }
 
+impl fmt::Display for DeploymentOperator {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{} ({})", self.name, self.id)
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 enum DeploymentOperatorError {
-    #[error("manifest-set operator ID '{id}' is not a UUID")]
+    #[error("operator ID '{id}' is not a UUID")]
     InvalidId { id: String, source: uuid::Error },
-    #[error("manifest-set operator {operator_id} has an invalid public key")]
+    #[error("operator {operator_id} has an invalid public key")]
     InvalidPublicKey {
         operator_id: Uuid,
         source: crate::config::turnkey::QosOperatorPublicKeyParseError,
@@ -793,6 +864,80 @@ struct FetchedManifest {
     manifest_id: Uuid,
     approvals: Vec<OperatorApproval>,
     operators: Vec<DeploymentOperator>,
+}
+
+/// `--operator-id` could not be bound to a manifest-set operator of the
+/// fetched deployment. Each message names the operator ID(s) to pass instead.
+#[derive(Debug, thiserror::Error)]
+enum RequestedOperatorError {
+    #[error("deployment manifest set contains multiple operators with ID {operator_id}")]
+    DuplicateId { operator_id: Uuid },
+    /// The requested record was minted for another app; this deployment's
+    /// manifest set carries the same key under `operator`.
+    #[error(
+        "operator ID {operator_id} is not in the deployment's manifest set; operator {operator} \
+         has the same public key, pass --operator-id {}",
+        operator.id
+    )]
+    SameKeyOperator {
+        operator_id: Uuid,
+        operator: Box<DeploymentOperator>,
+    },
+    /// Names the organization the credentials are scoped to, since
+    /// credentials for a different organization are the usual cause.
+    #[error(
+        "operator ID {operator_id} was not found in organization {organization_id} (not in the \
+         deployment's manifest set or the organization's operators); manifest-set operators: \
+         {manifest_set}"
+    )]
+    UnknownOperator {
+        operator_id: Uuid,
+        organization_id: String,
+        manifest_set: ManifestSetOperators,
+    },
+    #[error(
+        "operator ID {operator_id} is not in the deployment's manifest set and no manifest-set \
+         operator shares its public key; manifest-set operators: {manifest_set}"
+    )]
+    PublicKeyNotInManifestSet {
+        operator_id: Uuid,
+        manifest_set: ManifestSetOperators,
+    },
+    #[error(
+        "operator ID {operator_id} is not in the deployment's manifest set and several \
+         manifest-set operators share its public key; pass one of: {candidates}"
+    )]
+    AmbiguousPublicKey {
+        operator_id: Uuid,
+        candidates: ManifestSetOperators,
+    },
+}
+
+/// Manifest-set operators as remediation text: `name (id)`, comma-separated.
+#[derive(Debug)]
+struct ManifestSetOperators(Vec<DeploymentOperator>);
+
+impl From<Vec<DeploymentOperator>> for ManifestSetOperators {
+    fn from(operators: Vec<DeploymentOperator>) -> Self {
+        Self(operators)
+    }
+}
+
+impl fmt::Display for ManifestSetOperators {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        if self.0.is_empty() {
+            return f.write_str("(none)");
+        }
+
+        for (index, operator) in self.0.iter().enumerate() {
+            if index > 0 {
+                f.write_str(", ")?;
+            }
+            write!(f, "{operator}")?;
+        }
+
+        Ok(())
+    }
 }
 
 struct LoadedManifest {
@@ -1561,5 +1706,50 @@ mod tests {
         let human = posted.to_string();
         assert!(!human.contains("quorum"));
         assert!(human.ends_with("Operator ID: operator-456"));
+    }
+
+    const MANIFEST_SET_OPERATOR_ID: &str = "11111111-1111-4111-8111-111111111111";
+    const FOREIGN_OPERATOR_ID: &str = "88888888-8888-4888-8888-888888888888";
+
+    /// A server-side operator record carrying the fixture manifest set's
+    /// `member` public key.
+    fn fixture_operator(member: usize, id: &str, name: &str) -> DeploymentOperator {
+        let manifest = fixture_manifest();
+        let member = &manifest.manifest_set().members[member];
+
+        DeploymentOperator {
+            id: Uuid::parse_str(id).unwrap(),
+            name: name.to_string(),
+            public_key: QosOperatorPublicKey::try_from(member.pub_key.as_slice()).unwrap(),
+        }
+    }
+
+    #[test]
+    fn an_unknown_operator_error_names_the_manifest_set_or_its_absence() {
+        let operator_id = Uuid::parse_str(FOREIGN_OPERATOR_ID).unwrap();
+
+        let listed = RequestedOperatorError::UnknownOperator {
+            operator_id,
+            organization_id: "org-test".to_string(),
+            manifest_set: vec![fixture_operator(0, MANIFEST_SET_OPERATOR_ID, "hosted")].into(),
+        };
+        assert_eq!(
+            listed.to_string(),
+            "operator ID 88888888-8888-4888-8888-888888888888 was not found in organization \
+             org-test (not in the deployment's manifest set or the organization's operators); \
+             manifest-set operators: hosted (11111111-1111-4111-8111-111111111111)"
+        );
+
+        let empty = RequestedOperatorError::UnknownOperator {
+            operator_id,
+            organization_id: "org-test".to_string(),
+            manifest_set: Vec::new().into(),
+        };
+        assert_eq!(
+            empty.to_string(),
+            "operator ID 88888888-8888-4888-8888-888888888888 was not found in organization \
+             org-test (not in the deployment's manifest set or the organization's operators); \
+             manifest-set operators: (none)"
+        );
     }
 }
