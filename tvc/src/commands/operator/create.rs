@@ -519,7 +519,7 @@ mod tests {
     use crate::config::turnkey::{HostedOperatorRecord, OrgConfig};
     use crate::yubikey::SlotStatus;
     use crate::yubikey::test_support::{self, FakeDevice};
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
     use std::path::PathBuf;
 
     fn hosted_record() -> OperatorRecord {
@@ -617,7 +617,7 @@ mod tests {
     fn config_with_active_org() -> Config {
         Config {
             active_org: Some("default".to_string()),
-            orgs: HashMap::from([(
+            orgs: BTreeMap::from([(
                 "default".to_string(),
                 OrgConfig {
                     id: "org-123".to_string(),

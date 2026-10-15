@@ -2,7 +2,7 @@ mod common;
 
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use tempfile::TempDir;
 use tvc::config::turnkey::{Config, OperatorKind, OperatorRecord, OrgConfig};
@@ -18,7 +18,7 @@ fn write_login_config(
     fs::create_dir_all(&turnkey_dir).unwrap();
     let config = Config {
         active_org: Some("test".to_string()),
-        orgs: HashMap::from([(
+        orgs: BTreeMap::from([(
             "test".to_string(),
             OrgConfig {
                 id: "org-test".to_string(),

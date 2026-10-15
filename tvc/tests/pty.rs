@@ -12,7 +12,7 @@ mod common;
 
 use qos_p256::P256Pair;
 use rexpect::session::PtySession;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
 use std::path::Path;
@@ -457,7 +457,7 @@ fn write_hosted_org_config(home: &Path, saved_operator_ids: &[&str]) -> String {
 
     let config = Config {
         active_org: Some("hosted-org".to_string()),
-        orgs: HashMap::from([(
+        orgs: BTreeMap::from([(
             "hosted-org".to_string(),
             OrgConfig {
                 id: ORG_HOSTED.to_string(),
@@ -785,7 +785,7 @@ fn login_selects_among_multiple_yubikey_operators() {
     };
     let mut config = Config {
         active_org: Some("yk-org".to_string()),
-        orgs: HashMap::from([(
+        orgs: BTreeMap::from([(
             "yk-org".to_string(),
             OrgConfig {
                 id: "org-e2e".to_string(),
@@ -904,4 +904,73 @@ fn login_reports_the_hosted_operator_for_a_hosted_default_org() {
     assert!(output.contains("Successfully logged in!"), "{output}");
     assert!(!output.contains("Generating operator key"), "{output}");
     assert!(output.contains("Hosted operator:"), "{output}");
+}
+
+/// Profiles the pickers should list as: active first, then the rest by alias.
+/// Written out of alias order so the test is not satisfied by insertion order.
+const ORDERED_PROFILES: &[(&str, &str)] = &[
+    ("zeta", "org-zeta"),
+    ("mid", "org-mid"),
+    ("alpha", "org-alpha"),
+];
+
+/// The login organization picker lists the active profile first, the rest in
+/// alias order, and the new-organization entry last. Each `exp` consumes the
+/// PTY buffer up to its match, so the sequence asserts the order.
+#[test]
+fn login_picker_lists_the_active_profile_first_then_by_alias() {
+    let temp = tempfile::TempDir::new().unwrap();
+    common::write_profiles_config(temp.path(), ORDERED_PROFILES, Some("mid"));
+
+    let mut session = spawn_with_home(temp.path(), &["login"]);
+
+    session.exp_string("Select organization").unwrap();
+    exp_wrapped(&mut session, "mid (org-mid) (active)");
+    exp_wrapped(&mut session, "alpha (org-alpha)");
+    exp_wrapped(&mut session, "zeta (org-zeta)");
+    exp_wrapped(&mut session, "[new] Add a new organization");
+
+    // Escape cancels the prompt; nothing is selected or written.
+    session.send("\x1b").unwrap();
+    session.flush().unwrap();
+    session.exp_eof().unwrap();
+}
+
+/// Without an active profile, such as right after the active one was
+/// deleted, the picker is simply in alias order.
+#[test]
+fn login_picker_without_an_active_profile_lists_profiles_by_alias() {
+    let temp = tempfile::TempDir::new().unwrap();
+    common::write_profiles_config(temp.path(), ORDERED_PROFILES, None);
+
+    let mut session = spawn_with_home(temp.path(), &["login"]);
+
+    session.exp_string("Select organization").unwrap();
+    exp_wrapped(&mut session, "alpha (org-alpha)");
+    exp_wrapped(&mut session, "mid (org-mid)");
+    exp_wrapped(&mut session, "zeta (org-zeta)");
+    exp_wrapped(&mut session, "[new] Add a new organization");
+
+    session.send("\x1b").unwrap();
+    session.flush().unwrap();
+    session.exp_eof().unwrap();
+}
+
+/// The delete-profile picker uses the same order as the login picker.
+#[test]
+fn profile_delete_picker_lists_the_active_profile_first_then_by_alias() {
+    let temp = tempfile::TempDir::new().unwrap();
+    common::write_profiles_config(temp.path(), ORDERED_PROFILES, Some("mid"));
+
+    let mut session = spawn_with_home(temp.path(), &["profile", "delete"]);
+
+    session.exp_string("Select profile to delete").unwrap();
+    exp_wrapped(&mut session, "mid (org-mid) (active)");
+    exp_wrapped(&mut session, "alpha (org-alpha)");
+    exp_wrapped(&mut session, "zeta (org-zeta)");
+
+    // Escape cancels the prompt before the confirmation; nothing is deleted.
+    session.send("\x1b").unwrap();
+    session.flush().unwrap();
+    session.exp_eof().unwrap();
 }

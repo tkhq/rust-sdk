@@ -493,7 +493,7 @@ mod tests {
     use crate::yubikey::test_support::{self, FakeDevice};
     use crate::yubikey::{Pin, SlotStatus};
     use qos_p256::P256Pair;
-    use std::{collections::HashMap, path::PathBuf};
+    use std::{collections::BTreeMap, path::PathBuf};
 
     fn public_keys() -> (String, String) {
         let first = P256Pair::generate().unwrap().public_key().to_bytes();
@@ -506,7 +506,7 @@ mod tests {
     fn config_with_operators(operators: Vec<OperatorRecord>) -> Config {
         Config {
             active_org: Some("active".to_string()),
-            orgs: HashMap::from([(
+            orgs: BTreeMap::from([(
                 "active".to_string(),
                 OrgConfig {
                     id: "org-id".to_string(),

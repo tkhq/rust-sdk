@@ -22,7 +22,7 @@ pub use yubikey::{
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::{self, Display, Formatter};
 use std::path::Path;
 use std::path::PathBuf;
@@ -49,9 +49,10 @@ pub struct Config {
     /// The currently active organization alias
     #[serde(default)]
     pub active_org: Option<String>,
-    /// Map of org alias -> org config
+    /// Map of org alias -> org config. Ordered by alias so prompts, listings,
+    /// and the serialized config file iterate the profiles in a stable order.
     #[serde(default)]
-    pub orgs: HashMap<String, OrgConfig>,
+    pub orgs: BTreeMap<String, OrgConfig>,
     /// Registered YubiKey devices, shared across organizations. Absent from
     /// disk entirely while empty, so configs predating the registry rewrite
     /// byte-identically.
@@ -76,7 +77,7 @@ mod disk {
     };
     use anyhow::{Context, Result, bail};
     use serde::Serialize;
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
     use std::path::PathBuf;
 
     /// Every supported shape of `tvc.config.toml`.
@@ -193,7 +194,7 @@ mod disk {
             .orgs
             .into_iter()
             .map(|(alias, org)| migrate_v0_org(&alias, org).map(|org| (alias, org)))
-            .collect::<Result<HashMap<_, _>>>()?;
+            .collect::<Result<BTreeMap<_, _>>>()?;
 
         Ok(Config {
             active_org: config.active_org,

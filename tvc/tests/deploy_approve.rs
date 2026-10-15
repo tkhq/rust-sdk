@@ -2,7 +2,7 @@ mod common;
 
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
@@ -194,7 +194,7 @@ fn write_hosted_config(home: &TempDir) {
     let public = fixture_manifest_member_key(0);
     let config = Config {
         active_org: Some("test".to_string()),
-        orgs: HashMap::from([(
+        orgs: BTreeMap::from([(
             "test".to_string(),
             OrgConfig {
                 id: "org-test".to_string(),
@@ -362,7 +362,7 @@ fn yubikey_config(
 ) -> Config {
     Config {
         active_org: Some("test".to_string()),
-        orgs: HashMap::from([(
+        orgs: BTreeMap::from([(
             "test".to_string(),
             OrgConfig {
                 id: "org-test".to_string(),
@@ -776,7 +776,7 @@ fn remembered_operator_ids_are_not_approval_candidates() {
     let temp = TempDir::new().unwrap();
     let config = Config {
         active_org: Some("test".to_string()),
-        orgs: HashMap::from([(
+        orgs: BTreeMap::from([(
             "test".to_string(),
             OrgConfig {
                 id: "org-test".to_string(),
@@ -823,7 +823,7 @@ fn malformed_registered_local_operator_id_is_reported() {
     .unwrap();
     let config = Config {
         active_org: Some("test".to_string()),
-        orgs: HashMap::from([(
+        orgs: BTreeMap::from([(
             "test".to_string(),
             OrgConfig {
                 id: "org-test".to_string(),
@@ -877,7 +877,7 @@ fn manifest_membership_controls_signer_resolution_in_mixed_registry() {
     .unwrap();
     let config = Config {
         active_org: Some("test".to_string()),
-        orgs: HashMap::from([(
+        orgs: BTreeMap::from([(
             "test".to_string(),
             OrgConfig {
                 id: "org-test".to_string(),

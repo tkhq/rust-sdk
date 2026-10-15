@@ -371,7 +371,7 @@ mod tests {
     };
     use crate::operator::OperatorPublicKeyParseError;
     use qos_p256::P256Pair;
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
     use std::path::PathBuf;
 
     const OPERATOR_ID: &str = "11111111-1111-4111-8111-111111111111";
@@ -398,7 +398,7 @@ mod tests {
     fn config_with_operators(operators: Vec<OperatorRecord>) -> Config {
         Config {
             active_org: Some("active".to_string()),
-            orgs: HashMap::from([(
+            orgs: BTreeMap::from([(
                 "active".to_string(),
                 OrgConfig {
                     id: "org-id".to_string(),
@@ -576,7 +576,7 @@ mod tests {
         let operator_id = Uuid::parse_str(OPERATOR_ID).unwrap();
         let config = Config {
             active_org: Some("active".to_string()),
-            orgs: HashMap::from([
+            orgs: BTreeMap::from([
                 (
                     "active".to_string(),
                     OrgConfig {
