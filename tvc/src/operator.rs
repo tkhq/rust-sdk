@@ -600,7 +600,7 @@ mod tests {
     }
 
     fn fixed_pin() -> Pin {
-        Pin::from(String::from_utf8(test_support::PIN.to_vec()).unwrap())
+        Pin::try_from(String::from_utf8(test_support::PIN.to_vec()).unwrap()).unwrap()
     }
 
     fn selected_yubikey() -> SelectedYubiKey {

@@ -186,11 +186,11 @@ mod tests {
     }
 
     fn fixed_pin() -> Pin {
-        Pin::from(String::from_utf8(PIN.to_vec()).unwrap())
+        Pin::try_from(String::from_utf8(PIN.to_vec()).unwrap()).unwrap()
     }
 
     fn wrong_pin() -> Pin {
-        Pin::from("999999".to_string())
+        Pin::try_from("999999".to_string()).unwrap()
     }
 
     fn rendered(error: &anyhow::Error) -> String {
@@ -339,7 +339,9 @@ mod tests {
         let mut config = Config::default();
         config.yubikeys.register(serial, key);
 
-        let pin = Pin::from(String::from_utf8(qos_client::yubikey::DEFAULT_PIN.to_vec()).unwrap());
+        let pin =
+            Pin::try_from(String::from_utf8(qos_client::yubikey::DEFAULT_PIN.to_vec()).unwrap())
+                .unwrap();
         let pair = config.resolve_yubikey(serial, device, pin).await.unwrap();
 
         let message = b"tvc hardware pair test";

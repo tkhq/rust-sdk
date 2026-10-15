@@ -347,12 +347,45 @@ pub(crate) enum SlotStatus {
 }
 
 /// A YubiKey PIV PIN, held only for the duration of device-backed operations
-/// and zeroized on drop. Never persisted.
+/// and zeroized on drop. Never persisted. Constructing one proves the length
+/// is one the device can verify, so an empty or oversized entry is refused
+/// before any device call.
 pub(crate) struct Pin(Zeroizing<Vec<u8>>);
 
-impl From<String> for Pin {
-    fn from(pin: String) -> Self {
-        Self(Zeroizing::new(pin.into_bytes()))
+/// The longest PIN a PIV applet accepts.
+const PIN_MAX_LEN: usize = 8;
+
+/// A Yubico OTP is 44 modhex characters, typed as keystrokes when the key is
+/// touched with no PIV operation pending. Touching before the PIN prompt is
+/// answered lands one in the PIN field.
+const OTP_LEN: usize = 44;
+const MODHEX: &[u8] = b"cbdefghijklnrtuv";
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum PinError {
+    #[error("no PIN entered; type the PIN and press Enter before touching the device")]
+    Empty,
+    #[error(
+        "a YubiKey one-time password may have been entered instead of a PIN; type the PIN and \
+         press Enter, then touch the device only when prompted"
+    )]
+    LooksLikeOtp,
+    #[error("the PIN you entered is {len} bytes; a PIV PIN is at most {PIN_MAX_LEN} bytes")]
+    TooLong { len: usize },
+}
+
+impl TryFrom<String> for Pin {
+    type Error = PinError;
+
+    fn try_from(pin: String) -> Result<Self, Self::Error> {
+        let pin = Zeroizing::new(pin.into_bytes());
+
+        match pin.len() {
+            0 => Err(PinError::Empty),
+            OTP_LEN if pin.iter().all(|byte| MODHEX.contains(byte)) => Err(PinError::LooksLikeOtp),
+            len if len > PIN_MAX_LEN => Err(PinError::TooLong { len }),
+            _ => Ok(Self(pin)),
+        }
     }
 }
 
@@ -831,7 +864,7 @@ mod tests {
     }
 
     fn default_pin() -> Pin {
-        Pin::from(String::from_utf8(PIN.to_vec()).unwrap())
+        Pin::try_from(String::from_utf8(PIN.to_vec()).unwrap()).unwrap()
     }
 
     fn connected(serials: &[u32]) -> ConnectedYubiKeys {
@@ -939,7 +972,7 @@ mod tests {
         let mut device = FakeDevice::new(SlotStatus::QosProvisioned, SlotStatus::QosProvisioned);
 
         let error = device
-            .sign(&Pin::from("999999".to_string()), b"message")
+            .sign(&Pin::try_from("999999".to_string()).unwrap(), b"message")
             .unwrap_err();
 
         assert!(matches!(error, DeviceError::WrongPin { tries: 3 }));
@@ -1130,12 +1163,86 @@ mod tests {
         let mut yubikey = open(sole_connected_serial()).unwrap();
 
         let error = yubikey
-            .sign(&Pin::from("999999".to_string()), b"wrong pin probe")
+            .sign(
+                &Pin::try_from("999999".to_string()).unwrap(),
+                b"wrong pin probe",
+            )
             .unwrap_err();
         assert!(matches!(error, DeviceError::WrongPin { .. }));
 
         yubikey
             .sign(&default_pin(), b"restore the retry counter")
             .unwrap();
+    }
+
+    #[test]
+    fn a_pin_within_the_piv_length_bounds_is_accepted() {
+        let pin = Pin::try_from("123456".to_string()).unwrap();
+
+        assert_eq!(pin.as_bytes(), b"123456");
+    }
+
+    #[test]
+    fn an_empty_pin_is_refused_before_any_device_call() {
+        let Err(error) = Pin::try_from(String::new()) else {
+            panic!("an empty PIN should be refused");
+        };
+
+        assert!(
+            matches!(error, PinError::Empty),
+            "unexpected error: {error}"
+        );
+        assert_eq!(
+            error.to_string(),
+            "no PIN entered; type the PIN and press Enter before touching the device"
+        );
+    }
+
+    #[test]
+    fn a_touch_typed_one_time_password_is_named_as_such() {
+        let otp = "cccccccccccc".to_string() + "bdefghijklnrtuvcbdefghijklnrtuvc";
+        assert_eq!(otp.len(), OTP_LEN);
+
+        let Err(error) = Pin::try_from(otp) else {
+            panic!("a one-time password should be refused");
+        };
+
+        assert!(
+            matches!(error, PinError::LooksLikeOtp),
+            "unexpected error: {error}"
+        );
+        assert_eq!(
+            error.to_string(),
+            "a YubiKey one-time password may have been entered instead of a PIN; type the PIN and \
+             press Enter, then touch the device only when prompted"
+        );
+    }
+
+    #[test]
+    fn a_44_character_entry_outside_modhex_is_just_too_long() {
+        let Err(error) = Pin::try_from("x".repeat(OTP_LEN)) else {
+            panic!("a 44-character PIN should be refused");
+        };
+
+        assert!(
+            matches!(error, PinError::TooLong { len: 44 }),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn an_oversized_pin_is_refused_with_its_length() {
+        let Err(error) = Pin::try_from("123456789".to_string()) else {
+            panic!("a nine-character PIN should be refused");
+        };
+
+        assert!(
+            matches!(error, PinError::TooLong { len: 9 }),
+            "unexpected error: {error}"
+        );
+        assert_eq!(
+            error.to_string(),
+            "the PIN you entered is 9 bytes; a PIV PIN is at most 8 bytes"
+        );
     }
 }
