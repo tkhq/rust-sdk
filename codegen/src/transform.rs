@@ -19,6 +19,7 @@ const BASE64_FIELDS: &[(&str, &str)] = &[
         "GetTvcDeploymentProvisioningDetailsResponse",
         "manifest_envelope",
     ),
+    ("CreateTvcDeploymentIntent", "qos_manifest"),
     // Add more fields here as needed
 ];
 

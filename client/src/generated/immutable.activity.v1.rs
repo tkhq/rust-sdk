@@ -2517,6 +2517,7 @@ pub struct TvcOperatorParams {
     pub public_key: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
+#[serde_with::serde_as]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -2552,6 +2553,9 @@ pub struct CreateTvcDeploymentIntent {
     pub instance_size_cpus: ::core::option::Option<u32>,
     #[serde(default)]
     pub instance_size_ram: ::core::option::Option<u32>,
+    #[serde(default)]
+    #[serde_as(as = "Option<serde_with::base64::Base64>")]
+    pub qos_manifest: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]

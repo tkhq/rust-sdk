@@ -23,6 +23,19 @@ fn deploy_create_help_documents_config_and_override_precedence() {
         ));
 }
 
+#[cfg(not(feature = "manifest-v3"))]
+#[test]
+fn deploy_create_help_hides_client_generated_manifest_by_default() {
+    cargo_bin_cmd!("tvc")
+        .arg("deploy")
+        .arg("create")
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("client-generated-manifest").not())
+        .stdout(predicate::str::contains("TVC_CLIENT_GENERATED_MANIFEST").not());
+}
+
 #[test]
 fn deploy_create_help_documents_env_only_usage() {
     cargo_bin_cmd!("tvc")

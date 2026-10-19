@@ -2182,6 +2182,18 @@ service PublicApiService {
     };
   }
 
+  rpc GetTvcManifestGenerationInfo(GetTvcManifestGenerationInfoRequest) returns (GetTvcManifestGenerationInfoResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_tvc_manifest_generation_info"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get the values the coordinator decides or already knows for a client-generated TVC manifest: nonce, namespace, enclave PCRs, root certificate and default DNS resolvers."
+      summary: "Get TVC manifest generation info"
+      tags: "TVC"
+    };
+  }
+
   rpc GetTvcAppDeployments(GetTvcAppDeploymentsRequest) returns (GetTvcAppDeploymentsResponse) {
     option (google.api.http) = {
       post: "/public/v1/query/list_tvc_app_deployments"
@@ -4685,4 +4697,23 @@ message GetTvcOperatorsRequest {
 
 message GetTvcOperatorsResponse {
   repeated external.data.v1.TvcOperator tvc_operators = 1 [(google.api.field_behavior) = REQUIRED];
+}
+
+message GetTvcManifestGenerationInfoRequest {
+  string organization_id = 1 [(google.api.field_behavior) = REQUIRED];
+  string app_id = 2 [(google.api.field_behavior) = REQUIRED];
+  string qos_version = 3 [(google.api.field_behavior) = REQUIRED];
+}
+
+message GetTvcManifestGenerationInfoResponse {
+  // Available when queried; deployment creation enforces uniqueness if another
+  // client creates a deployment with the same nonce first.
+  uint32 nonce = 1 [(google.api.field_behavior) = REQUIRED];
+  string namespace = 2 [(google.api.field_behavior) = REQUIRED];
+  string pcr0 = 3 [(google.api.field_behavior) = REQUIRED];
+  string pcr1 = 4 [(google.api.field_behavior) = REQUIRED];
+  string pcr2 = 5 [(google.api.field_behavior) = REQUIRED];
+  string pcr3 = 6 [(google.api.field_behavior) = REQUIRED];
+  string aws_root_certificate = 7 [(google.api.field_behavior) = REQUIRED];
+  repeated string default_dns_resolvers = 8;
 }

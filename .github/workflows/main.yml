@@ -39,6 +39,8 @@ jobs:
         run: make lint
       - name: Run tests
         run: make test
+      - name: Run tvc tests with the manifest-v3 feature
+        run: cargo test --locked -p tvc --features manifest-v3
       - name: Run examples
         env:
           TURNKEY_ORGANIZATION_ID: 651b573c-861b-4f10-a478-cbcfe0c226af

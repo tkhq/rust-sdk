@@ -5077,6 +5077,10 @@ message CreateTvcDeploymentIntent {
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional desired instance memory size in GiB."}
   ];
+  optional bytes qos_manifest = 20 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional client-generated QOS manifest. The coordinator checks that the fields it decides or already knows (namespace, pivot, bridge config, operator sets, enclave PCRs and root certificate) match the deployment, and stores the bytes unchanged."}
+  ];
 }
 
 message CreateTvcManifestApprovalsIntent {

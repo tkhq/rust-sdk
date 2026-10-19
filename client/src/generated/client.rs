@@ -4486,6 +4486,19 @@ impl<S: Stamp> TurnkeyClient<S> {
         )
         .await
     }
+    /// Get TVC manifest generation info
+    ///
+    /// Get the values the coordinator decides or already knows for a client-generated TVC manifest: nonce, namespace, enclave PCRs, root certificate and default DNS resolvers.
+    pub async fn get_tvc_manifest_generation_info(
+        &self,
+        request: coordinator::GetTvcManifestGenerationInfoRequest,
+    ) -> Result<coordinator::GetTvcManifestGenerationInfoResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/get_tvc_manifest_generation_info".to_string(),
+        )
+        .await
+    }
     /// List TVC Deployments
     ///
     /// List all deployments for a given TVC App

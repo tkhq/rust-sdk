@@ -14,6 +14,12 @@ categories = ["command-line-utilities", "cryptography"]
 [lints.clippy]
 mod_module_files = "deny"
 
+[features]
+# Opt-in support for building the QOS manifest in the CLI instead of on the
+# coordinator (`tvc deploy create --client-generated-manifest`). Off by default;
+# a default build behaves exactly as before.
+manifest-v3 = []
+
 [dependencies]
 qos_client = { workspace = true }
 qos_core = { workspace = true }

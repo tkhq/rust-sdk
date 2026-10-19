@@ -1927,3 +1927,30 @@ pub struct GetTvcOperatorsResponse {
         super::super::super::super::external::data::v1::TvcOperator,
     >,
 }
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetTvcManifestGenerationInfoRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub app_id: ::prost::alloc::string::String,
+    pub qos_version: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetTvcManifestGenerationInfoResponse {
+    /// Available when queried; deployment creation enforces uniqueness if another
+    /// client creates a deployment with the same nonce first.
+    #[serde(default)]
+    pub nonce: u32,
+    pub namespace: ::prost::alloc::string::String,
+    pub pcr0: ::prost::alloc::string::String,
+    pub pcr1: ::prost::alloc::string::String,
+    pub pcr2: ::prost::alloc::string::String,
+    pub pcr3: ::prost::alloc::string::String,
+    pub aws_root_certificate: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub default_dns_resolvers: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}

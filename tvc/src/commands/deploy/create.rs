@@ -1,6 +1,11 @@
 //! Deploy create command - creates a deployment from a config file or CLI flags.
 
+#[cfg(feature = "manifest-v3")]
+mod manifest;
+
 use super::format_port_summary;
+#[cfg(feature = "manifest-v3")]
+use crate::client::fetch_tvc_deployment;
 use crate::client::{build_client, fetch_tvc_app};
 use crate::config::deploy::{DeployConfig, DeployConfigValidationErrors};
 use crate::config::turnkey::Config;
@@ -11,6 +16,8 @@ use crate::pull_secret::encrypt_pivot_pull_secret;
 use crate::shell_println;
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Args as ClapArgs;
+#[cfg(feature = "manifest-v3")]
+use clap::{ArgAction, builder::BoolishValueParser};
 use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
 use std::path::{Path, PathBuf};
@@ -80,6 +87,20 @@ pub struct Args {
     /// override `pivotContainerEncryptedPullSecret` from the config file.
     #[arg(long, value_name = "PATH", env = "TVC_PIVOT_PULL_SECRET")]
     pub pivot_pull_secret: Option<PathBuf>,
+
+    /// Build the QOS manifest locally and submit it with the deployment.
+    ///
+    /// Off by default, in which case the coordinator generates the manifest.
+    /// Requires client-generated manifests to be enabled for the organization,
+    /// a per-organization server-side switch that is off by default.
+    #[cfg(feature = "manifest-v3")]
+    #[arg(
+        long,
+        env = "TVC_CLIENT_GENERATED_MANIFEST",
+        action = ArgAction::SetTrue,
+        value_parser = BoolishValueParser::new()
+    )]
+    client_generated_manifest: bool,
 
     #[command(flatten)]
     overrides: Overrides,
@@ -155,6 +176,8 @@ struct ResolvedDeployInputs {
     config_path: Option<PathBuf>,
     config: DeployConfig,
     pivot_pull_secret: Option<String>,
+    #[cfg(feature = "manifest-v3")]
+    client_generated_manifest: bool,
 }
 
 #[instrument(skip_all)]
@@ -176,6 +199,8 @@ async fn build_inputs_interactive(
     let Args {
         config_file: config_path,
         pivot_pull_secret,
+        #[cfg(feature = "manifest-v3")]
+        client_generated_manifest,
         overrides,
     } = args;
     let (mut deploy_config, file_loaded) = read_config_file_bytes(config_path.as_deref())
@@ -214,6 +239,8 @@ async fn build_inputs_interactive(
         config_path,
         config: deploy_config,
         pivot_pull_secret,
+        #[cfg(feature = "manifest-v3")]
+        client_generated_manifest,
     })
 }
 
@@ -221,6 +248,8 @@ async fn build_inputs_non_interactive(args: Args) -> Result<ResolvedDeployInputs
     let Args {
         config_file: config_path,
         pivot_pull_secret,
+        #[cfg(feature = "manifest-v3")]
+        client_generated_manifest,
         overrides,
     } = args;
 
@@ -245,6 +274,8 @@ async fn build_inputs_non_interactive(args: Args) -> Result<ResolvedDeployInputs
         config_path,
         config,
         pivot_pull_secret,
+        #[cfg(feature = "manifest-v3")]
+        client_generated_manifest,
     })
 }
 
@@ -382,6 +413,7 @@ fn build_create_intent(
         replicas: deploy_config.replicas,
         instance_size_cpus: deploy_config.instance_size_cpus,
         instance_size_ram: deploy_config.instance_size_ram,
+        qos_manifest: None,
     }
 }
 
@@ -400,6 +432,13 @@ async fn run_with_resolved_inputs(
 ) -> Result<Outcome> {
     let deploy_config = inputs.config;
 
+    // Needs the digest as raw bytes: reject a malformed one before authenticating.
+    #[cfg(feature = "manifest-v3")]
+    let pivot_hash = inputs
+        .client_generated_manifest
+        .then(|| manifest::parse_pivot_digest(&deploy_config.expected_pivot_digest))
+        .transpose()?;
+
     shell_println!(
         ctx,
         "Creating deployment for app '{}'...",
@@ -411,7 +450,8 @@ async fn run_with_resolved_inputs(
     let auth = build_client(config).await?;
 
     // validate that the app exists
-    fetch_tvc_app(&auth, &deploy_config.app_id).await?;
+    #[cfg_attr(not(feature = "manifest-v3"), allow(unused_variables))]
+    let app = fetch_tvc_app(&auth, &deploy_config.app_id).await?;
 
     let pivot_container_encrypted_pull_secret = match inputs.pivot_pull_secret.as_ref() {
         Some(pull_secret) => Some(encrypt_pivot_pull_secret(pull_secret, &auth.api_base_url)?),
@@ -442,11 +482,34 @@ async fn run_with_resolved_inputs(
         )?;
     }
 
+    #[cfg(feature = "manifest-v3")]
+    let client_manifest = match pivot_hash {
+        None => None,
+        Some(pivot_hash) => {
+            let manifest = manifest::generate(&auth, &deploy_config, app, pivot_hash).await?;
+            shell_println!(
+                ctx,
+                "Generated QOS manifest locally (nonce {})",
+                manifest.nonce
+            )?;
+            Some(manifest)
+        }
+    };
+
     let intent = build_create_intent(
         &deploy_config,
         pinned_image_url.clone(),
         pivot_container_encrypted_pull_secret,
     );
+    #[cfg(feature = "manifest-v3")]
+    let intent = match &client_manifest {
+        None => intent,
+        Some(manifest) => CreateTvcDeploymentIntent {
+            nonce: Some(manifest.nonce),
+            qos_manifest: Some(manifest.bytes.clone()),
+            ..intent
+        },
+    };
 
     let timestamp_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -455,9 +518,15 @@ async fn run_with_resolved_inputs(
 
     let result = auth
         .client
-        .create_tvc_deployment(auth.org_id, timestamp_ms, intent)
+        .create_tvc_deployment(auth.org_id.clone(), timestamp_ms, intent)
         .await
         .context("failed to create TVC deployment")?;
+
+    #[cfg(feature = "manifest-v3")]
+    if let Some(manifest) = client_manifest {
+        let deployment = fetch_tvc_deployment(&auth, result.result.deployment_id.clone()).await?;
+        manifest::ensure_stored(deployment, &manifest.bytes)?;
+    }
 
     Ok(Outcome::DeploymentCreated(DeploymentCreated {
         deployment_id: result.result.deployment_id,
