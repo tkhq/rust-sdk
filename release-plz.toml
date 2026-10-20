@@ -2,6 +2,7 @@
 pr_labels = ["release"]
 # See https://release-plz.dev/docs/config#the-release_always-field
 release_always = false
+pr_branch_prefix = "backport-0.16-"
 
 [[package]]
 name = "turnkey_api_key_stamper"
