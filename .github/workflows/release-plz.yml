@@ -6,9 +6,11 @@ permissions:
   contents: write
 
 on:
+  push:
+    branches: ['release/0.16']
   pull_request:
-    types: [ closed ]
-    branches: [ main, release/0.16 ]
+    types: [closed]
+    branches: [main, 'release/0.16']
 
 jobs:
   # Release unpublished packages.
