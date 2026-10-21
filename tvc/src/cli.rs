@@ -87,7 +87,7 @@ pub struct Cli {
     color: ColorChoice,
 
     #[command(subcommand)]
-    command: Commands,
+    command: Dispatch,
 }
 
 impl Cli {
@@ -322,6 +322,68 @@ impl Commands {
     }
 }
 
+/// Every invocation, split by whether it runs against the loaded config file.
+/// The split is structural so a command that must work while the config file
+/// is unreadable never reaches the loading path.
+#[derive(Debug, Subcommand)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "one value per process; the split exists for the type system, not for size"
+)]
+enum Dispatch {
+    #[command(flatten)]
+    Configured(Commands),
+    #[command(flatten)]
+    Standalone(StandaloneCommands),
+}
+
+impl Dispatch {
+    async fn run(self, ctx: &mut StdCtx) -> anyhow::Result<Outcome> {
+        match self {
+            Dispatch::Configured(command) => command.run(ctx).await,
+            Dispatch::Standalone(command) => command.run().await,
+        }
+    }
+
+    fn name(&self) -> &'static str {
+        match self {
+            Dispatch::Configured(command) => command.name(),
+            Dispatch::Standalone(command) => command.name(),
+        }
+    }
+}
+
+/// Commands that never read the config file.
+#[derive(Debug, Subcommand)]
+enum StandaloneCommands {
+    /// Manage the tvc config file itself.
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommands,
+    },
+}
+
+impl StandaloneCommands {
+    async fn run(self) -> anyhow::Result<Outcome> {
+        match self {
+            StandaloneCommands::Config { command } => match command {
+                ConfigCommands::Downgrade => {
+                    commands::config::downgrade::run().await.map(Into::into)
+                }
+            },
+        }
+    }
+
+    fn name(&self) -> &'static str {
+        match self {
+            StandaloneCommands::Config { command } => match command {
+                ConfigCommands::Downgrade => "config downgrade",
+            },
+        }
+    }
+}
+
+/// Commands that run against the loaded config file.
 #[derive(Debug, Subcommand)]
 enum Commands {
     /// Authenticate with Turnkey.
@@ -396,6 +458,13 @@ enum OperatorCommands {
 enum ProfileCommands {
     /// Permanently delete a saved login profile and its local key files.
     Delete(commands::login::DeleteArgs),
+}
+
+#[derive(Debug, Subcommand)]
+enum ConfigCommands {
+    /// Rewrite tvc.config.toml to the previous schema version so an older tvc
+    /// release can read it.
+    Downgrade,
 }
 
 #[derive(Debug, Subcommand)]
@@ -582,9 +651,21 @@ mod tests {
 
         assert!(matches!(
             cli.command,
-            Commands::Yubikey {
+            Dispatch::Configured(Commands::Yubikey {
                 command: YubikeyCommands::CreateCerts(_),
-            }
+            })
+        ));
+    }
+
+    #[test]
+    fn parses_config_downgrade_as_standalone() {
+        let cli = Cli::try_parse_from(["tvc", "config", "downgrade"]).unwrap();
+
+        assert!(matches!(
+            cli.command,
+            Dispatch::Standalone(StandaloneCommands::Config {
+                command: ConfigCommands::Downgrade,
+            })
         ));
     }
 
