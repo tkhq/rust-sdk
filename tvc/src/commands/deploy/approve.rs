@@ -997,7 +997,10 @@ async fn post_approval_to_api(
 }
 
 /// Walk the user through each section of the manifest for approval.
-fn interactive_approve(ctx: &mut StdCtx, manifest: &VersionedManifest) -> anyhow::Result<()> {
+pub(crate) fn interactive_approve(
+    ctx: &mut StdCtx,
+    manifest: &VersionedManifest,
+) -> anyhow::Result<()> {
     shell_println!(ctx, "\n========================================")?;
     shell_println!(ctx, "         MANIFEST APPROVAL")?;
     shell_println!(ctx, "========================================\n")?;

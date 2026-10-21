@@ -1,5 +1,6 @@
 //! Re-encrypt local share command.
 
+use crate::commands::deploy::approve::interactive_approve;
 use crate::config::turnkey::{
     Config, OperatorKind, OperatorRecord, SelectYubiKeyOperatorError, YubiKeyOperatorRecord,
     YubiKeySerial,
@@ -9,7 +10,7 @@ use crate::operator::SelectedYubiKey;
 use crate::outcome::Outcome;
 use crate::output::{MissingRequiredInput, StdCtx};
 use crate::pair::{HexSeed, Pair};
-use crate::prompts::{self, stdin_can_prompt};
+use crate::prompts::{self, bail_required_in_non_interactive, stdin_can_prompt};
 use crate::provisioning::ProvisionBundle;
 use crate::quorum_key_metadata::QuorumKeyMetadata;
 use crate::shell_eprintln;
@@ -65,6 +66,11 @@ pub struct Args {
     #[arg(long, env = "TVC_DANGEROUS_SKIP_VERIFICATION")]
     pub dangerous_skip_verification: bool,
 
+    /// DANGEROUS: skip interactive prompts for approving each aspect of the manifest
+    /// before the share is re-encrypted to it.
+    #[arg(long, env = "TVC_DANGEROUS_SKIP_INTERACTIVE")]
+    pub dangerous_skip_interactive: bool,
+
     /// Output path for the re-encrypted share output (share ciphertext + manifest approval).
     #[arg(long, value_name = "PATH", env = "TVC_RE_ENCRYPTED_OUT")]
     pub re_encrypted_out: Option<PathBuf>,
@@ -111,6 +117,14 @@ impl Display for ReEncryptedShareGenerated {
 
 /// Run the re-encrypt-local-share command.
 pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Result<Outcome> {
+    let can_prompt = !ctx.is_non_interactive() && stdin_can_prompt();
+
+    // Manifest review prompts are required unless explicitly skipped;
+    // bail before reading anything if nobody can answer them.
+    if !args.dangerous_skip_interactive && !can_prompt {
+        bail_required_in_non_interactive("--dangerous-skip-interactive")?;
+    }
+
     let operator_seed_source =
         LocalOperatorSeedSource::from_args(args.operator_seed, args.operator_seed_path)?;
 
@@ -121,7 +135,6 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Result
         )?;
     }
 
-    let can_prompt = !ctx.is_non_interactive() && stdin_can_prompt();
     let selected_yubikey = config
         .active_org_config()
         .filter(|(_, org)| {
@@ -184,6 +197,16 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Result
         read_json_file(&args.quorum_key_metadata, "quorum key metadata file").await?;
     let provision_bundle: ProvisionBundle =
         read_json_file(&args.provision_bundle, "provision bundle").await?;
+
+    // The bundle's own manifest set approvals and attestation only prove the
+    // enclave runs the manifest it carries; the share holder still has to
+    // confirm that manifest is one they trust before handing over a share.
+    if !args.dangerous_skip_interactive {
+        interactive_approve(
+            ctx,
+            &provision_bundle.manifest_envelope().clone().manifest(),
+        )?;
+    }
 
     let operator_pair = pair_source.resolve(&config, yubikey::open).await?;
 
