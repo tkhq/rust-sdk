@@ -103,6 +103,7 @@ fn re_encrypt_local_share_help_lists_expected_flags() {
         .stdout(predicate::str::contains("--operator-seed-path <PATH>"))
         .stdout(predicate::str::contains("--dangerous-skip-verification"))
         .stdout(predicate::str::contains("--dangerous-skip-interactive"))
+        .stdout(predicate::str::contains("--trusted-app-config <PATH>"))
         .stdout(predicate::str::contains("--re-encrypted-out <PATH>"));
 }
 
@@ -218,7 +219,7 @@ fn an_unknown_yubikey_serial_is_rejected_before_share_input_io() {
 /// without the explicit skip refuses before any input files are read (they
 /// do not exist here).
 #[test]
-fn non_interactive_run_requires_dangerous_skip_interactive() {
+fn non_interactive_run_requires_a_manifest_review_choice() {
     let temp = TempDir::new().unwrap();
 
     let assert = cargo_bin_cmd!("tvc")
@@ -234,12 +235,13 @@ fn non_interactive_run_requires_dangerous_skip_interactive() {
 
     let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
     let message: serde_json::Value = serde_json::from_str(stdout.trim()).unwrap();
-    assert_eq!(message["code"], "missing_required_input");
-    assert!(
-        message["message"]
-            .as_str()
-            .unwrap()
-            .contains("--dangerous-skip-interactive")
+    assert_eq!(
+        message,
+        json!({
+            "reason": "missing_required_input",
+            "code": "missing_required_input",
+            "message": "--trusted-app-config or --dangerous-skip-interactive is required in non-interactive mode (set --trusted-app-config or --dangerous-skip-interactive or run in a TTY without --non-interactive / TVC_NON_INTERACTIVE=true)",
+        })
     );
 }
 
@@ -343,4 +345,153 @@ fn re_encrypt_local_share_round_trips_metadata_share() {
             &output.share_approval.signature,
         )
         .unwrap();
+}
+
+#[test]
+fn trusted_app_config_conflicts_with_dangerous_skip_interactive() {
+    cargo_bin_cmd!("tvc")
+        .args(["keys", "re-encrypt-local-share"])
+        .args(["--quorum-key-metadata", "meta.json"])
+        .args(["--provision-bundle", "bundle.json"])
+        .args(["--trusted-app-config", "app.json"])
+        .arg("--dangerous-skip-interactive")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "the argument '--trusted-app-config <PATH>' cannot be used with '--dangerous-skip-interactive'",
+        ));
+}
+
+/// A trusted app config stands in for the interactive review: the share is
+/// handed over only when the bundle's manifest set is the one the app config
+/// declares.
+#[test]
+fn trusted_app_config_gates_the_share_on_the_manifest_set() {
+    let temp = TempDir::new().unwrap();
+    let metadata_path = temp.path().join("quorum_key_metadata.json");
+    let provision_bundle_path = temp.path().join("provision_bundle.json");
+    let operator_seed_path = temp.path().join("operator_seed.txt");
+    let trusted_app_path = temp.path().join("trusted_app.json");
+    let untrusted_app_path = temp.path().join("untrusted_app.json");
+    let output_path = temp.path().join("re_encrypted_share.json");
+
+    let quorum_pair = P256Pair::generate().unwrap();
+    let operator_pair = P256Pair::generate().unwrap();
+    let manifest_operator = P256Pair::generate().unwrap();
+    let ephemeral_pair = P256Pair::generate().unwrap();
+    let operator_public_key = operator_pair.public_key().to_bytes();
+    let manifest_member = QuorumMember {
+        alias: "manifest-operator".to_string(),
+        pub_key: manifest_operator.public_key().to_bytes(),
+    };
+    let VersionedManifestEnvelope::V1(mut envelope) = sample_manifest_envelope(
+        quorum_pair.public_key().to_bytes(),
+        vec![QuorumMember {
+            alias: "operator-1".to_string(),
+            pub_key: operator_public_key.clone(),
+        }],
+    ) else {
+        panic!("sample manifest envelope should be V1");
+    };
+    envelope.manifest.manifest_set = ManifestSet {
+        threshold: 1,
+        members: vec![manifest_member.clone()],
+    };
+    let manifest_hash = VersionedManifestEnvelope::from(envelope.clone()).manifest_hash();
+    envelope.manifest_set_approvals = vec![Approval {
+        signature: manifest_operator.sign(&manifest_hash).unwrap(),
+        member: manifest_member,
+    }];
+    let manifest_envelope = VersionedManifestEnvelope::from(envelope);
+
+    let app_config = |public_key: Vec<u8>| {
+        serde_json::to_vec_pretty(&json!({
+            "name": "app",
+            "quorumPublicKey": hex::encode(quorum_pair.public_key().to_bytes()),
+            "manifestSetParams": {
+                "name": "manifest-set",
+                "threshold": 1,
+                "newOperators": [{"name": "manifest-operator", "publicKey": hex::encode(public_key)}],
+            },
+        }))
+        .unwrap()
+    };
+    fs::write(
+        &trusted_app_path,
+        app_config(manifest_operator.public_key().to_bytes()),
+    )
+    .unwrap();
+    fs::write(
+        &untrusted_app_path,
+        app_config(P256Pair::generate().unwrap().public_key().to_bytes()),
+    )
+    .unwrap();
+    fs::write(
+        &operator_seed_path,
+        String::from_utf8(operator_pair.to_master_seed_hex().to_vec()).unwrap(),
+    )
+    .unwrap();
+    fs::write(
+        &metadata_path,
+        serde_json::to_vec_pretty(&json!({
+            "quorumKeyPublic": hex::encode(quorum_pair.public_key().to_bytes()),
+            "threshold": 1,
+            "shares": [{
+                "operatorPublicKey": hex::encode(&operator_public_key),
+                "share": hex::encode(operator_pair.public_key().encrypt(b"share").unwrap()),
+            }],
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    fs::write(
+        &provision_bundle_path,
+        serde_json::to_vec_pretty(&json!({
+            "attestationDocumentCoseSign1Base64": "not parsed when verification is skipped",
+            "manifestEnvelope": manifest_envelope,
+            "fetchedAtUnixMs": 1_712_345_678_901_u64,
+            "deploymentId": "deploy-123",
+            "ephemeralPublicKeyHex": hex::encode(ephemeral_pair.public_key().to_bytes()),
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    let re_encrypt = |app_path: &std::path::Path| {
+        let mut command = cargo_bin_cmd!("tvc");
+        command
+            .arg("--non-interactive")
+            .args(["keys", "re-encrypt-local-share"])
+            .arg("--quorum-key-metadata")
+            .arg(&metadata_path)
+            .arg("--provision-bundle")
+            .arg(&provision_bundle_path)
+            .arg("--operator-seed-path")
+            .arg(&operator_seed_path)
+            .arg("--dangerous-skip-verification")
+            .arg("--trusted-app-config")
+            .arg(app_path)
+            .arg("--re-encrypted-out")
+            .arg(&output_path);
+        command.assert()
+    };
+
+    re_encrypt(&untrusted_app_path)
+        .failure()
+        .stderr(predicate::str::contains(
+            "provision bundle manifest set does not match the trusted app config manifest set",
+        ));
+    assert!(!output_path.exists());
+
+    re_encrypt(&trusted_app_path).success();
+    let output: ReEncryptedShareOutput =
+        serde_json::from_slice(&fs::read(&output_path).unwrap()).unwrap();
+    let re_encrypted_share = hex::decode(&output.re_encrypted_share).unwrap();
+    assert_eq!(
+        ephemeral_pair
+            .decrypt(&re_encrypted_share)
+            .unwrap()
+            .as_slice(),
+        b"share"
+    );
 }

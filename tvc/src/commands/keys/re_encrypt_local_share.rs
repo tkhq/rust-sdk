@@ -1,6 +1,7 @@
 //! Re-encrypt local share command.
 
 use crate::commands::deploy::approve::interactive_approve;
+use crate::config::app::{AppConfig, OperatorSetParams};
 use crate::config::turnkey::{
     Config, OperatorKind, OperatorRecord, SelectYubiKeyOperatorError, YubiKeyOperatorRecord,
     YubiKeySerial,
@@ -10,16 +11,17 @@ use crate::operator::SelectedYubiKey;
 use crate::outcome::Outcome;
 use crate::output::{MissingRequiredInput, StdCtx};
 use crate::pair::{HexSeed, Pair};
-use crate::prompts::{self, bail_required_in_non_interactive, stdin_can_prompt};
+use crate::prompts::{self, stdin_can_prompt};
 use crate::provisioning::ProvisionBundle;
 use crate::quorum_key_metadata::QuorumKeyMetadata;
 use crate::shell_eprintln;
 use crate::util::{read_json_file, write_file};
 use crate::yubikey::{self, Pin};
-use anyhow::{Context, anyhow};
+use anyhow::{Context, anyhow, bail, ensure};
 use clap::Args as ClapArgs;
 use qos_core::protocol::services::boot::{Approval, QuorumMember, VersionedManifestEnvelope};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use std::fmt::{self, Display, Formatter};
 use std::path::{Path, PathBuf};
 
@@ -69,7 +71,18 @@ pub struct Args {
     /// DANGEROUS: skip interactive prompts for approving each aspect of the manifest
     /// before the share is re-encrypted to it.
     #[arg(long, env = "TVC_DANGEROUS_SKIP_INTERACTIVE")]
-    pub dangerous_skip_interactive: bool,
+    dangerous_skip_interactive: bool,
+
+    /// Path to the app config whose `manifestSetParams` is trusted in place of the
+    /// interactive manifest review: the manifest set must match it exactly and its
+    /// approvals must meet the threshold.
+    #[arg(
+        long,
+        value_name = "PATH",
+        env = "TVC_TRUSTED_APP_CONFIG",
+        conflicts_with = "dangerous_skip_interactive"
+    )]
+    trusted_app_config: Option<PathBuf>,
 
     /// Output path for the re-encrypted share output (share ciphertext + manifest approval).
     #[arg(long, value_name = "PATH", env = "TVC_RE_ENCRYPTED_OUT")]
@@ -118,12 +131,16 @@ impl Display for ReEncryptedShareGenerated {
 /// Run the re-encrypt-local-share command.
 pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Result<Outcome> {
     let can_prompt = !ctx.is_non_interactive() && stdin_can_prompt();
-
-    // Manifest review prompts are required unless explicitly skipped;
-    // bail before reading anything if nobody can answer them.
-    if !args.dangerous_skip_interactive && !can_prompt {
-        bail_required_in_non_interactive("--dangerous-skip-interactive")?;
-    }
+    let manifest_review = match (args.trusted_app_config, args.dangerous_skip_interactive) {
+        (Some(path), _) => ManifestReview::TrustedAppConfig(path),
+        (None, true) => ManifestReview::DangerousSkip,
+        (None, false) if can_prompt => ManifestReview::Interactive,
+        (None, false) => {
+            return Err(prompts::error_required_in_non_interactive(
+                "--trusted-app-config or --dangerous-skip-interactive",
+            ));
+        }
+    };
 
     let operator_seed_source =
         LocalOperatorSeedSource::from_args(args.operator_seed, args.operator_seed_path)?;
@@ -200,12 +217,19 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Result
 
     // The bundle's own manifest set approvals and attestation only prove the
     // enclave runs the manifest it carries; the share holder still has to
-    // confirm that manifest is one they trust before handing over a share.
-    if !args.dangerous_skip_interactive {
-        interactive_approve(
+    // establish that manifest is one they trust before handing over a share.
+    match manifest_review {
+        ManifestReview::Interactive => interactive_approve(
             ctx,
             &provision_bundle.manifest_envelope().clone().manifest(),
-        )?;
+        )?,
+        ManifestReview::TrustedAppConfig(path) => {
+            let app_config: AppConfig = read_json_file(&path, "trusted app config").await?;
+            TrustedManifestSet::try_from(app_config)
+                .with_context(|| format!("trusted app config {}", path.display()))?
+                .ensure_trusts(provision_bundle.manifest_envelope())?;
+        }
+        ManifestReview::DangerousSkip => {}
     }
 
     let operator_pair = pair_source.resolve(&config, yubikey::open).await?;
@@ -219,6 +243,77 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Result
     .await?;
 
     write_output(ctx, args.re_encrypted_out.as_deref(), output).await
+}
+
+/// How the share holder establishes trust in the bundle's manifest.
+enum ManifestReview {
+    Interactive,
+    TrustedAppConfig(PathBuf),
+    DangerousSkip,
+}
+
+/// The manifest set an app config declares, as the keys and threshold a
+/// manifest must carry to be trusted.
+#[derive(Debug, PartialEq, Eq)]
+struct TrustedManifestSet {
+    threshold: u32,
+    members: BTreeSet<Vec<u8>>,
+}
+
+impl TryFrom<AppConfig> for TrustedManifestSet {
+    type Error = anyhow::Error;
+
+    fn try_from(app_config: AppConfig) -> anyhow::Result<Self> {
+        let Some(OperatorSetParams {
+            threshold,
+            new_operators,
+            existing_operator_ids,
+            name: _,
+        }) = app_config.manifest_set_params
+        else {
+            bail!("manifestSetParams is required to trust the manifest set offline");
+        };
+        ensure!(
+            existing_operator_ids.is_empty(),
+            "manifestSetParams.existingOperatorIds cannot be checked offline; list those operators' public keys in newOperators"
+        );
+        let members = new_operators
+            .into_iter()
+            .map(|operator| {
+                hex::decode(&operator.public_key).with_context(|| {
+                    format!(
+                        "invalid public key for manifest set operator '{}'",
+                        operator.name
+                    )
+                })
+            })
+            .collect::<anyhow::Result<_>>()?;
+
+        Ok(Self { threshold, members })
+    }
+}
+
+impl TrustedManifestSet {
+    fn ensure_trusts(&self, manifest_envelope: &VersionedManifestEnvelope) -> anyhow::Result<()> {
+        let manifest = manifest_envelope.clone().manifest();
+        let manifest_set = manifest.manifest_set();
+        let members: BTreeSet<Vec<u8>> = manifest_set
+            .members
+            .iter()
+            .map(|member| member.pub_key.clone())
+            .collect();
+        ensure!(
+            manifest_set.threshold == self.threshold && members == self.members,
+            "provision bundle manifest set does not match the trusted app config manifest set"
+        );
+
+        // Trusting the set only means something if enough of its members
+        // approved this manifest, which `--dangerous-skip-verification` would
+        // otherwise leave unchecked.
+        manifest_envelope
+            .check_approvals()
+            .context("failed to verify manifest approvals")
+    }
 }
 
 async fn build_re_encrypted_share_output(
@@ -328,9 +423,10 @@ async fn write_output(
 #[cfg(test)]
 mod tests {
     use super::{
-        ReEncryptedShareGenerated, ReEncryptedShareOutput, build_re_encrypted_share_output,
-        ensure_quorum_key_matches_manifest, find_share_set_member,
+        ReEncryptedShareGenerated, ReEncryptedShareOutput, TrustedManifestSet,
+        build_re_encrypted_share_output, ensure_quorum_key_matches_manifest, find_share_set_member,
     };
+    use crate::config::app::{AppConfig, OperatorParams};
     use crate::config::turnkey::Config;
     use crate::outcome::Outcome;
 
@@ -561,6 +657,137 @@ mod tests {
         let err = ensure_quorum_key_matches_manifest(&metadata, &bundle).unwrap_err();
 
         assert!(err.to_string().contains("does not match"));
+    }
+
+    /// An envelope whose manifest set is `members` at `threshold`, approved by
+    /// `approvers`.
+    fn envelope_with_manifest_set(
+        members: &[&P256Pair],
+        threshold: u32,
+        approvers: &[&P256Pair],
+    ) -> VersionedManifestEnvelope {
+        let member = |pair: &P256Pair| QuorumMember {
+            alias: hex::encode(&pair.public_key().to_bytes()[..4]),
+            pub_key: pair.public_key().to_bytes(),
+        };
+        let VersionedManifestEnvelope::V1(mut envelope) = sample_manifest_envelope(vec![], vec![])
+        else {
+            panic!("sample manifest envelope should be V1");
+        };
+        envelope.manifest.manifest_set = ManifestSet {
+            threshold,
+            members: members.iter().copied().map(member).collect(),
+        };
+        let manifest_hash = VersionedManifestEnvelope::from(envelope.clone()).manifest_hash();
+        envelope.manifest_set_approvals = approvers
+            .iter()
+            .map(|pair| Approval {
+                signature: pair.sign(&manifest_hash).unwrap(),
+                member: member(pair),
+            })
+            .collect();
+        envelope.into()
+    }
+
+    fn trusted_app_config(members: &[&P256Pair], threshold: u32) -> AppConfig {
+        let mut app_config = AppConfig::template(None);
+        let params = app_config.manifest_set_params.as_mut().unwrap();
+        params.threshold = threshold;
+        params.new_operators = members
+            .iter()
+            .map(|pair| OperatorParams {
+                name: "operator".to_string(),
+                public_key: hex::encode(pair.public_key().to_bytes()),
+            })
+            .collect();
+        app_config
+    }
+
+    #[test]
+    fn trusted_manifest_set_accepts_matching_approved_manifest() {
+        let operator = P256Pair::generate().unwrap();
+        let trusted = TrustedManifestSet::try_from(trusted_app_config(&[&operator], 1)).unwrap();
+
+        trusted
+            .ensure_trusts(&envelope_with_manifest_set(&[&operator], 1, &[&operator]))
+            .unwrap();
+    }
+
+    #[test]
+    fn trusted_manifest_set_rejects_a_different_manifest_set() {
+        let operator = P256Pair::generate().unwrap();
+        let impostor = P256Pair::generate().unwrap();
+        let trusted = TrustedManifestSet::try_from(trusted_app_config(&[&operator], 1)).unwrap();
+
+        let err = trusted
+            .ensure_trusts(&envelope_with_manifest_set(&[&impostor], 1, &[&impostor]))
+            .unwrap_err();
+
+        assert_eq!(
+            format!("{err:#}"),
+            "provision bundle manifest set does not match the trusted app config manifest set"
+        );
+    }
+
+    #[test]
+    fn trusted_manifest_set_rejects_a_different_threshold() {
+        let first = P256Pair::generate().unwrap();
+        let second = P256Pair::generate().unwrap();
+        let trusted =
+            TrustedManifestSet::try_from(trusted_app_config(&[&first, &second], 2)).unwrap();
+
+        let err = trusted
+            .ensure_trusts(&envelope_with_manifest_set(
+                &[&first, &second],
+                1,
+                &[&first],
+            ))
+            .unwrap_err();
+
+        assert_eq!(
+            format!("{err:#}"),
+            "provision bundle manifest set does not match the trusted app config manifest set"
+        );
+    }
+
+    #[test]
+    fn trusted_manifest_set_requires_threshold_approvals() {
+        let operator = P256Pair::generate().unwrap();
+        let trusted = TrustedManifestSet::try_from(trusted_app_config(&[&operator], 1)).unwrap();
+
+        let err = trusted
+            .ensure_trusts(&envelope_with_manifest_set(&[&operator], 1, &[]))
+            .unwrap_err();
+
+        assert_eq!(
+            format!("{err:#}"),
+            "failed to verify manifest approvals: not enough approvals"
+        );
+    }
+
+    #[test]
+    fn trusted_manifest_set_requires_inline_manifest_set_params() {
+        let mut by_id = AppConfig::template(None);
+        by_id.manifest_set_params = None;
+        by_id.manifest_set_id = Some("manifest-set-id".to_string());
+        let mut with_existing = trusted_app_config(&[], 1);
+        with_existing
+            .manifest_set_params
+            .as_mut()
+            .unwrap()
+            .existing_operator_ids = vec!["operator-id".to_string()];
+
+        assert_eq!(
+            format!("{:#}", TrustedManifestSet::try_from(by_id).unwrap_err()),
+            "manifestSetParams is required to trust the manifest set offline"
+        );
+        assert_eq!(
+            format!(
+                "{:#}",
+                TrustedManifestSet::try_from(with_existing).unwrap_err()
+            ),
+            "manifestSetParams.existingOperatorIds cannot be checked offline; list those operators' public keys in newOperators"
+        );
     }
 
     #[tokio::test]
