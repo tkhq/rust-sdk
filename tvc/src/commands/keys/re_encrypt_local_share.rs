@@ -1,12 +1,11 @@
 //! Re-encrypt local share command.
 
-use crate::commands::deploy::approve::interactive_approve;
-use crate::config::app::{AppConfig, OperatorSetParams};
 use crate::config::turnkey::{
     Config, OperatorKind, OperatorRecord, SelectYubiKeyOperatorError, YubiKeyOperatorRecord,
     YubiKeySerial,
 };
 use crate::local_operator_key::LocalOperatorSeedSource;
+use crate::manifest_review::{CarriesManifest, ManifestReview, ManifestReviewArgs, Reviewed};
 use crate::operator::SelectedYubiKey;
 use crate::outcome::Outcome;
 use crate::output::{MissingRequiredInput, StdCtx};
@@ -17,14 +16,12 @@ use crate::quorum_key_metadata::QuorumKeyMetadata;
 use crate::shell_eprintln;
 use crate::util::{read_json_file, write_file};
 use crate::yubikey::{self, Pin};
-use anyhow::{Context, anyhow, bail, ensure};
+use anyhow::{Context, anyhow};
 use clap::Args as ClapArgs;
 use qos_core::protocol::services::boot::{Approval, QuorumMember, VersionedManifestEnvelope};
 use qos_p256::P256Public;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
 use std::fmt::{self, Display, Formatter};
-use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 
 /// Re-encrypt a share with an ephemeral key.
@@ -70,21 +67,8 @@ pub struct Args {
     #[arg(long, env = "TVC_DANGEROUS_SKIP_VERIFICATION")]
     pub dangerous_skip_verification: bool,
 
-    /// DANGEROUS: skip interactive prompts for approving each aspect of the manifest
-    /// before the share is re-encrypted to it.
-    #[arg(long, env = "TVC_DANGEROUS_SKIP_INTERACTIVE")]
-    dangerous_skip_interactive: bool,
-
-    /// Path to the app config whose `manifestSetParams` is trusted in place of the
-    /// interactive manifest review: the manifest set must match it exactly and its
-    /// approvals must meet the threshold.
-    #[arg(
-        long,
-        value_name = "PATH",
-        env = "TVC_TRUSTED_APP_CONFIG",
-        conflicts_with = "dangerous_skip_interactive"
-    )]
-    trusted_app_config: Option<PathBuf>,
+    #[command(flatten)]
+    manifest_review: ManifestReviewArgs,
 
     /// Output path for the re-encrypted share output (share ciphertext + manifest approval).
     #[arg(long, value_name = "PATH", env = "TVC_RE_ENCRYPTED_OUT")]
@@ -136,22 +120,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Result
     let operator_seed_source =
         LocalOperatorSeedSource::from_args(args.operator_seed, args.operator_seed_path)?;
 
-    let manifest_review = match (args.trusted_app_config, args.dangerous_skip_interactive) {
-        (Some(path), _) => {
-            let app_config: AppConfig = read_json_file(&path, "trusted app config").await?;
-            ManifestReview::TrustedAppConfig(
-                TrustedManifestSet::try_from(app_config)
-                    .with_context(|| format!("trusted app config {}", path.display()))?,
-            )
-        }
-        (None, true) => ManifestReview::DangerousSkip,
-        (None, false) if can_prompt => ManifestReview::Interactive,
-        (None, false) => {
-            return Err(prompts::error_required_in_non_interactive(
-                "--trusted-app-config or --dangerous-skip-interactive",
-            ));
-        }
-    };
+    let manifest_review = ManifestReview::from_args(args.manifest_review, can_prompt).await?;
 
     if args.dangerous_skip_verification {
         shell_eprintln!(
@@ -226,20 +195,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Result
     let ephemeral_public_key =
         provision_bundle.ephemeral_public_key(args.dangerous_skip_verification)?;
 
-    // The bundle's own manifest set approvals and attestation only prove the
-    // enclave runs the manifest it carries; the share holder still has to
-    // establish that manifest is one they trust before handing over a share.
-    let provision_bundle = match manifest_review {
-        ManifestReview::Interactive => {
-            interactive_approve(
-                ctx,
-                &provision_bundle.manifest_envelope().clone().manifest(),
-            )?;
-            ReviewedProvisionBundle(provision_bundle)
-        }
-        ManifestReview::TrustedAppConfig(trusted) => trusted.trust(provision_bundle)?,
-        ManifestReview::DangerousSkip => ReviewedProvisionBundle(provision_bundle),
-    };
+    let provision_bundle = manifest_review.review(ctx, provision_bundle)?;
 
     let operator_pair = pair_source.resolve(&config, yubikey::open).await?;
 
@@ -254,97 +210,15 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Result
     write_output(ctx, args.re_encrypted_out.as_deref(), output).await
 }
 
-/// How the share holder establishes trust in the bundle's manifest.
-enum ManifestReview {
-    Interactive,
-    TrustedAppConfig(TrustedManifestSet),
-    DangerousSkip,
-}
-
-/// A provision bundle whose manifest passed the share holder's
-/// [`ManifestReview`]; only that review constructs it.
-#[cfg_attr(test, derive(Debug))]
-struct ReviewedProvisionBundle(ProvisionBundle);
-
-/// The manifest set an app config declares, as the keys and threshold a
-/// manifest must carry to be trusted.
-#[cfg_attr(test, derive(Debug))]
-struct TrustedManifestSet {
-    threshold: NonZeroU32,
-    members: BTreeSet<Vec<u8>>,
-}
-
-impl TryFrom<AppConfig> for TrustedManifestSet {
-    type Error = anyhow::Error;
-
-    fn try_from(app_config: AppConfig) -> anyhow::Result<Self> {
-        let Some(OperatorSetParams {
-            threshold,
-            new_operators,
-            existing_operator_ids,
-            name: _,
-        }) = app_config.manifest_set_params
-        else {
-            bail!("manifestSetParams is required to trust the manifest set offline");
-        };
-        ensure!(
-            existing_operator_ids.is_empty(),
-            "manifestSetParams.existingOperatorIds cannot be checked offline; list those operators' public keys in newOperators"
-        );
-        let threshold =
-            NonZeroU32::new(threshold).context("manifestSetParams.threshold must be at least 1")?;
-        let members: BTreeSet<Vec<u8>> = new_operators
-            .into_iter()
-            .map(|operator| {
-                hex::decode(&operator.public_key).with_context(|| {
-                    format!(
-                        "invalid public key for manifest set operator '{}'",
-                        operator.name
-                    )
-                })
-            })
-            .collect::<anyhow::Result<_>>()?;
-        ensure!(
-            threshold.get() as usize <= members.len(),
-            "manifestSetParams.threshold ({threshold}) exceeds its {} distinct newOperators",
-            members.len()
-        );
-
-        Ok(Self { threshold, members })
-    }
-}
-
-impl TrustedManifestSet {
-    fn trust(&self, provision_bundle: ProvisionBundle) -> anyhow::Result<ReviewedProvisionBundle> {
-        let manifest_envelope = provision_bundle.manifest_envelope();
-        let manifest_set = manifest_envelope.manifest_set();
-        let members: BTreeSet<&[u8]> = manifest_set
-            .members
-            .iter()
-            .map(|member| member.pub_key.as_slice())
-            .collect();
-        ensure!(
-            manifest_set.threshold == self.threshold.get()
-                && members
-                    .into_iter()
-                    .eq(self.members.iter().map(Vec::as_slice)),
-            "provision bundle manifest set does not match the trusted app config manifest set"
-        );
-
-        // Trusting the set only means something if enough of its members
-        // approved this manifest, which `--dangerous-skip-verification` would
-        // otherwise leave unchecked.
-        manifest_envelope
-            .check_approvals()
-            .context("failed to verify manifest approvals")?;
-
-        Ok(ReviewedProvisionBundle(provision_bundle))
+impl CarriesManifest for ProvisionBundle {
+    fn manifest_envelope(&self) -> &VersionedManifestEnvelope {
+        ProvisionBundle::manifest_envelope(self)
     }
 }
 
 async fn build_re_encrypted_share_output(
     quorum_key_metadata: &QuorumKeyMetadata,
-    ReviewedProvisionBundle(provision_bundle): &ReviewedProvisionBundle,
+    provision_bundle: &Reviewed<ProvisionBundle>,
     ephemeral_public_key: &P256Public,
     // Re-encryption decrypts the share, so a [`Signer`] alone is not enough;
     // the operator's key material must be able to decrypt.
@@ -445,68 +319,20 @@ async fn write_output(
 #[cfg(test)]
 mod tests {
     use super::{
-        ReEncryptedShareGenerated, ReEncryptedShareOutput, ReviewedProvisionBundle,
-        TrustedManifestSet, build_re_encrypted_share_output, ensure_quorum_key_matches_manifest,
-        find_share_set_member,
+        ReEncryptedShareGenerated, ReEncryptedShareOutput, build_re_encrypted_share_output,
+        ensure_quorum_key_matches_manifest, find_share_set_member,
     };
-    use crate::config::app::{AppConfig, OperatorParams};
     use crate::config::turnkey::Config;
+    use crate::manifest_review::Reviewed;
+    use crate::manifest_review::test_support::sample_manifest_envelope;
     use crate::outcome::Outcome;
     use crate::provisioning::ProvisionBundle;
     use crate::quorum_key_metadata::{EncryptedShareMetadata, QuorumKeyMetadata};
     use crate::yubikey::test_support::{FakeDevice, PIN, serial};
     use crate::yubikey::{Pin, SlotStatus};
-    use qos_core::protocol::services::boot::{
-        Approval, Manifest, ManifestEnvelope, ManifestSet, Namespace, NitroConfig, PatchSet,
-        PivotConfig, QuorumMember, RestartPolicy, ShareSet, VersionedManifestEnvelope,
-    };
+    use qos_core::protocol::services::boot::{Approval, QuorumMember};
     use qos_p256::{P256Pair, P256Public};
     use serde_json::json;
-
-    fn sample_manifest_envelope(
-        quorum_key: Vec<u8>,
-        share_set_members: Vec<QuorumMember>,
-    ) -> VersionedManifestEnvelope {
-        let envelope = ManifestEnvelope {
-            manifest: Manifest {
-                namespace: Namespace {
-                    name: "test-namespace".to_string(),
-                    nonce: 7,
-                    quorum_key,
-                },
-                pivot: PivotConfig {
-                    hash: [0; 32],
-                    restart: RestartPolicy::Never,
-                    bridge_config: vec![],
-                    debug_mode: false,
-                    args: vec![],
-                },
-                manifest_set: ManifestSet {
-                    threshold: 0,
-                    members: vec![],
-                },
-                share_set: ShareSet {
-                    threshold: share_set_members.len() as u32,
-                    members: share_set_members,
-                },
-                enclave: NitroConfig {
-                    pcr0: vec![0; 48],
-                    pcr1: vec![1; 48],
-                    pcr2: vec![2; 48],
-                    pcr3: vec![3; 48],
-                    aws_root_certificate: vec![],
-                    qos_commit: "test-commit".to_string(),
-                },
-                patch_set: PatchSet {
-                    threshold: 0,
-                    members: vec![],
-                },
-            },
-            manifest_set_approvals: vec![],
-            share_set_approvals: vec![],
-        };
-        envelope.into()
-    }
 
     fn bundle_with_ephemeral_key(
         ephemeral_key: &P256Public,
@@ -675,132 +501,6 @@ mod tests {
         assert!(err.to_string().contains("does not match"));
     }
 
-    fn bundle_with_manifest_set(
-        members: &[&P256Pair],
-        threshold: u32,
-        approvers: &[&P256Pair],
-    ) -> ProvisionBundle {
-        let member = |pair: &P256Pair| QuorumMember {
-            alias: hex::encode(&pair.public_key().to_bytes()[..4]),
-            pub_key: pair.public_key().to_bytes(),
-        };
-        let VersionedManifestEnvelope::V1(mut envelope) = sample_manifest_envelope(vec![], vec![])
-        else {
-            panic!("sample manifest envelope should be V1");
-        };
-        envelope.manifest.manifest_set = ManifestSet {
-            threshold,
-            members: members.iter().copied().map(member).collect(),
-        };
-        let manifest_hash = VersionedManifestEnvelope::from(envelope.clone()).manifest_hash();
-        envelope.manifest_set_approvals = approvers
-            .iter()
-            .map(|pair| Approval {
-                signature: pair.sign(&manifest_hash).unwrap(),
-                member: member(pair),
-            })
-            .collect();
-        ProvisionBundle::new(
-            "deploy-123".to_string(),
-            b"not parsed when verification is skipped",
-            envelope.into(),
-            1_712_345_678_901,
-            &P256Pair::generate().unwrap().public_key().to_bytes(),
-        )
-    }
-
-    fn trusted_app_config(members: &[&P256Pair], threshold: u32) -> AppConfig {
-        let mut app_config = AppConfig::template(None);
-        let params = app_config.manifest_set_params.as_mut().unwrap();
-        params.threshold = threshold;
-        params.new_operators = members
-            .iter()
-            .map(|pair| OperatorParams {
-                name: "operator".to_string(),
-                public_key: hex::encode(pair.public_key().to_bytes()),
-            })
-            .collect();
-        app_config
-    }
-
-    #[test]
-    fn trusted_manifest_set_rejects_a_different_threshold() {
-        let first = P256Pair::generate().unwrap();
-        let second = P256Pair::generate().unwrap();
-        let trusted =
-            TrustedManifestSet::try_from(trusted_app_config(&[&first, &second], 2)).unwrap();
-
-        let err = trusted
-            .trust(bundle_with_manifest_set(&[&first, &second], 1, &[&first]))
-            .unwrap_err();
-
-        assert_eq!(
-            format!("{err:#}"),
-            "provision bundle manifest set does not match the trusted app config manifest set"
-        );
-    }
-
-    #[test]
-    fn trusted_manifest_set_requires_threshold_approvals() {
-        let operator = P256Pair::generate().unwrap();
-        let trusted = TrustedManifestSet::try_from(trusted_app_config(&[&operator], 1)).unwrap();
-
-        let err = trusted
-            .trust(bundle_with_manifest_set(&[&operator], 1, &[]))
-            .unwrap_err();
-
-        assert_eq!(
-            format!("{err:#}"),
-            "failed to verify manifest approvals: not enough approvals"
-        );
-    }
-
-    #[test]
-    fn trusted_manifest_set_requires_inline_manifest_set_params() {
-        let mut by_id = AppConfig::template(None);
-        by_id.manifest_set_params = None;
-        by_id.manifest_set_id = Some("manifest-set-id".to_string());
-        let mut with_existing = trusted_app_config(&[], 1);
-        with_existing
-            .manifest_set_params
-            .as_mut()
-            .unwrap()
-            .existing_operator_ids = vec!["operator-id".to_string()];
-
-        assert_eq!(
-            format!("{:#}", TrustedManifestSet::try_from(by_id).unwrap_err()),
-            "manifestSetParams is required to trust the manifest set offline"
-        );
-        assert_eq!(
-            format!(
-                "{:#}",
-                TrustedManifestSet::try_from(with_existing).unwrap_err()
-            ),
-            "manifestSetParams.existingOperatorIds cannot be checked offline; list those operators' public keys in newOperators"
-        );
-    }
-
-    #[test]
-    fn trusted_manifest_set_rejects_an_unreachable_threshold() {
-        let operator = P256Pair::generate().unwrap();
-
-        assert_eq!(
-            format!(
-                "{:#}",
-                TrustedManifestSet::try_from(trusted_app_config(&[], 0)).unwrap_err()
-            ),
-            "manifestSetParams.threshold must be at least 1"
-        );
-        assert_eq!(
-            format!(
-                "{:#}",
-                TrustedManifestSet::try_from(trusted_app_config(&[&operator, &operator], 2))
-                    .unwrap_err()
-            ),
-            "manifestSetParams.threshold (2) exceeds its 1 distinct newOperators"
-        );
-    }
-
     /// The full share flow against the device-backed pair: the share is
     /// encrypted to the composite key, decrypted through the (fake) device's
     /// key-agreement path, re-encrypted to the ephemeral key, and the
@@ -837,7 +537,7 @@ mod tests {
                 share: hex::encode(composite_public.encrypt(plaintext_share).unwrap()),
             }],
         };
-        let bundle = ReviewedProvisionBundle(bundle_with_ephemeral_key(
+        let bundle = Reviewed::assume_reviewed(bundle_with_ephemeral_key(
             &ephemeral_pair.public_key(),
             quorum_pair.public_key().to_bytes(),
             vec![operator_member.clone()],
@@ -861,7 +561,7 @@ mod tests {
             P256Public::from_bytes(&output.share_approval.member.pub_key).unwrap();
         approval_public_key
             .verify(
-                &bundle.0.manifest_envelope().manifest_hash(),
+                &bundle.manifest_envelope().manifest_hash(),
                 &output.share_approval.signature,
             )
             .unwrap();

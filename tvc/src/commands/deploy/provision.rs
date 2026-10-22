@@ -3,11 +3,13 @@
 use crate::{
     client::{build_client, fetch_tvc_deployment},
     config::turnkey::Config,
+    manifest_review::{CarriesManifest, ManifestReview, ManifestReviewArgs},
     operator::{
         ResolvedHostedOperator, ensure_authenticated_org, hosted_activity_error, timestamp_ms,
     },
     outcome::Outcome,
     output::StdCtx,
+    prompts::stdin_can_prompt,
     provisioning::{
         FetchedProvisioningDetails, fetch_provisioning_details, verify_provisioning_details,
     },
@@ -16,7 +18,7 @@ use crate::{
 use anyhow::{Context, Result, ensure};
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use clap::Args as ClapArgs;
-use qos_core::protocol::services::boot::VersionedManifest;
+use qos_core::protocol::services::boot::{VersionedManifest, VersionedManifestEnvelope};
 use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
 use tracing::instrument;
@@ -41,6 +43,9 @@ pub struct Args {
     /// Never use for sensitive applications! Skip attestation, PCR, and approval verification.
     #[arg(long, env = "TVC_DANGEROUS_SKIP_VERIFICATION")]
     dangerous_skip_verification: bool,
+
+    #[command(flatten)]
+    manifest_review: ManifestReviewArgs,
 }
 
 #[derive(Default, Serialize)]
@@ -67,7 +72,10 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome
         deploy_id,
         operator_id,
         dangerous_skip_verification,
+        manifest_review,
     } = args;
+    let can_prompt = !ctx.is_non_interactive() && stdin_can_prompt();
+    let manifest_review = ManifestReview::from_args(manifest_review, can_prompt).await?;
 
     if dangerous_skip_verification {
         shell_eprintln!(
@@ -95,13 +103,15 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome
         !deployment_manifest.is_empty(),
         "deployment response contained an empty manifest"
     );
-    let intent = build_re_encrypt_intent(
+    let verified = build_re_encrypt_intent(
         details,
         deployment_manifest,
         &operator,
         dangerous_skip_verification,
         None,
     )?;
+    let VerifiedReEncryptIntent { intent, .. } =
+        manifest_review.review(ctx, verified)?.into_inner();
     let result = auth
         .client
         .re_encrypt_tvc_quorum_key_share(auth.org_id, timestamp_ms()?, intent)
@@ -112,13 +122,27 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome
     Ok(Outcome::ProvisioningShareCreated(output))
 }
 
+/// A re-encrypt intent together with the manifest envelope it was verified
+/// against, which the share holder still has to review before it is sent.
+#[cfg_attr(test, derive(Debug))]
+struct VerifiedReEncryptIntent {
+    intent: ReEncryptTvcQuorumKeyShareIntent,
+    manifest_envelope: VersionedManifestEnvelope,
+}
+
+impl CarriesManifest for VerifiedReEncryptIntent {
+    fn manifest_envelope(&self) -> &VersionedManifestEnvelope {
+        &self.manifest_envelope
+    }
+}
+
 fn build_re_encrypt_intent(
     details: FetchedProvisioningDetails,
     deployment_manifest_bytes: Vec<u8>,
     operator: &ResolvedHostedOperator,
     dangerous_skip_verification: bool,
     validation_time_override: Option<u64>,
-) -> Result<ReEncryptTvcQuorumKeyShareIntent> {
+) -> Result<VerifiedReEncryptIntent> {
     let (deployment_id, attestation_document, manifest_envelope, _) = details.into_parts();
     if dangerous_skip_verification {
         qos_nsm::nitro::unsafe_attestation_doc_from_der(&attestation_document)
@@ -131,7 +155,7 @@ fn build_re_encrypt_intent(
         )?;
     }
 
-    let verified_manifest = manifest_envelope.manifest();
+    let verified_manifest = manifest_envelope.clone().manifest();
     let deployment_manifest = VersionedManifest::try_from_slice_compat(&deployment_manifest_bytes)
         .context("failed to parse deployment manifest")?;
     ensure!(
@@ -152,13 +176,18 @@ fn build_re_encrypt_intent(
 
     let app_quorum_key = hex::encode(&deployment_manifest.namespace().quorum_key);
 
-    Ok(ReEncryptTvcQuorumKeyShareIntent {
+    let intent = ReEncryptTvcQuorumKeyShareIntent {
         attestation_doc_b64: BASE64_STANDARD.encode(attestation_document),
         manifest_b64: BASE64_STANDARD.encode(deployment_manifest_bytes),
         operator_encrypt_key: operator.encrypt_public_key().to_string(),
         operator_sign_key: operator.sign_public_key().to_string(),
         deployment_id: deployment_id.to_string(),
         app_quorum_key,
+    };
+
+    Ok(VerifiedReEncryptIntent {
+        intent,
+        manifest_envelope,
     })
 }
 
@@ -303,7 +332,8 @@ mod tests {
             false,
             Some(fixture.validation_time_secs),
         )
-        .unwrap();
+        .unwrap()
+        .intent;
 
         assert_eq!(intent, expected);
         assert_ne!(

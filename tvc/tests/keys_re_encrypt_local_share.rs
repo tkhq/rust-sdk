@@ -480,7 +480,7 @@ fn trusted_app_config_gates_the_share_on_the_manifest_set() {
         json!({
             "reason": "command_error",
             "code": "command_error",
-            "message": "provision bundle manifest set does not match the trusted app config manifest set",
+            "message": "manifest set does not match the trusted app config manifest set",
         })
     );
     assert!(!output_path.exists());
