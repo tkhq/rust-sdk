@@ -17,7 +17,7 @@ Exit codes: `0` success, `1` runtime error, `2` usage error.
 
 | `code` | Trigger | Recovery |
 |---|---|---|
-| `missing_required_input` | A value that would have been prompted for interactively was absent in non-interactive mode. Only the prompting commands emit it (`deploy approve` without `--dangerous-skip-interactive`, `keys re-encrypt-local-share` or `deploy provision` without `--trusted-app-config` or `--dangerous-skip-interactive`, `login` without `--org`); a missing clap-required flag is `usage_error` instead. `reason` is `missing_required_input`. | The message names the missing flag. Supply it or its `TVC_*` env var. |
+| `missing_required_input` | A value that would have been prompted for interactively was absent in non-interactive mode. Only the prompting commands emit it (`deploy approve` without `--dangerous-skip-interactive`, `keys re-encrypt-local-share` or `deploy provision` without `--dangerous-skip-interactive`, `login` without `--org`); a missing clap-required flag is `usage_error` instead. `reason` is `missing_required_input`. | The message names the missing flag. Supply it or its `TVC_*` env var. |
 | `usage_error` | Bad flags/args or unknown subcommand (clap parse failure). Exit code 2. | Fix the command. Re-check subcommand and flag names against the skill; do not invent flags. |
 | `unauthorized` | HTTP 401/403 from the API. | Verify `TVC_ORG_ID` / `TVC_API_KEY_PUBLIC` / `TVC_API_KEY_PRIVATE` (or your `tvc login` profile), and that the key is permitted for the action. |
 | `not_found` | HTTP 404, or an OK response with an empty resource. | Confirm the `--app-id` / `--deploy-id`. Remember there is no `deploy list` to discover IDs; you must have saved them. |
@@ -38,5 +38,5 @@ Exit codes: `0` success, `1` runtime error, `2` usage error.
 ## Gotchas
 
 - JSON mode forces non-interactive, so the few commands that would prompt instead fail with `missing_required_input`. Most missing values surface as `usage_error` (a clap-required flag was omitted), so provide every required value up front and treat both codes as "fix the invocation".
-- `deploy approve` in JSON mode fails fast (as `missing_required_input` on `--dangerous-skip-interactive`) unless that flag is passed; `keys re-encrypt-local-share` and `deploy provision` do the same unless `--trusted-app-config` or `--dangerous-skip-interactive` is passed.
+- `deploy approve` in JSON mode fails fast (as `missing_required_input` on `--dangerous-skip-interactive`) unless that flag is passed; `keys re-encrypt-local-share` and `deploy provision` do the same.
 - A 404-style "not found" can also mean "exists but has no state yet" (e.g. `deploy get-status` before replicas appear returns `replicas: null` rather than erroring, but a truly unknown ID errors as `not_found`). Distinguish by whether you hold a valid ID.

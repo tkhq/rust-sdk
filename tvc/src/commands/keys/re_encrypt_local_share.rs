@@ -120,7 +120,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Result
     let operator_seed_source =
         LocalOperatorSeedSource::from_args(args.operator_seed, args.operator_seed_path)?;
 
-    let manifest_review = ManifestReview::from_args(args.manifest_review, can_prompt).await?;
+    let manifest_review = ManifestReview::from_args(args.manifest_review, can_prompt)?;
 
     if args.dangerous_skip_verification {
         shell_eprintln!(
@@ -324,15 +324,62 @@ mod tests {
     };
     use crate::config::turnkey::Config;
     use crate::manifest_review::Reviewed;
-    use crate::manifest_review::test_support::sample_manifest_envelope;
     use crate::outcome::Outcome;
     use crate::provisioning::ProvisionBundle;
     use crate::quorum_key_metadata::{EncryptedShareMetadata, QuorumKeyMetadata};
     use crate::yubikey::test_support::{FakeDevice, PIN, serial};
     use crate::yubikey::{Pin, SlotStatus};
-    use qos_core::protocol::services::boot::{Approval, QuorumMember};
+    use qos_core::protocol::services::boot::{
+        Approval, Manifest, ManifestEnvelope, ManifestSet, Namespace, NitroConfig, PatchSet,
+        PivotConfig, QuorumMember, RestartPolicy, ShareSet, VersionedManifestEnvelope,
+    };
     use qos_p256::{P256Pair, P256Public};
     use serde_json::json;
+
+    fn sample_manifest_envelope(
+        quorum_key: Vec<u8>,
+        share_set_members: Vec<QuorumMember>,
+    ) -> VersionedManifestEnvelope {
+        let envelope = ManifestEnvelope {
+            manifest: Manifest {
+                namespace: Namespace {
+                    name: "test-namespace".to_string(),
+                    nonce: 7,
+                    quorum_key,
+                },
+                pivot: PivotConfig {
+                    hash: [0; 32],
+                    restart: RestartPolicy::Never,
+                    bridge_config: vec![],
+                    debug_mode: false,
+                    args: vec![],
+                },
+                manifest_set: ManifestSet {
+                    threshold: 0,
+                    members: vec![],
+                },
+                share_set: ShareSet {
+                    threshold: share_set_members.len() as u32,
+                    members: share_set_members,
+                },
+                enclave: NitroConfig {
+                    pcr0: vec![0; 48],
+                    pcr1: vec![1; 48],
+                    pcr2: vec![2; 48],
+                    pcr3: vec![3; 48],
+                    aws_root_certificate: vec![],
+                    qos_commit: "test-commit".to_string(),
+                },
+                patch_set: PatchSet {
+                    threshold: 0,
+                    members: vec![],
+                },
+            },
+            manifest_set_approvals: vec![],
+            share_set_approvals: vec![],
+        };
+        envelope.into()
+    }
 
     fn bundle_with_ephemeral_key(
         ephemeral_key: &P256Public,

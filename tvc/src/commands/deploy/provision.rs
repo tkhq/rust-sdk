@@ -75,7 +75,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome
         manifest_review,
     } = args;
     let can_prompt = !ctx.is_non_interactive() && stdin_can_prompt();
-    let manifest_review = ManifestReview::from_args(manifest_review, can_prompt).await?;
+    let manifest_review = ManifestReview::from_args(manifest_review, can_prompt)?;
 
     if dangerous_skip_verification {
         shell_eprintln!(
