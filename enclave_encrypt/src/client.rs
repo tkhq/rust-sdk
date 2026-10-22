@@ -13,6 +13,7 @@ use p256::{
 };
 use rand_core::OsRng;
 use std::str::from_utf8;
+use zeroize::Zeroizing;
 
 /// Expected length (in bytes) for imported private keys
 const EXPECTED_PRIVATE_KEY_BYTE_LENGTH: usize = 32;
@@ -169,12 +170,39 @@ impl ExportClient {
     /// Bundles are JSON encoded strings, e.g. "{\"version\":\"v1.0.0\",\"data\":\"7b22656e63617070656450...\"}"
     /// This function returns the secret as a string.
     /// - `organization_id` is the expected organization ID. This will be checked against the content of the bundle.
+    ///
+    /// The secret must be valid UTF-8, and the returned `String` is not wiped
+    /// on drop. For key material and any secret that is not text, use
+    /// [`ExportClient::decrypt_secret_bytes`] instead.
     pub fn decrypt_secret<S: AsRef<str>, T: AsRef<str>>(
         &mut self,
         export_bundle: S,
         organization_id: T,
     ) -> Result<String, EnclaveEncryptError> {
         self.decrypt_wallet_mnemonic_phrase(export_bundle, organization_id)
+    }
+
+    /// Decrypts a secret export bundle and returns the raw secret bytes.
+    /// Bundles are JSON encoded strings, e.g. "{\"version\":\"v1.0.0\",\"data\":\"7b22656e63617070656450...\"}"
+    /// - `organization_id` is the expected organization ID. This will be checked against the content of the bundle.
+    ///
+    /// Unlike [`ExportClient::decrypt_secret`], this accepts any byte content
+    /// (a DER-encoded key, for example) and does not check its length or
+    /// require UTF-8. The plaintext is returned in a [`Zeroizing`] wrapper and
+    /// is wiped from memory when dropped.
+    pub fn decrypt_secret_bytes<S: AsRef<str>, T: AsRef<str>>(
+        &mut self,
+        export_bundle: S,
+        organization_id: T,
+    ) -> Result<Zeroizing<Vec<u8>>, EnclaveEncryptError> {
+        // hpke opens the ciphertext in place and hands back the one `Vec`
+        // holding the plaintext, which `EnclaveEncryptClient::decrypt` moves
+        // up to us without copying. Wrapping that `Vec` covers the plaintext
+        // on this path.
+        let decrypted_bytes = self
+            .encrypt_client
+            .decrypt(export_bundle.as_ref().as_bytes(), organization_id.as_ref())?;
+        Ok(Zeroizing::new(decrypted_bytes))
     }
 }
 
@@ -863,6 +891,72 @@ mod test {
                     serde_json::to_string(&encrypt_bundle).unwrap(),
                     "wrong-org-id"
                 )
+                .unwrap_err(),
+            EnclaveEncryptError::InvalidOrganization,
+        );
+    }
+
+    /// A payload that is not valid UTF-8 and is longer than any fixed-size
+    /// key, so it exercises the "any bytes" path.
+    fn example_binary_secret() -> Vec<u8> {
+        let mut secret = vec![0x00, 0xff, 0x80, 0xfe, 0xc0, 0x00];
+        secret.extend((0u8..=255).cycle().take(1200));
+        secret
+    }
+
+    /// Encrypts `example_binary_secret` for "org-id" to `customer`'s target
+    /// key and returns the JSON bundle as sent over the wire.
+    fn binary_secret_export_bundle(customer: &ExportClient) -> String {
+        let customer_target: P256Public = hex::decode(customer.target_public_key().unwrap())
+            .unwrap()
+            .try_into()
+            .unwrap();
+        let enclave = EnclaveEncryptServer::from_enclave_auth_key(
+            test_quorum_private_key(),
+            "org-id".to_string(),
+            None,
+        );
+        serde_json::to_string(
+            &enclave
+                .encrypt(&customer_target, &example_binary_secret())
+                .unwrap(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn produce_and_decrypt_binary_secret_export_bundle() {
+        let secret = example_binary_secret();
+        assert!(from_utf8(&secret).is_err());
+
+        // The text variant refuses the payload. A target key is one-shot, so
+        // each variant gets its own client and bundle.
+        let mut text_customer = ExportClient::new(&test_quorum_public_key());
+        let text_bundle = binary_secret_export_bundle(&text_customer);
+        assert!(matches!(
+            text_customer
+                .decrypt_secret(text_bundle, "org-id")
+                .unwrap_err(),
+            EnclaveEncryptError::InvalidUtf8Bytes(_)
+        ));
+
+        // The bytes variant returns it as-is.
+        let mut bytes_customer = ExportClient::new(&test_quorum_public_key());
+        let bytes_bundle = binary_secret_export_bundle(&bytes_customer);
+        let decrypted = bytes_customer
+            .decrypt_secret_bytes(bytes_bundle, "org-id")
+            .unwrap();
+        assert_eq!(*decrypted, secret);
+    }
+
+    #[test]
+    fn binary_secret_export_bundle_decryption_fails_with_incorrect_org_id() {
+        let mut customer = ExportClient::new(&test_quorum_public_key());
+        let encoded_bundle = binary_secret_export_bundle(&customer);
+
+        assert_eq!(
+            customer
+                .decrypt_secret_bytes(encoded_bundle, "wrong-org-id")
                 .unwrap_err(),
             EnclaveEncryptError::InvalidOrganization,
         );
