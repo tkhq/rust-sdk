@@ -14,7 +14,7 @@ pub const MIN_SHARE_SET_THRESHOLD: u32 = 2;
 pub struct AppConfig {
     pub name: String,
     pub quorum_public_key: String,
-    #[serde(default)]
+    #[serde(default = "default_enable_egress")]
     pub enable_egress: bool,
     #[serde(default)]
     pub manifest_set_id: Option<String>,
@@ -29,6 +29,10 @@ pub struct AppConfig {
     /// quorum key is considered permanently insecure.
     #[serde(default)]
     pub dangerous_enable_debug_mode_deployments: bool,
+}
+
+fn default_enable_egress() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,7 +75,7 @@ impl AppConfig {
         Self {
             name: "<FILL_IN_APP_NAME>".to_string(),
             quorum_public_key: KNOWN_QUORUM_KEY.to_string(),
-            enable_egress: false,
+            enable_egress: true,
             manifest_set_id: None,
             manifest_set_params: Some(OperatorSetParams {
                 name: "<FILL_IN_MANIFEST_SET_NAME>".to_string(),
@@ -352,17 +356,17 @@ mod tests {
     #[test]
     fn config_deserializes_enable_egress() {
         let mut json = valid_config_json();
-        json["enableEgress"] = json!(true);
+        json["enableEgress"] = json!(false);
         let config: AppConfig = serde_json::from_value(json).unwrap();
 
-        assert!(config.enable_egress);
+        assert!(!config.enable_egress);
     }
 
     #[test]
-    fn config_defaults_enable_egress_to_false() {
+    fn config_defaults_enable_egress_to_true() {
         let config: AppConfig = serde_json::from_value(valid_config_json()).unwrap();
 
-        assert!(!config.enable_egress);
+        assert!(config.enable_egress);
     }
 
     #[test]
