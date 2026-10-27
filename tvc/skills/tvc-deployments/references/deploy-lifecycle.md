@@ -168,8 +168,10 @@ The hosted path above lets Turnkey hold the operator quorum key. For the self-pr
 - `tvc keys init-local-quorum-key -o quorum_key.json` → edit → `tvc keys generate-local-quorum-key -c quorum_key.json --quorum-key-metadata-out meta.json`
 - `tvc deploy provisioning-details --deploy-id <ID> --provision-bundle-out bundle.json`
 - `tvc keys re-encrypt-local-share --quorum-key-metadata meta.json --provision-bundle bundle.json --re-encrypted-out share.json`
+  - walks the share holder through the same manifest review as `deploy approve` before decrypting the share. In JSON/non-interactive mode it **requires** `--dangerous-skip-interactive` (blind to the manifest contents).
 - `tvc deploy post-share --re-encrypted-share share.json --share-operator-id <OPERATOR_ID>`
 - `tvc deploy provision --deploy-id <ID> --operator-id <OPERATOR_ID>`
+  - runs the same manifest review as `keys re-encrypt-local-share` before asking Turnkey to re-encrypt the hosted operator's share, after fetching and verifying the provisioning details. In JSON/non-interactive mode it likewise **requires** `--dangerous-skip-interactive`.
 
 `quorum_key_metadata` and share files contain sensitive material, keep them out of source control.
 

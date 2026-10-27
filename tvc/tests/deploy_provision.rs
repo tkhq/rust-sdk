@@ -1,5 +1,6 @@
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
+use serde_json::json;
 
 const DEPLOYMENT_ID: &str = "33333333-3333-4333-8333-333333333333";
 const OPERATOR_ID: &str = "11111111-1111-4111-8111-111111111111";
@@ -28,6 +29,7 @@ fn provision_help_lists_only_singular_live_inputs() {
         .stdout(predicate::str::contains("--deploy-id <DEPLOY_ID>"))
         .stdout(predicate::str::contains("--operator-id <OPERATOR_ID>"))
         .stdout(predicate::str::contains("--dangerous-skip-verification"))
+        .stdout(predicate::str::contains("--dangerous-skip-interactive"))
         .stdout(predicate::str::contains("TVC_DEPLOY_ID"))
         .stdout(predicate::str::contains("TVC_OPERATOR_ID"))
         .stdout(predicate::str::contains("--provision-bundle").not())
@@ -60,6 +62,7 @@ fn provision_reads_ids_from_environment() {
         .env("TVC_OPERATOR_ID", OPERATOR_ID)
         .arg("deploy")
         .arg("provision")
+        .arg("--dangerous-skip-interactive")
         .assert()
         .failure()
         .stderr(predicate::str::contains("No active organization"))
@@ -81,4 +84,30 @@ fn provision_rejects_malformed_uuids_during_parsing() {
             .failure()
             .stderr(predicate::str::contains("invalid value 'not-a-uuid'"));
     }
+}
+
+#[test]
+fn non_interactive_provision_requires_a_manifest_review_choice() {
+    let temp = tempfile::TempDir::new().unwrap();
+
+    let assert = cargo_bin_cmd!("tvc")
+        .env_clear()
+        .env("HOME", temp.path())
+        .arg("--message-format=json")
+        .args(["deploy", "provision"])
+        .args(["--deploy-id", DEPLOYMENT_ID])
+        .args(["--operator-id", OPERATOR_ID])
+        .assert()
+        .failure();
+
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+    let message: serde_json::Value = serde_json::from_str(stdout.trim()).unwrap();
+    assert_eq!(
+        message,
+        json!({
+            "reason": "missing_required_input",
+            "code": "missing_required_input",
+            "message": "--dangerous-skip-interactive is required in non-interactive mode (set --dangerous-skip-interactive or run in a TTY without --non-interactive / TVC_NON_INTERACTIVE=true)",
+        })
+    );
 }

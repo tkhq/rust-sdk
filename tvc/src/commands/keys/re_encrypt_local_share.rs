@@ -5,6 +5,7 @@ use crate::config::turnkey::{
     YubiKeySerial,
 };
 use crate::local_operator_key::LocalOperatorSeedSource;
+use crate::manifest_review::{CarriesManifest, ManifestReview, ManifestReviewArgs, Reviewed};
 use crate::operator::SelectedYubiKey;
 use crate::outcome::Outcome;
 use crate::output::{MissingRequiredInput, StdCtx};
@@ -18,6 +19,7 @@ use crate::yubikey::{self, Pin};
 use anyhow::{Context, anyhow};
 use clap::Args as ClapArgs;
 use qos_core::protocol::services::boot::{Approval, QuorumMember, VersionedManifestEnvelope};
+use qos_p256::P256Public;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display, Formatter};
 use std::path::{Path, PathBuf};
@@ -65,6 +67,9 @@ pub struct Args {
     #[arg(long, env = "TVC_DANGEROUS_SKIP_VERIFICATION")]
     pub dangerous_skip_verification: bool,
 
+    #[command(flatten)]
+    manifest_review: ManifestReviewArgs,
+
     /// Output path for the re-encrypted share output (share ciphertext + manifest approval).
     #[arg(long, value_name = "PATH", env = "TVC_RE_ENCRYPTED_OUT")]
     pub re_encrypted_out: Option<PathBuf>,
@@ -111,8 +116,11 @@ impl Display for ReEncryptedShareGenerated {
 
 /// Run the re-encrypt-local-share command.
 pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Result<Outcome> {
+    let can_prompt = !ctx.is_non_interactive() && stdin_can_prompt();
     let operator_seed_source =
         LocalOperatorSeedSource::from_args(args.operator_seed, args.operator_seed_path)?;
+
+    let manifest_review = ManifestReview::from_args(args.manifest_review, can_prompt)?;
 
     if args.dangerous_skip_verification {
         shell_eprintln!(
@@ -121,7 +129,6 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Result
         )?;
     }
 
-    let can_prompt = !ctx.is_non_interactive() && stdin_can_prompt();
     let selected_yubikey = config
         .active_org_config()
         .filter(|(_, org)| {
@@ -184,35 +191,82 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Result
         read_json_file(&args.quorum_key_metadata, "quorum key metadata file").await?;
     let provision_bundle: ProvisionBundle =
         read_json_file(&args.provision_bundle, "provision bundle").await?;
+    let verified_bundle = manifest_review.review(
+        ctx,
+        VerifiedProvisionBundle::verify(
+            &quorum_key_metadata,
+            provision_bundle,
+            args.dangerous_skip_verification,
+        )?,
+    )?;
 
     let operator_pair = pair_source.resolve(&config, yubikey::open).await?;
 
     let output = build_re_encrypted_share_output(
         &quorum_key_metadata,
-        &provision_bundle,
+        &verified_bundle,
         operator_pair.as_ref(),
-        args.dangerous_skip_verification,
     )
     .await?;
 
     write_output(ctx, args.re_encrypted_out.as_deref(), output).await
 }
 
+/// A provision bundle that matches the quorum key metadata, together with the
+/// ephemeral key it attests to, which the share holder still has to review
+/// before the share is re-encrypted to that key.
+struct VerifiedProvisionBundle {
+    bundle: ProvisionBundle,
+    ephemeral_public_key: P256Public,
+}
+
+impl VerifiedProvisionBundle {
+    fn verify(
+        quorum_key_metadata: &QuorumKeyMetadata,
+        bundle: ProvisionBundle,
+        dangerous_skip_verification: bool,
+    ) -> anyhow::Result<Self> {
+        let metadata_quorum_key = quorum_key_metadata.quorum_key_public_bytes()?;
+        let manifest = bundle.manifest_envelope().clone().manifest();
+        let manifest_quorum_key = &manifest.namespace().quorum_key;
+
+        if metadata_quorum_key.as_slice() != manifest_quorum_key.as_slice() {
+            anyhow::bail!(
+                "quorum key metadata quorumKeyPublic ({}) does not match provision bundle manifest quorumKey ({})",
+                hex::encode(metadata_quorum_key),
+                hex::encode(manifest_quorum_key),
+            );
+        }
+
+        let ephemeral_public_key = bundle.ephemeral_public_key(dangerous_skip_verification)?;
+
+        Ok(Self {
+            bundle,
+            ephemeral_public_key,
+        })
+    }
+}
+
+impl CarriesManifest for VerifiedProvisionBundle {
+    fn manifest_envelope(&self) -> &VersionedManifestEnvelope {
+        self.bundle.manifest_envelope()
+    }
+}
+
 async fn build_re_encrypted_share_output(
     quorum_key_metadata: &QuorumKeyMetadata,
-    provision_bundle: &ProvisionBundle,
+    verified_bundle: &Reviewed<VerifiedProvisionBundle>,
     // Re-encryption decrypts the share, so a [`Signer`] alone is not enough;
     // the operator's key material must be able to decrypt.
     operator_pair: &dyn Pair,
-    dangerous_skip_verification: bool,
 ) -> anyhow::Result<ReEncryptedShareOutput> {
-    ensure_quorum_key_matches_manifest(quorum_key_metadata, provision_bundle)?;
-
-    let ephemeral_public_key =
-        provision_bundle.ephemeral_public_key(dangerous_skip_verification)?;
     let operator_public_key = operator_pair.public_key();
     let encrypted_share = quorum_key_metadata.encrypted_share_for_operator(&operator_public_key)?;
-    let member = find_share_set_member(provision_bundle.manifest_envelope(), &operator_public_key)?;
+    let VerifiedProvisionBundle {
+        bundle,
+        ephemeral_public_key,
+    } = &**verified_bundle;
+    let member = find_share_set_member(bundle.manifest_envelope(), &operator_public_key)?;
 
     let re_encrypted_share = {
         let plaintext_share = operator_pair
@@ -226,36 +280,17 @@ async fn build_re_encrypted_share_output(
     };
 
     let signature = operator_pair
-        .sign(&provision_bundle.manifest_envelope().manifest_hash())
+        .sign(&bundle.manifest_envelope().manifest_hash())
         .await
         .context("failed to sign share approval with operator key")?;
     let share_approval = Approval { signature, member };
 
     Ok(ReEncryptedShareOutput {
-        deployment_id: provision_bundle.deployment_id().to_string(),
+        deployment_id: bundle.deployment_id().to_string(),
         ephemeral_public_key_hex: hex::encode(ephemeral_public_key.to_bytes()),
         re_encrypted_share: hex::encode(re_encrypted_share),
         share_approval,
     })
-}
-
-fn ensure_quorum_key_matches_manifest(
-    quorum_key_metadata: &QuorumKeyMetadata,
-    provision_bundle: &ProvisionBundle,
-) -> anyhow::Result<()> {
-    let metadata_quorum_key = quorum_key_metadata.quorum_key_public_bytes()?;
-    let manifest = provision_bundle.manifest_envelope().clone().manifest();
-    let manifest_quorum_key = &manifest.namespace().quorum_key;
-
-    if metadata_quorum_key.as_slice() != manifest_quorum_key.as_slice() {
-        anyhow::bail!(
-            "quorum key metadata quorumKeyPublic ({}) does not match provision bundle manifest quorumKey ({})",
-            hex::encode(metadata_quorum_key),
-            hex::encode(manifest_quorum_key),
-        );
-    }
-
-    Ok(())
 }
 
 fn find_share_set_member(
@@ -305,13 +340,12 @@ async fn write_output(
 #[cfg(test)]
 mod tests {
     use super::{
-        ReEncryptedShareGenerated, ReEncryptedShareOutput, build_re_encrypted_share_output,
-        ensure_quorum_key_matches_manifest, find_share_set_member,
+        ReEncryptedShareGenerated, ReEncryptedShareOutput, VerifiedProvisionBundle,
+        build_re_encrypted_share_output, find_share_set_member,
     };
     use crate::config::turnkey::Config;
+    use crate::manifest_review::Reviewed;
     use crate::outcome::Outcome;
-
-    use crate::pair::LocalPair;
     use crate::provisioning::ProvisionBundle;
     use crate::quorum_key_metadata::{EncryptedShareMetadata, QuorumKeyMetadata};
     use crate::yubikey::test_support::{FakeDevice, PIN, serial};
@@ -380,11 +414,6 @@ mod tests {
             1_712_345_678_901,
             &ephemeral_key.to_bytes(),
         )
-    }
-
-    fn local_pair_from_pair(pair: &P256Pair) -> LocalPair {
-        let seed_hex = String::from_utf8(pair.to_master_seed_hex().to_vec()).unwrap();
-        LocalPair::from_hex_seed(&seed_hex).unwrap()
     }
 
     fn quorum_key_metadata(
@@ -535,52 +564,11 @@ mod tests {
             vec![],
         );
 
-        let err = ensure_quorum_key_matches_manifest(&metadata, &bundle).unwrap_err();
+        let Err(err) = VerifiedProvisionBundle::verify(&metadata, bundle, false) else {
+            panic!("expected a quorum key mismatch error");
+        };
 
         assert!(err.to_string().contains("does not match"));
-    }
-
-    #[tokio::test]
-    async fn re_encrypt_round_trip_and_generates_verifiable_approval() {
-        let quorum_pair = P256Pair::generate().unwrap();
-        let operator_pair = P256Pair::generate().unwrap();
-        let operator_member = QuorumMember {
-            alias: "operator-1".to_string(),
-            pub_key: operator_pair.public_key().to_bytes(),
-        };
-        let operator_local_pair = local_pair_from_pair(&operator_pair);
-        let ephemeral_pair = P256Pair::generate().unwrap();
-        let plaintext_share = b"arbitrary test share bytes";
-        let metadata = quorum_key_metadata(&quorum_pair, &operator_pair, plaintext_share);
-        let bundle = bundle_with_ephemeral_key(
-            &ephemeral_pair.public_key(),
-            quorum_pair.public_key().to_bytes(),
-            vec![operator_member.clone()],
-        );
-
-        let output =
-            build_re_encrypted_share_output(&metadata, &bundle, &operator_local_pair, true)
-                .await
-                .unwrap();
-
-        assert_eq!(output.deployment_id, "deploy-123");
-        assert_eq!(
-            output.ephemeral_public_key_hex,
-            hex::encode(ephemeral_pair.public_key().to_bytes())
-        );
-        let re_encrypted_share = hex::decode(&output.re_encrypted_share).unwrap();
-        let decrypted_share = ephemeral_pair.decrypt(&re_encrypted_share).unwrap();
-        assert_eq!(decrypted_share.as_slice(), plaintext_share);
-        assert_eq!(output.share_approval.member, operator_member);
-
-        let approval_public_key =
-            P256Public::from_bytes(&output.share_approval.member.pub_key).unwrap();
-        approval_public_key
-            .verify(
-                &bundle.manifest_envelope().manifest_hash(),
-                &output.share_approval.signature,
-            )
-            .unwrap();
     }
 
     /// The full share flow against the device-backed pair: the share is
@@ -619,13 +607,16 @@ mod tests {
                 share: hex::encode(composite_public.encrypt(plaintext_share).unwrap()),
             }],
         };
-        let bundle = bundle_with_ephemeral_key(
-            &ephemeral_pair.public_key(),
-            quorum_pair.public_key().to_bytes(),
-            vec![operator_member.clone()],
-        );
+        let verified_bundle = Reviewed::assume_reviewed(VerifiedProvisionBundle {
+            bundle: bundle_with_ephemeral_key(
+                &ephemeral_pair.public_key(),
+                quorum_pair.public_key().to_bytes(),
+                vec![operator_member.clone()],
+            ),
+            ephemeral_public_key: ephemeral_pair.public_key(),
+        });
 
-        let output = build_re_encrypted_share_output(&metadata, &bundle, &operator_pair, true)
+        let output = build_re_encrypted_share_output(&metadata, &verified_bundle, &operator_pair)
             .await
             .unwrap();
 
@@ -638,35 +629,10 @@ mod tests {
             P256Public::from_bytes(&output.share_approval.member.pub_key).unwrap();
         approval_public_key
             .verify(
-                &bundle.manifest_envelope().manifest_hash(),
+                &verified_bundle.bundle.manifest_envelope().manifest_hash(),
                 &output.share_approval.signature,
             )
             .unwrap();
-    }
-
-    #[tokio::test]
-    async fn dangerous_skip_does_not_bypass_quorum_key_match() {
-        let metadata_quorum_pair = P256Pair::generate().unwrap();
-        let manifest_quorum_pair = P256Pair::generate().unwrap();
-        let operator_pair = P256Pair::generate().unwrap();
-        let operator_member = QuorumMember {
-            alias: "operator-1".to_string(),
-            pub_key: operator_pair.public_key().to_bytes(),
-        };
-        let operator_local_pair = local_pair_from_pair(&operator_pair);
-        let ephemeral_pair = P256Pair::generate().unwrap();
-        let metadata = quorum_key_metadata(&metadata_quorum_pair, &operator_pair, b"share");
-        let bundle = bundle_with_ephemeral_key(
-            &ephemeral_pair.public_key(),
-            manifest_quorum_pair.public_key().to_bytes(),
-            vec![operator_member],
-        );
-
-        let err = build_re_encrypted_share_output(&metadata, &bundle, &operator_local_pair, true)
-            .await
-            .unwrap_err();
-
-        assert!(err.to_string().contains("does not match"));
     }
 
     fn generated_inline() -> ReEncryptedShareGenerated {

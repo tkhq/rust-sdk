@@ -102,6 +102,7 @@ fn re_encrypt_local_share_help_lists_expected_flags() {
         .stdout(predicate::str::contains("--operator-seed <HEX_SEED>"))
         .stdout(predicate::str::contains("--operator-seed-path <PATH>"))
         .stdout(predicate::str::contains("--dangerous-skip-verification"))
+        .stdout(predicate::str::contains("--dangerous-skip-interactive"))
         .stdout(predicate::str::contains("--re-encrypted-out <PATH>"));
 }
 
@@ -142,6 +143,7 @@ fn hosted_only_org_is_pointed_at_deploy_provision() {
         .arg("--provision-bundle")
         .arg(temp.path().join("does_not_exist_bundle.json"))
         .arg("--dangerous-skip-verification")
+        .arg("--dangerous-skip-interactive")
         .assert()
         .failure()
         .stderr(predicate::str::contains(
@@ -173,6 +175,7 @@ fn yubikey_org_without_a_prompt_reports_the_pin_requirement() {
         .arg("--provision-bundle")
         .arg(temp.path().join("does_not_exist_bundle.json"))
         .arg("--dangerous-skip-verification")
+        .arg("--dangerous-skip-interactive")
         .assert()
         .failure()
         .stderr(predicate::str::contains(
@@ -197,13 +200,45 @@ fn an_unknown_yubikey_serial_is_rejected_before_share_input_io() {
         .arg(temp.path().join("does-not-exist-metadata.json"))
         .arg("--provision-bundle")
         .arg(temp.path().join("does-not-exist-bundle.json"))
-        .args(["--dangerous-skip-verification", "--serial", "deadbeef"])
+        .args([
+            "--dangerous-skip-verification",
+            "--dangerous-skip-interactive",
+            "--serial",
+            "deadbeef",
+        ])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
             "no YubiKey operator has serial deadbeef",
         ))
         .stderr(predicate::str::contains("does-not-exist-metadata.json").not());
+}
+
+#[test]
+fn non_interactive_run_requires_a_manifest_review_choice() {
+    let temp = TempDir::new().unwrap();
+
+    let assert = cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .arg("--message-format=json")
+        .args(["keys", "re-encrypt-local-share"])
+        .arg("--quorum-key-metadata")
+        .arg(temp.path().join("does-not-exist-metadata.json"))
+        .arg("--provision-bundle")
+        .arg(temp.path().join("does-not-exist-bundle.json"))
+        .assert()
+        .failure();
+
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+    let message: serde_json::Value = serde_json::from_str(stdout.trim()).unwrap();
+    assert_eq!(
+        message,
+        json!({
+            "reason": "missing_required_input",
+            "code": "missing_required_input",
+            "message": "--dangerous-skip-interactive is required in non-interactive mode (set --dangerous-skip-interactive or run in a TTY without --non-interactive / TVC_NON_INTERACTIVE=true)",
+        })
+    );
 }
 
 #[test]
@@ -269,6 +304,7 @@ fn re_encrypt_local_share_round_trips_metadata_share() {
         .arg("--operator-seed-path")
         .arg(&operator_seed_path)
         .arg("--dangerous-skip-verification")
+        .arg("--dangerous-skip-interactive")
         .arg("--re-encrypted-out")
         .arg(&output_path)
         .assert()
