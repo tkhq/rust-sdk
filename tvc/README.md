@@ -28,6 +28,13 @@ Some commands support environment variables and command-line flags for
 programmatic use. Run command help, such as `tvc deploy create --help`, to see
 the supported inputs and precedence for that command.
 
+## Trust Model
+
+`tvc` should be a trusted client. Do not trust Turnkey's API alone for critical
+enclave operations. `tvc` should verify these operations against boot proofs
+from the enclave. For example, when an enclave generates an operator key, `tvc`
+should check the boot proof that shows the key came from the expected enclave.
+
 ## Usage
 
 ### Use a YubiKey Operator
