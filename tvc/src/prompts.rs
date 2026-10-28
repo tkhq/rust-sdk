@@ -51,7 +51,11 @@ pub fn required_text(message: &str, default: Option<&str>) -> Result<String> {
 /// Prompt for a line of text, optionally with a default value.
 pub fn text(message: &str, default: Option<&str>) -> Result<String> {
     let message = TerminalText(message).single_line();
-    let placeholder = default.map(|value| TerminalText(value).single_line());
+    // Display the escaped default in the label; accepting it returns the raw value.
+    let message = match default {
+        Some(value) => format!("{message} ({})", TerminalText(value).single_line()),
+        None => message,
+    };
     let formatter = |value: &str| {
         let value = if value.is_empty() {
             default.unwrap_or(value)
@@ -60,14 +64,7 @@ pub fn text(message: &str, default: Option<&str>) -> Result<String> {
         };
         TerminalText(value).single_line()
     };
-    let mut prompt = Text::new(&message).with_formatter(&formatter);
-    if let Some(value) = &placeholder {
-        // Keep the raw default out of inquire's renderer and return it unchanged.
-        prompt = prompt
-            .with_placeholder(value)
-            .with_help_message("Press Enter to keep the saved value.");
-    }
-    let value = prompt.prompt()?;
+    let value = Text::new(&message).with_formatter(&formatter).prompt()?;
     Ok(if value.is_empty() {
         default.map(String::from).unwrap_or(value)
     } else {
