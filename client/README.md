@@ -26,6 +26,7 @@ let request = client.sign_raw_payload(
         payload: "hello from TKHQ".to_string(),
         encoding: PayloadEncoding::TextUtf8,
         hash_function: HashFunction::Keccak256, // assuming ETH
+        external_signer_pubkey: None,
     },
 );
 
