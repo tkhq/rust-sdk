@@ -174,11 +174,19 @@ impl<W: Write, W2: Write> Human<'_, W, W2> {
                 _ => render_error_chain(error),
             };
 
-            writeln!(self.0.stderr, "{style}error{style:#}: {}", TerminalText(message))?;
+            writeln!(
+                self.0.stderr,
+                "{style}error{style:#}: {}",
+                TerminalText(message)
+            )?;
 
             if let Some(hint) = hint(error) {
                 let style = self.0.style(AnsiColor::Cyan);
-                writeln!(self.0.stderr, "{style}hint{style:#}: {}", TerminalText(hint))?;
+                writeln!(
+                    self.0.stderr,
+                    "{style}hint{style:#}: {}",
+                    TerminalText(hint)
+                )?;
             }
         }
         Ok(())

@@ -41,7 +41,10 @@ pub fn init() {
     tracing_subscriber::fmt()
         .with_ansi(false)
         .event_format(TerminalFormat(
-            format::format().compact().with_ansi(false).with_target(true),
+            format::format()
+                .compact()
+                .with_ansi(false)
+                .with_target(true),
         ))
         .with_env_filter(filter)
         .with_writer(std::io::stderr)
