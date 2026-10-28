@@ -15,6 +15,7 @@ pub mod config;
 pub(crate) mod errors;
 pub(crate) mod local_operator_key;
 pub mod logging;
+pub(crate) mod manifest_review;
 pub mod operator;
 pub mod outcome;
 pub mod output;
