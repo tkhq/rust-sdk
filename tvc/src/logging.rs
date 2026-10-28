@@ -1,7 +1,7 @@
 //! Logging setup for the `tvc` binary.
 
 use crate::terminal::TerminalText;
-use std::fmt::{self, Write};
+use std::fmt;
 use tracing::{Event, Subscriber};
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::fmt::{

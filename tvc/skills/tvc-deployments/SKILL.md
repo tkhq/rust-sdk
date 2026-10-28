@@ -73,8 +73,9 @@ Add `--message-format json` to **every** command in scripts and agents:
 
 Human output, prompts, and diagnostic logs show terminal control characters and
 Unicode direction controls as visible escapes, such as `\u{1b}` and `\r`.
-Multiline output preserves newlines and tabs; prompt labels and choices escape
-those too. CLI status colors and interactive prompt controls still work.
+Multiline output preserves layout; manifest fields, prompt labels, and choices
+also escape newlines and tabs and show a warning when controls are detected.
+CLI status colors and interactive prompt controls still work.
 Diagnostic logs use plain text. JSON uses JSON escapes for controls and preserves
 the original values when decoded. Files written by commands keep their original data.
 

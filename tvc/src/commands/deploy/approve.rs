@@ -15,6 +15,7 @@ use crate::{
     pair::{HexSeed, LocalPair, Signer},
     prompts::{self, bail_required_in_non_interactive, stdin_can_prompt},
     shell_print, shell_println,
+    terminal::TerminalText,
     util::{read_file_to_string, write_file},
     yubikey::{self, Pin},
 };
@@ -1211,7 +1212,8 @@ fn render_namespace(namespace: &Namespace) -> String {
     let mut s = String::new();
     let _ = writeln!(s, "NAMESPACE");
     let _ = writeln!(s, "─────────────────────────────────────");
-    let _ = writeln!(s, "  Name:       {}", namespace.name);
+    let name = TerminalText(&namespace.name).single_line();
+    let _ = writeln!(s, "  Name:       {name}");
     let _ = writeln!(s, "  Nonce:      {}", namespace.nonce);
     let _ = writeln!(s, "  Quorum Key: {}", hex::encode(&namespace.quorum_key));
     let _ = writeln!(s);
@@ -1253,7 +1255,12 @@ fn render_pivot(manifest: &VersionedManifest) -> String {
     if manifest.args().is_empty() {
         let _ = writeln!(s, "  CLI Args: (none)");
     } else {
-        let _ = writeln!(s, "  CLI Args:\n   {}", manifest.args().join("\n   "));
+        let args = manifest
+            .args()
+            .iter()
+            .map(|arg| TerminalText(arg).single_line())
+            .collect::<Vec<_>>();
+        let _ = writeln!(s, "  CLI Args:\n   {}", args.join("\n   "));
     }
     let _ = writeln!(
         s,
@@ -1292,10 +1299,11 @@ fn render_pivot(manifest: &VersionedManifest) -> String {
 fn render_bridge(bridge: &BridgeConfig) -> String {
     match bridge {
         BridgeConfig::Server { port, host } => {
+            let host = TerminalText(host).single_line();
             format!("Server bridge: host bind={host}:{port}; enclave pivot target=127.0.0.1:{port}")
         }
         BridgeConfig::Client { port, host } => {
-            let host = host.as_deref().unwrap_or("(none)");
+            let host = TerminalText(host.as_deref().unwrap_or("(none)")).single_line();
             format!(
                 "Client bridge: requests transparent egress; configured host={host}, port={port} ignored"
             )
@@ -1311,7 +1319,8 @@ fn review_pivot(ctx: &mut StdCtx, manifest: &VersionedManifest) -> anyhow::Resul
 fn render_quorum_members(members: &[QuorumMember]) -> String {
     let mut s = String::new();
     for member in members.iter() {
-        let _ = writeln!(s, "    {} ({})", member.alias, hex::encode(&member.pub_key));
+        let alias = TerminalText(&member.alias).single_line();
+        let _ = writeln!(s, "    {} ({})", alias, hex::encode(&member.pub_key));
     }
     s
 }
@@ -1527,6 +1536,28 @@ mod tests {
             "Client bridge: requests transparent egress; configured host=(none), port=4001 ignored"
         ));
         assert!(rendered.contains("Debug Mode: enabled"));
+    }
+
+    #[test]
+    fn bridge_host_controls_cannot_replace_the_review_or_forge_prompt_lines() {
+        let host = concat!(
+            "\x1b[?1049h\x1b[?7l\x1b[2J\x1b[Hfake\n> Approve? Yes\n",
+            "\x1b[22;24r\x1b[24;1H\x1b[8m\x1b]0;title\x07\x1bPdata\x1b\\"
+        );
+        let bridge = BridgeConfig::Client {
+            port: 443,
+            host: Some(host.to_owned()),
+        };
+        assert_eq!(
+            render_bridge(&bridge),
+            concat!(
+                "Client bridge: requests transparent egress; configured host=",
+                r"[warning: escaped control characters] \u{1b}[?1049h\u{1b}[?7l",
+                r"\u{1b}[2J\u{1b}[Hfake\n> Approve? Yes\n\u{1b}[22;24r",
+                r"\u{1b}[24;1H\u{1b}[8m\u{1b}]0;title\u{7}\u{1b}Pdata\u{1b}\",
+                ", port=443 ignored"
+            )
+        );
     }
 
     #[test]

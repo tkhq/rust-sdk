@@ -23,9 +23,18 @@ impl<T: Display> Display for TerminalText<T> {
 }
 
 impl<T: Display> TerminalText<T> {
-    /// Prompt labels and choices must occupy one line.
+    /// Keep data fields on one line and flag any escaped control characters.
     pub(crate) fn single_line(&self) -> String {
-        self.to_string().replace('\n', r"\n").replace('\t', r"\t")
+        let text = self.0.to_string();
+        let escaped = TerminalText(&text)
+            .to_string()
+            .replace('\n', r"\n")
+            .replace('\t', r"\t");
+        if text == escaped {
+            escaped
+        } else {
+            format!("[warning: escaped control characters] {escaped}")
+        }
     }
 }
 
@@ -73,7 +82,7 @@ mod tests {
     fn prompt_values_are_single_line() {
         assert_eq!(
             TerminalText("name\n\t\r\x1b[H").single_line(),
-            r"name\n\t\r\u{1b}[H"
+            r"[warning: escaped control characters] name\n\t\r\u{1b}[H"
         );
     }
 

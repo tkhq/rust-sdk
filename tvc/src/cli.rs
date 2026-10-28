@@ -2,7 +2,6 @@
 
 use crate::commands::{self, Run};
 use crate::config::turnkey::{CONFIG_DIR, CONFIG_FILE, Config};
-use crate::errors::strip_ansi;
 use crate::outcome::Outcome;
 use crate::output::{ColorChoice, Ctx, ErrorMessage, MessageFormat, Shell, StdCtx};
 use crate::terminal::{TerminalText, terminal_json};
@@ -167,12 +166,9 @@ fn handle_parse_error(error: clap::Error) -> ExitCode {
         | ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand => print_parse_error(&error),
         _ => {
             if args_request_json_output(std::env::args_os()) {
-                // Emit clap's full text (including the "Usage:" line) with any
-                // ANSI stripped so agents get pure NDJSON they can self-correct
-                // from, regardless of terminal/color detection.
-                let message = strip_ansi(&error.render().to_string())
-                    .trim_end()
-                    .to_string();
+                // StyledStr's Display omits clap's styling. JSON escaping
+                // preserves control characters in data without executing them.
+                let message = error.render().to_string().trim_end().to_string();
                 let error_message = ErrorMessage::usage_error(message);
                 let mut stdout = std::io::stdout();
 

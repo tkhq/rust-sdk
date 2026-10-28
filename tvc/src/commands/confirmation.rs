@@ -140,7 +140,10 @@ mod tests {
         let mut output = Vec::new();
         confirm_typed_with_io("Type app_\x1b[2J\n", "app_\x1b[2J", &mut input, &mut output)
             .unwrap();
-        assert_eq!(output, r"Type app_\u{1b}[2J\n: ".as_bytes());
+        assert_eq!(
+            output,
+            r"[warning: escaped control characters] Type app_\u{1b}[2J\n: ".as_bytes()
+        );
     }
 
     #[test]
