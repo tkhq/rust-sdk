@@ -10,6 +10,7 @@ use std::fmt::Display;
 use std::io::IsTerminal;
 
 use crate::output::MissingRequiredInput;
+use crate::terminal::TerminalText;
 
 /// Env var that disables interactive prompts when parsed as true.
 pub const NON_INTERACTIVE_ENV: &str = "TVC_NON_INTERACTIVE";
@@ -49,16 +50,35 @@ pub fn required_text(message: &str, default: Option<&str>) -> Result<String> {
 
 /// Prompt for a line of text, optionally with a default value.
 pub fn text(message: &str, default: Option<&str>) -> Result<String> {
-    let mut prompt = Text::new(message);
-    if let Some(d) = default {
-        prompt = prompt.with_default(d);
+    let message = TerminalText(message).single_line();
+    let placeholder = default.map(|value| TerminalText(value).single_line());
+    let formatter = |value: &str| {
+        let value = if value.is_empty() {
+            default.unwrap_or(value)
+        } else {
+            value
+        };
+        TerminalText(value).single_line()
+    };
+    let mut prompt = Text::new(&message).with_formatter(&formatter);
+    if let Some(value) = &placeholder {
+        // Keep the raw default out of inquire's renderer and return it unchanged.
+        prompt = prompt
+            .with_placeholder(value)
+            .with_help_message("Press Enter to keep the saved value.");
     }
-    Ok(prompt.prompt()?)
+    let value = prompt.prompt()?;
+    Ok(if value.is_empty() {
+        default.map(String::from).unwrap_or(value)
+    } else {
+        value
+    })
 }
 
 /// Prompt for a yes/no confirmation with a default.
 pub fn confirm(message: &str, default: bool) -> Result<bool> {
-    Ok(Confirm::new(message).with_default(default).prompt()?)
+    let message = TerminalText(message).single_line();
+    Ok(Confirm::new(&message).with_default(default).prompt()?)
 }
 
 /// Prompt for yes/no confirmation; bail with `"operation cancelled by user:
@@ -76,10 +96,20 @@ pub fn confirm_or_bail(message: &str, operation: &str) -> Result<()> {
 
 /// Prompt for a selection from a list.
 pub fn select<T: Display>(message: &str, options: Vec<T>) -> Result<T> {
-    Ok(Select::new(message, options).prompt()?)
+    let message = TerminalText(message).single_line();
+    let labels = options
+        .iter()
+        .map(|value| TerminalText(value).single_line())
+        .collect();
+    let selected = Select::new(&message, labels).raw_prompt()?;
+    Ok(options
+        .into_iter()
+        .nth(selected.index)
+        .expect("inquire selected an existing option"))
 }
 
 /// Prompt for a secret value with masked input.
 pub fn password(message: &str) -> Result<String> {
-    Ok(Password::new(message).without_confirmation().prompt()?)
+    let message = TerminalText(message).single_line();
+    Ok(Password::new(&message).without_confirmation().prompt()?)
 }
