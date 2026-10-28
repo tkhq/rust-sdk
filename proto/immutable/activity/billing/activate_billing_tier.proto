@@ -1,4 +1,4 @@
-// Proto representing a billing tier activatieon
+// Proto representing a billing tier activation
 
 syntax = "proto3";
 

@@ -148,9 +148,9 @@
       "intentType": "UpdateWalletAccountNameIntent",
       "resultType": "UpdateWalletAccountNameResult"
     },
-    "ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V8": {
-      "intentType": "CreateSubOrganizationIntentV8",
-      "resultType": "CreateSubOrganizationResultV8"
+    "ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V9": {
+      "intentType": "CreateSubOrganizationIntentV9",
+      "resultType": "CreateSubOrganizationResultV9"
     },
     "ACTIVITY_TYPE_INIT_USER_EMAIL_RECOVERY_V2": {
       "intentType": "InitUserEmailRecoveryIntentV2",
@@ -187,6 +187,10 @@
     "ACTIVITY_TYPE_INIT_FIAT_ON_RAMP": {
       "intentType": "InitFiatOnRampIntent",
       "resultType": "InitFiatOnRampResult"
+    },
+    "ACTIVITY_TYPE_CREATE_FIAT_OFF_RAMP_SESSION": {
+      "intentType": "CreateFiatOffRampSessionIntent",
+      "resultType": "CreateFiatOffRampSessionResult"
     },
     "ACTIVITY_TYPE_INIT_IMPORT_WALLET": {
       "intentType": "InitImportWalletIntent",
@@ -252,6 +256,18 @@
       "intentType": "VerifyOtpIntentV2",
       "resultType": "VerifyOtpResult"
     },
+    "ACTIVITY_TYPE_VERIFY_WALLET_AUTHENTICATOR": {
+      "intentType": "VerifyWalletAuthenticatorIntent",
+      "resultType": "VerifyWalletAuthenticatorResult"
+    },
+    "ACTIVITY_TYPE_CREATE_WALLET_AUTHENTICATORS": {
+      "intentType": "CreateWalletAuthenticatorsIntent",
+      "resultType": "CreateWalletAuthenticatorsResult"
+    },
+    "ACTIVITY_TYPE_DELETE_WALLET_AUTHENTICATORS": {
+      "intentType": "DeleteWalletAuthenticatorsIntent",
+      "resultType": "DeleteWalletAuthenticatorsResult"
+    },
     "ACTIVITY_TYPE_CREATE_OAUTH_PROVIDERS_V2": {
       "intentType": "CreateOauthProvidersIntentV2",
       "resultType": "CreateOauthProvidersResultV2"
@@ -311,6 +327,10 @@
     "ACTIVITY_TYPE_CREATE_FIAT_ON_RAMP_CREDENTIAL": {
       "intentType": "CreateFiatOnRampCredentialIntent",
       "resultType": "CreateFiatOnRampCredentialResult"
+    },
+    "ACTIVITY_TYPE_CREATE_FIAT_ON_RAMP_SESSION": {
+      "intentType": "CreateFiatOnRampSessionIntent",
+      "resultType": "CreateFiatOnRampSessionResult"
     },
     "ACTIVITY_TYPE_DELETE_FIAT_ON_RAMP_CREDENTIAL": {
       "intentType": "DeleteFiatOnRampCredentialIntent",
@@ -383,6 +403,11 @@
     "ACTIVITY_TYPE_EXECUTE_SWAP_V3": {
       "intentType": "ExecuteSwapIntentV3",
       "resultType": "ExecuteSwapResult"
+    },
+    "ACTIVITY_TYPE_EXECUTE_SWAP_V4": {
+      "intentType": "ExecuteSwapIntentV4",
+      "resultType": "ExecuteSwapResult",
+      "internal": true
     },
     "ACTIVITY_TYPE_UPSERT_SWAP_CONFIG": {
       "intentType": "UpsertSwapConfigIntent",
@@ -527,6 +552,10 @@
     "ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V7": {
       "intentType": "CreateSubOrganizationIntentV7",
       "resultType": "CreateSubOrganizationResultV7"
+    },
+    "ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V8": {
+      "intentType": "CreateSubOrganizationIntentV8",
+      "resultType": "CreateSubOrganizationResultV8"
     },
     "ACTIVITY_TYPE_CREATE_USERS": {
       "intentType": "CreateUsersIntent",
@@ -683,9 +712,9 @@
       "intentType": "CreateVelocityControlIntent",
       "resultType": "CreateVelocityControlResult"
     },
-    "ACTIVITY_TYPE_DELETE_VELOCITY_CONTROL": {
-      "intentType": "DeleteVelocityControlIntent",
-      "resultType": "DeleteVelocityControlResult"
+    "ACTIVITY_TYPE_DELETE_VELOCITY_CONTROLS": {
+      "intentType": "DeleteVelocityControlsIntent",
+      "resultType": "DeleteVelocityControlsResult"
     },
     "ACTIVITY_TYPE_UPDATE_PAYMENT_METHOD": {
       "intentType": "UpdatePaymentMethodIntent",
@@ -695,6 +724,18 @@
       "intentType": "*",
       "resultType": "*",
       "internal": true
+    },
+    "ACTIVITY_TYPE_CREATE_SWAP_QUOTE_V3": {
+      "intentType": "CreateSwapQuoteIntentV3",
+      "resultType": "CreateSwapQuoteResultV2"
+    },
+    "ACTIVITY_TYPE_UPSERT_SWAP_FEE_SPONSORSHIP_LIMIT_CONFIG": {
+      "intentType": "UpsertSwapFeeSponsorshipLimitConfigIntent",
+      "resultType": "UpsertSwapFeeSponsorshipLimitConfigResult"
+    },
+    "ACTIVITY_TYPE_UPSERT_SWAP_FIXED_RATE_LIMIT_CONFIG": {
+      "intentType": "UpsertSwapFixedRateLimitConfigIntent",
+      "resultType": "UpsertSwapFixedRateLimitConfigResult"
     }
   }
 }

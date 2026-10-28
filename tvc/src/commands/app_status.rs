@@ -54,7 +54,9 @@ fn strip_deploy_prefix(deploy_id: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{format_replica_counts, sanitize_app_status};
-    use turnkey_client::generated::external::data::v1::{AppStatus, DeploymentStatus};
+    use turnkey_client::generated::external::data::v1::{
+        AppStatus, DeploymentStatus, ProvisioningState,
+    };
 
     #[test]
     fn sanitize_app_status_strips_deploy_prefixes() {
@@ -65,7 +67,7 @@ mod tests {
                 ready_replicas: 3,
                 desired_replicas: 3,
                 last_updated_time: None,
-                provisioning_state: None,
+                provisioning_state: ProvisioningState::Unspecified,
             }],
             targeted_deployment_id: "deploy-5376f492-d014-4e01-a6bb-20fc97448e25".to_string(),
         };

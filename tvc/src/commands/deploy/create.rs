@@ -382,6 +382,7 @@ fn build_create_intent(
         replicas: deploy_config.replicas,
         instance_size_cpus: deploy_config.instance_size_cpus,
         instance_size_ram: deploy_config.instance_size_ram,
+        qos_manifest: None,
     }
 }
 

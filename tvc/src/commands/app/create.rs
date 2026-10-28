@@ -339,6 +339,7 @@ fn build_create_tvc_app_intent(app_config: &AppConfig) -> CreateTvcAppIntent {
         share_set_params: share_set_params.as_ref().map(to_tvc_operator_set_params),
         enable_egress: app_config.enable_egress.into(),
         enable_debug_mode_deployments: app_config.dangerous_enable_debug_mode_deployments.into(),
+        region: None,
     }
 }
 

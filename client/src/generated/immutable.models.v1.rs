@@ -410,6 +410,12 @@ pub enum SignatureScheme {
     TkApiSecp256k1Eip191 = 6,
     #[serde(rename = "SIGNATURE_SCHEME_TK_ATTESTED_P256")]
     TkAttestedP256 = 7,
+    /// Scheme used by enclave applications when the public key is only the SEC1 uncompressed signing
+    /// half of the quorum key (e.g. external signer proofs), not the combined encryption+signing key.
+    /// The message is the hex-encoded borsh serialization of the signed payload, and the signature is
+    /// an ECDSA-P256-SHA256 signature over those bytes
+    #[serde(rename = "SIGNATURE_SCHEME_TK_QUORUM_P256_SIGNING_KEY")]
+    TkQuorumP256SigningKey = 8,
 }
 impl SignatureScheme {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -426,6 +432,7 @@ impl SignatureScheme {
             Self::TkApiEd25519 => "SIGNATURE_SCHEME_TK_API_ED25519",
             Self::TkApiSecp256k1Eip191 => "SIGNATURE_SCHEME_TK_API_SECP256K1_EIP191",
             Self::TkAttestedP256 => "SIGNATURE_SCHEME_TK_ATTESTED_P256",
+            Self::TkQuorumP256SigningKey => "SIGNATURE_SCHEME_TK_QUORUM_P256_SIGNING_KEY",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -441,6 +448,9 @@ impl SignatureScheme {
                 Some(Self::TkApiSecp256k1Eip191)
             }
             "SIGNATURE_SCHEME_TK_ATTESTED_P256" => Some(Self::TkAttestedP256),
+            "SIGNATURE_SCHEME_TK_QUORUM_P256_SIGNING_KEY" => {
+                Some(Self::TkQuorumP256SigningKey)
+            }
             _ => None,
         }
     }

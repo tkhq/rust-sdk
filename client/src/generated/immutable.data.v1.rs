@@ -70,11 +70,11 @@ pub struct EarnConfig {
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct EarnWrapper {
-    /// The underlying yield vault being wrapped.
+    /// The underlying yield vault being wrapped (Morpho vault, Aave reserve, Kamino K-Lend reserve).
     pub vault_address: ::prost::alloc::string::String,
     /// CAIP-2 chain identifier the vault lives on (e.g. "eip155:8453").
     pub chain_caip2: ::prost::alloc::string::String,
-    /// The deployed fee wrapper (Morpho FeeWrapper / Aave ATokenVault) - the deposit target.
+    /// The deployed fee wrapper (Morpho FeeWrapper / Aave ATokenVault / Kamino vault_state) - the deposit target.
     pub wrapper_address: ::prost::alloc::string::String,
     /// The deployed fee splitter (Morpho PaymentSplitter / Aave RevenueSplitterOwner).
     pub splitter_address: ::prost::alloc::string::String,
@@ -90,13 +90,19 @@ pub struct EarnWrapper {
     pub turnkey_fee_bps: ::prost::alloc::string::String,
     /// The wallet address that receives Turnkey's fee payouts on-chain.
     pub turnkey_fee_wallet: ::prost::alloc::string::String,
-    /// The vault's underlying ERC-20 asset (the deposit approve target), pinned at
+    /// The vault's underlying asset (ERC-20 address, or SPL mint on Solana), pinned at
     /// deploy time from the TLS-Fetcher-verified vault.
     pub underlying_asset: ::prost::alloc::string::String,
     /// When true, deposits to this wrapper are rejected; withdrawals are unaffected.
     /// Toggled via EarnSetWrapperState (e.g. incident brake for a compromised vault).
     #[serde(default)]
     pub deposits_disabled: bool,
+    /// Solana (Kamino) pins from the TLS-Fetcher; empty on EVM.
+    pub shares_mint: ::prost::alloc::string::String,
+    pub token_program: ::prost::alloc::string::String,
+    pub vault_authority: ::prost::alloc::string::String,
+    pub vault_token_account: ::prost::alloc::string::String,
+    pub lookup_table: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 /// The signer-signed payload authorizing a wrapper's insertion into an org's EarnConfig.
@@ -136,6 +142,8 @@ pub enum EarnProvider {
     Morpho = 1,
     #[serde(rename = "EARN_PROVIDER_AAVE")]
     Aave = 2,
+    #[serde(rename = "EARN_PROVIDER_KAMINO")]
+    Kamino = 3,
 }
 impl EarnProvider {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -147,6 +155,7 @@ impl EarnProvider {
             Self::Unspecified => "EARN_PROVIDER_UNSPECIFIED",
             Self::Morpho => "EARN_PROVIDER_MORPHO",
             Self::Aave => "EARN_PROVIDER_AAVE",
+            Self::Kamino => "EARN_PROVIDER_KAMINO",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -155,6 +164,7 @@ impl EarnProvider {
             "EARN_PROVIDER_UNSPECIFIED" => Some(Self::Unspecified),
             "EARN_PROVIDER_MORPHO" => Some(Self::Morpho),
             "EARN_PROVIDER_AAVE" => Some(Self::Aave),
+            "EARN_PROVIDER_KAMINO" => Some(Self::Kamino),
             _ => None,
         }
     }

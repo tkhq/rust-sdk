@@ -34,6 +34,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Resul
         .client
         .get_tvc_apps(GetTvcAppsRequest {
             organization_id: auth.org_id.clone(),
+            is_live: None,
         })
         .await
         .context("failed to list TVC apps")?;
@@ -90,6 +91,7 @@ impl From<TvcApp> for AppSummary {
             share_set: _,
             created_at: _,
             updated_at: _,
+            region: _,
         } = app;
 
         Self {
@@ -164,6 +166,7 @@ mod tests {
             live_deployment_id: None,
             public_domain: String::new(),
             enable_debug_mode_deployments: false,
+            region: String::new(),
         }
     }
 

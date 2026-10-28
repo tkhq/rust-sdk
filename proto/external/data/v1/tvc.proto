@@ -43,11 +43,15 @@ message TvcApp {
   optional string live_deployment_id = 10 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The deployment currently designated to receive traffic. Null if no deployment for this app is deployed."}];
   string public_domain = 11 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The public domain for ingress to this TVC App (in the format \"app-<ID>.turnkey.cloud\")."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The public domain for ingress to this TVC App (in the format \"app-<ID>.app.turnkey.cloud\"). May contain multiple comma-separated hostnames."}
   ];
   bool enable_debug_mode_deployments = 12 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether this app permits debug-mode deployments. Set at app creation via CreateTvcAppIntent.enable_debug_mode_deployments and never updated thereafter. Debug-mode deployments expose logs and emit zero'd attestation PCRs, so remote attestation cannot succeed. The app's quorum key is therefore considered permanently insecure once enabled — a new app with a fresh quorum key must be created to return to a secure posture."}
+  ];
+  string region = 13 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "region this TVC App is deployed in, e.g. us-east-1 or ap-southeast-1. Set at app creation."}
   ];
 }
 
@@ -261,8 +265,8 @@ message DeploymentStatus {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Last time this deployment was updated"}
   ];
-  optional ProvisioningState provisioning_state = 5 [
-    (google.api.field_behavior) = OPTIONAL,
+  ProvisioningState provisioning_state = 5 [
+    (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Current quorum-key provisioning state for this deployment"}
   ];
 }

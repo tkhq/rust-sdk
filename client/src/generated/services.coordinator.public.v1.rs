@@ -359,6 +359,24 @@ pub struct GetAuthenticatorResponse {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct GetWalletAuthenticatorsRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub user_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetWalletAuthenticatorsResponse {
+    #[serde(default)]
+    pub wallet_authenticators: ::prost::alloc::vec::Vec<
+        super::super::super::super::external::data::v1::WalletAuthenticator,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct GetAuthenticatorsRequest {
     pub organization_id: ::prost::alloc::string::String,
     pub user_id: ::prost::alloc::string::String,
@@ -479,6 +497,51 @@ pub mod get_send_transaction_status_response {
         #[serde(rename = "DETAILS_SOLANA")]
         Solana(super::SolanaSendTransactionStatus),
     }
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetFiatOffRampQuotesRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub crypto_amount: ::prost::alloc::string::String,
+    pub fiat_currency_code: super::super::super::super::immutable::common::v1::FiatOnRampCurrency,
+    pub caip19: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub country_code: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub country_subdivision_code: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub sandbox_mode: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetFiatOffRampQuotesResponse {
+    #[serde(default)]
+    pub quotes: ::prost::alloc::vec::Vec<FiatOffRampQuote>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct FiatOffRampQuote {
+    pub quote_id: ::prost::alloc::string::String,
+    pub provider: super::super::super::super::immutable::common::v1::FiatOnRampProvider,
+    #[serde(default)]
+    pub service_provider: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub fiat_amount: ::core::option::Option<FiatOnRampAmount>,
+    pub fiat_currency_code: super::super::super::super::immutable::common::v1::FiatOnRampCurrency,
+    #[serde(default)]
+    pub crypto_amount: ::core::option::Option<FiatOnRampAmount>,
+    pub caip19: ::prost::alloc::string::String,
+    pub payment_method: super::super::super::super::immutable::common::v1::FiatOnRampPaymentMethod,
+    #[serde(default)]
+    pub total_fee: ::core::option::Option<FiatOnRampAmount>,
+    #[serde(default)]
+    pub expires_at: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -802,6 +865,103 @@ pub struct ListFiatOnRampCredentialsResponse {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct GetFiatOnRampQuotesRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub fiat_amount: ::prost::alloc::string::String,
+    pub fiat_currency_code: super::super::super::super::immutable::common::v1::FiatOnRampCurrency,
+    pub caip19: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub country_code: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub country_subdivision_code: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub sandbox_mode: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetFiatOnRampQuotesResponse {
+    #[serde(default)]
+    pub quotes: ::prost::alloc::vec::Vec<FiatOnRampQuote>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct FiatOnRampQuote {
+    pub quote_id: ::prost::alloc::string::String,
+    pub onramp_provider: super::super::super::super::immutable::common::v1::FiatOnRampProvider,
+    #[serde(default)]
+    pub service_provider: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub fiat_amount: ::core::option::Option<FiatOnRampAmount>,
+    pub fiat_currency_code: super::super::super::super::immutable::common::v1::FiatOnRampCurrency,
+    #[serde(default)]
+    pub crypto_amount: ::core::option::Option<FiatOnRampAmount>,
+    pub caip19: ::prost::alloc::string::String,
+    pub payment_method: super::super::super::super::immutable::common::v1::FiatOnRampPaymentMethod,
+    #[serde(default)]
+    pub total_fee: ::core::option::Option<FiatOnRampAmount>,
+    #[serde(default)]
+    pub expires_at: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+/// FiatOnRampAmount is an atomic amount plus its decimal display.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct FiatOnRampAmount {
+    pub amount: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub decimals: i32,
+    pub display: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetIndicativeSwapQuoteRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub sign_with: ::prost::alloc::string::String,
+    pub input_token: ::prost::alloc::string::String,
+    pub output_token: ::prost::alloc::string::String,
+    pub input_amount: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub slippage_bps: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub destination_address: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub fee_sponsorship: ::core::option::Option<bool>,
+    #[serde(default)]
+    pub fixed_rate: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetIndicativeSwapQuoteResponse {
+    pub provider: ::prost::alloc::string::String,
+    pub output_amount: ::prost::alloc::string::String,
+    pub min_output_amount: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub slippage_bps: ::core::option::Option<::prost::alloc::string::String>,
+    pub client_fee_bps: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub estimated_time_seconds: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub fee_sponsorship: bool,
+    #[serde(default)]
+    pub fixed_rate: bool,
+    #[serde(default)]
+    pub estimated_fixed_rate_adjustment_usd: ::core::option::Option<
+        ::prost::alloc::string::String,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct GetSwapStatusRequest {
     pub organization_id: ::prost::alloc::string::String,
     pub swap_request_id: ::prost::alloc::string::String,
@@ -852,6 +1012,48 @@ pub struct GetSwapStatusResponse {
     pub error: ::core::option::Option<SwapError>,
     #[serde(default)]
     pub destination_address: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetSwapSponsorshipUsageRequest {
+    pub organization_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SwapSpendingWindow {
+    #[serde(default)]
+    pub window_duration_minutes: i32,
+    pub window_limit_usd: ::prost::alloc::string::String,
+    pub usage_usd: ::prost::alloc::string::String,
+    pub remaining_usd: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub sub_org_window_limit_usd: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SwapSponsorshipFeature {
+    #[serde(default)]
+    pub permitted: bool,
+    #[serde(default)]
+    pub window: ::core::option::Option<SwapSpendingWindow>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetSwapSponsorshipUsageResponse {
+    #[serde(default)]
+    pub fee_sponsorship: ::core::option::Option<SwapSponsorshipFeature>,
+    #[serde(default)]
+    pub fixed_rate: ::core::option::Option<SwapSponsorshipFeature>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -1257,6 +1459,8 @@ pub struct SolanaFailureDetails {
 #[derive(Clone, PartialEq)]
 pub struct GetTvcAppsRequest {
     pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub is_live: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -1361,10 +1565,7 @@ pub struct GetTvcDeploymentProvisioningDetailsResponse {
     #[serde(default)]
     #[serde_as(as = "Option<serde_with::base64::Base64>")]
     pub manifest_envelope: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
-    #[serde(default)]
-    pub provisioning_state: Option<
-        super::super::super::super::external::data::v1::ProvisioningState,
-    >,
+    pub provisioning_state: super::super::super::super::external::data::v1::ProvisioningState,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -1926,4 +2127,32 @@ pub struct GetTvcOperatorsResponse {
     pub tvc_operators: ::prost::alloc::vec::Vec<
         super::super::super::super::external::data::v1::TvcOperator,
     >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetTvcManifestGenerationInfoRequest {
+    pub organization_id: ::prost::alloc::string::String,
+    pub app_id: ::prost::alloc::string::String,
+    pub qos_version: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct GetTvcManifestGenerationInfoResponse {
+    /// Available when queried; deployment creation enforces uniqueness if another
+    /// client creates a deployment with the same nonce first.
+    #[serde(default)]
+    pub nonce: u32,
+    pub namespace: ::prost::alloc::string::String,
+    pub pcr0: ::prost::alloc::string::String,
+    pub pcr1: ::prost::alloc::string::String,
+    pub pcr2: ::prost::alloc::string::String,
+    pub pcr3: ::prost::alloc::string::String,
+    /// The version these values are for, which the deployment must use.
+    pub qos_version: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub default_dns_resolvers: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }

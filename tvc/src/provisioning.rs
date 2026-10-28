@@ -280,6 +280,7 @@ mod tests {
     use serde::Deserialize;
     use serde_json::json;
     use turnkey_client::generated::GetTvcDeploymentProvisioningDetailsResponse;
+    use turnkey_client::generated::external::data::v1::ProvisioningState;
     use uuid::Uuid;
 
     const DEPLOYMENT_ID: &str = "33333333-3333-4333-8333-333333333333";
@@ -357,7 +358,7 @@ mod tests {
         let response = GetTvcDeploymentProvisioningDetailsResponse {
             attestation_document: Some(vec![1, 2, 3]),
             manifest_envelope: Some(manifest_envelope.to_storage_vec().unwrap()),
-            provisioning_state: None,
+            provisioning_state: ProvisioningState::Unspecified,
         };
         let expected = FetchedProvisioningDetails::new(
             deployment_id(),
@@ -377,7 +378,7 @@ mod tests {
         let missing_attestation = GetTvcDeploymentProvisioningDetailsResponse {
             attestation_document: None,
             manifest_envelope: Some(manifest_envelope.clone()),
-            provisioning_state: None,
+            provisioning_state: ProvisioningState::Unspecified,
         };
         assert_eq!(
             provisioning_details_from_response(deployment_id(), missing_attestation, 1234)
@@ -389,7 +390,7 @@ mod tests {
         let missing_manifest = GetTvcDeploymentProvisioningDetailsResponse {
             attestation_document: Some(vec![1, 2, 3]),
             manifest_envelope: Some(Vec::new()),
-            provisioning_state: None,
+            provisioning_state: ProvisioningState::Unspecified,
         };
         assert_eq!(
             provisioning_details_from_response(deployment_id(), missing_manifest, 1234)
@@ -404,7 +405,7 @@ mod tests {
         let response = GetTvcDeploymentProvisioningDetailsResponse {
             attestation_document: Some(vec![1, 2, 3]),
             manifest_envelope: Some(vec![4, 5, 6]),
-            provisioning_state: None,
+            provisioning_state: ProvisioningState::Unspecified,
         };
 
         let error =
