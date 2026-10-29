@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.17.0](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.16.0...turnkey_client-v0.17.0) - 2026-10-29
+
+### Other
+
+- support region
+- sync release protos
+- sync release protos
+
 ## [0.16.0](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.15.0...turnkey_client-v0.16.0) - 2026-09-17
 
 ### Other

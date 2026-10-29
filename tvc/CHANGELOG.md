@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.17.0](https://github.com/tkhq/rust-sdk/compare/tvc-v0.16.0...tvc-v0.17.0) - 2026-10-29
+
+### Added
+
+- *(tvc)* require manifest review, interactive or skipped with --dangerous-skip-interactive, before re-encrypt-local-share and deploy provision hand over a share
+
+### Other
+
+- support region
+- sync release protos
+- default app creation with egress enabled
+- Merge pull request #291 from tkhq/am/TVC-341/login-active-profile-first
+- Merge pull request #290 from tkhq/am/TVC-409/yubikey-pin-prompt
+- Merge pull request #288 from tkhq/am/TVC-339/deploy-approve-fails-confusingly
+- *(tvc)* Bump the highest PCR value in provisioning-details
+- *(tvc)* update QOS dependencies and default release to 0.15.0
+- *(tvc)* handle new fields
+
 ## [0.16.0](https://github.com/tkhq/rust-sdk/compare/tvc-v0.15.0...tvc-v0.16.0) - 2026-09-17
 
 ### Added
