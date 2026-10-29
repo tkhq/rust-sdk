@@ -3,6 +3,7 @@ use hpke::{Deserializable, Kem as KemTrait, Serializable};
 use p256::ecdsa::{Signature, SigningKey, signature::Signer};
 use p256::elliptic_curve::sec1::ToEncodedPoint;
 use rand_core::OsRng;
+use std::mem;
 use zeroize::Zeroizing;
 
 use crate::{
@@ -70,7 +71,8 @@ impl EnclaveEncryptServer {
     ) -> Result<ServerSendMsgV1, EnclaveEncryptError> {
         let client_target = <Kem as KemTrait>::PublicKey::from_bytes(&**client_target)
             .map_err(EnclaveEncryptError::InvalidClientTarget)?;
-        let (ciphertext, encapped_public) = encrypt(&client_target, plaintext, TURNKEY_HPKE_INFO)?;
+        let (ciphertext, encapped_public) =
+            encrypt(&client_target, plaintext, TURNKEY_HPKE_INFO, &[])?;
 
         let data = ServerSendData {
             encapped_public: encapped_public.to_bytes().to_vec().try_into()?,
@@ -111,7 +113,8 @@ impl EnclaveEncryptServer {
     ) -> Result<String, EnclaveEncryptError> {
         let client_target = <Kem as KemTrait>::PublicKey::from_bytes(&**client_target)
             .map_err(EnclaveEncryptError::InvalidClientTarget)?;
-        let (ciphertext, encapped_public) = encrypt(&client_target, plaintext, TURNKEY_HPKE_INFO)?;
+        let (ciphertext, encapped_public) =
+            encrypt(&client_target, plaintext, TURNKEY_HPKE_INFO, &[])?;
 
         let encapped_public_bytes = encapped_public.to_bytes().to_vec();
         let compressed_encapped_public = compress_p256_public(&encapped_public_bytes)?;
@@ -185,6 +188,17 @@ impl EnclaveEncryptServerRecv {
     /// *N.B.* We assume the authenticity of the message contents is verified
     /// out of band in the Ump policy engine.
     pub fn decrypt(&mut self, msg: &ClientSendMsg) -> Result<Vec<u8>, EnclaveEncryptError> {
+        self.decrypt_with_purpose_binding(msg, &[])
+            .map(|mut plaintext| mem::take(&mut *plaintext))
+    }
+
+    /// Decrypt a message from a client that was encrypted with `purpose_binding` appended to the
+    /// AAD. Fails if `purpose_binding` differs from the one the client used.
+    pub fn decrypt_with_purpose_binding(
+        &mut self,
+        msg: &ClientSendMsg,
+        purpose_binding: &[u8],
+    ) -> Result<Zeroizing<Vec<u8>>, EnclaveEncryptError> {
         let encapped_public = <Kem as KemTrait>::EncappedKey::from_bytes(&*msg.encapped_public)
             .map_err(EnclaveEncryptError::InvalidEncappedKey)?;
 
@@ -197,12 +211,13 @@ impl EnclaveEncryptServerRecv {
                 target_public,
                 &msg.ciphertext,
                 TURNKEY_HPKE_INFO,
+                purpose_binding,
             );
 
             self.target_public = None;
             self.target_private = None;
 
-            result
+            result.map(Zeroizing::new)
         } else {
             Err(EnclaveEncryptError::ServerAlreadyUsedToDecrypt)
         }
@@ -233,6 +248,7 @@ impl ReusableEnclaveEncryptServerRecv {
             &self.target_public,
             &msg.ciphertext,
             TURNKEY_HPKE_INFO,
+            &[],
         )
     }
 }

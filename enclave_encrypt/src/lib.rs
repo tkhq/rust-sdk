@@ -14,6 +14,7 @@ use rand_core::OsRng;
 
 pub mod client;
 pub mod errors;
+pub mod purpose_binding;
 mod quorum_public_key;
 pub mod server;
 
@@ -222,6 +223,7 @@ fn encrypt(
     receiver_public: &<Kem as KemTrait>::PublicKey,
     plaintext: &[u8],
     info_string: &[u8],
+    purpose_binding: &[u8],
 ) -> Result<(Vec<u8>, <Kem as KemTrait>::EncappedKey), EnclaveEncryptError> {
     let (encapped_public, mut sender_ctx) = hpke::setup_sender::<Aead, Kdf, Kem, _>(
         &OpModeS::Base,
@@ -231,7 +233,7 @@ fn encrypt(
     )
     .map_err(|_| EnclaveEncryptError::FailedToSetupSendCtx)?;
 
-    let aad = additional_associated_data(receiver_public, &encapped_public);
+    let aad = additional_associated_data(receiver_public, &encapped_public, purpose_binding);
     let ciphertext = sender_ctx
         .seal(plaintext, &aad)
         .map_err(|_| EnclaveEncryptError::FailedToEncrypt)?;
@@ -245,6 +247,7 @@ fn decrypt(
     receiver_public: &<Kem as KemTrait>::PublicKey,
     ciphertext: &[u8],
     info_string: &[u8],
+    purpose_binding: &[u8],
 ) -> Result<Vec<u8>, EnclaveEncryptError> {
     let mut receiver_ctx = hpke::setup_receiver::<Aead, Kdf, Kem>(
         &OpModeR::Base,
@@ -254,7 +257,7 @@ fn decrypt(
     )
     .map_err(|_| EnclaveEncryptError::ReceiveCtxSetupFail)?;
 
-    let aad = additional_associated_data(receiver_public, encapped_public);
+    let aad = additional_associated_data(receiver_public, encapped_public, purpose_binding);
     receiver_ctx
         .open(ciphertext, &aad)
         .map_err(|_| EnclaveEncryptError::FailedToDecrypt)
@@ -263,11 +266,13 @@ fn decrypt(
 fn additional_associated_data(
     receiver_public: &<Kem as KemTrait>::PublicKey,
     sender_public: &<Kem as KemTrait>::EncappedKey,
+    purpose_binding: &[u8],
 ) -> Vec<u8> {
     sender_public
         .to_bytes()
         .iter()
         .chain(receiver_public.to_bytes().iter())
+        .chain(purpose_binding)
         .copied()
         .collect()
 }

@@ -3,7 +3,7 @@ use crate::{
     ClientSendMsg, DATA_VERSION, Kem, P256Public, ServerSendData, ServerSendMsg, ServerSendMsgV0,
     ServerSendMsgV1, ServerTargetData, ServerTargetMsg, ServerTargetMsgV0, ServerTargetMsgV1,
     TURNKEY_HPKE_INFO, decompress_p256_public, decrypt, encrypt, errors::EnclaveEncryptError,
-    quorum_public_key::QuorumPublicKey,
+    purpose_binding, quorum_public_key::QuorumPublicKey,
 };
 use hpke::{Deserializable, Kem as KemTrait, Serializable};
 use p256::elliptic_curve::sec1::ToEncodedPoint;
@@ -310,6 +310,32 @@ impl ImportClient {
     ) -> Result<String, EnclaveEncryptError> {
         self.encrypt_wallet_with_bundle(secret, import_bundle, organization_id, "")
     }
+
+    /// Encrypts a secret like [`Self::encrypt_secret_bundle`], and binds the ciphertext to the
+    /// secret's `name` and `static_properties` with [`purpose_binding::import_secrets`].
+    ///
+    /// The `IMPORT_SECRETS` activity must send the same `name` and the same `static_properties`
+    /// in the same order, with `TRANSPORT_ENCRYPTION_SUITE_ENCLAVE_ENCRYPT_V2`.
+    pub fn encrypt_bound_secret_bundle<S: AsRef<str>, T: AsRef<str>, U: AsRef<str>>(
+        &mut self,
+        secret: S,
+        import_bundle: T,
+        organization_id: U,
+        name: Option<&str>,
+        static_properties: &[(&str, &str)],
+    ) -> Result<String, EnclaveEncryptError> {
+        let binding = purpose_binding::import_secrets(name, static_properties)?;
+        let encrypted = self.encrypt_client.encrypt_with_purpose_binding(
+            secret.as_ref().as_bytes(),
+            import_bundle.as_ref().as_bytes(),
+            organization_id.as_ref(),
+            "",
+            &binding,
+        )?;
+
+        serde_json::to_string(&encrypted)
+            .map_err(|e| EnclaveEncryptError::CannotSerializeBundle(e.to_string()))
+    }
 }
 
 /// An instance of the client side for `EnclaveEncrypt`. This should only be used for either
@@ -368,13 +394,25 @@ impl EnclaveEncryptClient {
     }
 
     /// Encrypt a message to the given server target.
-    #[allow(clippy::unused_self)]
     pub fn encrypt(
         &self,
         plaintext: &[u8],
         msg_bytes: &[u8],
         organization_id: &str,
         user_id: &str,
+    ) -> Result<ClientSendMsg, EnclaveEncryptError> {
+        self.encrypt_with_purpose_binding(plaintext, msg_bytes, organization_id, user_id, &[])
+    }
+
+    /// Encrypt a message to the given server target with `purpose_binding` appended to the AAD.
+    /// The server must decrypt with the same `purpose_binding`.
+    pub fn encrypt_with_purpose_binding(
+        &self,
+        plaintext: &[u8],
+        msg_bytes: &[u8],
+        organization_id: &str,
+        user_id: &str,
+        purpose_binding: &[u8],
     ) -> Result<ClientSendMsg, EnclaveEncryptError> {
         let ciphertext;
         let encapped_public: <Kem as KemTrait>::EncappedKey;
@@ -397,8 +435,12 @@ impl EnclaveEncryptClient {
                 let receiver_public =
                     <Kem as KemTrait>::PublicKey::from_bytes(&*msg_v0.target_public)
                         .map_err(EnclaveEncryptError::InvalidServerTarget)?;
-                (ciphertext, encapped_public) =
-                    encrypt(&receiver_public, plaintext, TURNKEY_HPKE_INFO)?;
+                (ciphertext, encapped_public) = encrypt(
+                    &receiver_public,
+                    plaintext,
+                    TURNKEY_HPKE_INFO,
+                    purpose_binding,
+                )?;
             }
             Some(s) if s.as_str() == DATA_VERSION => {
                 let msg_v1: ServerTargetMsgV1 = serde_json::from_slice(msg_bytes)
@@ -434,8 +476,12 @@ impl EnclaveEncryptClient {
                 let receiver_public =
                     <Kem as KemTrait>::PublicKey::from_bytes(&*parsed_data.target_public)
                         .map_err(EnclaveEncryptError::InvalidServerTarget)?;
-                (ciphertext, encapped_public) =
-                    encrypt(&receiver_public, plaintext, TURNKEY_HPKE_INFO)?;
+                (ciphertext, encapped_public) = encrypt(
+                    &receiver_public,
+                    plaintext,
+                    TURNKEY_HPKE_INFO,
+                    purpose_binding,
+                )?;
             }
             Some(_) => return Err(EnclaveEncryptError::InvalidDataVersion),
         }
@@ -521,6 +567,7 @@ impl EnclaveEncryptClient {
                 target_public,
                 &ciphertext,
                 TURNKEY_HPKE_INFO,
+                &[],
             );
 
             self.target_public = None;
@@ -564,6 +611,7 @@ impl EnclaveEncryptClient {
                 target_public,
                 ciphertext,
                 TURNKEY_HPKE_INFO,
+                &[],
             );
 
             self.target_public = None;
@@ -602,7 +650,7 @@ impl ReusableEnclaveEncryptClientSend {
             <Kem as KemTrait>::PublicKey::from_bytes(target_public_key_bytes.as_bytes())
                 .map_err(EnclaveEncryptError::InvalidServerTarget)?;
         let (ciphertext, encapped_public) =
-            encrypt(&receiver_public, plaintext, TURNKEY_HPKE_INFO)?;
+            encrypt(&receiver_public, plaintext, TURNKEY_HPKE_INFO, &[])?;
 
         Ok(ClientSendMsg {
             encapped_public: encapped_public.to_bytes().to_vec().try_into()?,
@@ -991,6 +1039,49 @@ mod test {
                 .encrypt_wallet_with_bundle(mnemonic, &encoded_bundle, "org-id", "wrong-user-id")
                 .unwrap_err(),
             EnclaveEncryptError::InvalidUser,
+        );
+    }
+
+    #[test]
+    fn import_bound_secret_decrypts_only_with_matching_binding() {
+        let properties = [("kind", "credit-card"), ("dual-agent-consensus", "true")];
+        let secret = "4111111111111111";
+        let encrypt = || {
+            let enclave = EnclaveEncryptServer::from_enclave_auth_key(
+                test_quorum_private_key(),
+                "org-id".to_string(),
+                Some(String::new()),
+            );
+            let bundle = serde_json::to_string(&enclave.publish_target().unwrap()).unwrap();
+            let encrypted = ImportClient::new(&test_quorum_public_key())
+                .encrypt_bound_secret_bundle(secret, bundle, "org-id", Some("card"), &properties)
+                .unwrap();
+            (
+                enclave.into_recv(),
+                serde_json::from_str::<ClientSendMsg>(&encrypted).unwrap(),
+            )
+        };
+
+        let (mut receiver, msg) = encrypt();
+        let binding = purpose_binding::import_secrets(Some("card"), &properties).unwrap();
+        assert_eq!(
+            *receiver
+                .decrypt_with_purpose_binding(&msg, &binding)
+                .unwrap(),
+            secret.as_bytes(),
+        );
+
+        let (mut receiver, msg) = encrypt();
+        let weaker = purpose_binding::import_secrets(Some("card"), &properties[..1]).unwrap();
+        assert_eq!(
+            receiver.decrypt_with_purpose_binding(&msg, &weaker),
+            Err(EnclaveEncryptError::FailedToDecrypt),
+        );
+
+        let (mut receiver, msg) = encrypt();
+        assert_eq!(
+            receiver.decrypt(&msg),
+            Err(EnclaveEncryptError::FailedToDecrypt)
         );
     }
 }
