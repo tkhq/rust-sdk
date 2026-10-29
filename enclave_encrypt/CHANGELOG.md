@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- `purpose_binding` module with `import_secrets`, `EnclaveEncryptClient::encrypt_with_purpose_binding`, `EnclaveEncryptServerRecv::decrypt_with_purpose_binding`, and `ImportClient::encrypt_bound_secret_bundle` to bind a ciphertext to its request fields through the HPKE AAD.
+
 ## [0.16.0](https://github.com/tkhq/rust-sdk/compare/turnkey_enclave_encrypt-v0.15.0...turnkey_enclave_encrypt-v0.16.0) - 2026-09-17
 
 ### Other
