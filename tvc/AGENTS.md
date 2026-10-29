@@ -124,6 +124,18 @@ Default guidance for coding-agent runs in this repository.
 
 ## I/O, errors, and compatibility
 
+- Before inserting API, manifest, config, argument, or path values into a human
+  layout, use `TerminalText(&value).single_line()`. It escapes controls,
+  including newlines and tabs, and adds a warning when controls are present.
+  This prevents data fields from forging rows or prompts in a review.
+- Use `TerminalText(value)` for complete human presentation whose newlines and
+  tabs are intentional. The output shell, shell macros, and shared prompts
+  already provide terminal protection; prefer them over direct terminal writes.
+  The shell preserves layout whitespace, so escape individual data fields with
+  `single_line()` before interpolation. Add trusted styling after escaping data.
+- Escape only for display. Keep original values for validation, hashing,
+  signing, API requests, and files. Emit structured JSON through `Shell::emit`,
+  which uses JSON escapes; never serialize `TerminalText` display strings as data.
 - Perform config loading, authentication, and network work only on paths that
   require them. Explicit or offline inputs must not depend on unrelated config
   being present or well-formed.
