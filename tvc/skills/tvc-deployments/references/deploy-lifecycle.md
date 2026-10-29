@@ -40,9 +40,10 @@ Fill the remaining `<FILL_IN_*>` sentinels (app name, manifest set name; leave t
 tvc app create --config-file app.json --message-format json   # reason: app_created
 ```
 
-`app create` output carries `appId`, `manifestSetId`, and `manifestSetOperatorIds`. Save the `appId` **and** the `manifestSetOperatorIds`: the latter are the operator ids allowed to approve this app's deployments, this output is the only place that returns them, and step 4 needs one.
+`app create` output carries `appId`, `region`, `manifestSetId`, and `manifestSetOperatorIds`. Save the `appId` **and** the `manifestSetOperatorIds`: the latter are the operator ids allowed to approve this app's deployments, this output is the only place that returns them, and step 4 needs one.
 
 - `--config-file` / `-c` is **required** for `app create` (env `TVC_APP_CONFIG`).
+- `--region <REGION>` (env `TVC_APP_REGION`) overrides `region` in `app.json`: `us-east-1` (default) or `ap-southeast-1`, the latter only for organizations Turnkey has enabled. The region is decided at `app create` and can never be changed afterward. See [config-files.md](config-files.md#region).
 - `--no-operator-reuse` stops the CLI from swapping an existing operator id into the config before sending it. The backend still returns the existing operator when the key *and* operator name match, and reuses an operator set with identical members, threshold, and name; a new operator record appears only when the operator name differs.
 
 ## 3. Create a deployment
@@ -132,13 +133,14 @@ tvc app list --message-format json
       "liveDeploymentId": "<DEPLOY_ID>",
       "egressEnabled": false,
       "debugModeDeploymentsEnabled": false,
+      "region": "us-east-1",
       "publicDomain": "app-<APP_ID>.<environment-specific-domain>"
     }
   ]
 }
 ```
 
-**Read `publicDomain`; do not construct it.** The key is omitted from the JSON whenever its value is the empty string, and empty is the only "absent" signal the API has (the wire type is a non-optional string, so there is no null and no way to tell unset from empty). Treat a missing key as "no domain available right now" rather than an error.
+**Read `publicDomain`; do not construct it.** The key is omitted from the JSON whenever its value is the empty string, and empty is the only "absent" signal the API has (the wire type is a non-optional string, so there is no null and no way to tell unset from empty). Treat a missing key as "no domain available right now" rather than an error. `region` is omitted the same way when empty, which happens only for an app whose cluster the server cannot map to a region.
 
 What empty *means* is not firmly established: the CLI documents it as "the app has no public domain configured," but it has not been confirmed whether it can also be empty transiently while a new app's domain is still being provisioned. If you get an empty value on an app you expect to have a domain, poll `app list` again before concluding it has none. There is no constructible fallback: the hostname pattern is environment-specific (production orgs get `app-<APP_ID>.turnkey.cloud`, dev orgs something entirely different, e.g. `app-<APP_ID>.apps.tvc-dev.turnkey.engineering`), so a guessed hostname is a dead end — the returned `publicDomain` is the only reliable source. It is populated as early as `app create`, before any deployment exists; it just serves nothing until a deployment is live.
 

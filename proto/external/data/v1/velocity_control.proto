@@ -94,10 +94,14 @@ message VelocityControlDataSourceChainAssetTransferDefinition {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-19 identifier for the asset."}
   ];
-  // Base-10 integer string from 0 through 255 that specifies the number of decimal places for the asset.
-  string decimals = 2 [
+  // Integer between 0 and 32 (inclusive) that specifies the number of decimal places for the asset.
+  uint32 decimals = 2 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Base-10 integer string from 0 through 255 that specifies the number of decimal places for the asset."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Integer between 0 and 32 (inclusive) that specifies the number of decimal places for the asset."
+      minimum: 0
+      maximum: 32
+    }
   ];
 }
 
@@ -172,10 +176,10 @@ message VelocityControlAggregation {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Comparison between the aggregate and the threshold."}
   ];
-  // Non-negative base-10 decimal string with at most 38 total digits and 18 fractional digits.
+  // Non-negative base-10 decimal string with at most 46 integer digits and 32 fractional digits.
   string threshold = 3 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Non-negative base-10 decimal string with at most 38 total digits and 18 fractional digits."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Non-negative base-10 decimal string with at most 46 integer digits and 32 fractional digits."}
   ];
   // Time window for the aggregation.
   VelocityControlAggregationWindow window = 4 [
@@ -233,10 +237,10 @@ message VelocityControlAggregationWindow {
 
 // A rolling time window.
 message VelocityControlAggregationWindowRolling {
-  // Duration of the rolling window, in seconds, as a base-10 integer string.
-  string duration = 1 [
+  // Duration of the rolling window, in seconds.
+  uint32 duration = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Duration of the rolling window, in seconds, as a base-10 integer string."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Duration of the rolling window, in seconds."}
   ];
 }
 

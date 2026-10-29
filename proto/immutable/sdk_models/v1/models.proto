@@ -27,6 +27,7 @@ message TokenUsage {
     SignupUsage signup = 3;
     LoginUsage login = 4;
     SignupUsageV2 signup_v2 = 5;
+    SignupUsageV3 signup_v3 = 6;
   }
 }
 
@@ -46,9 +47,63 @@ message SignupUsageV2 {
   repeated immutable.activity.v1.OauthProviderParamsV2 oauth_providers = 5;
 }
 
+message SignupUsageV3 {
+  optional string email = 1;
+  optional string phone_number = 2;
+  repeated immutable.activity.v1.ApiKeyParamsV2 api_keys = 3;
+  repeated immutable.activity.v1.AuthenticatorParamsV2 authenticators = 4;
+  repeated immutable.activity.v1.OauthProviderParamsV2 oauth_providers = 5;
+  repeated immutable.activity.v1.WalletAuthenticatorParams wallet_authenticators = 6;
+}
+
 message LoginUsage {
   string public_key = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Public key for authentication"}
+  ];
+}
+
+message WalletVerificationClaims {
+  string exp = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Expiration time of the claims"}
+  ];
+  string id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for the claims"}
+  ];
+  string organization_id = 3 [
+    json_name = "organization_id",
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Organization ID of the claims"}
+  ];
+  WalletClaim wallet = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Wallet for the claims"}
+  ];
+  string public_key = 5 [
+    json_name = "public_key",
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Public key for the claims"}
+  ];
+  string ephemeral_public_key = 6 [
+    json_name = "ephemeral_public_key",
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Ephemeral public key for the claims"}
+  ];
+}
+
+message WalletClaim {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Type of wallet for the claims"}
+  ];
+  string address = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address of the wallet for the claims"}
+  ];
+  string domain = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Domain of the wallet for the claims"}
   ];
 }

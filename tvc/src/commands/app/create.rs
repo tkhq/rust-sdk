@@ -3,7 +3,7 @@
 use crate::{
     client::build_client,
     config::{
-        app::{AppConfig, AppConfigValidationErrors, OperatorSetParams},
+        app::{AppConfig, AppConfigValidationErrors, OperatorSetParams, Region},
         turnkey,
     },
     operator::OperatorCandidate,
@@ -53,6 +53,11 @@ struct Overrides {
     /// this true means the app's quorum key is considered permanently insecure.
     #[arg(long, env = "TVC_DANGEROUS_ENABLE_DEBUG_MODE_DEPLOYMENTS")]
     pub dangerous_enable_debug_mode_deployments: bool,
+
+    /// Region to create the app in. Overrides `region` in the config file;
+    /// cannot be changed after app creation.
+    #[arg(long, value_enum, value_name = "REGION", env = "TVC_APP_REGION")]
+    region: Option<Region>,
 }
 
 #[instrument(skip_all)]
@@ -253,7 +258,9 @@ async fn run_with_app_config(
 
     let auth = build_client(&config).await?;
 
-    let intent = build_create_tvc_app_intent(&app_config);
+    let name = app_config.name.clone();
+    let region = app_config.region;
+    let intent = build_create_tvc_app_intent(app_config);
 
     let timestamp_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -275,7 +282,8 @@ async fn run_with_app_config(
 
     Ok(Outcome::AppCreated(AppCreated {
         app_id,
-        name: app_config.name,
+        name,
+        region,
         manifest_set_id: result.result.manifest_set_id,
         manifest_set_operator_ids: operator_ids,
         config_path: args.config_file.display().to_string(),
@@ -287,6 +295,7 @@ async fn run_with_app_config(
 pub struct AppCreated {
     app_id: String,
     name: String,
+    region: Region,
     manifest_set_id: String,
     manifest_set_operator_ids: Vec<String>,
     config_path: String,
@@ -301,8 +310,9 @@ App created successfully!
 
 App ID: {}
 Name: {}
+Region: {}
 Manifest Set ID: {}"#,
-            self.app_id, self.name, self.manifest_set_id
+            self.app_id, self.name, self.region, self.manifest_set_id
         )?;
 
         if !self.manifest_set_operator_ids.is_empty() {
@@ -324,21 +334,21 @@ Use one of the Manifest Set Operator IDs above with `tvc deploy approve --operat
     }
 }
 
-fn build_create_tvc_app_intent(app_config: &AppConfig) -> CreateTvcAppIntent {
+fn build_create_tvc_app_intent(app_config: AppConfig) -> CreateTvcAppIntent {
     let share_set_params = app_config.effective_share_set_params();
 
     CreateTvcAppIntent {
-        name: app_config.name.clone(),
-        quorum_public_key: app_config.quorum_public_key.clone(),
-        manifest_set_id: app_config.manifest_set_id.clone(),
+        name: app_config.name,
+        quorum_public_key: app_config.quorum_public_key,
+        manifest_set_id: app_config.manifest_set_id,
         manifest_set_params: app_config
             .manifest_set_params
-            .as_ref()
             .map(to_tvc_operator_set_params),
-        share_set_id: app_config.share_set_id.clone(),
-        share_set_params: share_set_params.as_ref().map(to_tvc_operator_set_params),
+        share_set_id: app_config.share_set_id,
+        share_set_params: share_set_params.map(to_tvc_operator_set_params),
         enable_egress: app_config.enable_egress.into(),
         enable_debug_mode_deployments: app_config.dangerous_enable_debug_mode_deployments.into(),
+        region: Some(app_config.region.to_string()),
     }
 }
 
@@ -347,22 +357,25 @@ fn apply_overrides(mut config: AppConfig, overrides: &Overrides) -> AppConfig {
         config.dangerous_enable_debug_mode_deployments =
             overrides.dangerous_enable_debug_mode_deployments;
     }
+    if let Some(region) = overrides.region {
+        config.region = region;
+    }
     config
 }
 
-fn to_tvc_operator_set_params(params: &OperatorSetParams) -> TvcOperatorSetParams {
+fn to_tvc_operator_set_params(params: OperatorSetParams) -> TvcOperatorSetParams {
     TvcOperatorSetParams {
-        name: params.name.clone(),
+        name: params.name,
         threshold: params.threshold,
         new_operators: params
             .new_operators
-            .iter()
+            .into_iter()
             .map(|o| TvcOperatorParams {
-                name: o.name.clone(),
-                public_key: o.public_key.clone(),
+                name: o.name,
+                public_key: o.public_key,
             })
             .collect(),
-        existing_operator_ids: params.existing_operator_ids.clone(),
+        existing_operator_ids: params.existing_operator_ids,
     }
 }
 
@@ -373,6 +386,7 @@ mod tests {
         config::app::{KNOWN_QUORUM_KEY, OperatorParams},
         output::{Ctx, EmptyShell},
     };
+    use clap::{Parser, error::ErrorKind};
 
     fn valid_config() -> AppConfig {
         AppConfig {
@@ -392,12 +406,13 @@ mod tests {
             share_set_id: None,
             share_set_params: None,
             dangerous_enable_debug_mode_deployments: false,
+            region: Region::UsEast1,
         }
     }
 
     #[test]
     fn build_intent_uses_default_share_set_params_when_omitted() {
-        let intent = build_create_tvc_app_intent(&valid_config());
+        let intent = build_create_tvc_app_intent(valid_config());
         let share_set_params = intent.share_set_params.unwrap();
 
         assert_eq!(share_set_params.name, "dev-known-share-set");
@@ -411,7 +426,7 @@ mod tests {
         let mut config = valid_config();
         config.enable_egress = true;
 
-        let intent = build_create_tvc_app_intent(&config);
+        let intent = build_create_tvc_app_intent(config);
 
         assert_eq!(intent.enable_egress, Some(true));
     }
@@ -429,7 +444,7 @@ mod tests {
             existing_operator_ids: vec!["existing-operator-id".to_string()],
         });
 
-        let intent = build_create_tvc_app_intent(&config);
+        let intent = build_create_tvc_app_intent(config);
         let share_set_params = intent.share_set_params.unwrap();
 
         assert_eq!(share_set_params.name, "custom-share-set");
@@ -445,7 +460,7 @@ mod tests {
     /// — explicit so the server doesn't have to fall back to a proto default.
     #[test]
     fn build_intent_sends_false_debug_mode_by_default() {
-        let intent = build_create_tvc_app_intent(&valid_config());
+        let intent = build_create_tvc_app_intent(valid_config());
         assert_eq!(intent.enable_debug_mode_deployments, Some(false));
     }
 
@@ -456,7 +471,7 @@ mod tests {
         let mut config = valid_config();
         config.dangerous_enable_debug_mode_deployments = true;
 
-        let intent = build_create_tvc_app_intent(&config);
+        let intent = build_create_tvc_app_intent(config);
         assert_eq!(intent.enable_debug_mode_deployments, Some(true));
     }
 
@@ -467,6 +482,7 @@ mod tests {
         let config = valid_config();
         let overrides = Overrides {
             dangerous_enable_debug_mode_deployments: true,
+            region: None,
         };
 
         let config = apply_overrides(config, &overrides);
@@ -477,15 +493,62 @@ mod tests {
     /// deployments: the flag is opt-in only and can never turn it off, so a
     /// `true` config survives an absent flag.
     #[test]
-    fn absent_dangerous_flag_preserves_config_debug_mode() {
+    fn absent_flags_preserve_config_values() {
         let mut config = valid_config();
         config.dangerous_enable_debug_mode_deployments = true;
+        config.region = Region::ApSoutheast1;
         let overrides = Overrides {
             dangerous_enable_debug_mode_deployments: false,
+            region: None,
         };
 
         let config = apply_overrides(config, &overrides);
         assert!(config.dangerous_enable_debug_mode_deployments);
+        assert_eq!(config.region, Region::ApSoutheast1);
+    }
+
+    #[test]
+    fn build_intent_forwards_region_from_config() {
+        for (region, expected) in [
+            (Region::UsEast1, "us-east-1"),
+            (Region::ApSoutheast1, "ap-southeast-1"),
+        ] {
+            let mut config = valid_config();
+            config.region = region;
+
+            let intent = build_create_tvc_app_intent(config);
+            assert_eq!(intent.region.as_deref(), Some(expected));
+        }
+    }
+
+    #[derive(Debug, Parser)]
+    struct TestCli {
+        #[command(flatten)]
+        args: Args,
+    }
+
+    #[test]
+    fn region_flag_rejects_unknown_region() {
+        let error = TestCli::try_parse_from([
+            "tvc-app-create",
+            "--config-file",
+            "/tmp/test-app.json",
+            "--region",
+            "eu-west-1",
+        ])
+        .expect_err("unknown region must fail to parse");
+
+        assert_eq!(error.kind(), ErrorKind::InvalidValue);
+    }
+
+    #[test]
+    fn region_flag_defaults_to_none_when_absent() {
+        let args =
+            TestCli::try_parse_from(["tvc-app-create", "--config-file", "/tmp/test-app.json"])
+                .unwrap()
+                .args;
+
+        assert_eq!(args.overrides.region, None);
     }
 
     /// Exercises every override flag via clap parsing so flag renames or
@@ -493,20 +556,14 @@ mod tests {
     /// field name and would silently pass.
     #[test]
     fn every_override_flag_changes_config_value() {
-        use clap::Parser;
-
-        #[derive(Parser)]
-        struct TestCli {
-            #[command(flatten)]
-            args: Args,
-        }
-
         let config_path = "/tmp/test-app.json";
         let args = TestCli::try_parse_from([
             "tvc-app-create",
             "--config-file",
             config_path,
             "--dangerous-enable-debug-mode-deployments",
+            "--region",
+            "ap-southeast-1",
         ])
         .unwrap()
         .args;
@@ -519,9 +576,11 @@ mod tests {
             resolved.dangerous_enable_debug_mode_deployments,
             baseline.dangerous_enable_debug_mode_deployments
         );
+        assert_ne!(resolved.region, baseline.region);
 
         // ... to the value passed on the CLI.
         assert!(resolved.dangerous_enable_debug_mode_deployments);
+        assert_eq!(resolved.region, Region::ApSoutheast1);
 
         // config_file isn't an override; verify clap captured the path.
         assert_eq!(args.config_file, PathBuf::from(config_path));
@@ -532,7 +591,7 @@ mod tests {
         let mut config = valid_config();
         config.share_set_id = Some("share-set-id".to_string());
 
-        let intent = build_create_tvc_app_intent(&config);
+        let intent = build_create_tvc_app_intent(config);
 
         assert_eq!(intent.share_set_id.as_deref(), Some("share-set-id"));
         assert!(intent.share_set_params.is_none());

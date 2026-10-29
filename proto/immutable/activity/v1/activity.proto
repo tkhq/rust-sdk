@@ -193,12 +193,25 @@ enum ActivityType {
   ACTIVITY_TYPE_IMPORT_SECRETS = 162;
   ACTIVITY_TYPE_EXPORT_SECRETS = 163;
   ACTIVITY_TYPE_CREATE_VELOCITY_CONTROL = 164;
-  ACTIVITY_TYPE_DELETE_VELOCITY_CONTROL = 165;
+  ACTIVITY_TYPE_DELETE_VELOCITY_CONTROLS = 165;
   ACTIVITY_TYPE_UPDATE_PAYMENT_METHOD = 166;
   ACTIVITY_TYPE_CREATE_SWAP_QUOTE_V2 = 167;
   ACTIVITY_TYPE_EXECUTE_SWAP_V3 = 168;
   ACTIVITY_TYPE_DELETE_SECRETS = 169;
   ACTIVITY_TYPE_EARN_CLAIM_REWARDS = 170;
+  ACTIVITY_TYPE_CREATE_SWAP_QUOTE_V3 = 171;
+  reserved 172;
+  ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V9 = 173;
+  ACTIVITY_TYPE_VERIFY_WALLET_AUTHENTICATOR = 174;
+  ACTIVITY_TYPE_UPSERT_SWAP_FEE_SPONSORSHIP_LIMIT_CONFIG = 175;
+  ACTIVITY_TYPE_UPSERT_SWAP_FIXED_RATE_LIMIT_CONFIG = 176;
+  ACTIVITY_TYPE_CREATE_FIAT_ON_RAMP_SESSION = 177;
+  ACTIVITY_TYPE_CREATE_FIAT_OFF_RAMP_SESSION = 178;
+  reserved 179; // reserved for ACTIVITY_TYPE_ENABLE_SMS_FOR_COUNTRIES
+  reserved 180; // reserved for ACTIVITY_TYPE_DISABLE_SMS_FOR_COUNTRIES
+  ACTIVITY_TYPE_EXECUTE_SWAP_V4 = 181;
+  ACTIVITY_TYPE_CREATE_WALLET_AUTHENTICATORS = 182;
+  ACTIVITY_TYPE_DELETE_WALLET_AUTHENTICATORS = 183;
 }
 
 // The current processing status of an Activity.
@@ -394,14 +407,24 @@ message Intent {
     ImportSecretsIntent import_secrets_intent = 163;
     ExportSecretsIntent export_secrets_intent = 164;
     CreateVelocityControlIntent create_velocity_control_intent = 165;
-    DeleteVelocityControlIntent delete_velocity_control_intent = 166;
+    DeleteVelocityControlsIntent delete_velocity_controls_intent = 166;
     immutable.activity.billing.UpdatePaymentMethodIntent update_payment_method_intent = 167;
     CreateSwapQuoteIntentV2 create_swap_quote_intent_v2 = 168;
     ExecuteSwapIntentV3 execute_swap_intent_v3 = 169;
     DeleteSecretsIntent delete_secrets_intent = 170;
     EarnClaimRewardsIntent earn_claim_rewards_intent = 171;
+    CreateSwapQuoteIntentV3 create_swap_quote_intent_v3 = 172;
+    CreateSubOrganizationIntentV9 create_sub_organization_intent_v9 = 174;
+    VerifyWalletAuthenticatorIntent verify_wallet_authenticator_intent = 175;
+    UpsertSwapFeeSponsorshipLimitConfigIntent upsert_swap_fee_sponsorship_limit_config_intent = 176;
+    UpsertSwapFixedRateLimitConfigIntent upsert_swap_fixed_rate_limit_config_intent = 177;
+    CreateFiatOnRampSessionIntent create_fiat_on_ramp_session_intent = 178;
+    CreateFiatOffRampSessionIntent create_fiat_off_ramp_session_intent = 179;
+    ExecuteSwapIntentV4 execute_swap_intent_v4 = 180;
+    CreateWalletAuthenticatorsIntent create_wallet_authenticators_intent = 181;
+    DeleteWalletAuthenticatorsIntent delete_wallet_authenticators_intent = 182;
   }
-  reserved 148;
+  reserved 148, 173;
   reserved "upsert_earn_client_fee_config_intent";
 }
 
@@ -527,7 +550,10 @@ message EnableAuthProxyIntent {} // This intent is used to enable auth proxied a
 message DisableAuthProxyIntent {} // This intent is used to disable auth proxied authentication for business org
 
 message UpsertSwapConfigIntent {
-  optional string fee_receiver_wallet_address = 1 [(google.api.field_behavior) = OPTIONAL];
+  optional string fee_receiver_wallet_address = 1 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Organization-owned wallet account that receives swap fees. Required when fee_bps is set. Omit together with fee_bps to clear swap fees."}
+  ];
   optional string fee_bps = 2 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Client fee in basis points applied to swaps; used for all pairs unless stable_fee_bps is set."}
@@ -1031,6 +1057,20 @@ message CreatePrivateKeysIntentV2 {
       title: ""
     }
   ];
+  optional string external_signer_pubkey = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The public key of the external signer to use for creating the private keys. Only needed for external signer requests."
+      title: ""
+    }
+  ];
+  optional string external_signer_wrapping_key_id = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The object ID of the wrapping key the external signer will use when creating the private keys. Only needed for external signer requests."
+      title: ""
+    }
+  ];
 }
 
 message SignRawPayloadIntent {
@@ -1099,6 +1139,13 @@ message SignRawPayloadIntentV2 {
       title: ""
     }
   ];
+  optional string external_signer_pubkey = 5 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The public key of the external signer to use for signing the payload. Only needed for external signer requests."
+      title: ""
+    }
+  ];
 }
 
 message SignRawPayloadsIntent {
@@ -1130,6 +1177,13 @@ message SignRawPayloadsIntent {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
       description: "Hash function to apply to payload bytes before signing. This field must be set to HASH_FUNCTION_NOT_APPLICABLE for EdDSA/ed25519 signature requests; configurable payload hashing is not supported by RFC 8032."
+      title: ""
+    }
+  ];
+  optional string external_signer_pubkey = 5 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The public key of the external signer to use for signing the payloads. Only needed for external signer requests."
       title: ""
     }
   ];
@@ -1594,6 +1648,13 @@ message SignTransactionIntentV2 {
   immutable.common.v1.TransactionType type = 3 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {title: ""}
+  ];
+  optional string external_signer_pubkey = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The public key of the external signer to use for signing this transaction. Only needed for external signer requests."
+      title: ""
+    }
   ];
 }
 
@@ -2459,6 +2520,66 @@ message CreateSubOrganizationIntentV8 {
   ];
 }
 
+message CreateSubOrganizationIntentV9 {
+  // @inject_tag: validate:"omitempty,tk_label,tk_label_length"
+  string sub_organization_name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Name for this sub-organization"
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"required,dive"
+  repeated RootUserParamsV6 root_users = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Root users to create within this sub-organization"
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"required"
+  int32 root_quorum_threshold = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The threshold of unique approvals to reach root quorum. This value must be less than or equal to the number of root users"
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"omitempty"
+  optional WalletParams wallet = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+    description: "The wallet to create for the sub-organization"
+    title: ""
+  }];
+  // @inject_tag: validate:"omitempty"
+  optional bool disable_email_recovery = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+    description: "Disable email recovery for the sub-organization"
+    title: ""
+  }];
+  // @inject_tag: validate:"omitempty"
+  optional bool disable_email_auth = 6 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+    description: "Disable email auth for the sub-organization"
+    title: ""
+  }];
+  // @inject_tag: validate:"omitempty"
+  optional bool disable_sms_auth = 7 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+    description: "Disable OTP SMS auth for the sub-organization"
+    title: ""
+  }];
+  // @inject_tag: validate:"omitempty"
+  optional bool disable_otp_email_auth = 8 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+    description: "Disable OTP email auth for the sub-organization"
+    title: ""
+  }];
+  optional string verification_token = 9 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Signed JWT containing a unique id, expiry, verification type, contact"}
+  ];
+  optional ClientSignature client_signature = 10 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional signature proving authorization for this sub-organization creation. The signature is over the verification token ID and the root user parameters for the root user associated with the verification token. Only required if a public key was provided during the verification step."}
+  ];
+}
+
 message UpdatePolicyIntent {
   // @inject_tag: validate:"uuid"
   string policy_id = 1 [
@@ -2843,7 +2964,7 @@ message EarnDeployWrapperIntent {
   ];
 
   // @inject_tag: validate:"required"
-  string chain_caip2 = 2 [
+  string caip2 = 2 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
       description: "CAIP-2 chain ID the vault lives on (e.g., 'eip155:8453' for Base)."
@@ -2853,7 +2974,11 @@ message EarnDeployWrapperIntent {
         "eip155:42161",
         "eip155:137",
         "eip155:56",
-        "eip155:4217"
+        "eip155:4217",
+        "solana:mainnet",
+        "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+        "solana:devnet",
+        "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1"
       ]
     }
   ];
@@ -2906,7 +3031,7 @@ message EarnDepositIntent {
   ];
 
   // @inject_tag: validate:"required"
-  string chain_caip2 = 4 [
+  string caip2 = 4 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
       description: "CAIP-2 chain ID the vault lives on (e.g., 'eip155:8453' for Base)."
@@ -2916,7 +3041,11 @@ message EarnDepositIntent {
         "eip155:42161",
         "eip155:137",
         "eip155:56",
-        "eip155:4217"
+        "eip155:4217",
+        "solana:mainnet",
+        "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+        "solana:devnet",
+        "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1"
       ]
     }
   ];
@@ -2951,7 +3080,7 @@ message EarnWithdrawIntent {
   ];
 
   // @inject_tag: validate:"required"
-  string chain_caip2 = 3 [
+  string caip2 = 3 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
       description: "CAIP-2 chain ID the vault lives on (e.g., 'eip155:8453' for Base)."
@@ -2961,7 +3090,11 @@ message EarnWithdrawIntent {
         "eip155:42161",
         "eip155:137",
         "eip155:56",
-        "eip155:4217"
+        "eip155:4217",
+        "solana:mainnet",
+        "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+        "solana:devnet",
+        "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1"
       ]
     }
   ];
@@ -3027,7 +3160,7 @@ message EarnClaimRewardsIntent {
   ];
 
   // @inject_tag: validate:"required"
-  string chain_caip2 = 2 [
+  string caip2 = 2 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
       description: "CAIP-2 chain to claim rewards on (e.g. 'eip155:8453'). Rewards accrue per chain; see ListEarnRewards."
@@ -3228,6 +3361,103 @@ message RootUserParamsV5 {
       description: "A list of Oauth providers. This field, if not needed, should be an empty array in your request body."
       title: ""
     }
+  ];
+}
+
+message RootUserParamsV6 {
+  // @inject_tag: validate:"required,tk_label_length,tk_label"
+  string user_name = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Human-readable name for a User."
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"omitempty,email,tk_email"
+  optional string user_email = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The user's email address."}];
+
+  // @inject_tag: validate:"omitempty,e164"
+  optional string user_phone_number = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The user's phone number in E.164 format e.g. +13214567890"}];
+
+  // @inject_tag: validate:"dive"
+  repeated ApiKeyParamsV2 api_keys = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "A list of API Key parameters. This field, if not needed, should be an empty array in your request body."
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"dive"
+  repeated AuthenticatorParamsV2 authenticators = 6 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "A list of Authenticator parameters. This field, if not needed, should be an empty array in your request body."
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"dive"
+  repeated OauthProviderParamsV2 oauth_providers = 7 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "A list of Oauth providers. This field, if not needed, should be an empty array in your request body."
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"dive"
+  repeated WalletAuthenticatorParams wallet_authenticators = 8 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "A list of wallet authenticators. This field, if not needed, should be an empty array in your request body."
+      title: ""
+    }
+  ];
+}
+
+message WalletAuthenticatorParams {
+  // @inject_tag: validate:"required"
+  immutable.common.v1.WalletAuthenticatorType type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Network this authenticator belongs to."}
+  ];
+  // @inject_tag: validate:"required"
+  string address = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Account address. Ethereum addresses are stored lowercase with a 0x prefix. Solana addresses are canonical base58."}
+  ];
+  // @inject_tag: validate:"required"
+  string domain = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "SIWE/SIWS domain this authenticator is bound to. Host only, lowercased."}
+  ];
+  optional string verification_token = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Wallet verification JWT for this claim. Omit to attach the authenticator unverified."}
+  ];
+}
+
+message CreateWalletAuthenticatorsIntent {
+  // @inject_tag: validate:"required,uuid"
+  string user_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The ID of the User to add wallet authenticators to."}
+  ];
+  // @inject_tag: validate:"required,dive,required"
+  repeated WalletAuthenticatorParams wallet_authenticators = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Wallet authenticators to add. Each entry is a type, address, and domain. verification_token is optional."}
+  ];
+}
+
+message DeleteWalletAuthenticatorsIntent {
+  // @inject_tag: validate:"required,uuid"
+  string user_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The ID of the User to remove wallet authenticators from."}
+  ];
+  // @inject_tag: validate:"required,dive,required,uuid"
+  repeated string wallet_authenticator_ids = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "IDs of the wallet authenticators to delete."}
   ];
 }
 
@@ -4110,6 +4340,68 @@ message SolanaConfig {
   ];
 }
 
+message UpsertSwapFeeSponsorshipLimitConfigIntent {
+  // @inject_tag: validate:"required"
+  string org_window_limit_usd = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Positive USD limit shared by the billing parent and its sub-organizations. At most 18 integer and 12 fractional digits."}
+  ];
+  // @inject_tag: validate:"required"
+  string sub_org_window_limit_usd = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Positive USD limit for each sub-organization, no greater than the parent limit."}
+  ];
+  // @inject_tag: validate:"required,numeric"
+  string window_duration_minutes = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Positive rolling window duration in minutes, at most 153722867."}
+  ];
+  // @inject_tag: validate:"required"
+  optional bool enabled = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether this spending window permits new swaps. True also grants the billing parent's signed permission for the feature. False turns the saved window off, keeps its limits, and removes the permission. Granting or removing the permission needs root quorum."}
+  ];
+}
+
+message UpsertSwapFeeSponsorshipLimitConfigResult {
+  // @inject_tag: validate:"required,uuid4"
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier of the organization the limit config was saved for."}
+  ];
+}
+
+message UpsertSwapFixedRateLimitConfigIntent {
+  // @inject_tag: validate:"required"
+  string org_window_limit_usd = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Positive USD limit shared by the billing parent and its sub-organizations. At most 18 integer and 12 fractional digits."}
+  ];
+  // @inject_tag: validate:"required"
+  string sub_org_window_limit_usd = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Positive USD limit for each sub-organization, no greater than the parent limit."}
+  ];
+  // @inject_tag: validate:"required,numeric"
+  string window_duration_minutes = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Positive rolling window duration in minutes, at most 153722867."}
+  ];
+  // @inject_tag: validate:"required"
+  optional bool enabled = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether this spending window permits new swaps. True also grants the billing parent's signed permission for the feature. False turns the saved window off, keeps its limits, and removes the permission. Granting or removing the permission needs root quorum."}
+  ];
+}
+
+message UpsertSwapFixedRateLimitConfigResult {
+  // @inject_tag: validate:"required,uuid4"
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier of the organization the limit config was saved for."}
+  ];
+}
+
 message UpsertGasUsageConfigIntent {
   // @inject_tag: validate:"required,numeric"
   string org_window_limit_usd = 1 [
@@ -4546,6 +4838,25 @@ message InitFiatOnRampIntent {
   ];
 }
 
+message CreateFiatOnRampSessionIntent {
+  // @inject_tag: validate:"required,uuid4"
+  string quote_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Identifier of a saved fiat on-ramp quote. Returned by GetFiatOnRampQuotes."
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"required"
+  string wallet_address = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Destination wallet address for the buy transaction."
+      title: ""
+    }
+  ];
+}
+
 message ImportWalletIntent {
   // @inject_tag: validate:"required,uuid"
   string user_id = 1 [
@@ -4951,6 +5262,10 @@ message CreateTvcAppIntent {
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "When true, this app may create deployments in debug-mode. Debug-mode deployments expose logs and emit zero'd attestation PCRs, so remote attestation cannot succeed. Cannot be changed after app creation. Setting this true means the app's quorum key is considered permanently insecure, and a new app with a fresh quorum key must be created. Default if not provided: false."}
   ];
+  optional string region = 9 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "AWS region in which to place this TVC application. Allowed values: us-east-1, ap-southeast-1. Default if not provided: us-east-1."}
+  ];
 }
 
 message CreateTvcOperatorIntent {
@@ -5076,6 +5391,10 @@ message CreateTvcDeploymentIntent {
   optional uint32 instance_size_ram = 19 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional desired instance memory size in GiB."}
+  ];
+  optional bytes qos_manifest = 20 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional client-generated QOS manifest."}
   ];
 }
 
@@ -5379,10 +5698,19 @@ message Result {
     ImportSecretsResult import_secrets_result = 143;
     ExportSecretsResult export_secrets_result = 144;
     CreateVelocityControlResult create_velocity_control_result = 145;
-    DeleteVelocityControlResult delete_velocity_control_result = 146;
+    DeleteVelocityControlsResult delete_velocity_controls_result = 146;
     immutable.activity.billing.UpdatePaymentMethodResult update_payment_method_result = 147;
     DeleteSecretsResult delete_secrets_result = 148;
     EarnClaimRewardsResult earn_claim_rewards_result = 149;
+    CreateSwapQuoteResultV2 create_swap_quote_result_v2 = 150;
+    CreateSubOrganizationResultV9 create_sub_organization_result_v9 = 151;
+    VerifyWalletAuthenticatorResult verify_wallet_authenticator_result = 152;
+    UpsertSwapFeeSponsorshipLimitConfigResult upsert_swap_fee_sponsorship_limit_config_result = 153;
+    UpsertSwapFixedRateLimitConfigResult upsert_swap_fixed_rate_limit_config_result = 154;
+    CreateFiatOnRampSessionResult create_fiat_on_ramp_session_result = 155;
+    CreateFiatOffRampSessionResult create_fiat_off_ramp_session_result = 156;
+    CreateWalletAuthenticatorsResult create_wallet_authenticators_result = 157;
+    DeleteWalletAuthenticatorsResult delete_wallet_authenticators_result = 158;
   }
   reserved 127;
   reserved "upsert_earn_client_fee_config_result";
@@ -5421,6 +5749,20 @@ message CreateOrganizationResult {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+}
+
+message CreateWalletAuthenticatorsResult {
+  repeated string wallet_authenticator_ids = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "IDs of the wallet authenticators created."}
+  ];
+}
+
+message DeleteWalletAuthenticatorsResult {
+  repeated string wallet_authenticator_ids = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "IDs of the wallet authenticators deleted."}
   ];
 }
 
@@ -5539,15 +5881,15 @@ message Address {
 message SignRawPayloadResult {
   string r = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Component of an ECSDA signature."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Component of a cryptographic signature, meaning varies based on signing scheme."}
   ];
   string s = 2 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Component of an ECSDA signature."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Component of a cryptographic signature, meaning varies based on signing scheme."}
   ];
   string v = 3 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Component of an ECSDA signature."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Recovery ID for ECDSA signatures, \"00\" otherwise."}
   ];
 }
 
@@ -5585,6 +5927,43 @@ message OauthLoginResult {
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Signed JWT containing an expiry, public key, session type, user id, and organization id"}
   ];
 }
+message CreateFiatOffRampSessionIntent {
+  // @inject_tag: validate:"required,uuid4"
+  string quote_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Identifier of a saved fiat off-ramp quote. Returned by GetFiatOffRampQuotes."
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"required"
+  string wallet_address = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Wallet address for this sale. Coinbase uses it as the source address. MoonPay uses it as the refund address; the user deposits the crypto to MoonPay separately."
+      title: ""
+    }
+  ];
+  optional string redirect_url = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "URL Coinbase redirects to after the user submits the sell. Required when the saved quote is from Coinbase. Coinbase buy does not use this field. MoonPay ignores it."
+      title: ""
+    }
+  ];
+}
+
+message CreateFiatOffRampSessionResult {
+  string off_ramp_url = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "URL of the fiat off-ramp session for the saved quote."}
+  ];
+  string off_ramp_transaction_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier used to retrieve transaction statuses for a given fiat off-ramp flow."}
+  ];
+}
+
 message InitFiatOnRampResult {
   string on_ramp_url = 1 [
     (google.api.field_behavior) = REQUIRED,
@@ -5599,6 +5978,18 @@ message InitFiatOnRampResult {
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Optional signature of the MoonPay Widget URL. The signature is generated if the Init Fiat On Ramp intent includes the urlForSignature field. The signature can be used to initialize the MoonPay SDKs when URL signing is enabled for your project."}
   ];
 }
+
+message CreateFiatOnRampSessionResult {
+  string on_ramp_url = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "URL of the fiat on-ramp session for the saved quote."}
+  ];
+  string on_ramp_transaction_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier used to retrieve transaction statuses for a given fiat on-ramp flow."}
+  ];
+}
+
 message StampLoginResult {
   string session = 1 [
     (google.api.field_behavior) = REQUIRED,
@@ -5657,6 +6048,31 @@ message OtpAuthResult {
   string credential_bundle = 3 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "HPKE encrypted credential bundle"}
+  ];
+}
+
+message VerifyWalletAuthenticatorIntent {
+  // @inject_tag: validate:"required,max=8192"
+  string message = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "SIWE or SIWS message. Ump accepts only the Turnkey supported login template."}
+  ];
+  // @inject_tag: validate:"required"
+  string signature = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Wallet signature over the message. Ethereum: 65-byte hex personal_sign (r || s || v). Solana: 64-byte hex ed25519 signature."}
+  ];
+  // @inject_tag: validate:"required"
+  string public_key = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Wallet public key that signed the message. Ethereum: sec1 secp256k1 hex, compressed or uncompressed. Solana: 32-byte ed25519 hex."}
+  ];
+}
+
+message VerifyWalletAuthenticatorResult {
+  string verification_token = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Enclave-signed JWT binding the wallet, the wallet public key, and the ephemeral P-256 session key."}
   ];
 }
 
@@ -6006,6 +6422,13 @@ message CreateSubOrganizationResultV7 {
   repeated string root_user_ids = 3;
 }
 message CreateSubOrganizationResultV8 {
+  string sub_organization_id = 1 [(google.api.field_behavior) = REQUIRED];
+
+  optional WalletResult wallet = 2;
+
+  repeated string root_user_ids = 3;
+}
+message CreateSubOrganizationResultV9 {
   string sub_organization_id = 1 [(google.api.field_behavior) = REQUIRED];
 
   optional WalletResult wallet = 2;
@@ -6375,6 +6798,22 @@ message ExecuteSwapResult {
   optional string quote_id = 3 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Quote identifier used for execution, if any."}
+  ];
+  optional string output_amount = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Quoted base-unit amount of the output asset. Set by execute_swap V4."}
+  ];
+  optional string min_output_amount = 5 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Minimum base-unit amount of the output asset after slippage. Set by execute_swap V4."}
+  ];
+  optional bool fee_sponsorship = 6 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether Turnkey paid the provider fees for this swap. Set by execute_swap V4."}
+  ];
+  optional bool fixed_rate = 7 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether this swap used a 1:1 fixed rate. Set by execute_swap V4."}
   ];
 }
 
@@ -7739,12 +8178,19 @@ message CreateVelocityControlResult {
   string velocity_control_id = 1 [(google.api.field_behavior) = REQUIRED];
 }
 
-message DeleteVelocityControlIntent {
-  string velocity_control_id = 1 [(google.api.field_behavior) = REQUIRED];
+message DeleteVelocityControlsIntent {
+  // @inject_tag: validate:"required,min=1,max=32,unique,dive,uuid"
+  repeated string velocity_control_ids = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "List of 1 to 32 unique identifiers for Velocity Controls within an Organization."}
+  ];
 }
 
-message DeleteVelocityControlResult {
-  string velocity_control_id = 1 [(google.api.field_behavior) = REQUIRED];
+message DeleteVelocityControlsResult {
+  repeated string velocity_control_ids = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of unique identifiers for the deleted Velocity Controls."}
+  ];
 }
 
 message ClientSignature {
@@ -8283,5 +8729,284 @@ message CreateSwapQuoteIntentV2 {
       description: "Raw public address that receives the output asset. Required for cross-protocol swaps. The address must match the output token protocol. Wallet account IDs, private key IDs, and CAIP account or asset identifiers are not supported."
       title: ""
     }
+  ];
+}
+
+message CreateSwapQuoteIntentV3 {
+  // @inject_tag: validate:"required"
+  string sign_with = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Wallet account address used to price the executable provider quote. Private Key identifiers are not supported."
+      title: ""
+    }
+  ];
+
+  // @inject_tag: validate:"required"
+  string input_token = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "CAIP-19 asset ID for the input asset. The chain is derived from this value."
+      title: ""
+    }
+  ];
+
+  // @inject_tag: validate:"required"
+  string output_token = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "CAIP-19 asset ID for the output asset."
+      title: ""
+    }
+  ];
+
+  // @inject_tag: validate:"required"
+  string input_amount = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Base-unit amount of the input asset."
+      title: ""
+    }
+  ];
+
+  optional string slippage_bps = 5 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Provider-neutral maximum allowed slippage in basis points. Turnkey converts this value to each provider's request format. When omitted, each provider applies its default slippage behavior."
+      title: ""
+    }
+  ];
+
+  // Previously an optional provider filter; clients should filter quotes client-side for now.
+  reserved 6;
+
+  optional string destination_address = 7 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Raw public address that receives the output asset. Required for cross-protocol swaps. The address must match the output token protocol. Wallet account IDs, private key IDs, and CAIP account or asset identifiers are not supported."
+      title: ""
+    }
+  ];
+  // Provider fees are paid from Turnkey's Relay balance and invoiced to the parent.
+  optional bool fee_sponsorship = 8 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "When true, Turnkey pays the provider fees for this swap and invoices them to the billing parent organization. Requires the FEATURE_NAME_SWAP_FEE_SPONSORSHIP organization feature. Defaults to false."}
+  ];
+  // Request a 1:1 conversion before fees for eligible stablecoins.
+  optional bool fixed_rate = 9 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "When true, requests a 1:1 conversion before fees between supported stablecoins. Requires the FEATURE_NAME_SWAP_FIXED_RATE organization feature. Defaults to false."}
+  ];
+}
+
+message SwapQuoteV2 {
+  string quote_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Identifier for this provider quote. Pass this value to execute_swap_v2 to bind execution to this exact quote. The signer is derived from the quote; clients do not resupply sign_with on execute."}
+  ];
+  string provider = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Swap provider that produced this quote."}
+  ];
+  string output_amount = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Estimated base-unit amount of the output asset."}
+  ];
+  string min_output_amount = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Minimum acceptable base-unit amount of the output asset after slippage."}
+  ];
+  string expires_at = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Quote expiration as a millisecond epoch string."}
+  ];
+  // Previously sign_with; omitted because execute derives the signer from the bound quote.
+  reserved 6;
+  optional string slippage_bps = 7 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Effective total slippage tolerance in basis points for this quote, taken from the provider response when present. When the request omits input slippage_bps, the provider may calculate this value."}
+  ];
+  string client_fee_bps = 8 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Client fee in basis points applied for this pair. Informational only; already reflected in output_amount and min_output_amount."}
+  ];
+  optional string estimated_time_seconds = 9 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Provider-estimated completion time in seconds, when available."}
+  ];
+  bool fee_sponsorship = 10 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether Turnkey pays the provider fees for this quote."}
+  ];
+  bool fixed_rate = 11 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether this quote uses a 1:1 fixed rate."}
+  ];
+  // Previously turnkey_fee_collection, sponsored_fee_components, and remaining_fee_components;
+  // removed because they restated fee_sponsorship and client_fee_bps.
+  reserved 12, 13, 14;
+  reserved "turnkey_fee_collection", "sponsored_fee_components", "remaining_fee_components";
+  reserved 15, 16;
+  optional string estimated_fixed_rate_adjustment_usd = 17 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Estimated USD adjustment for the fixed rate. Present only for fixed-rate quotes. Positive is a cost billed to you; negative is an earning credited against your transaction management charges at the end of the billing period. Informational; the final amount is settled after execution."}
+  ];
+}
+
+message CreateSwapQuoteResultV2 {
+  // @inject_tag: validate:"required,min=1,dive"
+  repeated SwapQuoteV2 quotes = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "One or more provider quotes for this request. Today this contains a single Relay quote; pass quotes[i].quoteId to execute_swap to bind execution."}
+  ];
+}
+
+// Executes a swap either at a bound quote's exact terms or at the provider's price when the activity is approved.
+message ExecuteSwapIntentV4 {
+  // @inject_tag: validate:"required"
+  string input_token = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "CAIP-19 asset ID for the input asset."
+      title: ""
+    }
+  ];
+
+  // @inject_tag: validate:"required"
+  string input_amount = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Exact base-unit amount of the input asset."
+      title: ""
+    }
+  ];
+
+  // @inject_tag: validate:"required"
+  string output_token = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "CAIP-19 asset ID for the output asset."
+      title: ""
+    }
+  ];
+
+  // proto3 optional tracks presence; REQUIRED is the API contract and Go rejects unset.
+  // @inject_tag: validate:"required"
+  optional bool sponsor = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Whether the swap transaction is gas sponsored."
+      title: ""
+    }
+  ];
+
+  optional string destination_address = 5 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Raw public address that receives the output asset. Required for cross-protocol swaps and rejected otherwise. The address must match the output token protocol. Wallet account IDs, private key IDs, and CAIP account or asset identifiers are not supported."
+      title: ""
+    }
+  ];
+
+  optional string evm_nonce = 6 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Exact EVM sender (EOA account) nonce. Valid only for a non-sponsored EVM swap. Honored for already-delegated (Type-2) batch swaps and single-call swaps; ignored for not-yet-delegated EIP-7702 (Type-4) batches where the outer nonce is derived from the authorization. Prefer gas_station_nonce for batch replay protection and use the nonces endpoint to fetch it. Omit to auto-fetch."
+      title: ""
+    }
+  ];
+
+  optional string recent_blockhash = 7 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Exact Solana recent blockhash. Valid only for a Solana swap, including sponsored swaps. Omit to auto-fetch."
+      title: ""
+    }
+  ];
+
+  optional string gas_station_nonce = 8 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Exact gas station delegate contract nonce used in the BatchExecution EIP-712 message. Valid for sponsored EVM swaps and non-sponsored EVM swaps that execute as a multi-call batch (for example ERC-20 approve + swap). This is the replay-protection nonce for gas-station batches; use the nonces endpoint to fetch it. Omit to auto-fetch."
+      title: ""
+    }
+  ];
+
+  // Exactly one is required.
+  oneof price {
+    ExecuteSwapBoundQuote bound_quote = 9 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Execute a quote returned by create_swap_quote at its exact terms."
+      title: ""
+    }];
+    ExecuteSwapMarketTerms market = 10 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Execute at the provider's price when the activity is approved, within the signed slippage and optional price floor."
+      title: ""
+    }];
+  }
+}
+
+message ExecuteSwapBoundQuote {
+  // @inject_tag: validate:"required"
+  string quote_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Quote identifier returned by create_swap_quote. Execution is bound to this quote; the signer is derived from the quote and must not be resupplied."
+      title: ""
+    }
+  ];
+
+  // @inject_tag: validate:"required"
+  string quoted_output_amount = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Exact quoted base-unit output amount committed by the quote."
+      title: ""
+    }
+  ];
+
+  // @inject_tag: validate:"required"
+  string min_output_amount = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Exact minimum base-unit output committed by the quote."
+      title: ""
+    }
+  ];
+}
+
+message ExecuteSwapMarketTerms {
+  // @inject_tag: validate:"required"
+  string sign_with = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Wallet account address that sends the input asset. Private Key identifiers are not supported."
+      title: ""
+    }
+  ];
+
+  optional string slippage_bps = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Maximum allowed slippage in basis points, at most 5000. When omitted, the provider chooses the slippage. The swap executes at the provider's price when the activity is approved, so the slippage and min_output_amount are its only price protection."
+      title: ""
+    }
+  ];
+
+  optional string min_output_amount = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Optional price floor in base units of the output asset. When set, the swap fails unless the provider's minimum output after slippage is at least this amount."
+      title: ""
+    }
+  ];
+
+  optional bool fee_sponsorship = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "When true, Turnkey pays the provider fees for this swap and invoices them to the billing parent organization. Requires the FEATURE_NAME_SWAP_FEE_SPONSORSHIP organization feature. Defaults to false."}
+  ];
+
+  optional bool fixed_rate = 5 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "When true, requests a 1:1 conversion before fees between supported stablecoins. Requires the FEATURE_NAME_SWAP_FIXED_RATE organization feature. Defaults to false."}
   ];
 }

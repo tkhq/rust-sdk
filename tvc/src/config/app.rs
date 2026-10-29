@@ -2,6 +2,7 @@
 
 use crate::prompts;
 use anyhow::Result;
+use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display, Formatter};
 use thiserror::Error;
@@ -29,6 +30,36 @@ pub struct AppConfig {
     /// quorum key is considered permanently insecure.
     #[serde(default)]
     pub dangerous_enable_debug_mode_deployments: bool,
+    /// Region the app runs in. Fixed at app creation and cannot be changed
+    /// after. `ap-southeast-1` requires the organization to be enabled for it.
+    #[serde(default)]
+    pub region: Region,
+}
+
+/// Region a TVC app runs in, as accepted by app creation.
+///
+/// Closed on purpose: a region the server adds needs a new variant here
+/// before the CLI can request it.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize, ValueEnum)]
+pub enum Region {
+    /// US East (N. Virginia). The default.
+    #[default]
+    #[serde(rename = "us-east-1")]
+    #[value(name = "us-east-1")]
+    UsEast1,
+    /// Asia Pacific (Singapore). Requires the organization to be enabled for it.
+    #[serde(rename = "ap-southeast-1")]
+    #[value(name = "ap-southeast-1")]
+    ApSoutheast1,
+}
+
+impl Display for Region {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::UsEast1 => "us-east-1",
+            Self::ApSoutheast1 => "ap-southeast-1",
+        })
+    }
 }
 
 fn default_enable_egress() -> bool {
@@ -91,6 +122,7 @@ impl AppConfig {
             share_set_id: None,
             share_set_params: None,
             dangerous_enable_debug_mode_deployments: false,
+            region: Region::default(),
         }
     }
 
@@ -367,6 +399,54 @@ mod tests {
         let config: AppConfig = serde_json::from_value(valid_config_json()).unwrap();
 
         assert!(config.enable_egress);
+    }
+
+    #[test]
+    fn config_deserializes_region() {
+        let config: AppConfig = serde_json::from_value(valid_config_json()).unwrap();
+
+        assert_eq!(config.region, Region::UsEast1);
+
+        let mut json = valid_config_json();
+        json["region"] = json!("ap-southeast-1");
+        let config: AppConfig = serde_json::from_value(json).unwrap();
+
+        assert_eq!(config.region, Region::ApSoutheast1);
+    }
+
+    #[test]
+    fn config_rejects_unknown_region() {
+        let mut json = valid_config_json();
+        json["region"] = json!("eu-west-1");
+
+        let error = serde_json::from_value::<AppConfig>(json).unwrap_err();
+
+        assert!(error.is_data());
+        let message = error.to_string();
+        for expected in ["eu-west-1", "us-east-1", "ap-southeast-1"] {
+            assert!(message.contains(expected), "{message}");
+        }
+    }
+
+    #[test]
+    fn config_rejects_non_string_region() {
+        let mut json = valid_config_json();
+        json["region"] = json!(1);
+
+        let error = serde_json::from_value::<AppConfig>(json).unwrap_err();
+
+        assert!(error.is_data());
+    }
+
+    /// The config file, the CLI flag, and the API request must all spell each
+    /// region the same way.
+    #[test]
+    fn region_wire_names_agree() {
+        for &region in Region::value_variants() {
+            let name = region.to_string();
+            assert_eq!(serde_json::to_value(region).unwrap(), json!(name));
+            assert_eq!(Region::from_str(&name, false), Ok(region));
+        }
     }
 
     #[test]

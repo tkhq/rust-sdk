@@ -20,6 +20,8 @@ pub mod token_usage {
         Login(super::LoginUsage),
         #[serde(rename = "USAGE_SIGNUP_V2")]
         SignupV2(super::SignupUsageV2),
+        #[serde(rename = "USAGE_SIGNUP_V3")]
+        SignupV3(super::SignupUsageV3),
     }
 }
 #[derive(Debug)]
@@ -66,8 +68,54 @@ pub struct SignupUsageV2 {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct SignupUsageV3 {
+    #[serde(default)]
+    pub email: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub phone_number: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub api_keys: ::prost::alloc::vec::Vec<super::super::activity::v1::ApiKeyParamsV2>,
+    #[serde(default)]
+    pub authenticators: ::prost::alloc::vec::Vec<
+        super::super::activity::v1::AuthenticatorParamsV2,
+    >,
+    #[serde(default)]
+    pub oauth_providers: ::prost::alloc::vec::Vec<
+        super::super::activity::v1::OauthProviderParamsV2,
+    >,
+    #[serde(default)]
+    pub wallet_authenticators: ::prost::alloc::vec::Vec<
+        super::super::activity::v1::WalletAuthenticatorParams,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct LoginUsage {
     pub public_key: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct WalletVerificationClaims {
+    pub exp: ::prost::alloc::string::String,
+    pub id: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub wallet: ::core::option::Option<WalletClaim>,
+    pub public_key: ::prost::alloc::string::String,
+    pub ephemeral_public_key: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct WalletClaim {
+    pub r#type: ::prost::alloc::string::String,
+    pub address: ::prost::alloc::string::String,
+    pub domain: ::prost::alloc::string::String,
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]

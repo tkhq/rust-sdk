@@ -970,6 +970,32 @@ pub struct InitOtpRequest {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct UpsertSwapFeeSponsorshipLimitConfigRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::UpsertSwapFeeSponsorshipLimitConfigIntent,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct UpsertSwapFixedRateLimitConfigRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::UpsertSwapFixedRateLimitConfigIntent,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct UpsertGasUsageConfigRequest {
     pub r#type: ::prost::alloc::string::String,
     pub timestamp_ms: ::prost::alloc::string::String,
@@ -983,6 +1009,21 @@ pub struct UpsertGasUsageConfigRequest {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct CreateFiatOffRampSessionRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::CreateFiatOffRampSessionIntent,
+    >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct InitFiatOnRampRequest {
     pub r#type: ::prost::alloc::string::String,
     pub timestamp_ms: ::prost::alloc::string::String,
@@ -990,6 +1031,66 @@ pub struct InitFiatOnRampRequest {
     #[serde(default)]
     pub parameters: ::core::option::Option<
         super::super::super::immutable::activity::v1::InitFiatOnRampIntent,
+    >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateFiatOnRampSessionRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::CreateFiatOnRampSessionIntent,
+    >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateWalletAuthenticatorsRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::CreateWalletAuthenticatorsIntent,
+    >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeleteWalletAuthenticatorsRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::DeleteWalletAuthenticatorsIntent,
+    >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct VerifyWalletAuthenticatorRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::VerifyWalletAuthenticatorIntent,
     >,
     #[serde(default)]
     pub generate_app_proofs: ::core::option::Option<bool>,
@@ -1431,7 +1532,7 @@ pub struct ExecuteSwapRequest {
     pub organization_id: ::prost::alloc::string::String,
     #[serde(default)]
     pub parameters: ::core::option::Option<
-        super::super::super::immutable::activity::v1::ExecuteSwapIntentV2,
+        super::super::super::immutable::activity::v1::ExecuteSwapIntentV3,
     >,
     #[serde(default)]
     pub generate_app_proofs: ::core::option::Option<bool>,
@@ -1446,7 +1547,7 @@ pub struct CreateSwapQuoteRequest {
     pub organization_id: ::prost::alloc::string::String,
     #[serde(default)]
     pub parameters: ::core::option::Option<
-        super::super::super::immutable::activity::v1::CreateSwapQuoteIntent,
+        super::super::super::immutable::activity::v1::CreateSwapQuoteIntentV3,
     >,
     #[serde(default)]
     pub generate_app_proofs: ::core::option::Option<bool>,
@@ -2042,13 +2143,13 @@ pub struct CreateVelocityControlRequest {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
-pub struct DeleteVelocityControlRequest {
+pub struct DeleteVelocityControlsRequest {
     pub r#type: ::prost::alloc::string::String,
     pub timestamp_ms: ::prost::alloc::string::String,
     pub organization_id: ::prost::alloc::string::String,
     #[serde(default)]
     pub parameters: ::core::option::Option<
-        super::super::super::immutable::activity::v1::DeleteVelocityControlIntent,
+        super::super::super::immutable::activity::v1::DeleteVelocityControlsIntent,
     >,
     #[serde(default)]
     pub generate_app_proofs: ::core::option::Option<bool>,

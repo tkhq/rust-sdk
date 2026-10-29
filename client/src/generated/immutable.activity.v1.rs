@@ -179,12 +179,26 @@ pub mod intent {
         ImportSecretsIntent(super::ImportSecretsIntent),
         ExportSecretsIntent(super::ExportSecretsIntent),
         CreateVelocityControlIntent(super::CreateVelocityControlIntent),
-        DeleteVelocityControlIntent(super::DeleteVelocityControlIntent),
+        DeleteVelocityControlsIntent(super::DeleteVelocityControlsIntent),
         UpdatePaymentMethodIntent(super::super::billing::UpdatePaymentMethodIntent),
         CreateSwapQuoteIntentV2(super::CreateSwapQuoteIntentV2),
         ExecuteSwapIntentV3(super::ExecuteSwapIntentV3),
         DeleteSecretsIntent(super::DeleteSecretsIntent),
         EarnClaimRewardsIntent(super::EarnClaimRewardsIntent),
+        CreateSwapQuoteIntentV3(super::CreateSwapQuoteIntentV3),
+        CreateSubOrganizationIntentV9(super::CreateSubOrganizationIntentV9),
+        VerifyWalletAuthenticatorIntent(super::VerifyWalletAuthenticatorIntent),
+        UpsertSwapFeeSponsorshipLimitConfigIntent(
+            super::UpsertSwapFeeSponsorshipLimitConfigIntent,
+        ),
+        UpsertSwapFixedRateLimitConfigIntent(
+            super::UpsertSwapFixedRateLimitConfigIntent,
+        ),
+        CreateFiatOnRampSessionIntent(super::CreateFiatOnRampSessionIntent),
+        CreateFiatOffRampSessionIntent(super::CreateFiatOffRampSessionIntent),
+        ExecuteSwapIntentV4(super::ExecuteSwapIntentV4),
+        CreateWalletAuthenticatorsIntent(super::CreateWalletAuthenticatorsIntent),
+        DeleteWalletAuthenticatorsIntent(super::DeleteWalletAuthenticatorsIntent),
     }
 }
 #[derive(Debug)]
@@ -563,6 +577,12 @@ pub struct CreatePrivateKeysIntentV2 {
     /// @inject_tag: validate:"dive,required"
     #[serde(default)]
     pub private_keys: ::prost::alloc::vec::Vec<PrivateKeyParams>,
+    #[serde(default)]
+    pub external_signer_pubkey: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub external_signer_wrapping_key_id: ::core::option::Option<
+        ::prost::alloc::string::String,
+    >,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -589,6 +609,8 @@ pub struct SignRawPayloadIntentV2 {
     /// @inject_tag: validate:"required"
     pub encoding: super::super::common::v1::PayloadEncoding,
     pub hash_function: super::super::common::v1::HashFunction,
+    #[serde(default)]
+    pub external_signer_pubkey: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -603,6 +625,8 @@ pub struct SignRawPayloadsIntent {
     /// @inject_tag: validate:"required"
     pub encoding: super::super::common::v1::PayloadEncoding,
     pub hash_function: super::super::common::v1::HashFunction,
+    #[serde(default)]
+    pub external_signer_pubkey: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -871,6 +895,8 @@ pub struct SignTransactionIntentV2 {
     pub unsigned_transaction: ::prost::alloc::string::String,
     /// @inject_tag: validate:"required"
     pub r#type: super::super::common::v1::TransactionType,
+    #[serde(default)]
+    pub external_signer_pubkey: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -1240,6 +1266,39 @@ pub struct CreateSubOrganizationIntentV8 {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct CreateSubOrganizationIntentV9 {
+    /// @inject_tag: validate:"omitempty,tk_label,tk_label_length"
+    pub sub_organization_name: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required,dive"
+    #[serde(default)]
+    pub root_users: ::prost::alloc::vec::Vec<RootUserParamsV6>,
+    /// @inject_tag: validate:"required"
+    #[serde(default)]
+    pub root_quorum_threshold: i32,
+    /// @inject_tag: validate:"omitempty"
+    #[serde(default)]
+    pub wallet: ::core::option::Option<WalletParams>,
+    /// @inject_tag: validate:"omitempty"
+    #[serde(default)]
+    pub disable_email_recovery: ::core::option::Option<bool>,
+    /// @inject_tag: validate:"omitempty"
+    #[serde(default)]
+    pub disable_email_auth: ::core::option::Option<bool>,
+    /// @inject_tag: validate:"omitempty"
+    #[serde(default)]
+    pub disable_sms_auth: ::core::option::Option<bool>,
+    /// @inject_tag: validate:"omitempty"
+    #[serde(default)]
+    pub disable_otp_email_auth: ::core::option::Option<bool>,
+    #[serde(default)]
+    pub verification_token: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub client_signature: ::core::option::Option<ClientSignature>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct UpdatePolicyIntent {
     /// @inject_tag: validate:"uuid"
     pub policy_id: ::prost::alloc::string::String,
@@ -1423,7 +1482,7 @@ pub struct EarnDeployWrapperIntent {
     /// @inject_tag: validate:"required"
     pub vault_address: ::prost::alloc::string::String,
     /// @inject_tag: validate:"required"
-    pub chain_caip2: ::prost::alloc::string::String,
+    pub caip2: ::prost::alloc::string::String,
     /// @inject_tag: validate:"required"
     pub client_fee_bps: ::prost::alloc::string::String,
     /// @inject_tag: validate:"required"
@@ -1441,7 +1500,7 @@ pub struct EarnDepositIntent {
     /// @inject_tag: validate:"required"
     pub assets: ::prost::alloc::string::String,
     /// @inject_tag: validate:"required"
-    pub chain_caip2: ::prost::alloc::string::String,
+    pub caip2: ::prost::alloc::string::String,
     /// If true, Turnkey acts as fee payer via Gas Station.
     #[serde(default)]
     pub sponsor: ::core::option::Option<bool>,
@@ -1456,7 +1515,7 @@ pub struct EarnWithdrawIntent {
     /// @inject_tag: validate:"required"
     pub sign_with: ::prost::alloc::string::String,
     /// @inject_tag: validate:"required"
-    pub chain_caip2: ::prost::alloc::string::String,
+    pub caip2: ::prost::alloc::string::String,
     /// If true, Turnkey acts as fee payer via Gas Station.
     #[serde(default)]
     pub sponsor: ::core::option::Option<bool>,
@@ -1490,7 +1549,7 @@ pub struct EarnClaimRewardsIntent {
     /// @inject_tag: validate:"required"
     pub sign_with: ::prost::alloc::string::String,
     /// @inject_tag: validate:"required"
-    pub chain_caip2: ::prost::alloc::string::String,
+    pub caip2: ::prost::alloc::string::String,
     /// If true, Turnkey acts as fee payer via Gas Station.
     #[serde(default)]
     pub sponsor: ::core::option::Option<bool>,
@@ -1597,6 +1656,70 @@ pub struct RootUserParamsV5 {
     /// @inject_tag: validate:"dive"
     #[serde(default)]
     pub oauth_providers: ::prost::alloc::vec::Vec<OauthProviderParamsV2>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct RootUserParamsV6 {
+    /// @inject_tag: validate:"required,tk_label_length,tk_label"
+    pub user_name: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"omitempty,email,tk_email"
+    #[serde(default)]
+    pub user_email: ::core::option::Option<::prost::alloc::string::String>,
+    /// @inject_tag: validate:"omitempty,e164"
+    #[serde(default)]
+    pub user_phone_number: ::core::option::Option<::prost::alloc::string::String>,
+    /// @inject_tag: validate:"dive"
+    #[serde(default)]
+    pub api_keys: ::prost::alloc::vec::Vec<ApiKeyParamsV2>,
+    /// @inject_tag: validate:"dive"
+    #[serde(default)]
+    pub authenticators: ::prost::alloc::vec::Vec<AuthenticatorParamsV2>,
+    /// @inject_tag: validate:"dive"
+    #[serde(default)]
+    pub oauth_providers: ::prost::alloc::vec::Vec<OauthProviderParamsV2>,
+    /// @inject_tag: validate:"dive"
+    #[serde(default)]
+    pub wallet_authenticators: ::prost::alloc::vec::Vec<WalletAuthenticatorParams>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct WalletAuthenticatorParams {
+    /// @inject_tag: validate:"required"
+    pub r#type: super::super::common::v1::WalletAuthenticatorType,
+    /// @inject_tag: validate:"required"
+    pub address: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub domain: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub verification_token: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateWalletAuthenticatorsIntent {
+    /// @inject_tag: validate:"required,uuid"
+    pub user_id: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required,dive,required"
+    #[serde(default)]
+    pub wallet_authenticators: ::prost::alloc::vec::Vec<WalletAuthenticatorParams>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeleteWalletAuthenticatorsIntent {
+    /// @inject_tag: validate:"required,uuid"
+    pub user_id: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required,dive,required,uuid"
+    #[serde(default)]
+    pub wallet_authenticator_ids: ::prost::alloc::vec::Vec<
+        ::prost::alloc::string::String,
+    >,
 }
 #[derive(Debug)]
 /// Each of these customization parameters are optional; resort to defaults if any are not provided.
@@ -2029,6 +2152,52 @@ pub struct SolanaConfig {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct UpsertSwapFeeSponsorshipLimitConfigIntent {
+    /// @inject_tag: validate:"required"
+    pub org_window_limit_usd: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub sub_org_window_limit_usd: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required,numeric"
+    pub window_duration_minutes: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    #[serde(default)]
+    pub enabled: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct UpsertSwapFeeSponsorshipLimitConfigResult {
+    /// @inject_tag: validate:"required,uuid4"
+    pub organization_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct UpsertSwapFixedRateLimitConfigIntent {
+    /// @inject_tag: validate:"required"
+    pub org_window_limit_usd: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub sub_org_window_limit_usd: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required,numeric"
+    pub window_duration_minutes: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    #[serde(default)]
+    pub enabled: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct UpsertSwapFixedRateLimitConfigResult {
+    /// @inject_tag: validate:"required,uuid4"
+    pub organization_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct UpsertGasUsageConfigIntent {
     /// @inject_tag: validate:"required,numeric"
     pub org_window_limit_usd: ::prost::alloc::string::String,
@@ -2220,6 +2389,16 @@ pub struct InitFiatOnRampIntent {
     pub sandbox_mode: ::core::option::Option<bool>,
     #[serde(default)]
     pub url_for_signature: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateFiatOnRampSessionIntent {
+    /// @inject_tag: validate:"required,uuid4"
+    pub quote_id: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub wallet_address: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -2474,6 +2653,8 @@ pub struct CreateTvcAppIntent {
     pub enable_egress: ::core::option::Option<bool>,
     #[serde(default)]
     pub enable_debug_mode_deployments: ::core::option::Option<bool>,
+    #[serde(default)]
+    pub region: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -2552,6 +2733,8 @@ pub struct CreateTvcDeploymentIntent {
     pub instance_size_cpus: ::core::option::Option<u32>,
     #[serde(default)]
     pub instance_size_ram: ::core::option::Option<u32>,
+    #[serde(default)]
+    pub qos_manifest: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -2824,10 +3007,23 @@ pub mod result {
         ImportSecretsResult(super::ImportSecretsResult),
         ExportSecretsResult(super::ExportSecretsResult),
         CreateVelocityControlResult(super::CreateVelocityControlResult),
-        DeleteVelocityControlResult(super::DeleteVelocityControlResult),
+        DeleteVelocityControlsResult(super::DeleteVelocityControlsResult),
         UpdatePaymentMethodResult(super::super::billing::UpdatePaymentMethodResult),
         DeleteSecretsResult(super::DeleteSecretsResult),
         EarnClaimRewardsResult(super::EarnClaimRewardsResult),
+        CreateSwapQuoteResultV2(super::CreateSwapQuoteResultV2),
+        CreateSubOrganizationResultV9(super::CreateSubOrganizationResultV9),
+        VerifyWalletAuthenticatorResult(super::VerifyWalletAuthenticatorResult),
+        UpsertSwapFeeSponsorshipLimitConfigResult(
+            super::UpsertSwapFeeSponsorshipLimitConfigResult,
+        ),
+        UpsertSwapFixedRateLimitConfigResult(
+            super::UpsertSwapFixedRateLimitConfigResult,
+        ),
+        CreateFiatOnRampSessionResult(super::CreateFiatOnRampSessionResult),
+        CreateFiatOffRampSessionResult(super::CreateFiatOffRampSessionResult),
+        CreateWalletAuthenticatorsResult(super::CreateWalletAuthenticatorsResult),
+        DeleteWalletAuthenticatorsResult(super::DeleteWalletAuthenticatorsResult),
     }
 }
 #[derive(Debug)]
@@ -2877,6 +3073,26 @@ pub struct ClaimSwapFeesResult {
 #[derive(Clone, PartialEq)]
 pub struct CreateOrganizationResult {
     pub organization_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateWalletAuthenticatorsResult {
+    #[serde(default)]
+    pub wallet_authenticator_ids: ::prost::alloc::vec::Vec<
+        ::prost::alloc::string::String,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeleteWalletAuthenticatorsResult {
+    #[serde(default)]
+    pub wallet_authenticator_ids: ::prost::alloc::vec::Vec<
+        ::prost::alloc::string::String,
+    >,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -3053,10 +3269,38 @@ pub struct OauthLoginResult {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct CreateFiatOffRampSessionIntent {
+    /// @inject_tag: validate:"required,uuid4"
+    pub quote_id: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub wallet_address: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub redirect_url: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateFiatOffRampSessionResult {
+    pub off_ramp_url: ::prost::alloc::string::String,
+    pub off_ramp_transaction_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct InitFiatOnRampResult {
     pub on_ramp_url: ::prost::alloc::string::String,
     pub on_ramp_transaction_id: ::prost::alloc::string::String,
     pub on_ramp_url_signature: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateFiatOnRampSessionResult {
+    pub on_ramp_url: ::prost::alloc::string::String,
+    pub on_ramp_transaction_id: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -3109,6 +3353,25 @@ pub struct OtpAuthResult {
     pub user_id: ::prost::alloc::string::String,
     pub api_key_id: ::prost::alloc::string::String,
     pub credential_bundle: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct VerifyWalletAuthenticatorIntent {
+    /// @inject_tag: validate:"required,max=8192"
+    pub message: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub signature: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub public_key: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct VerifyWalletAuthenticatorResult {
+    pub verification_token: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -3437,6 +3700,17 @@ pub struct CreateSubOrganizationResultV8 {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct CreateSubOrganizationResultV9 {
+    pub sub_organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub wallet: ::core::option::Option<WalletResult>,
+    #[serde(default)]
+    pub root_user_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct RecoverUserResult {
     #[serde(default)]
     pub authenticator_id: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
@@ -3740,6 +4014,14 @@ pub struct ExecuteSwapResult {
     pub provider: ::core::option::Option<::prost::alloc::string::String>,
     #[serde(default)]
     pub quote_id: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub output_amount: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub min_output_amount: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub fee_sponsorship: ::core::option::Option<bool>,
+    #[serde(default)]
+    pub fixed_rate: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -4658,15 +4940,18 @@ pub struct CreateVelocityControlResult {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
-pub struct DeleteVelocityControlIntent {
-    pub velocity_control_id: ::prost::alloc::string::String,
+pub struct DeleteVelocityControlsIntent {
+    /// @inject_tag: validate:"required,min=1,max=32,unique,dive,uuid"
+    #[serde(default)]
+    pub velocity_control_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
-pub struct DeleteVelocityControlResult {
-    pub velocity_control_id: ::prost::alloc::string::String,
+pub struct DeleteVelocityControlsResult {
+    #[serde(default)]
+    pub velocity_control_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -4940,6 +5225,132 @@ pub struct CreateSwapQuoteIntentV2 {
     pub slippage_bps: ::core::option::Option<::prost::alloc::string::String>,
     #[serde(default)]
     pub destination_address: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateSwapQuoteIntentV3 {
+    /// @inject_tag: validate:"required"
+    pub sign_with: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub input_token: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub output_token: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub input_amount: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub slippage_bps: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub destination_address: ::core::option::Option<::prost::alloc::string::String>,
+    /// Provider fees are paid from Turnkey's Relay balance and invoiced to the parent.
+    #[serde(default)]
+    pub fee_sponsorship: ::core::option::Option<bool>,
+    /// Request a 1:1 conversion before fees for eligible stablecoins.
+    #[serde(default)]
+    pub fixed_rate: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SwapQuoteV2 {
+    pub quote_id: ::prost::alloc::string::String,
+    pub provider: ::prost::alloc::string::String,
+    pub output_amount: ::prost::alloc::string::String,
+    pub min_output_amount: ::prost::alloc::string::String,
+    pub expires_at: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub slippage_bps: ::core::option::Option<::prost::alloc::string::String>,
+    pub client_fee_bps: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub estimated_time_seconds: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub fee_sponsorship: bool,
+    #[serde(default)]
+    pub fixed_rate: bool,
+    #[serde(default)]
+    pub estimated_fixed_rate_adjustment_usd: ::core::option::Option<
+        ::prost::alloc::string::String,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateSwapQuoteResultV2 {
+    /// @inject_tag: validate:"required,min=1,dive"
+    #[serde(default)]
+    pub quotes: ::prost::alloc::vec::Vec<SwapQuoteV2>,
+}
+#[derive(Debug)]
+/// Executes a swap either at a bound quote's exact terms or at the provider's price when the activity is approved.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct ExecuteSwapIntentV4 {
+    /// @inject_tag: validate:"required"
+    pub input_token: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub input_amount: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub output_token: ::prost::alloc::string::String,
+    /// proto3 optional tracks presence; REQUIRED is the API contract and Go rejects unset.
+    /// @inject_tag: validate:"required"
+    #[serde(default)]
+    pub sponsor: ::core::option::Option<bool>,
+    #[serde(default)]
+    pub destination_address: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub evm_nonce: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub recent_blockhash: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub gas_station_nonce: ::core::option::Option<::prost::alloc::string::String>,
+    /// Exactly one is required.
+    #[serde(default)]
+    pub price: ::core::option::Option<execute_swap_intent_v4::Price>,
+}
+/// Nested message and enum types in `ExecuteSwapIntentV4`.
+pub mod execute_swap_intent_v4 {
+    /// Exactly one is required.
+    #[derive(::serde::Serialize, ::serde::Deserialize)]
+    #[derive(Clone, PartialEq)]
+    #[derive(Debug)]
+    pub enum Price {
+        #[serde(rename = "PRICE_BOUND_QUOTE")]
+        BoundQuote(super::ExecuteSwapBoundQuote),
+        #[serde(rename = "PRICE_MARKET")]
+        Market(super::ExecuteSwapMarketTerms),
+    }
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct ExecuteSwapBoundQuote {
+    /// @inject_tag: validate:"required"
+    pub quote_id: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub quoted_output_amount: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub min_output_amount: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct ExecuteSwapMarketTerms {
+    /// @inject_tag: validate:"required"
+    pub sign_with: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub slippage_bps: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub min_output_amount: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub fee_sponsorship: ::core::option::Option<bool>,
+    #[serde(default)]
+    pub fixed_rate: ::core::option::Option<bool>,
 }
 /// Type of Activity, such as Add User, or Sign Transaction.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -5273,8 +5684,8 @@ pub enum ActivityType {
     ExportSecrets = 163,
     #[serde(rename = "ACTIVITY_TYPE_CREATE_VELOCITY_CONTROL")]
     CreateVelocityControl = 164,
-    #[serde(rename = "ACTIVITY_TYPE_DELETE_VELOCITY_CONTROL")]
-    DeleteVelocityControl = 165,
+    #[serde(rename = "ACTIVITY_TYPE_DELETE_VELOCITY_CONTROLS")]
+    DeleteVelocityControls = 165,
     #[serde(rename = "ACTIVITY_TYPE_UPDATE_PAYMENT_METHOD")]
     UpdatePaymentMethod = 166,
     #[serde(rename = "ACTIVITY_TYPE_CREATE_SWAP_QUOTE_V2")]
@@ -5285,6 +5696,26 @@ pub enum ActivityType {
     DeleteSecrets = 169,
     #[serde(rename = "ACTIVITY_TYPE_EARN_CLAIM_REWARDS")]
     EarnClaimRewards = 170,
+    #[serde(rename = "ACTIVITY_TYPE_CREATE_SWAP_QUOTE_V3")]
+    CreateSwapQuoteV3 = 171,
+    #[serde(rename = "ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V9")]
+    CreateSubOrganizationV9 = 173,
+    #[serde(rename = "ACTIVITY_TYPE_VERIFY_WALLET_AUTHENTICATOR")]
+    VerifyWalletAuthenticator = 174,
+    #[serde(rename = "ACTIVITY_TYPE_UPSERT_SWAP_FEE_SPONSORSHIP_LIMIT_CONFIG")]
+    UpsertSwapFeeSponsorshipLimitConfig = 175,
+    #[serde(rename = "ACTIVITY_TYPE_UPSERT_SWAP_FIXED_RATE_LIMIT_CONFIG")]
+    UpsertSwapFixedRateLimitConfig = 176,
+    #[serde(rename = "ACTIVITY_TYPE_CREATE_FIAT_ON_RAMP_SESSION")]
+    CreateFiatOnRampSession = 177,
+    #[serde(rename = "ACTIVITY_TYPE_CREATE_FIAT_OFF_RAMP_SESSION")]
+    CreateFiatOffRampSession = 178,
+    #[serde(rename = "ACTIVITY_TYPE_EXECUTE_SWAP_V4")]
+    ExecuteSwapV4 = 181,
+    #[serde(rename = "ACTIVITY_TYPE_CREATE_WALLET_AUTHENTICATORS")]
+    CreateWalletAuthenticators = 182,
+    #[serde(rename = "ACTIVITY_TYPE_DELETE_WALLET_AUTHENTICATORS")]
+    DeleteWalletAuthenticators = 183,
 }
 impl ActivityType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -5481,12 +5912,34 @@ impl ActivityType {
             Self::ImportSecrets => "ACTIVITY_TYPE_IMPORT_SECRETS",
             Self::ExportSecrets => "ACTIVITY_TYPE_EXPORT_SECRETS",
             Self::CreateVelocityControl => "ACTIVITY_TYPE_CREATE_VELOCITY_CONTROL",
-            Self::DeleteVelocityControl => "ACTIVITY_TYPE_DELETE_VELOCITY_CONTROL",
+            Self::DeleteVelocityControls => "ACTIVITY_TYPE_DELETE_VELOCITY_CONTROLS",
             Self::UpdatePaymentMethod => "ACTIVITY_TYPE_UPDATE_PAYMENT_METHOD",
             Self::CreateSwapQuoteV2 => "ACTIVITY_TYPE_CREATE_SWAP_QUOTE_V2",
             Self::ExecuteSwapV3 => "ACTIVITY_TYPE_EXECUTE_SWAP_V3",
             Self::DeleteSecrets => "ACTIVITY_TYPE_DELETE_SECRETS",
             Self::EarnClaimRewards => "ACTIVITY_TYPE_EARN_CLAIM_REWARDS",
+            Self::CreateSwapQuoteV3 => "ACTIVITY_TYPE_CREATE_SWAP_QUOTE_V3",
+            Self::CreateSubOrganizationV9 => "ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V9",
+            Self::VerifyWalletAuthenticator => {
+                "ACTIVITY_TYPE_VERIFY_WALLET_AUTHENTICATOR"
+            }
+            Self::UpsertSwapFeeSponsorshipLimitConfig => {
+                "ACTIVITY_TYPE_UPSERT_SWAP_FEE_SPONSORSHIP_LIMIT_CONFIG"
+            }
+            Self::UpsertSwapFixedRateLimitConfig => {
+                "ACTIVITY_TYPE_UPSERT_SWAP_FIXED_RATE_LIMIT_CONFIG"
+            }
+            Self::CreateFiatOnRampSession => "ACTIVITY_TYPE_CREATE_FIAT_ON_RAMP_SESSION",
+            Self::CreateFiatOffRampSession => {
+                "ACTIVITY_TYPE_CREATE_FIAT_OFF_RAMP_SESSION"
+            }
+            Self::ExecuteSwapV4 => "ACTIVITY_TYPE_EXECUTE_SWAP_V4",
+            Self::CreateWalletAuthenticators => {
+                "ACTIVITY_TYPE_CREATE_WALLET_AUTHENTICATORS"
+            }
+            Self::DeleteWalletAuthenticators => {
+                "ACTIVITY_TYPE_DELETE_WALLET_AUTHENTICATORS"
+            }
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -5716,12 +6169,40 @@ impl ActivityType {
             "ACTIVITY_TYPE_IMPORT_SECRETS" => Some(Self::ImportSecrets),
             "ACTIVITY_TYPE_EXPORT_SECRETS" => Some(Self::ExportSecrets),
             "ACTIVITY_TYPE_CREATE_VELOCITY_CONTROL" => Some(Self::CreateVelocityControl),
-            "ACTIVITY_TYPE_DELETE_VELOCITY_CONTROL" => Some(Self::DeleteVelocityControl),
+            "ACTIVITY_TYPE_DELETE_VELOCITY_CONTROLS" => {
+                Some(Self::DeleteVelocityControls)
+            }
             "ACTIVITY_TYPE_UPDATE_PAYMENT_METHOD" => Some(Self::UpdatePaymentMethod),
             "ACTIVITY_TYPE_CREATE_SWAP_QUOTE_V2" => Some(Self::CreateSwapQuoteV2),
             "ACTIVITY_TYPE_EXECUTE_SWAP_V3" => Some(Self::ExecuteSwapV3),
             "ACTIVITY_TYPE_DELETE_SECRETS" => Some(Self::DeleteSecrets),
             "ACTIVITY_TYPE_EARN_CLAIM_REWARDS" => Some(Self::EarnClaimRewards),
+            "ACTIVITY_TYPE_CREATE_SWAP_QUOTE_V3" => Some(Self::CreateSwapQuoteV3),
+            "ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V9" => {
+                Some(Self::CreateSubOrganizationV9)
+            }
+            "ACTIVITY_TYPE_VERIFY_WALLET_AUTHENTICATOR" => {
+                Some(Self::VerifyWalletAuthenticator)
+            }
+            "ACTIVITY_TYPE_UPSERT_SWAP_FEE_SPONSORSHIP_LIMIT_CONFIG" => {
+                Some(Self::UpsertSwapFeeSponsorshipLimitConfig)
+            }
+            "ACTIVITY_TYPE_UPSERT_SWAP_FIXED_RATE_LIMIT_CONFIG" => {
+                Some(Self::UpsertSwapFixedRateLimitConfig)
+            }
+            "ACTIVITY_TYPE_CREATE_FIAT_ON_RAMP_SESSION" => {
+                Some(Self::CreateFiatOnRampSession)
+            }
+            "ACTIVITY_TYPE_CREATE_FIAT_OFF_RAMP_SESSION" => {
+                Some(Self::CreateFiatOffRampSession)
+            }
+            "ACTIVITY_TYPE_EXECUTE_SWAP_V4" => Some(Self::ExecuteSwapV4),
+            "ACTIVITY_TYPE_CREATE_WALLET_AUTHENTICATORS" => {
+                Some(Self::CreateWalletAuthenticators)
+            }
+            "ACTIVITY_TYPE_DELETE_WALLET_AUTHENTICATORS" => {
+                Some(Self::DeleteWalletAuthenticators)
+            }
             _ => None,
         }
     }

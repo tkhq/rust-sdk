@@ -81,6 +81,22 @@ pub struct User {
     pub updated_at: ::core::option::Option<Timestamp>,
     #[serde(default)]
     pub mfa_policies: ::prost::alloc::vec::Vec<MfaPolicy>,
+    #[serde(default)]
+    pub wallet_authenticators: ::prost::alloc::vec::Vec<WalletAuthenticator>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct WalletAuthenticator {
+    pub wallet_authenticator_id: ::prost::alloc::string::String,
+    pub r#type: super::super::super::immutable::common::v1::WalletAuthenticatorType,
+    pub address: ::prost::alloc::string::String,
+    pub domain: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub created_at: ::core::option::Option<Timestamp>,
+    #[serde(default)]
+    pub updated_at: ::core::option::Option<Timestamp>,
 }
 #[derive(Debug)]
 #[serde_with::serde_as]
@@ -617,8 +633,9 @@ pub struct VelocityControlDataSourceChainAssetTransfer {
 pub struct VelocityControlDataSourceChainAssetTransferDefinition {
     /// CAIP-19 identifier for the asset.
     pub caip19: ::prost::alloc::string::String,
-    /// Base-10 integer string from 0 through 255 that specifies the number of decimal places for the asset.
-    pub decimals: ::prost::alloc::string::String,
+    /// Integer between 0 and 32 (inclusive) that specifies the number of decimal places for the asset.
+    #[serde(default)]
+    pub decimals: u32,
 }
 #[derive(Debug)]
 /// Filters chain asset transfers by activity type.
@@ -707,7 +724,7 @@ pub struct VelocityControlAggregation {
     pub method: VelocityControlAggregationMethod,
     /// Comparison between the aggregate and the threshold.
     pub operator: VelocityControlAggregationOperator,
-    /// Non-negative base-10 decimal string with at most 38 total digits and 18 fractional digits.
+    /// Non-negative base-10 decimal string with at most 46 integer digits and 32 fractional digits.
     pub threshold: ::prost::alloc::string::String,
     /// Time window for the aggregation.
     #[serde(default)]
@@ -720,7 +737,7 @@ pub struct VelocityControlAggregation {
 /// Time window for aggregation. Set exactly one definition.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct VelocityControlAggregationWindow {
     #[serde(default)]
     pub definition: ::core::option::Option<
@@ -730,7 +747,7 @@ pub struct VelocityControlAggregationWindow {
 /// Nested message and enum types in `VelocityControlAggregationWindow`.
 pub mod velocity_control_aggregation_window {
     #[derive(::serde::Serialize, ::serde::Deserialize)]
-    #[derive(Clone, PartialEq)]
+    #[derive(Clone, Copy, PartialEq)]
     #[derive(Debug)]
     pub enum Definition {
         /// Uses a rolling time window.
@@ -745,10 +762,11 @@ pub mod velocity_control_aggregation_window {
 /// A rolling time window.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct VelocityControlAggregationWindowRolling {
-    /// Duration of the rolling window, in seconds, as a base-10 integer string.
-    pub duration: ::prost::alloc::string::String,
+    /// Duration of the rolling window, in seconds.
+    #[serde(default)]
+    pub duration: u32,
 }
 #[derive(Debug)]
 /// An aggregation window without a time limit.
@@ -1077,6 +1095,7 @@ pub struct TvcApp {
     pub public_domain: ::prost::alloc::string::String,
     #[serde(default)]
     pub enable_debug_mode_deployments: bool,
+    pub region: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -1206,8 +1225,7 @@ pub struct DeploymentStatus {
     pub desired_replicas: i32,
     #[serde(default)]
     pub last_updated_time: ::core::option::Option<Timestamp>,
-    #[serde(default)]
-    pub provisioning_state: Option<ProvisioningState>,
+    pub provisioning_state: ProvisioningState,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]

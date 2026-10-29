@@ -150,6 +150,11 @@ enum SignatureScheme {
   SIGNATURE_SCHEME_TK_API_SECP256K1_EIP191 = 6;
 
   SIGNATURE_SCHEME_TK_ATTESTED_P256 = 7;
+  // Scheme used by enclave applications when the public key is only the SEC1 uncompressed signing
+  // half of the quorum key (e.g. external signer proofs), not the combined encryption+signing key.
+  // The message is the hex-encoded borsh serialization of the signed payload, and the signature is
+  // an ECDSA-P256-SHA256 signature over those bytes
+  SIGNATURE_SCHEME_TK_QUORUM_P256_SIGNING_KEY = 8;
 }
 
 message Signature {

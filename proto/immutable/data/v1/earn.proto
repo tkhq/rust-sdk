@@ -21,11 +21,11 @@ message EarnConfig {
 // A single deployed Earn wrapper stack for one (vault, chain) the org enabled.
 // Written by the enclave when a DeployEarnWrapper activity is processed.
 message EarnWrapper {
-  // The underlying yield vault being wrapped.
+  // The underlying yield vault being wrapped (Morpho vault, Aave reserve, Kamino K-Lend reserve).
   string vault_address = 1;
   // CAIP-2 chain identifier the vault lives on (e.g. "eip155:8453").
   string chain_caip2 = 2;
-  // The deployed fee wrapper (Morpho FeeWrapper / Aave ATokenVault) - the deposit target.
+  // The deployed fee wrapper (Morpho FeeWrapper / Aave ATokenVault / Kamino vault_state) - the deposit target.
   string wrapper_address = 3;
   // The deployed fee splitter (Morpho PaymentSplitter / Aave RevenueSplitterOwner).
   string splitter_address = 4;
@@ -41,12 +41,18 @@ message EarnWrapper {
   string turnkey_fee_bps = 9;
   // The wallet address that receives Turnkey's fee payouts on-chain.
   string turnkey_fee_wallet = 10;
-  // The vault's underlying ERC-20 asset (the deposit approve target), pinned at
+  // The vault's underlying asset (ERC-20 address, or SPL mint on Solana), pinned at
   // deploy time from the TLS-Fetcher-verified vault.
   string underlying_asset = 11;
   // When true, deposits to this wrapper are rejected; withdrawals are unaffected.
   // Toggled via EarnSetWrapperState (e.g. incident brake for a compromised vault).
   bool deposits_disabled = 12;
+  // Solana (Kamino) pins from the TLS-Fetcher; empty on EVM.
+  string shares_mint = 13;
+  string token_program = 14;
+  string vault_authority = 15;
+  string vault_token_account = 16;
+  string lookup_table = 17;
 }
 
 // The signer-signed payload authorizing a wrapper's insertion into an org's EarnConfig.
@@ -73,4 +79,5 @@ enum EarnProvider {
   EARN_PROVIDER_UNSPECIFIED = 0;
   EARN_PROVIDER_MORPHO = 1;
   EARN_PROVIDER_AAVE = 2;
+  EARN_PROVIDER_KAMINO = 3;
 }

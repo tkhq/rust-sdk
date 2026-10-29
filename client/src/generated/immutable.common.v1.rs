@@ -640,6 +640,11 @@ pub enum FeatureName {
     SwapConfig = 10,
     #[serde(rename = "FEATURE_NAME_EARN_CONFIG")]
     EarnConfig = 11,
+    /// Presence on the verified parent authorizes per-quote selection; absent means disabled.
+    #[serde(rename = "FEATURE_NAME_SWAP_FEE_SPONSORSHIP")]
+    SwapFeeSponsorship = 12,
+    #[serde(rename = "FEATURE_NAME_SWAP_FIXED_RATE")]
+    SwapFixedRate = 13,
 }
 impl FeatureName {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -660,6 +665,8 @@ impl FeatureName {
             Self::SolanaRentPrefundEnabled => "FEATURE_NAME_SOLANA_RENT_PREFUND_ENABLED",
             Self::SwapConfig => "FEATURE_NAME_SWAP_CONFIG",
             Self::EarnConfig => "FEATURE_NAME_EARN_CONFIG",
+            Self::SwapFeeSponsorship => "FEATURE_NAME_SWAP_FEE_SPONSORSHIP",
+            Self::SwapFixedRate => "FEATURE_NAME_SWAP_FIXED_RATE",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -679,6 +686,8 @@ impl FeatureName {
             }
             "FEATURE_NAME_SWAP_CONFIG" => Some(Self::SwapConfig),
             "FEATURE_NAME_EARN_CONFIG" => Some(Self::EarnConfig),
+            "FEATURE_NAME_SWAP_FEE_SPONSORSHIP" => Some(Self::SwapFeeSponsorship),
+            "FEATURE_NAME_SWAP_FIXED_RATE" => Some(Self::SwapFixedRate),
             _ => None,
         }
     }
@@ -962,9 +971,6 @@ pub enum FiatOnRampBlockchainNetwork {
     /// Unspecified
     #[serde(rename = "FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_UNSPECIFIED")]
     Unspecified = 0,
-    /// bitcoin
-    #[serde(rename = "FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_BITCOIN")]
-    Bitcoin = 1,
     /// ethereum
     #[serde(rename = "FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_ETHEREUM")]
     Ethereum = 2,
@@ -983,7 +989,6 @@ impl FiatOnRampBlockchainNetwork {
     pub fn as_str_name(&self) -> &'static str {
         match self {
             Self::Unspecified => "FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_UNSPECIFIED",
-            Self::Bitcoin => "FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_BITCOIN",
             Self::Ethereum => "FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_ETHEREUM",
             Self::Solana => "FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_SOLANA",
             Self::Base => "FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_BASE",
@@ -993,7 +998,6 @@ impl FiatOnRampBlockchainNetwork {
     pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
         match value {
             "FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_UNSPECIFIED" => Some(Self::Unspecified),
-            "FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_BITCOIN" => Some(Self::Bitcoin),
             "FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_ETHEREUM" => Some(Self::Ethereum),
             "FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_SOLANA" => Some(Self::Solana),
             "FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_BASE" => Some(Self::Base),
@@ -1384,6 +1388,39 @@ impl TvcHealthCheckType {
         }
     }
 }
+/// Network a wallet authenticator speaks. SIWE/SIWS only for v1; extend later.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum WalletAuthenticatorType {
+    #[serde(rename = "WALLET_AUTHENTICATOR_TYPE_UNSPECIFIED")]
+    Unspecified = 0,
+    #[serde(rename = "WALLET_AUTHENTICATOR_TYPE_ETHEREUM")]
+    Ethereum = 1,
+    #[serde(rename = "WALLET_AUTHENTICATOR_TYPE_SOLANA")]
+    Solana = 2,
+}
+impl WalletAuthenticatorType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "WALLET_AUTHENTICATOR_TYPE_UNSPECIFIED",
+            Self::Ethereum => "WALLET_AUTHENTICATOR_TYPE_ETHEREUM",
+            Self::Solana => "WALLET_AUTHENTICATOR_TYPE_SOLANA",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "WALLET_AUTHENTICATOR_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+            "WALLET_AUTHENTICATOR_TYPE_ETHEREUM" => Some(Self::Ethereum),
+            "WALLET_AUTHENTICATOR_TYPE_SOLANA" => Some(Self::Solana),
+            _ => None,
+        }
+    }
+}
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum AuthenticationType {
@@ -1401,6 +1438,8 @@ pub enum AuthenticationType {
     Oauth = 5,
     #[serde(rename = "AUTHENTICATION_TYPE_SESSION")]
     Session = 6,
+    #[serde(rename = "AUTHENTICATION_TYPE_WALLET")]
+    Wallet = 7,
 }
 impl AuthenticationType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -1416,6 +1455,7 @@ impl AuthenticationType {
             Self::ApiKey => "AUTHENTICATION_TYPE_API_KEY",
             Self::Oauth => "AUTHENTICATION_TYPE_OAUTH",
             Self::Session => "AUTHENTICATION_TYPE_SESSION",
+            Self::Wallet => "AUTHENTICATION_TYPE_WALLET",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -1428,6 +1468,7 @@ impl AuthenticationType {
             "AUTHENTICATION_TYPE_API_KEY" => Some(Self::ApiKey),
             "AUTHENTICATION_TYPE_OAUTH" => Some(Self::Oauth),
             "AUTHENTICATION_TYPE_SESSION" => Some(Self::Session),
+            "AUTHENTICATION_TYPE_WALLET" => Some(Self::Wallet),
             _ => None,
         }
     }

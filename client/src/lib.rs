@@ -669,6 +669,7 @@ mod test {
             payload: "hello".to_string(),
             encoding: PayloadEncoding::TextUtf8,
             hash_function: HashFunction::Keccak256,
+            external_signer_pubkey: None,
         }
     }
 

@@ -144,7 +144,9 @@ fn find_deployment_status<'a>(
 mod tests {
     use super::{Args, find_deployment_status};
     use clap::Parser;
-    use turnkey_client::generated::external::data::v1::{AppStatus, DeploymentStatus};
+    use turnkey_client::generated::external::data::v1::{
+        AppStatus, DeploymentStatus, ProvisioningState,
+    };
     use uuid::Uuid;
 
     #[derive(Debug, Parser)]
@@ -181,7 +183,7 @@ mod tests {
                 ready_replicas: 3,
                 desired_replicas: 3,
                 last_updated_time: None,
-                provisioning_state: None,
+                provisioning_state: ProvisioningState::Unspecified,
             }],
             targeted_deployment_id: "5376f492-d014-4e01-a6bb-20fc97448e25".to_string(),
         };

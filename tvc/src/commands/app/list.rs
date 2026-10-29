@@ -34,6 +34,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Resul
         .client
         .get_tvc_apps(GetTvcAppsRequest {
             organization_id: auth.org_id.clone(),
+            is_live: None,
         })
         .await
         .context("failed to list TVC apps")?;
@@ -68,6 +69,9 @@ struct AppSummary {
     live_deployment_id: Option<String>,
     egress_enabled: bool,
     debug_mode_deployments_enabled: bool,
+    /// `None` when the server returns an empty region, meaning it cannot map the app's cluster to a region.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    region: Option<String>,
     /// Empty when the app has no public domain configured.
     #[serde(skip_serializing_if = "String::is_empty")]
     public_domain: String,
@@ -90,6 +94,7 @@ impl From<TvcApp> for AppSummary {
             share_set: _,
             created_at: _,
             updated_at: _,
+            region,
         } = app;
 
         Self {
@@ -99,6 +104,7 @@ impl From<TvcApp> for AppSummary {
             live_deployment_id,
             egress_enabled,
             debug_mode_deployments_enabled,
+            region: Some(region).filter(|r| !r.is_empty()),
             public_domain,
         }
     }
@@ -138,6 +144,10 @@ Debug Mode Deployments: {}"#,
             yes_no(self.debug_mode_deployments_enabled),
         )?;
 
+        if let Some(region) = &self.region {
+            write!(f, "\nRegion: {region}")?;
+        }
+
         if !self.public_domain.is_empty() {
             write!(f, "\nPublic Domain: {}", self.public_domain)?;
         }
@@ -149,6 +159,7 @@ Debug Mode Deployments: {}"#,
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::{json, to_value};
 
     fn make_app(name: &str) -> TvcApp {
         TvcApp {
@@ -164,6 +175,7 @@ mod tests {
             live_deployment_id: None,
             public_domain: String::new(),
             enable_debug_mode_deployments: false,
+            region: "us-east-1".to_string(),
         }
     }
 
@@ -251,6 +263,7 @@ mod tests {
             live_deployment_id: Some("dep-9".to_string()),
             egress_enabled: true,
             debug_mode_deployments_enabled: true,
+            region: Some("ap-southeast-1".to_string()),
             public_domain: "my-app.example.com".to_string(),
         }
     }
@@ -263,6 +276,7 @@ mod tests {
             live_deployment_id: None,
             egress_enabled: false,
             debug_mode_deployments_enabled: false,
+            region: None,
             public_domain: String::new(),
         }
     }
@@ -277,6 +291,7 @@ Quorum Public Key: 04abcd
 Live Deployment: dep-9
 Egress Enabled: yes
 Debug Mode Deployments: yes
+Region: ap-southeast-1
 Public Domain: my-app.example.com
 ────────────────────────────────────────"#
         );
@@ -293,6 +308,38 @@ Live Deployment: (none)
 Egress Enabled: no
 Debug Mode Deployments: no
 ────────────────────────────────────────"#
+        );
+    }
+
+    #[test]
+    fn json_full_includes_region() {
+        assert_eq!(
+            to_value(full_summary()).unwrap(),
+            json!({
+                "id": "app-1",
+                "name": "my-app",
+                "quorumPublicKey": "04abcd",
+                "liveDeploymentId": "dep-9",
+                "egressEnabled": true,
+                "debugModeDeploymentsEnabled": true,
+                "region": "ap-southeast-1",
+                "publicDomain": "my-app.example.com",
+            })
+        );
+    }
+
+    #[test]
+    fn json_minimal_omits_empty_region() {
+        assert_eq!(
+            to_value(minimal_summary()).unwrap(),
+            json!({
+                "id": "app-2",
+                "name": "bare",
+                "quorumPublicKey": "04ef",
+                "liveDeploymentId": null,
+                "egressEnabled": false,
+                "debugModeDeploymentsEnabled": false,
+            })
         );
     }
 }

@@ -61,6 +61,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 payload: "hello from TKHQ".to_string(),
                 encoding: PayloadEncoding::TextUtf8,
                 hash_function: HashFunction::Keccak256,
+                external_signer_pubkey: None,
             },
         )
         .await?;

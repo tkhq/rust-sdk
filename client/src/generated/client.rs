@@ -7,7 +7,7 @@ use crate::{ActivityResult, Stamp, TurnkeyClient, TurnkeyClientError};
 impl<S: Stamp> TurnkeyClient<S> {
     /// Who am I?
     ///
-    /// Get basic information about your current API or WebAuthN user and their organization. Affords sub-organization look ups via parent organization for WebAuthN or API key users.
+    /// Get basic information about your current API or WebAuthn user and their organization. Affords sub-organization lookups via parent organization for WebAuthn or API key users.
     pub async fn get_whoami(
         &self,
         request: coordinator::GetWhoamiRequest,
@@ -17,7 +17,7 @@ impl<S: Stamp> TurnkeyClient<S> {
     }
     /// Get sub-organizations
     ///
-    /// Get all suborg IDs associated given a parent org ID and an optional filter.
+    /// Get all suborg IDs (verified and unverified) associated with a given parent organization ID and an optional filter.
     pub async fn get_sub_org_ids(
         &self,
         request: coordinator::GetSubOrgIdsRequest,
@@ -27,7 +27,7 @@ impl<S: Stamp> TurnkeyClient<S> {
     }
     /// Get verified sub-organizations
     ///
-    /// Get all email or phone verified suborg IDs associated given a parent org ID.
+    /// Get all verified suborg IDs associated with a given parent organization ID and an optional filter.
     pub async fn get_verified_sub_org_ids(
         &self,
         request: coordinator::GetVerifiedSubOrgIdsRequest,
@@ -468,7 +468,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// Login with Oauth
+    /// Login with OAuth
     ///
     /// Create an Oauth session for a user.
     pub async fn oauth_login(
@@ -689,7 +689,7 @@ impl<S: Stamp> TurnkeyClient<S> {
     }
     /// Delete API keys
     ///
-    /// Remove api keys from a user.
+    /// Remove API keys from a user.
     pub async fn delete_api_keys(
         &self,
         organization_id: String,
@@ -726,7 +726,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// Get Oauth providers
+    /// Get OAuth providers
     ///
     /// Get details about Oauth providers for a user.
     pub async fn get_oauth_providers(
@@ -867,6 +867,109 @@ impl<S: Stamp> TurnkeyClient<S> {
             status: activity.status,
             app_proofs: activity.app_proofs,
         })
+    }
+    /// Create wallet authenticators
+    ///
+    /// Add wallet authenticators to an existing user. Omit verification_token to attach unverified.
+    pub async fn create_wallet_authenticators(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::CreateWalletAuthenticatorsIntent,
+    ) -> Result<
+        ActivityResult<immutable_activity::CreateWalletAuthenticatorsResult>,
+        TurnkeyClientError,
+    > {
+        let request = external_activity::CreateWalletAuthenticatorsRequest {
+            r#type: "ACTIVITY_TYPE_CREATE_WALLET_AUTHENTICATORS".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/create_wallet_authenticators".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::CreateWalletAuthenticatorsResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Delete wallet authenticators
+    ///
+    /// Remove wallet authenticators from a user.
+    pub async fn delete_wallet_authenticators(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::DeleteWalletAuthenticatorsIntent,
+    ) -> Result<
+        ActivityResult<immutable_activity::DeleteWalletAuthenticatorsResult>,
+        TurnkeyClientError,
+    > {
+        let request = external_activity::DeleteWalletAuthenticatorsRequest {
+            r#type: "ACTIVITY_TYPE_DELETE_WALLET_AUTHENTICATORS".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/delete_wallet_authenticators".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::DeleteWalletAuthenticatorsResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Get wallet authenticators
+    ///
+    /// Get wallet authenticators for a user.
+    pub async fn get_wallet_authenticators(
+        &self,
+        request: coordinator::GetWalletAuthenticatorsRequest,
+    ) -> Result<coordinator::GetWalletAuthenticatorsResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/get_wallet_authenticators".to_string(),
+        )
+        .await
     }
     /// Get authenticators
     ///
@@ -1836,7 +1939,7 @@ impl<S: Stamp> TurnkeyClient<S> {
     }
     /// Create sub-organization
     ///
-    /// Create a new sub-organization. Each root user must have at least one valid credential: an API key, an authenticator, an OAuth provider, or an email or phone number with a login method enabled on the sub-organization (email, email OTP, or SMS).
+    /// Create a new sub-organization. Each root user must have at least one valid credential: an API key, an authenticator, an OAuth provider, a wallet authenticator, or an email or phone number with a login method enabled on the sub-organization (email, email OTP, or SMS).
     pub async fn create_sub_organization(
         &self,
         organization_id: String,
@@ -2251,7 +2354,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// Init fiat on ramp
+    /// Init Fiat On Ramp
     ///
     /// Initiate a fiat on ramp flow.
     pub async fn init_fiat_on_ramp(
@@ -2452,7 +2555,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// Oauth
+    /// OAuth
     ///
     /// Authenticate a user with an OIDC token (Oauth).
     pub async fn oauth(
@@ -2517,6 +2620,51 @@ impl<S: Stamp> TurnkeyClient<S> {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         let result = match inner {
             immutable_activity::result::Inner::InitOtpResultV2(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Verify wallet authenticator
+    ///
+    /// Verify a SIWE or SIWS login and return an enclave-signed wallet verification token.
+    pub async fn verify_wallet_authenticator(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::VerifyWalletAuthenticatorIntent,
+    ) -> Result<
+        ActivityResult<immutable_activity::VerifyWalletAuthenticatorResult>,
+        TurnkeyClientError,
+    > {
+        let request = external_activity::VerifyWalletAuthenticatorRequest {
+            r#type: "ACTIVITY_TYPE_VERIFY_WALLET_AUTHENTICATOR".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/verify_wallet_authenticator".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::VerifyWalletAuthenticatorResult(res) => res,
             other => {
                 return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
                     serde_json::to_string(&other)?,
@@ -2647,7 +2795,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// Create Oauth providers
+    /// Create OAuth providers
     ///
     /// Create Oauth providers for a specified user.
     pub async fn create_oauth_providers(
@@ -2690,7 +2838,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// Delete Oauth providers
+    /// Delete OAuth providers
     ///
     /// Remove Oauth providers for a specified user.
     pub async fn delete_oauth_providers(
@@ -2923,9 +3071,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         )
         .await
     }
-    /// Create an OAuth 2.0 Credential
+    /// Create an OAuth 2.0 credential
     ///
-    /// Enable authentication for end users with an OAuth 2.0 provider
+    /// Enable authentication for end users with an OAuth 2.0 provider.
     pub async fn create_oauth2_credential(
         &self,
         organization_id: String,
@@ -2966,9 +3114,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// Update an OAuth 2.0 Credential
+    /// Update an OAuth 2.0 credential
     ///
-    /// Update an OAuth 2.0 provider credential
+    /// Update an OAuth 2.0 provider credential.
     pub async fn update_oauth2_credential(
         &self,
         organization_id: String,
@@ -3009,9 +3157,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// Delete an OAuth 2.0 Credential
+    /// Delete an OAuth 2.0 credential
     ///
-    /// Disable authentication for end users with an OAuth 2.0 provider
+    /// Disable authentication for end users with an OAuth 2.0 provider.
     pub async fn delete_oauth2_credential(
         &self,
         organization_id: String,
@@ -3181,9 +3329,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// Get a specific boot proof
+    /// Get a specific Boot Proof
     ///
-    /// Get the boot proof for a given ephemeral key.
+    /// Get the Boot Proof for a given ephemeral key.
     pub async fn get_boot_proof(
         &self,
         request: coordinator::GetBootProofRequest,
@@ -3191,9 +3339,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/get_boot_proof".to_string())
             .await
     }
-    /// Get the latest boot proof for an app
+    /// Get the latest Boot Proof for an app
     ///
-    /// Get the latest boot proof for a given enclave app name.
+    /// Get the latest Boot Proof for a given enclave app name.
     pub async fn get_latest_boot_proof(
         &self,
         request: coordinator::GetLatestBootProofRequest,
@@ -3214,7 +3362,7 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/list_app_proofs".to_string())
             .await
     }
-    /// List OAuth 2.0 Credentials
+    /// List OAuth 2.0 credentials
     ///
     /// List all OAuth 2.0 credentials within an organization.
     pub async fn list_oauth2_credentials(
@@ -3255,7 +3403,7 @@ impl<S: Stamp> TurnkeyClient<S> {
     }
     /// OAuth 2.0 authentication
     ///
-    /// Authenticate a user with an OAuth 2.0 provider and receive an OIDC token to use with the LoginWithOAuth or CreateSubOrganization activities
+    /// Authenticate a user with an OAuth 2.0 provider and receive an OIDC token to use with the LoginWithOAuth or CreateSubOrganization activities.
     pub async fn oauth2_authenticate(
         &self,
         organization_id: String,
@@ -3339,9 +3487,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// Create a Fiat On Ramp Credential
+    /// Create a Fiat On Ramp credential
     ///
-    /// Create a fiat on ramp provider credential
+    /// Create a fiat on ramp provider credential.
     pub async fn create_fiat_on_ramp_credential(
         &self,
         organization_id: String,
@@ -3384,9 +3532,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// Update a Fiat On Ramp Credential
+    /// Update a Fiat On Ramp credential
     ///
-    /// Update a fiat on ramp provider credential
+    /// Update a fiat on ramp provider credential.
     pub async fn update_fiat_on_ramp_credential(
         &self,
         organization_id: String,
@@ -3429,9 +3577,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// Delete a Fiat On Ramp Credential
+    /// Delete a Fiat On Ramp credential
     ///
-    /// Delete a fiat on ramp provider credential
+    /// Delete a fiat on ramp provider credential.
     pub async fn delete_fiat_on_ramp_credential(
         &self,
         organization_id: String,
@@ -3474,7 +3622,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// List Fiat On Ramp Credentials
+    /// List Fiat On Ramp credentials
     ///
     /// List all fiat on ramp provider credentials within an organization.
     pub async fn list_fiat_on_ramp_credentials(
@@ -3747,7 +3895,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// Claim earn fees
+    /// Claim Earn fees
     ///
     /// Claim earn fees through the activity pipeline.
     pub async fn claim_earn_fees(
@@ -3934,17 +4082,18 @@ impl<S: Stamp> TurnkeyClient<S> {
         )
         .await
     }
-    /// Get swap quote
+    /// Create Swap quote
     ///
-    /// Get a swap quote. Asset chains are derived from CAIP-19 asset IDs; cross-chain quotes are supported.
+    /// Create a swap quote. Asset chains are derived from CAIP-19 asset IDs; cross-chain quotes are supported. Requests must use ACTIVITY_TYPE_CREATE_SWAP_QUOTE_V3, which returns its quotes in createSwapQuoteResultV2.
     pub async fn create_swap_quote(
         &self,
         organization_id: String,
         timestamp_ms: u128,
-        params: immutable_activity::CreateSwapQuoteIntent,
-    ) -> Result<ActivityResult<immutable_activity::CreateSwapQuoteResult>, TurnkeyClientError> {
+        params: immutable_activity::CreateSwapQuoteIntentV3,
+    ) -> Result<ActivityResult<immutable_activity::CreateSwapQuoteResultV2>, TurnkeyClientError>
+    {
         let request = external_activity::CreateSwapQuoteRequest {
-            r#type: "ACTIVITY_TYPE_CREATE_SWAP_QUOTE".to_string(),
+            r#type: "ACTIVITY_TYPE_CREATE_SWAP_QUOTE_V3".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
@@ -3959,7 +4108,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             .inner
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         let result = match inner {
-            immutable_activity::result::Inner::CreateSwapQuoteResult(res) => res,
+            immutable_activity::result::Inner::CreateSwapQuoteResultV2(res) => res,
             other => {
                 return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
                     serde_json::to_string(&other)?,
@@ -3973,7 +4122,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// Get swap status
+    /// Get Swap status
     ///
     /// Poll the status of a swap by its swap_request_id. Covers same-chain and cross-chain swaps.
     pub async fn get_swap_status(
@@ -3983,17 +4132,17 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/get_swap_status".to_string())
             .await
     }
-    /// Execute swap
+    /// Execute Swap
     ///
-    /// Execute the exact provider quote identified by quote_id through the activity pipeline and Turnkey broadcasting. Requests must use ACTIVITY_TYPE_EXECUTE_SWAP_V2.
+    /// Execute the exact provider quote identified by quote_id through the activity pipeline and Turnkey broadcasting. Requests must use ACTIVITY_TYPE_EXECUTE_SWAP_V3.
     pub async fn execute_swap(
         &self,
         organization_id: String,
         timestamp_ms: u128,
-        params: immutable_activity::ExecuteSwapIntentV2,
+        params: immutable_activity::ExecuteSwapIntentV3,
     ) -> Result<ActivityResult<immutable_activity::ExecuteSwapResult>, TurnkeyClientError> {
         let request = external_activity::ExecuteSwapRequest {
-            r#type: "ACTIVITY_TYPE_EXECUTE_SWAP_V2".to_string(),
+            r#type: "ACTIVITY_TYPE_EXECUTE_SWAP_V3".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
@@ -4022,7 +4171,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// Claim swap fees
+    /// Claim Swap fees
     ///
     /// Claim swap fees through the activity pipeline.
     pub async fn claim_swap_fees(
@@ -4061,7 +4210,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// Upsert swap config
+    /// Upsert Swap config
     ///
     /// Enable or disable swap configuration for an organization.
     pub async fn upsert_swap_config(
@@ -4101,6 +4250,109 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
+    /// Upsert swap fee sponsorship limits
+    ///
+    /// Replace this feature's spending window. Requires the billing parent's signed permission and activity authorization.
+    pub async fn upsert_swap_fee_sponsorship_limit_config(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::UpsertSwapFeeSponsorshipLimitConfigIntent,
+    ) -> Result<
+        ActivityResult<immutable_activity::UpsertSwapFeeSponsorshipLimitConfigResult>,
+        TurnkeyClientError,
+    > {
+        let request = external_activity::UpsertSwapFeeSponsorshipLimitConfigRequest {
+            r#type: "ACTIVITY_TYPE_UPSERT_SWAP_FEE_SPONSORSHIP_LIMIT_CONFIG".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/upsert_swap_fee_sponsorship_limit_config".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::UpsertSwapFeeSponsorshipLimitConfigResult(res) => {
+                res
+            }
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Upsert swap fixed rate limits
+    ///
+    /// Replace this feature's spending window. Requires the billing parent's signed permission and activity authorization.
+    pub async fn upsert_swap_fixed_rate_limit_config(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::UpsertSwapFixedRateLimitConfigIntent,
+    ) -> Result<
+        ActivityResult<immutable_activity::UpsertSwapFixedRateLimitConfigResult>,
+        TurnkeyClientError,
+    > {
+        let request = external_activity::UpsertSwapFixedRateLimitConfigRequest {
+            r#type: "ACTIVITY_TYPE_UPSERT_SWAP_FIXED_RATE_LIMIT_CONFIG".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/upsert_swap_fixed_rate_limit_config".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::UpsertSwapFixedRateLimitConfigResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Get swap sponsorship usage
+    ///
+    /// Read each swap sponsorship feature's spending window and settled spending in the current rolling window. Parents see aggregate spending; children see their own spending. Pending swaps are not reserved.
+    pub async fn get_swap_sponsorship_usage(
+        &self,
+        request: coordinator::GetSwapSponsorshipUsageRequest,
+    ) -> Result<coordinator::GetSwapSponsorshipUsageResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/get_swap_sponsorship_usage".to_string(),
+        )
+        .await
+    }
     /// Get gas usage
     ///
     /// Get gas usage and gas limits for either the parent organization or a sub-organization.
@@ -4121,9 +4373,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/get_nonces".to_string())
             .await
     }
-    /// Create a TVC App
+    /// Create a TVC app
     ///
-    /// Create a new TVC application
+    /// Create a new TVC application.
     pub async fn create_tvc_app(
         &self,
         organization_id: String,
@@ -4159,9 +4411,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// Create TVC Operator
+    /// Create TVC operator
     ///
-    /// Create a TVC Operator backed by uncompressed P-256 Turnkey wallet accounts
+    /// Create a TVC operator backed by uncompressed P-256 Turnkey wallet accounts.
     pub async fn create_tvc_operator(
         &self,
         organization_id: String,
@@ -4202,9 +4454,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// Delete a TVC App and all of its deployments
+    /// Delete a TVC app and all of its deployments
     ///
-    /// Delete a TVC App and all of its deployments
+    /// Delete a TVC app and all of its deployments.
     pub async fn delete_tvc_app_and_deployments(
         &self,
         organization_id: String,
@@ -4247,9 +4499,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// List TVC quorum keys
+    /// List TVC Quorum Keys
     ///
-    /// List all hosted TVC quorum keys within an organization, newest first.
+    /// List all hosted TVC Quorum Keys within an organization, newest first.
     pub async fn get_tvc_quorum_keys(
         &self,
         request: coordinator::GetTvcQuorumKeysRequest,
@@ -4270,9 +4522,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/list_tvc_operators".to_string())
             .await
     }
-    /// List TVC Apps
+    /// List TVC apps
     ///
-    /// List all TVC Apps within an organization.
+    /// List all TVC apps within an organization.
     pub async fn get_tvc_apps(
         &self,
         request: coordinator::GetTvcAppsRequest,
@@ -4280,9 +4532,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/list_tvc_apps".to_string())
             .await
     }
-    /// Get TVC App
+    /// Get TVC app
     ///
-    /// Get details about a single TVC App
+    /// Get details about a single TVC app.
     pub async fn get_tvc_app(
         &self,
         request: coordinator::GetTvcAppRequest,
@@ -4290,9 +4542,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/get_tvc_app".to_string())
             .await
     }
-    /// Create a TVC Deployment
+    /// Create a TVC deployment
     ///
-    /// Create a new TVC Deployment
+    /// Create a new TVC deployment.
     pub async fn create_tvc_deployment(
         &self,
         organization_id: String,
@@ -4332,9 +4584,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// Set TVC App live deployment
+    /// Set TVC app live deployment
     ///
-    /// Set the live deployment for a TVC App
+    /// Set the live deployment for a TVC app.
     pub async fn update_tvc_app_live_deployment(
         &self,
         organization_id: String,
@@ -4377,9 +4629,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// Delete a TVC Deployment
+    /// Delete a TVC deployment
     ///
-    /// Delete a TVC Deployment
+    /// Delete a TVC deployment.
     pub async fn delete_tvc_deployment(
         &self,
         organization_id: String,
@@ -4420,9 +4672,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// Restore a TVC Deployment
+    /// Restore a TVC deployment
     ///
-    /// Restore a deleted TVC Deployment
+    /// Restore a deleted TVC deployment.
     pub async fn restore_tvc_deployment(
         &self,
         organization_id: String,
@@ -4463,9 +4715,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// Validate Container Image for TVC
+    /// Validate container image for TVC
     ///
-    /// Validate a container image URL and pull secret for TVC deployment
+    /// Validate a container image URL and pull secret for TVC deployment.
     pub async fn validate_tvc_image(
         &self,
         request: coordinator::ValidateTvcImageRequest,
@@ -4486,9 +4738,22 @@ impl<S: Stamp> TurnkeyClient<S> {
         )
         .await
     }
-    /// List TVC Deployments
+    /// Get TVC manifest generation info
     ///
-    /// List all deployments for a given TVC App
+    /// Get default values for creating a QOS manifest. Relevant for client manifest generation.
+    pub async fn get_tvc_manifest_generation_info(
+        &self,
+        request: coordinator::GetTvcManifestGenerationInfoRequest,
+    ) -> Result<coordinator::GetTvcManifestGenerationInfoResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/get_tvc_manifest_generation_info".to_string(),
+        )
+        .await
+    }
+    /// List TVC deployments
+    ///
+    /// List all deployments for a given TVC app.
     pub async fn get_tvc_app_deployments(
         &self,
         request: coordinator::GetTvcAppDeploymentsRequest,
@@ -4499,9 +4764,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         )
         .await
     }
-    /// Get TVC Deployment
+    /// Get TVC deployment
     ///
-    /// Get details about a single TVC Deployment
+    /// Get details about a single TVC deployment.
     pub async fn get_tvc_deployment(
         &self,
         request: coordinator::GetTvcDeploymentRequest,
@@ -4509,9 +4774,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/get_tvc_deployment".to_string())
             .await
     }
-    /// Get TVC Deployment's Provisioning Details
+    /// Get TVC deployment's provisioning details
     ///
-    /// Get the attestation document and manifest envelope of the provisioning enclave for a TVC deployment
+    /// Get the attestation document and manifest envelope of the provisioning enclave for a TVC deployment.
     pub async fn get_tvc_deployment_provisioning_details(
         &self,
         request: coordinator::GetTvcDeploymentProvisioningDetailsRequest,
@@ -4522,9 +4787,9 @@ impl<S: Stamp> TurnkeyClient<S> {
         )
         .await
     }
-    /// Create TVC Manifest Approvals
+    /// Create TVC manifest approvals
     ///
-    /// Post one or more manifest approvals for a TVC Manifest
+    /// Post one or more manifest approvals for a TVC manifest.
     pub async fn create_tvc_manifest_approvals(
         &self,
         organization_id: String,
@@ -4566,9 +4831,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// Post TVC Quorum Key Share
+    /// Post TVC Quorum Key share
     ///
-    /// Post re-encrypted quorum key share for a TVC deployment.
+    /// Post re-encrypted Quorum Key share for a TVC deployment.
     pub async fn post_tvc_quorum_key_share(
         &self,
         organization_id: String,
@@ -4610,7 +4875,7 @@ impl<S: Stamp> TurnkeyClient<S> {
     }
     /// Create TVC Quorum Key
     ///
-    /// Create a hosted TVC quorum key and encrypted shares.
+    /// Create a hosted TVC Quorum Key and encrypted shares.
     pub async fn create_tvc_quorum_key(
         &self,
         organization_id: String,
@@ -4651,9 +4916,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// Re-encrypt TVC Quorum Key Share
+    /// Re-encrypt TVC Quorum Key share
     ///
-    /// Re-encrypt a hosted TVC quorum key share for a deployment.
+    /// Re-encrypt a hosted TVC Quorum Key share for a deployment.
     pub async fn re_encrypt_tvc_quorum_key_share(
         &self,
         organization_id: String,
@@ -4696,9 +4961,9 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
-    /// Get TVC App status
+    /// Get TVC app status
     ///
-    /// Get live runtime status for a TVC App from the cluster.
+    /// Get live runtime status for a TVC app from the cluster.
     pub async fn get_app_status(
         &self,
         request: coordinator::GetAppStatusRequest,
@@ -4706,7 +4971,7 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/get_app_status".to_string())
             .await
     }
-    /// Get TVC Deployment debug logs
+    /// Get TVC deployment debug logs
     ///
     /// Get a bounded window of application logs from a debug-mode TVC deployment. Returned lines are collected from every running replica and sorted by platform timestamp.
     pub async fn get_tvc_deployment_debug_logs(

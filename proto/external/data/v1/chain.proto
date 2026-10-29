@@ -1,0 +1,97 @@
+syntax = "proto3";
+
+package external.data.v1;
+
+import "immutable/data/v1/earn.proto";
+import "vendor/google/api/field_behavior.proto";
+import "vendor/protoc-gen-openapiv2/options/annotations.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/external/data/v1";
+
+message SupportedChainFeature {
+  bool supported = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether the feature is supported on this chain."}
+  ];
+}
+
+message SupportedChainEarnFeature {
+  bool supported = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether Earn is supported on this chain."}
+  ];
+  repeated immutable.data.v1.EarnProvider providers = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Earn providers available on this chain."}
+  ];
+}
+
+message SupportedChainGasSponsorshipFeature {
+  bool supported = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether gas sponsorship is supported on this chain."}
+  ];
+  optional SupportedChainGasStation gas_station = 2 [(google.api.field_behavior) = OPTIONAL];
+}
+
+message SupportedChainGasStation {
+  map<string, string> addresses = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "TKGasStation contract addresses keyed by release version."}
+  ];
+  string current_version = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Current TKGasStation release version. Use this key to look up the current address in addresses."}
+  ];
+}
+
+message SupportedChainWebhooksFeature {
+  bool supported = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether chain-specific webhook subscriptions are supported on this chain."}
+  ];
+  repeated string subscriptions = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Webhook subscription event types available on this chain."}
+  ];
+}
+
+message SupportedChainFeatures {
+  SupportedChainFeature balances = 1 [(google.api.field_behavior) = REQUIRED];
+  SupportedChainBroadcastingFeature broadcasting = 2 [(google.api.field_behavior) = REQUIRED];
+  SupportedChainEarnFeature earn = 3 [(google.api.field_behavior) = REQUIRED];
+  SupportedChainFeature swaps = 4 [(google.api.field_behavior) = REQUIRED];
+  SupportedChainFeature transaction_history = 5 [(google.api.field_behavior) = REQUIRED];
+  SupportedChainWebhooksFeature webhooks = 6 [(google.api.field_behavior) = REQUIRED];
+}
+
+message SupportedChainBroadcastingFeature {
+  bool supported = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether broadcasting is supported on this chain."}
+  ];
+  SupportedChainGasSponsorshipFeature gas_sponsorship = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+message SupportedChain {
+  string caip2 = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Canonical CAIP-2 chain identifier."}
+  ];
+  string name = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable chain name."}
+  ];
+  bool is_testnet = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether the chain is a testnet."}
+  ];
+  SupportedChainFeatures features = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Turnkey features available on this chain."}
+  ];
+  string native_caip19 = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-19 identifier of the native asset on this chain."}
+  ];
+}

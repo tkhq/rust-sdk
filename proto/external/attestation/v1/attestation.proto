@@ -11,6 +11,7 @@ enum StampAttestedScheme {
   STAMP_ATTESTED_SCHEME_UNSPECIFIED = 0;
   STAMP_ATTESTED_SCHEME_P256_OIDC = 1;
   STAMP_ATTESTED_SCHEME_P256_VERIFICATION_TOKEN = 2;
+  STAMP_ATTESTED_SCHEME_P256_WALLET_VERIFICATION_TOKEN = 3;
 }
 
 // We expect this to be passed in as a JSON-encoded, then base64-encoded string within a X-Stamp-Attested header

@@ -15,6 +15,7 @@ import "external/data/v1/wallet_account.proto";
 import "external/options/v1/options.proto";
 import "external/webauthn/v1/webauthn.proto";
 import "immutable/activity/v1/activity.proto";
+import "immutable/common/v1/common.proto";
 import "immutable/data/v1/earn.proto";
 import "immutable/models/v1/models.proto";
 import "immutable/sdk_models/v1/models.proto";
@@ -92,6 +93,10 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
         "See [Root Quorum](../concepts/users/root-quorum) for more information"
     },
     {
+      name: "Webhooks"
+      description: "Webhooks let you subscribe to events on your Organization and receive HTTP notifications when they occur, such as when an Activity completes."
+    },
+    {
       name: "Invitations"
       description:
         "Invitations allow you to invite Users into your Organization via email. Alternatively, Users can be added directly without an Invitation if their ApiKey or Authenticator credentials are known ahead of time."
@@ -117,6 +122,13 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
       description: "Signers allow you to create digital signatures. Signatures are used to validate the authenticity and integrity of a digital message. Turnkey makes it easy to produce signatures by allowing you to sign with an address. If Turnkey doesn't yet support an address format you need, you can generate and sign with the public key instead by using the address format `ADDRESS_FORMAT_COMPRESSED`."
     },
     {
+      name: "Spark"
+      description:
+        "Spark operations support the Spark Bitcoin protocol, including preparing and claiming encrypted transfers and preparing Lightning receives."
+        "\n\n"
+        "FROST partial signing for Spark wallets is performed via the Signing operations. See [Signing](./api#tag/Signing) for more information"
+    },
+    {
       name: "Private Keys"
       description:
         "Private Keys are cryptographic public / private key pairs that can be used for cryptocurrency needs or more generalized encryption. Turnkey securely holds all private key materials for you, but only you can access them."
@@ -140,11 +152,11 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
       description: "Authenticators are WebAuthN hardware devices, such as a Macbook TouchID or Yubikey, that can be used to authenticate requests."
     },
     {
-      name: "API Keys"
+      name: "API keys"
       description:
-        "API Keys are used to authenticate requests"
+        "API keys are used to authenticate requests"
         "\n\n"
-        "See our [CLI](https://github.com/tkhq/tkcli) for instructions on generating API Keys"
+        "See our [CLI](https://github.com/tkhq/tkcli) for instructions on generating API keys"
     },
     {
       name: "Activities"
@@ -186,10 +198,12 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
                   list_value: {
                     values: [
                       {string_value: "Organizations"},
+                      {string_value: "Webhooks"},
                       {string_value: "Invitations"},
                       {string_value: "Policies"},
                       {string_value: "Features"},
-                      {string_value: "IP Allowlist"}]
+                      {string_value: "IP Allowlist"}
+                    ]
                   }
                 }
               }
@@ -208,8 +222,10 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
                     values: [
                       {string_value: "Wallets"},
                       {string_value: "Signing"},
+                      {string_value: "Spark"},
                       {string_value: "Private Keys"},
-                      {string_value: "Private Key Tags"}]
+                      {string_value: "Private Key Tags"}
+                    ]
                   }
                 }
               }
@@ -229,7 +245,8 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
                       {string_value: "Users"},
                       {string_value: "User Tags"},
                       {string_value: "User Recovery"},
-                      {string_value: "User Auth"}]
+                      {string_value: "User Auth"}
+                    ]
                   }
                 }
               }
@@ -247,8 +264,9 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
                   list_value: {
                     values: [
                       {string_value: "Authenticators"},
-                      {string_value: "API Keys"},
-                      {string_value: "Sessions"}]
+                      {string_value: "API keys"},
+                      {string_value: "Sessions"}
+                    ]
                   }
                 }
               }
@@ -266,7 +284,8 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
                   list_value: {
                     values: [
                       {string_value: "Activities"},
-                      {string_value: "Consensus"}]
+                      {string_value: "Consensus"}
+                    ]
                   }
                 }
               }
@@ -285,7 +304,7 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Get basic information about your current API or WebAuthN user and their organization. Affords sub-organization look ups via parent organization for WebAuthN or API key users."
+      description: "Get basic information about your current API or WebAuthn user and their organization. Affords sub-organization lookups via parent organization for WebAuthn or API key users."
       summary: "Who am I?"
       tags: "Sessions"
     };
@@ -323,7 +342,7 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Get all suborg IDs associated given a parent org ID and an optional filter."
+      description: "Get all suborg IDs (verified and unverified) associated with a given parent organization ID and an optional filter."
       summary: "Get sub-organizations"
       tags: "Organizations"
     };
@@ -335,7 +354,7 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Get all email or phone verified suborg IDs associated given a parent org ID."
+      description: "Get all verified suborg IDs associated with a given parent organization ID and an optional filter."
       summary: "Get verified sub-organizations"
       tags: "Organizations"
     };
@@ -535,15 +554,15 @@ service PublicApiService {
     };
   }
 
-  rpc DeleteVelocityControl(external.activity.v1.DeleteVelocityControlRequest) returns (ActivityResponse) {
+  rpc DeleteVelocityControls(external.activity.v1.DeleteVelocityControlsRequest) returns (ActivityResponse) {
     option (google.api.method_visibility).restriction = "INTERNAL";
     option (google.api.http) = {
-      post: "/public/v1/submit/delete_velocity_control"
+      post: "/public/v1/submit/delete_velocity_controls"
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Delete an existing velocity control."
-      summary: "Delete velocity control"
+      description: "Delete existing velocity controls."
+      summary: "Delete velocity controls"
       tags: "Velocity Controls"
     };
   }
@@ -617,7 +636,7 @@ service PublicApiService {
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Create an Oauth session for a user."
-      summary: "Login with Oauth"
+      summary: "Login with OAuth"
       tags: "Sessions"
     };
   }
@@ -690,7 +709,7 @@ service PublicApiService {
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Add API keys to an existing user."
       summary: "Create API keys"
-      tags: "API Keys"
+      tags: "API keys"
     };
   }
 
@@ -700,9 +719,9 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Remove api keys from a user."
+      description: "Remove API keys from a user."
       summary: "Delete API keys"
-      tags: "API Keys"
+      tags: "API keys"
     };
   }
 
@@ -713,7 +732,7 @@ service PublicApiService {
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Get details about Oauth providers for a user."
-      summary: "Get Oauth providers"
+      summary: "Get OAuth providers"
       tags: "User Auth"
     };
   }
@@ -728,6 +747,32 @@ service PublicApiService {
       summary: "Get API keys"
       tags: "API keys"
     };
+  }
+
+  rpc GetFiatOffRampQuotes(GetFiatOffRampQuotesRequest) returns (GetFiatOffRampQuotesResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/list_fiat_off_ramp_quotes"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Quote enabled fiat off-ramp providers for a sell. Returns one quote per payment method the provider can offer for this route. Providers and methods that cannot serve the route are omitted."
+      summary: "List Fiat Off Ramp quotes"
+      tags: "On Ramp"
+    };
+    option (google.api.method_visibility).restriction = "INTERNAL";
+  }
+
+  rpc CreateFiatOffRampSession(external.activity.v1.CreateFiatOffRampSessionRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/create_fiat_off_ramp_session"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Open a fiat off-ramp session for a saved quote."
+      summary: "Create Fiat Off Ramp Session"
+      tags: "On Ramp"
+    };
+    option (google.api.method_visibility).restriction = "INTERNAL";
   }
 
   rpc GetOnRampTransactionStatus(GetOnRampTransactionStatusRequest) returns (GetOnRampTransactionStatusResponse) {
@@ -786,6 +831,42 @@ service PublicApiService {
       description: "Remove authenticators from a user."
       summary: "Delete authenticators"
       tags: "Authenticators"
+    };
+  }
+
+  rpc CreateWalletAuthenticators(external.activity.v1.CreateWalletAuthenticatorsRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/create_wallet_authenticators"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Add wallet authenticators to an existing user. Omit verification_token to attach unverified."
+      summary: "Create wallet authenticators"
+      tags: "Wallet Authenticators"
+    };
+  }
+
+  rpc DeleteWalletAuthenticators(external.activity.v1.DeleteWalletAuthenticatorsRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/delete_wallet_authenticators"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Remove wallet authenticators from a user."
+      summary: "Delete wallet authenticators"
+      tags: "Wallet Authenticators"
+    };
+  }
+
+  rpc GetWalletAuthenticators(GetWalletAuthenticatorsRequest) returns (GetWalletAuthenticatorsResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_wallet_authenticators"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get wallet authenticators for a user."
+      summary: "Get wallet authenticators"
+      tags: "Wallet Authenticators"
     };
   }
 
@@ -1180,7 +1261,7 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Create a new sub-organization. Each root user must have at least one valid credential: an API key, an authenticator, an OAuth provider, or an email or phone number with a login method enabled on the sub-organization (email, email OTP, or SMS)."
+      description: "Create a new sub-organization. Each root user must have at least one valid credential: an API key, an authenticator, an OAuth provider, a wallet authenticator, or an email or phone number with a login method enabled on the sub-organization (email, email OTP, or SMS)."
       summary: "Create sub-organization"
       tags: "Organizations"
     };
@@ -1301,9 +1382,22 @@ service PublicApiService {
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Initiate a fiat on ramp flow."
-      summary: "Init fiat on ramp"
+      summary: "Init Fiat On Ramp"
       tags: "On Ramp"
     };
+  }
+
+  rpc CreateFiatOnRampSession(external.activity.v1.CreateFiatOnRampSessionRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/create_fiat_on_ramp_session"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Open a fiat on-ramp session for a saved quote."
+      summary: "Create Fiat On Ramp Session"
+      tags: "On Ramp"
+    };
+    option (google.api.method_visibility).restriction = "INTERNAL";
   }
 
   rpc InitImportWallet(external.activity.v1.InitImportWalletRequest) returns (ActivityResponse) {
@@ -1361,7 +1455,7 @@ service PublicApiService {
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Authenticate a user with an OIDC token (Oauth)."
-      summary: "Oauth"
+      summary: "OAuth"
       tags: "User Auth"
     };
   }
@@ -1374,6 +1468,18 @@ service PublicApiService {
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Initiate a generic OTP activity."
       summary: "Init generic OTP"
+      tags: "User Verification"
+    };
+  }
+
+  rpc VerifyWalletAuthenticator(external.activity.v1.VerifyWalletAuthenticatorRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/verify_wallet_authenticator"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Verify a SIWE or SIWS login and return an enclave-signed wallet verification token."
+      summary: "Verify wallet authenticator"
       tags: "User Verification"
     };
   }
@@ -1421,7 +1527,7 @@ service PublicApiService {
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Create Oauth providers for a specified user."
-      summary: "Create Oauth providers"
+      summary: "Create OAuth providers"
       tags: "User Auth"
     };
   }
@@ -1433,7 +1539,7 @@ service PublicApiService {
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Remove Oauth providers for a specified user."
-      summary: "Delete Oauth providers"
+      summary: "Delete OAuth providers"
       tags: "User Auth"
     };
   }
@@ -1517,8 +1623,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Enable authentication for end users with an OAuth 2.0 provider"
-      summary: "Create an OAuth 2.0 Credential"
+      description: "Enable authentication for end users with an OAuth 2.0 provider."
+      summary: "Create an OAuth 2.0 credential"
       tags: "User Auth"
     };
   }
@@ -1529,8 +1635,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Update an OAuth 2.0 provider credential"
-      summary: "Update an OAuth 2.0 Credential"
+      description: "Update an OAuth 2.0 provider credential."
+      summary: "Update an OAuth 2.0 credential"
       tags: "User Auth"
     };
   }
@@ -1541,8 +1647,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Disable authentication for end users with an OAuth 2.0 provider"
-      summary: "Delete an OAuth 2.0 Credential"
+      description: "Disable authentication for end users with an OAuth 2.0 provider."
+      summary: "Delete an OAuth 2.0 credential"
       tags: "User Auth"
     };
   }
@@ -1555,7 +1661,7 @@ service PublicApiService {
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Create a webhook endpoint for an organization."
       summary: "Create webhook endpoint"
-      tags: "Organizations"
+      tags: "Webhooks"
     };
   }
 
@@ -1567,7 +1673,7 @@ service PublicApiService {
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Update a webhook endpoint for an organization."
       summary: "Update webhook endpoint"
-      tags: "Organizations"
+      tags: "Webhooks"
     };
   }
 
@@ -1579,7 +1685,7 @@ service PublicApiService {
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Delete a webhook endpoint for an organization."
       summary: "Delete webhook endpoint"
-      tags: "Organizations"
+      tags: "Webhooks"
     };
   }
 
@@ -1589,8 +1695,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Get the boot proof for a given ephemeral key."
-      summary: "Get a specific boot proof"
+      description: "Get the Boot Proof for a given ephemeral key."
+      summary: "Get a specific Boot Proof"
       tags: "Boot Proof"
     };
   }
@@ -1601,8 +1707,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Get the latest boot proof for a given enclave app name."
-      summary: "Get the latest boot proof for an app"
+      description: "Get the latest Boot Proof for a given enclave app name."
+      summary: "Get the latest Boot Proof for an app"
       tags: "Boot Proof"
     };
   }
@@ -1626,7 +1732,7 @@ service PublicApiService {
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "List all OAuth 2.0 credentials within an organization."
-      summary: "List OAuth 2.0 Credentials"
+      summary: "List OAuth 2.0 credentials"
       tags: "User Auth"
     };
   }
@@ -1639,7 +1745,7 @@ service PublicApiService {
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "List webhook endpoints within an organization."
       summary: "List webhook endpoints"
-      tags: "Organizations"
+      tags: "Webhooks"
     };
   }
 
@@ -1651,6 +1757,7 @@ service PublicApiService {
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Get details about an OAuth 2.0 credential."
       summary: "Get OAuth 2.0 credential"
+      tags: "User Auth"
     };
   }
 
@@ -1660,7 +1767,7 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Authenticate a user with an OAuth 2.0 provider and receive an OIDC token to use with the LoginWithOAuth or CreateSubOrganization activities"
+      description: "Authenticate a user with an OAuth 2.0 provider and receive an OIDC token to use with the LoginWithOAuth or CreateSubOrganization activities."
       summary: "OAuth 2.0 authentication"
       tags: "User Auth"
     };
@@ -1696,8 +1803,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Create a fiat on ramp provider credential"
-      summary: "Create a Fiat On Ramp Credential"
+      description: "Create a fiat on ramp provider credential."
+      summary: "Create a Fiat On Ramp credential"
       tags: "On Ramp"
     };
   }
@@ -1708,8 +1815,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Update a fiat on ramp provider credential"
-      summary: "Update a Fiat On Ramp Credential"
+      description: "Update a fiat on ramp provider credential."
+      summary: "Update a Fiat On Ramp credential"
       tags: "On Ramp"
     };
   }
@@ -1720,8 +1827,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Delete a fiat on ramp provider credential"
-      summary: "Delete a Fiat On Ramp Credential"
+      description: "Delete a fiat on ramp provider credential."
+      summary: "Delete a Fiat On Ramp credential"
       tags: "On Ramp"
     };
   }
@@ -1733,9 +1840,22 @@ service PublicApiService {
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "List all fiat on ramp provider credentials within an organization."
-      summary: "List Fiat On Ramp Credentials"
+      summary: "List Fiat On Ramp credentials"
       tags: "On Ramp"
     };
+  }
+
+  rpc GetFiatOnRampQuotes(GetFiatOnRampQuotesRequest) returns (GetFiatOnRampQuotesResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/list_fiat_on_ramp_quotes"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Quote enabled fiat on-ramp providers for a buy. Returns one quote per payment method the provider can offer for this route. Providers and methods that cannot serve the route are omitted."
+      summary: "List Fiat On Ramp quotes"
+      tags: "On Ramp"
+    };
+    option (google.api.method_visibility).restriction = "INTERNAL";
   }
 
   rpc EthSendTransaction(external.activity.v1.EthSendTransactionRequest) returns (ActivityResponse) {
@@ -1817,7 +1937,7 @@ service PublicApiService {
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Claim earn fees through the activity pipeline."
-      summary: "Claim earn fees"
+      summary: "Claim Earn fees"
       tags: "Earn"
     };
   }
@@ -1948,8 +2068,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Get a swap quote. Asset chains are derived from CAIP-19 asset IDs; cross-chain quotes are supported."
-      summary: "Get swap quote"
+      description: "Create a swap quote. Asset chains are derived from CAIP-19 asset IDs; cross-chain quotes are supported. Requests must use ACTIVITY_TYPE_CREATE_SWAP_QUOTE_V3, which returns its quotes in createSwapQuoteResultV2."
+      summary: "Create Swap quote"
       tags: "Swaps"
     };
   }
@@ -1961,7 +2081,20 @@ service PublicApiService {
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Poll the status of a swap by its swap_request_id. Covers same-chain and cross-chain swaps."
-      summary: "Get swap status"
+      summary: "Get Swap status"
+      tags: "Swaps"
+    };
+  }
+
+  rpc GetIndicativeSwapQuote(GetIndicativeSwapQuoteRequest) returns (GetIndicativeSwapQuoteResponse) {
+    option (google.api.method_visibility).restriction = "INTERNAL";
+    option (google.api.http) = {
+      post: "/public/v1/query/get_indicative_swap_quote"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Preview the provider's current price for a swap without creating an activity. The quote is not binding and has no quote ID: a market swap executed later fetches its own quote, so its price can differ."
+      summary: "Get indicative swap quote"
       tags: "Swaps"
     };
   }
@@ -1972,8 +2105,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Execute the exact provider quote identified by quote_id through the activity pipeline and Turnkey broadcasting. Requests must use ACTIVITY_TYPE_EXECUTE_SWAP_V2."
-      summary: "Execute swap"
+      description: "Execute the exact provider quote identified by quote_id through the activity pipeline and Turnkey broadcasting. Requests must use ACTIVITY_TYPE_EXECUTE_SWAP_V3."
+      summary: "Execute Swap"
       tags: "Swaps"
     };
   }
@@ -1985,7 +2118,7 @@ service PublicApiService {
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Claim swap fees through the activity pipeline."
-      summary: "Claim swap fees"
+      summary: "Claim Swap fees"
       tags: "Swaps"
     };
   }
@@ -1997,7 +2130,43 @@ service PublicApiService {
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Enable or disable swap configuration for an organization."
-      summary: "Upsert swap config"
+      summary: "Upsert Swap config"
+      tags: "Swaps"
+    };
+  }
+
+  rpc UpsertSwapFeeSponsorshipLimitConfig(external.activity.v1.UpsertSwapFeeSponsorshipLimitConfigRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/upsert_swap_fee_sponsorship_limit_config"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Replace this feature's spending window. Requires the billing parent's signed permission and activity authorization."
+      summary: "Upsert swap fee sponsorship limits"
+      tags: "Swaps"
+    };
+  }
+
+  rpc UpsertSwapFixedRateLimitConfig(external.activity.v1.UpsertSwapFixedRateLimitConfigRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/upsert_swap_fixed_rate_limit_config"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Replace this feature's spending window. Requires the billing parent's signed permission and activity authorization."
+      summary: "Upsert swap fixed rate limits"
+      tags: "Swaps"
+    };
+  }
+
+  rpc GetSwapSponsorshipUsage(GetSwapSponsorshipUsageRequest) returns (GetSwapSponsorshipUsageResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_swap_sponsorship_usage"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Read each swap sponsorship feature's spending window and settled spending in the current rolling window. Parents see aggregate spending; children see their own spending. Pending swaps are not reserved."
+      summary: "Get swap sponsorship usage"
       tags: "Swaps"
     };
   }
@@ -2032,8 +2201,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Create a new TVC application"
-      summary: "Create a TVC App"
+      description: "Create a new TVC application."
+      summary: "Create a TVC app"
       tags: "TVC"
     };
   }
@@ -2044,8 +2213,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Create a TVC Operator backed by uncompressed P-256 Turnkey wallet accounts"
-      summary: "Create TVC Operator"
+      description: "Create a TVC operator backed by uncompressed P-256 Turnkey wallet accounts."
+      summary: "Create TVC operator"
       tags: "TVC"
     };
   }
@@ -2056,8 +2225,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Delete a TVC App and all of its deployments"
-      summary: "Delete a TVC App and all of its deployments"
+      description: "Delete a TVC app and all of its deployments."
+      summary: "Delete a TVC app and all of its deployments"
       tags: "TVC"
     };
   }
@@ -2068,8 +2237,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "List all hosted TVC quorum keys within an organization, newest first."
-      summary: "List TVC quorum keys"
+      description: "List all hosted TVC Quorum Keys within an organization, newest first."
+      summary: "List TVC Quorum Keys"
       tags: "TVC"
     };
   }
@@ -2092,8 +2261,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "List all TVC Apps within an organization."
-      summary: "List TVC Apps"
+      description: "List all TVC apps within an organization."
+      summary: "List TVC apps"
       tags: "TVC"
     };
   }
@@ -2104,8 +2273,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Get details about a single TVC App"
-      summary: "Get TVC App"
+      description: "Get details about a single TVC app."
+      summary: "Get TVC app"
       tags: "TVC"
     };
   }
@@ -2116,8 +2285,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Create a new TVC Deployment"
-      summary: "Create a TVC Deployment"
+      description: "Create a new TVC deployment."
+      summary: "Create a TVC deployment"
       tags: "TVC"
     };
   }
@@ -2128,8 +2297,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Set the live deployment for a TVC App"
-      summary: "Set TVC App live deployment"
+      description: "Set the live deployment for a TVC app."
+      summary: "Set TVC app live deployment"
       tags: "TVC"
     };
   }
@@ -2140,8 +2309,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Delete a TVC Deployment"
-      summary: "Delete a TVC Deployment"
+      description: "Delete a TVC deployment."
+      summary: "Delete a TVC deployment"
       tags: "TVC"
     };
   }
@@ -2152,8 +2321,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Restore a deleted TVC Deployment"
-      summary: "Restore a TVC Deployment"
+      description: "Restore a deleted TVC deployment."
+      summary: "Restore a TVC deployment"
       tags: "TVC"
     };
   }
@@ -2164,8 +2333,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Validate a container image URL and pull secret for TVC deployment"
-      summary: "Validate Container Image for TVC"
+      description: "Validate a container image URL and pull secret for TVC deployment."
+      summary: "Validate container image for TVC"
       tags: "TVC"
     };
   }
@@ -2182,14 +2351,26 @@ service PublicApiService {
     };
   }
 
+  rpc GetTvcManifestGenerationInfo(GetTvcManifestGenerationInfoRequest) returns (GetTvcManifestGenerationInfoResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/query/get_tvc_manifest_generation_info"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Get default values for creating a QOS manifest. Relevant for client manifest generation."
+      summary: "Get TVC manifest generation info"
+      tags: "TVC"
+    };
+  }
+
   rpc GetTvcAppDeployments(GetTvcAppDeploymentsRequest) returns (GetTvcAppDeploymentsResponse) {
     option (google.api.http) = {
       post: "/public/v1/query/list_tvc_app_deployments"
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "List all deployments for a given TVC App"
-      summary: "List TVC Deployments"
+      description: "List all deployments for a given TVC app."
+      summary: "List TVC deployments"
       tags: "TVC"
     };
   }
@@ -2200,8 +2381,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Get details about a single TVC Deployment"
-      summary: "Get TVC Deployment"
+      description: "Get details about a single TVC deployment."
+      summary: "Get TVC deployment"
       tags: "TVC"
     };
   }
@@ -2212,8 +2393,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Get the attestation document and manifest envelope of the provisioning enclave for a TVC deployment"
-      summary: "Get TVC Deployment's Provisioning Details"
+      description: "Get the attestation document and manifest envelope of the provisioning enclave for a TVC deployment."
+      summary: "Get TVC deployment's provisioning details"
       tags: "TVC"
     };
   }
@@ -2224,8 +2405,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Post one or more manifest approvals for a TVC Manifest"
-      summary: "Create TVC Manifest Approvals"
+      description: "Post one or more manifest approvals for a TVC manifest."
+      summary: "Create TVC manifest approvals"
       tags: "TVC"
     };
   }
@@ -2236,8 +2417,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Post re-encrypted quorum key share for a TVC deployment."
-      summary: "Post TVC Quorum Key Share"
+      description: "Post re-encrypted Quorum Key share for a TVC deployment."
+      summary: "Post TVC Quorum Key share"
       tags: "TVC"
     };
   }
@@ -2248,7 +2429,7 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Create a hosted TVC quorum key and encrypted shares."
+      description: "Create a hosted TVC Quorum Key and encrypted shares."
       summary: "Create TVC Quorum Key"
       tags: "TVC"
     };
@@ -2260,8 +2441,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Re-encrypt a hosted TVC quorum key share for a deployment."
-      summary: "Re-encrypt TVC Quorum Key Share"
+      description: "Re-encrypt a hosted TVC Quorum Key share for a deployment."
+      summary: "Re-encrypt TVC Quorum Key share"
       tags: "TVC"
     };
   }
@@ -2272,8 +2453,8 @@ service PublicApiService {
       body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
-      description: "Get live runtime status for a TVC App from the cluster."
-      summary: "Get TVC App status"
+      description: "Get live runtime status for a TVC app from the cluster."
+      summary: "Get TVC app status"
       tags: "TVC"
     };
   }
@@ -2285,7 +2466,7 @@ service PublicApiService {
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Get a bounded window of application logs from a debug-mode TVC deployment. Returned lines are collected from every running replica and sorted by platform timestamp."
-      summary: "Get TVC Deployment debug logs"
+      summary: "Get TVC deployment debug logs"
       tags: "TVC"
     };
   }
@@ -2430,7 +2611,7 @@ service PublicApiService {
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Construct sender-side encrypted operator packages for a Spark BTC transfer. Does not perform FROST signing."
       summary: "Prepare Spark transfer"
-      tags: "Signing"
+      tags: "Spark"
     };
   }
 
@@ -2442,7 +2623,7 @@ service PublicApiService {
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Construct receiver-side encrypted operator packages to claim a Spark transfer. Does not perform FROST signing."
       summary: "Claim Spark transfer"
-      tags: "Signing"
+      tags: "Spark"
     };
   }
 
@@ -2454,7 +2635,7 @@ service PublicApiService {
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       description: "Generate a Lightning preimage and distribute Feldman shares to operators for a Spark Lightning receive. Does not perform FROST signing."
       summary: "Spark prepare Lightning receive"
-      tags: "Signing"
+      tags: "Spark"
     };
   }
 
@@ -2619,6 +2800,11 @@ service PublicApiService {
   // that are not directly referenced in requests.
   rpc NOOPCodegenAnchor(NOOPCodegenAnchorRequest) returns (NOOPCodegenAnchorResponse) {
     option (google.api.http) = {post: "/tkhq/api/v1/noop-codegen-anchor"};
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Internal no-op endpoint used to force generation of types not otherwise referenced by a public request or response. Not intended for use."
+      summary: "Internal codegen anchor (no-op)"
+      tags: "Internal"
+    };
   }
 }
 
@@ -2657,7 +2843,7 @@ message GetWhoamiRequest {
 message GetWhoamiResponse {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   string organization_name = 2 [
     (google.api.field_behavior) = REQUIRED,
@@ -2680,7 +2866,7 @@ message GetSubOrgIdsRequest {
   ];
   string filter_type = 2 [
     (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Specifies the type of filter to apply, i.e 'CREDENTIAL_ID', 'NAME', 'USERNAME', 'EMAIL', 'PHONE_NUMBER', 'OIDC_TOKEN', 'WALLET_ACCOUNT_ADDRESS' or 'PUBLIC_KEY'"}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Specifies the type of filter to apply, i.e 'CREDENTIAL_ID', 'NAME', 'USERNAME', 'EMAIL', 'PHONE_NUMBER', 'OIDC_TOKEN', 'OAUTH_CLAIM', 'WALLET_ACCOUNT_ADDRESS', 'WALLET_AUTH_TOKEN', or 'PUBLIC_KEY'"}
   ];
   string filter_value = 3 [
     (google.api.field_behavior) = OPTIONAL,
@@ -2699,7 +2885,7 @@ message GetVerifiedSubOrgIdsRequest {
   ];
   string filter_type = 2 [
     (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Specifies the type of filter to apply, i.e 'EMAIL', 'PHONE_NUMBER'."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Specifies the type of filter to apply, i.e 'EMAIL', 'PHONE_NUMBER', 'OIDC_TOKEN', 'OAUTH_CLAIM', 'PUBLIC_KEY', or 'WALLET_AUTH_TOKEN'."}
   ];
   string filter_value = 3 [
     (google.api.field_behavior) = OPTIONAL,
@@ -2728,7 +2914,7 @@ message GetVerifiedSubOrgIdsResponse {
 message GetOrganizationRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
 }
 
@@ -2742,7 +2928,7 @@ message GetOrganizationResponse {
 message GetActivityRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   string activity_id = 2 [
     (google.api.field_behavior) = REQUIRED,
@@ -2753,7 +2939,7 @@ message GetActivityRequest {
 message GetActivitiesRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   repeated immutable.activity.v1.ActivityStatus filter_by_status = 2 [
     (google.api.field_behavior) = OPTIONAL,
@@ -2779,7 +2965,7 @@ message GetActivitiesResponse {
 message GetUserRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   string user_id = 2 [
     (google.api.field_behavior) = REQUIRED,
@@ -2797,7 +2983,7 @@ message GetUserResponse {
 message GetUsersRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
 }
 
@@ -2818,7 +3004,7 @@ message ActivityResponse {
 message GetPoliciesRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
 }
 
@@ -2832,7 +3018,7 @@ message GetPoliciesResponse {
 message GetPolicyRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   string policy_id = 2 [
     (google.api.field_behavior) = REQUIRED,
@@ -2868,7 +3054,7 @@ message ListVelocityControlsResponse {
 message GetActivePoliciesRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
 }
 
@@ -2903,7 +3089,7 @@ message GetActivePoliciesResponse {
 message GetSmartContractInterfacesRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
 }
 
@@ -2917,7 +3103,7 @@ message GetSmartContractInterfacesResponse {
 message GetSmartContractInterfaceRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   string smart_contract_interface_id = 2 [
     (google.api.field_behavior) = REQUIRED,
@@ -2935,7 +3121,7 @@ message GetSmartContractInterfaceResponse {
 message GetAuthenticatorRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   string authenticator_id = 2 [
     (google.api.field_behavior) = REQUIRED,
@@ -2950,10 +3136,28 @@ message GetAuthenticatorResponse {
   ];
 }
 
-message GetAuthenticatorsRequest {
+message GetWalletAuthenticatorsRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+  ];
+  string user_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given user."}
+  ];
+}
+
+message GetWalletAuthenticatorsResponse {
+  repeated external.data.v1.WalletAuthenticator wallet_authenticators = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of wallet authenticators."}
+  ];
+}
+
+message GetAuthenticatorsRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   string user_id = 2 [
     (google.api.field_behavior) = REQUIRED,
@@ -2971,7 +3175,7 @@ message GetAuthenticatorsResponse {
 message GetOauthProvidersRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   optional string user_id = 2 [
     (google.api.field_behavior) = OPTIONAL,
@@ -2989,7 +3193,7 @@ message GetOauthProvidersResponse {
 message GetApiKeyRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   string api_key_id = 2 [
     (google.api.field_behavior) = REQUIRED,
@@ -3007,7 +3211,7 @@ message GetApiKeyResponse {
 message GetApiKeysRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   optional string user_id = 2 [
     (google.api.field_behavior) = OPTIONAL,
@@ -3025,7 +3229,7 @@ message GetApiKeysResponse {
 message GetSendTransactionStatusRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
 
   string send_transaction_status_id = 2 [
@@ -3059,10 +3263,123 @@ message GetSendTransactionStatusResponse {
   optional TxError error = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Structured error information including revert details, if available."}];
 }
 
+message GetFiatOffRampQuotesRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string crypto_amount = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Crypto amount the user wants to sell, in major units of the caip19 asset. For example, \"0.05\" for 0.05 ETH. The wallet address is not part of this query."}
+  ];
+  immutable.common.v1.FiatOnRampCurrency fiat_currency_code = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Fiat currency the user receives, for example USD."}
+  ];
+  string caip19 = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "CAIP-19 asset to sell. Each value is supported for both Coinbase and MoonPay sell, the same set as on-ramp."
+      enum: [
+        "eip155:1/slip44:60",
+        "eip155:10/slip44:60",
+        "eip155:137/erc20:0x7ceb23fd6bc0add59e62ac25578270cff1b9f619",
+        "eip155:8453/slip44:60",
+        "eip155:42161/slip44:60",
+        "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "eip155:10/erc20:0x0b2c639c533813f4aa9d7837caf62653d097ff85",
+        "eip155:137/erc20:0x3c499c542cef5e3811e1192ce70d8cc03d5c3359",
+        "eip155:8453/erc20:0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+        "eip155:42161/erc20:0xaf88d065e77c8cc2239327c5edb3a432268e5831",
+        "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/slip44:501",
+        "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/token:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+      ]
+    }
+  ];
+  optional string country_code = 5 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "ISO 3166-1 alpha-2 country code of the selling user, for example US. When omitted, the country is taken from the location of the request."}
+  ];
+  optional string country_subdivision_code = 6 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "ISO 3166-2 subdivision code, for example NY. When omitted for a US visitor, the subdivision is taken from the location of the request."}
+  ];
+  optional bool sandbox_mode = 7 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Quote sandbox credentials when true. Defaults to false."}
+  ];
+}
+
+message GetFiatOffRampQuotesResponse {
+  repeated FiatOffRampQuote quotes = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "One quote per provider and payment method that can serve this route. Empty when none can."}
+  ];
+}
+
+message FiatOffRampQuote {
+  string quote_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Identifier for this saved quote."}
+  ];
+  immutable.common.v1.FiatOnRampProvider provider = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Provider that produced this quote."}
+  ];
+  optional string service_provider = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Underlying provider when provider aggregates several."}
+  ];
+  FiatOnRampAmount fiat_amount = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Fiat the user receives, in atomic units of fiat_currency_code. For USD, 100 dollars is \"10000\"."}
+  ];
+  immutable.common.v1.FiatOnRampCurrency fiat_currency_code = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Fiat currency of fiat_amount and total_fee."}
+  ];
+  FiatOnRampAmount crypto_amount = 6 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Cryptocurrency the user would sell, in atomic units. Not locked in the session."}
+  ];
+  string caip19 = 7 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "CAIP-19 asset of crypto_amount. Each value is supported for both Coinbase and MoonPay sell, the same set as on-ramp."
+      enum: [
+        "eip155:1/slip44:60",
+        "eip155:10/slip44:60",
+        "eip155:137/erc20:0x7ceb23fd6bc0add59e62ac25578270cff1b9f619",
+        "eip155:8453/slip44:60",
+        "eip155:42161/slip44:60",
+        "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "eip155:10/erc20:0x0b2c639c533813f4aa9d7837caf62653d097ff85",
+        "eip155:137/erc20:0x3c499c542cef5e3811e1192ce70d8cc03d5c3359",
+        "eip155:8453/erc20:0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+        "eip155:42161/erc20:0xaf88d065e77c8cc2239327c5edb3a432268e5831",
+        "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/slip44:501",
+        "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/token:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+      ]
+    }
+  ];
+  immutable.common.v1.FiatOnRampPaymentMethod payment_method = 8 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Payout method this quote was priced for."}
+  ];
+  FiatOnRampAmount total_fee = 9 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Total fee in atomic units of fiat_currency_code."}
+  ];
+  optional string expires_at = 10 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Quote expiration as a millisecond epoch string. Empty when the provider does not send one."}
+  ];
+}
+
 message GetOnRampTransactionStatusRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
 
   string transaction_id = 2 [
@@ -3086,7 +3403,7 @@ message GetOnRampTransactionStatusResponse {
 message GetPrivateKeysRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
 }
 
@@ -3100,7 +3417,7 @@ message GetPrivateKeysResponse {
 message GetPrivateKeyRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   string private_key_id = 2 [
     (google.api.field_behavior) = REQUIRED,
@@ -3118,7 +3435,7 @@ message GetPrivateKeyResponse {
 message GetWalletsRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
 }
 
@@ -3132,7 +3449,7 @@ message GetWalletsResponse {
 message GetWalletRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   string wallet_id = 2 [
     (google.api.field_behavior) = REQUIRED,
@@ -3150,7 +3467,7 @@ message GetWalletResponse {
 message GetWalletAccountsRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   optional string wallet_id = 2 [
     (google.api.field_behavior) = OPTIONAL,
@@ -3176,7 +3493,7 @@ message GetWalletAccountsResponse {
 message GetWalletAccountRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   string wallet_id = 2 [
     (google.api.field_behavior) = REQUIRED,
@@ -3202,7 +3519,7 @@ message GetWalletAccountResponse {
 message ListUserTagsRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
 }
 
@@ -3216,7 +3533,7 @@ message ListUserTagsResponse {
 message ListPrivateKeyTagsRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
 }
 
@@ -3230,7 +3547,7 @@ message ListPrivateKeyTagsResponse {
 message GetOrganizationConfigsRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
 }
 
@@ -3244,7 +3561,7 @@ message GetOrganizationConfigsResponse {
 message GetPolicyEvaluationsRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
 
   string activity_id = 2 [
@@ -3348,6 +3665,213 @@ message ListFiatOnRampCredentialsResponse {
   repeated external.data.v1.FiatOnRampCredential fiat_on_ramp_credentials = 1 [(google.api.field_behavior) = REQUIRED];
 }
 
+message GetFiatOnRampQuotesRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string fiat_amount = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Fiat amount the user wants to spend, in major units of fiat_currency_code. For example, \"100\" for 100 USD."}
+  ];
+  immutable.common.v1.FiatOnRampCurrency fiat_currency_code = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Fiat currency for fiat_amount, for example USD."}
+  ];
+  string caip19 = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "CAIP-19 asset to buy."
+      enum: [
+        "eip155:1/slip44:60",
+        "eip155:10/slip44:60",
+        "eip155:137/erc20:0x7ceb23fd6bc0add59e62ac25578270cff1b9f619",
+        "eip155:8453/slip44:60",
+        "eip155:42161/slip44:60",
+        "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "eip155:10/erc20:0x0b2c639c533813f4aa9d7837caf62653d097ff85",
+        "eip155:137/erc20:0x3c499c542cef5e3811e1192ce70d8cc03d5c3359",
+        "eip155:8453/erc20:0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+        "eip155:42161/erc20:0xaf88d065e77c8cc2239327c5edb3a432268e5831",
+        "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/slip44:501",
+        "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/token:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+      ]
+    }
+  ];
+  optional string country_code = 5 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "ISO 3166-1 alpha-2 country code of the purchasing user, for example US. When omitted, the country is taken from the location of the request."}
+  ];
+  optional string country_subdivision_code = 6 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "ISO 3166-2 subdivision code, for example NY. When omitted for a US visitor, the subdivision is taken from the location of the request."}
+  ];
+  optional bool sandbox_mode = 7 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Quote sandbox credentials when true. Defaults to false."}
+  ];
+}
+
+message GetFiatOnRampQuotesResponse {
+  repeated FiatOnRampQuote quotes = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "One quote per provider and payment method that can serve this route. Empty when none can."}
+  ];
+}
+
+message FiatOnRampQuote {
+  string quote_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Identifier for this saved quote. Pass this to the create on ramp session activity."}
+  ];
+  immutable.common.v1.FiatOnRampProvider onramp_provider = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Provider that produced this quote."}
+  ];
+  optional string service_provider = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Underlying provider when onramp_provider aggregates several."}
+  ];
+  FiatOnRampAmount fiat_amount = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Fiat the user pays, in atomic units of fiat_currency_code. For USD, 100 dollars is \"10000\"."}
+  ];
+  immutable.common.v1.FiatOnRampCurrency fiat_currency_code = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Fiat currency of fiat_amount and total_fee."}
+  ];
+  FiatOnRampAmount crypto_amount = 6 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Cryptocurrency the user would receive, in atomic units. Not locked in the session."}
+  ];
+  string caip19 = 7 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "CAIP-19 asset of crypto_amount."
+      enum: [
+        "eip155:1/slip44:60",
+        "eip155:10/slip44:60",
+        "eip155:137/erc20:0x7ceb23fd6bc0add59e62ac25578270cff1b9f619",
+        "eip155:8453/slip44:60",
+        "eip155:42161/slip44:60",
+        "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "eip155:10/erc20:0x0b2c639c533813f4aa9d7837caf62653d097ff85",
+        "eip155:137/erc20:0x3c499c542cef5e3811e1192ce70d8cc03d5c3359",
+        "eip155:8453/erc20:0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+        "eip155:42161/erc20:0xaf88d065e77c8cc2239327c5edb3a432268e5831",
+        "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/slip44:501",
+        "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/token:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+      ]
+    }
+  ];
+  immutable.common.v1.FiatOnRampPaymentMethod payment_method = 8 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Payment method this quote was priced for. Bank transfers are not included."}
+  ];
+  FiatOnRampAmount total_fee = 9 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Total fee in atomic units of fiat_currency_code."}
+  ];
+  optional string expires_at = 10 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Quote expiration as a millisecond epoch string. Empty when the provider does not send one."}
+  ];
+}
+
+// FiatOnRampAmount is an atomic amount plus its decimal display.
+message FiatOnRampAmount {
+  string amount = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Amount in atomic units. Use this to compare quotes. Do not use display."}
+  ];
+  int32 decimals = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Decimal places for this amount. Asset decimals for cryptocurrency, atomic-unit decimals for fiat (2 for USD)."}
+  ];
+  string display = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Decimal representation in standard currency units."}
+  ];
+}
+
+message GetIndicativeSwapQuoteRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  string sign_with = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Wallet account address that would send the input asset. It must belong to the organization."}
+  ];
+  string input_token = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-19 asset ID for the input asset."}
+  ];
+  string output_token = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-19 asset ID for the output asset."}
+  ];
+  string input_amount = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Exact base-unit amount of the input asset."}
+  ];
+  optional string slippage_bps = 6 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Maximum allowed slippage in basis points, at most 5000. When omitted, the provider chooses the slippage."}
+  ];
+  optional string destination_address = 7 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Raw public address that would receive the output asset. Required for cross-protocol swaps and rejected otherwise."}
+  ];
+  optional bool fee_sponsorship = 8 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Preview the price with Turnkey paying the provider fees. Requires the FEATURE_NAME_SWAP_FEE_SPONSORSHIP organization feature. Defaults to false."}
+  ];
+  optional bool fixed_rate = 9 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Preview a 1:1 conversion before fees between supported stablecoins. Requires the FEATURE_NAME_SWAP_FIXED_RATE organization feature. Defaults to false."}
+  ];
+}
+
+message GetIndicativeSwapQuoteResponse {
+  string provider = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Swap provider that produced this quote."}
+  ];
+  string output_amount = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Estimated base-unit amount of the output asset."}
+  ];
+  string min_output_amount = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Minimum base-unit amount of the output asset after slippage."}
+  ];
+  optional string slippage_bps = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Slippage tolerance in basis points the provider applied."}
+  ];
+  string client_fee_bps = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Client app fee in basis points included in this quote. \"0\" when no client fee applies."}
+  ];
+  optional string estimated_time_seconds = 6 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Provider's estimated time to complete the swap, in seconds."}
+  ];
+  bool fee_sponsorship = 7 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether this quote has Turnkey paying the provider fees."}
+  ];
+  bool fixed_rate = 8 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether this quote uses a 1:1 fixed rate."}
+  ];
+  optional string estimated_fixed_rate_adjustment_usd = 9 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Estimated fixed-rate adjustment in USD from the customer's side: positive is a cost, negative an earning. Present only for fixed-rate quotes the provider priced."}
+  ];
+}
+
 message GetSwapStatusRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
@@ -3447,6 +3971,56 @@ message GetSwapStatusResponse {
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address that receives the output asset."}
   ];
+}
+
+message GetSwapSponsorshipUsageRequest {
+  string organization_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+  ];
+}
+
+message SwapSpendingWindow {
+  int32 window_duration_minutes = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Rolling window duration in minutes."}
+  ];
+  string window_limit_usd = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The parent's window limit, or the per-child limit when queried by a sub-organization."}
+  ];
+  string usage_usd = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Settled spending in the current window. Fixed-rate earnings offset fixed-rate costs, and usage never goes below zero. Fixed-rate usage stays zero until final fixed-rate costs are recorded."}
+  ];
+  string remaining_usd = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Remaining spending capacity, clamped to zero. For children, also capped by remaining parent capacity. Zero when the window is disabled. This is not a reservation or a guarantee of feature eligibility."}
+  ];
+  bool enabled = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether the saved spending window permits new swaps."}
+  ];
+  optional string sub_org_window_limit_usd = 6 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Configured per-child limit. Returned only when querying the billing parent."}
+  ];
+}
+
+message SwapSponsorshipFeature {
+  bool permitted = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether the billing parent holds this feature's signed permission, which enabling its spending window grants. Quotes can use the feature only when it is permitted and its window is enabled."}
+  ];
+  SwapSpendingWindow window = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Absent until the billing parent saves a spending window."}
+  ];
+}
+
+message GetSwapSponsorshipUsageResponse {
+  SwapSponsorshipFeature fee_sponsorship = 1 [(google.api.field_behavior) = REQUIRED];
+  SwapSponsorshipFeature fixed_rate = 2 [(google.api.field_behavior) = REQUIRED];
 }
 
 message GetGasUsageRequest {
@@ -3823,8 +4397,9 @@ message SolanaFailureDetails {
 message GetTvcAppsRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
+  optional bool is_live = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Filter TVC Apps by whether they have a live deployment. If omitted, all TVC Apps are returned."}];
 }
 
 message GetTvcAppsResponse {
@@ -3837,7 +4412,7 @@ message GetTvcAppsResponse {
 message GetTvcAppRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   string tvc_app_id = 2 [
     (google.api.field_behavior) = REQUIRED,
@@ -3855,7 +4430,7 @@ message GetTvcAppResponse {
 message GetTvcAppDeploymentsRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   string app_id = 2 [
     (google.api.field_behavior) = REQUIRED,
@@ -3873,7 +4448,7 @@ message GetTvcAppDeploymentsResponse {
 message GetTvcDeploymentRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   string deployment_id = 2 [
     (google.api.field_behavior) = REQUIRED,
@@ -3927,8 +4502,8 @@ message GetTvcDeploymentProvisioningDetailsResponse {
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The manifest envelope containing the TVC deployment's manifest and signatures. Present only when a deployment is awaiting provisioning."}
   ];
-  optional external.data.v1.ProvisioningState provisioning_state = 3 [
-    (google.api.field_behavior) = OPTIONAL,
+  external.data.v1.ProvisioningState provisioning_state = 3 [
+    (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Current provisioning state."}
   ];
 }
@@ -3989,7 +4564,7 @@ message RefreshFeatureFlagsResponse {}
 message GetWalletAddressBalancesRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   string address = 2 [
     (google.api.field_behavior) = REQUIRED,
@@ -4049,7 +4624,7 @@ message AssetBalanceDisplay {
 message ListSupportedAssetsRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   string caip2 = 2 [
     (google.api.field_behavior) = REQUIRED,
@@ -4090,7 +4665,7 @@ message ListSupportedAssetsResponse {
 message GetIpAllowlistRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   optional string public_key = 2 [
     (google.api.field_behavior) = OPTIONAL,
@@ -4129,7 +4704,7 @@ message GetIpAllowlistResponse {
 message GetMfaPolicyRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   string user_id = 2 [
     (google.api.field_behavior) = REQUIRED,
@@ -4151,7 +4726,7 @@ message GetMfaPolicyResponse {
 message GetMfaPoliciesRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   string user_id = 2 [
     (google.api.field_behavior) = REQUIRED,
@@ -4169,7 +4744,7 @@ message GetMfaPoliciesResponse {
 message GetSessionProfileRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   string session_profile_id = 2 [
     (google.api.field_behavior) = REQUIRED,
@@ -4187,7 +4762,7 @@ message GetSessionProfileResponse {
 message GetSessionProfilesRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
 }
 
@@ -4201,7 +4776,7 @@ message GetSessionProfilesResponse {
 message GetMfaStatusRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   string activity_id = 2 [
     (google.api.field_behavior) = REQUIRED,
@@ -4359,7 +4934,7 @@ message SecretMetadata {
 message ListEthTransactionHistoryRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   string address = 2 [
     (google.api.field_behavior) = REQUIRED,
@@ -4398,7 +4973,7 @@ message ListEthTransactionHistoryRequest {
 message ListSolTransactionHistoryRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
   string address = 2 [
     (google.api.field_behavior) = REQUIRED,
@@ -4668,7 +5243,7 @@ message GetTvcQosVersionsResponse {
 message GetTvcQuorumKeysRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
 }
 
@@ -4679,10 +5254,33 @@ message GetTvcQuorumKeysResponse {
 message GetTvcOperatorsRequest {
   string organization_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given organization."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
 }
 
 message GetTvcOperatorsResponse {
   repeated external.data.v1.TvcOperator tvc_operators = 1 [(google.api.field_behavior) = REQUIRED];
+}
+
+message GetTvcManifestGenerationInfoRequest {
+  string organization_id = 1 [(google.api.field_behavior) = REQUIRED];
+  string app_id = 2 [(google.api.field_behavior) = REQUIRED];
+  string qos_version = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "QOS version of the deployment. Defaults to the latest recommended TVC QOS version."}
+  ];
+}
+
+message GetTvcManifestGenerationInfoResponse {
+  // Available when queried; deployment creation enforces uniqueness if another
+  // client creates a deployment with the same nonce first.
+  uint32 nonce = 1 [(google.api.field_behavior) = REQUIRED];
+  string namespace = 2 [(google.api.field_behavior) = REQUIRED];
+  string pcr0 = 3 [(google.api.field_behavior) = REQUIRED];
+  string pcr1 = 4 [(google.api.field_behavior) = REQUIRED];
+  string pcr2 = 5 [(google.api.field_behavior) = REQUIRED];
+  string pcr3 = 6 [(google.api.field_behavior) = REQUIRED];
+  // The version these values are for, which the deployment must use.
+  string qos_version = 7 [(google.api.field_behavior) = REQUIRED];
+  repeated string default_dns_resolvers = 8;
 }

@@ -17,6 +17,14 @@ tvc app create --config-file app.json --message-format json
 - `--config-file` / `-c` is required for `app create` (env `TVC_APP_CONFIG`).
 - `--output` / `-o` is optional for `app init` (env `TVC_APP_CONFIG_OUT`); it defaults to `app.json`. Pass it explicitly in scripts so the path is deterministic.
 
+### Region
+
+`region` in `app.json` picks where the app runs. The scaffold writes `"region": "us-east-1"`; a file without the key also means `us-east-1`. `--region <REGION>` (env `TVC_APP_REGION`) on `app create` overrides the file.
+
+- Allowed values: `us-east-1` (default) and `ap-southeast-1`. Any other value is rejected locally, before any request is sent.
+- Decided at `app create` and **cannot be changed afterward**. Moving an app to another region means creating a new app.
+- `ap-southeast-1` works only for organizations Turnkey has enabled for it. Otherwise `app create` fails with `api_error` and `region "ap-southeast-1" is not enabled for organization <orgID>`; nothing was created. Ask Turnkey to enable the organization, or create the app in `us-east-1`.
+
 ### Wiring the operator into `app.json`
 
 The scaffold prefills `manifestSetParams.newOperators[0].publicKey` with your profile's saved default operator when the profile resolves exactly one; otherwise it drops a `<FILL_IN_OPERATOR_PUBLIC_KEY>` sentinel. Branch on which you got:

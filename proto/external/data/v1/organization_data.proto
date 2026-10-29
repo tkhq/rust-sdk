@@ -105,6 +105,31 @@ message User {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of MFA Policies that define multi-factor authentication requirements for this user."}
   ];
+  repeated WalletAuthenticator wallet_authenticators = 12 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "A list of wallet authenticators (externally-owned Ethereum or Solana accounts used to authenticate). If not needed, this should be an empty array."}
+  ];
+}
+
+message WalletAuthenticator {
+  string wallet_authenticator_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a wallet authenticator."}
+  ];
+  immutable.common.v1.WalletAuthenticatorType type = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Network this authenticator belongs to."}
+  ];
+  string address = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Normalized account address."}
+  ];
+  string domain = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "SIWE/SIWS domain this authenticator is bound to."}
+  ];
+  Timestamp created_at = 5 [(google.api.field_behavior) = REQUIRED];
+  Timestamp updated_at = 6 [(google.api.field_behavior) = REQUIRED];
 }
 
 message ApiKey {

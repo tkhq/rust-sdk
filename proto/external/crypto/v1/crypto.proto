@@ -20,6 +20,9 @@ enum SignatureScheme {
   SIGNATURE_SCHEME_TK_WEBAUTHN = 2;
   // Scheme used by our enclave applications
   SIGNATURE_SCHEME_TK_QUORUM_P256 = 3;
+  // Scheme used by enclave applications when the public key is only the SEC1 uncompressed signing
+  // half of the quorum key (e.g. external signer proofs). Numbered to match immutable.models.v1.SignatureScheme.
+  SIGNATURE_SCHEME_TK_QUORUM_P256_SIGNING_KEY = 8;
 }
 
 enum HashFunction {

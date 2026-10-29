@@ -184,6 +184,9 @@ enum FeatureName {
   FEATURE_NAME_SOLANA_RENT_PREFUND_ENABLED = 9;
   FEATURE_NAME_SWAP_CONFIG = 10;
   FEATURE_NAME_EARN_CONFIG = 11;
+  // Presence on the verified parent authorizes per-quote selection; absent means disabled.
+  FEATURE_NAME_SWAP_FEE_SPONSORSHIP = 12;
+  FEATURE_NAME_SWAP_FIXED_RATE = 13;
 }
 
 // The supported Fiat On Ramp Providers.
@@ -241,7 +244,8 @@ enum FiatOnRampCurrency {
 
 enum FiatOnRampBlockchainNetwork {
   FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_UNSPECIFIED = 0; // Unspecified
-  FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_BITCOIN = 1; // bitcoin
+  reserved 1;
+  reserved "FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_BITCOIN";
   FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_ETHEREUM = 2; // ethereum
   FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_SOLANA = 3; // solana
   FIAT_ON_RAMP_BLOCKCHAIN_NETWORK_BASE = 4; // base
@@ -337,6 +341,13 @@ enum TvcHealthCheckType {
   TVC_HEALTH_CHECK_TYPE_GRPC = 2;
 }
 
+// Network a wallet authenticator speaks. SIWE/SIWS only for v1; extend later.
+enum WalletAuthenticatorType {
+  WALLET_AUTHENTICATOR_TYPE_UNSPECIFIED = 0;
+  WALLET_AUTHENTICATOR_TYPE_ETHEREUM = 1;
+  WALLET_AUTHENTICATOR_TYPE_SOLANA = 2;
+}
+
 enum AuthenticationType {
   AUTHENTICATION_TYPE_UNSPECIFIED = 0;
   AUTHENTICATION_TYPE_EMAIL_OTP = 1;
@@ -345,4 +356,5 @@ enum AuthenticationType {
   AUTHENTICATION_TYPE_API_KEY = 4;
   AUTHENTICATION_TYPE_OAUTH = 5;
   AUTHENTICATION_TYPE_SESSION = 6;
+  AUTHENTICATION_TYPE_WALLET = 7;
 }

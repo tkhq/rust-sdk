@@ -311,6 +311,7 @@ impl Signer for HostedSigner {
                 payload: hex::encode(message),
                 encoding: PayloadEncoding::Hexadecimal,
                 hash_function: HashFunction::Sha256,
+                external_signer_pubkey: None,
             }
         };
 
