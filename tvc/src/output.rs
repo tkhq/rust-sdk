@@ -1,6 +1,7 @@
 //! User-facing output primitives for TVC.
 
 use crate::errors::{Classification, ErrorCode, binary_name, classify, hint, render_error_chain};
+use crate::terminal::{TerminalText, terminal_json};
 use crate::yubikey::{ConnectedYubiKeys, DeviceError};
 use anstyle::{AnsiColor, Color, Style};
 use anyhow::Result;
@@ -94,7 +95,7 @@ impl<W: Write, W2: Write> Shell<W, W2> {
                 self.human().line(text)
             }
             MessageFormat::Json => {
-                writeln!(self.stdout, "{}", serde_json::to_string(message)?)?;
+                writeln!(self.stdout, "{}", terminal_json(message)?)?;
                 Ok(())
             }
         }
@@ -122,7 +123,7 @@ pub struct Human<'a, W: Write, W2: Write>(&'a mut Shell<W, W2>);
 impl<W: Write, W2: Write> Human<'_, W, W2> {
     pub fn line(&mut self, message: impl Display) -> Result<()> {
         if matches!(self.0.message_format, MessageFormat::Human) {
-            writeln!(self.0.stdout, "{message}")?;
+            writeln!(self.0.stdout, "{}", TerminalText(message))?;
         }
         Ok(())
     }
@@ -137,6 +138,8 @@ impl<W: Write, W2: Write> Human<'_, W, W2> {
     pub fn status(&mut self, label: &str, message: impl Display) -> Result<()> {
         if matches!(self.0.message_format, MessageFormat::Human) {
             let style = self.0.style(AnsiColor::Green);
+            let label = TerminalText(label);
+            let message = TerminalText(message);
             writeln!(self.0.stderr, "{style}{label}{style:#}: {message}")?;
         }
         Ok(())
@@ -145,6 +148,7 @@ impl<W: Write, W2: Write> Human<'_, W, W2> {
     pub fn warn(&mut self, message: impl Display) -> Result<()> {
         if matches!(self.0.message_format, MessageFormat::Human) {
             let style = self.0.style(AnsiColor::Yellow);
+            let message = TerminalText(message);
             writeln!(self.0.stderr, "{style}warning{style:#}: {message}")?;
         }
         Ok(())
@@ -152,7 +156,7 @@ impl<W: Write, W2: Write> Human<'_, W, W2> {
 
     pub fn err_line(&mut self, message: impl Display) -> Result<()> {
         if matches!(self.0.message_format, MessageFormat::Human) {
-            writeln!(self.0.stderr, "{message}")?;
+            writeln!(self.0.stderr, "{}", TerminalText(message))?;
         }
         Ok(())
     }
@@ -170,11 +174,19 @@ impl<W: Write, W2: Write> Human<'_, W, W2> {
                 _ => render_error_chain(error),
             };
 
-            writeln!(self.0.stderr, "{style}error{style:#}: {message}")?;
+            writeln!(
+                self.0.stderr,
+                "{style}error{style:#}: {}",
+                TerminalText(message)
+            )?;
 
             if let Some(hint) = hint(error) {
                 let style = self.0.style(AnsiColor::Cyan);
-                writeln!(self.0.stderr, "{style}hint{style:#}: {hint}")?;
+                writeln!(
+                    self.0.stderr,
+                    "{style}hint{style:#}: {}",
+                    TerminalText(hint)
+                )?;
             }
         }
         Ok(())
@@ -182,7 +194,7 @@ impl<W: Write, W2: Write> Human<'_, W, W2> {
 
     pub fn print(&mut self, message: impl Display) -> Result<()> {
         if matches!(self.0.message_format, MessageFormat::Human) {
-            write!(self.0.stdout, "{message}")?;
+            write!(self.0.stdout, "{}", TerminalText(message))?;
             self.0.stdout.flush()?;
         }
         Ok(())
@@ -436,6 +448,57 @@ mod tests {
         shell.emit(&TestMessage { value: "ok" }).unwrap();
 
         assert_eq!(shell.into_stdout(), "value: ok\n".as_bytes());
+    }
+
+    #[test]
+    fn every_human_writer_escapes_controls_before_adding_cli_styles() {
+        let mut shell = TestShell::with_human_formatter();
+        let value = "name\x1b[2J\r\u{202e}";
+        let escaped = r"name\u{1b}[2J\r\u{202e}";
+        shell.emit(&TestMessage { value }).unwrap();
+        shell.human().line(value).unwrap();
+        shell.human().print(value).unwrap();
+        shell.human().err_line(value).unwrap();
+        shell.human().status(value, value).unwrap();
+        shell.human().warn(value).unwrap();
+        shell.human().error(&anyhow!(value)).unwrap();
+        assert_eq!(
+            shell.stdout,
+            format!("value: {escaped}\n{escaped}\n{escaped}").as_bytes()
+        );
+        assert_eq!(
+            shell.stderr,
+            format!("{escaped}\n{escaped}: {escaped}\nwarning: {escaped}\nerror: {escaped}\n")
+                .as_bytes()
+        );
+
+        let mut shell = TestShell {
+            use_color: true,
+            ..TestShell::with_human_formatter()
+        };
+        shell.human().warn(value).unwrap();
+        let style = Style::new()
+            .bold()
+            .fg_color(Some(Color::Ansi(AnsiColor::Yellow)));
+        assert_eq!(
+            shell.stderr,
+            format!("{style}warning{style:#}: {escaped}\n").as_bytes()
+        );
+    }
+
+    #[test]
+    fn shell_json_keeps_control_characters_in_decoded_values() {
+        let mut shell = TestShell::with_json_formatter();
+        let value = "name\x1b[2J\u{9b}\u{202e}";
+        shell.emit(&TestMessage { value }).unwrap();
+        assert_eq!(
+            shell.stdout,
+            concat!(r#"{"value":"name\u001b[2J\u009b\u202e"}"#, "\n").as_bytes()
+        );
+        assert_eq!(
+            serde_json::from_slice::<Value>(&shell.stdout).unwrap(),
+            serde_json::json!({ "value": value })
+        );
     }
 
     #[derive(Serialize)]

@@ -2,9 +2,9 @@
 
 use crate::commands::{self, Run};
 use crate::config::turnkey::{CONFIG_DIR, CONFIG_FILE, Config};
-use crate::errors::strip_ansi;
 use crate::outcome::Outcome;
 use crate::output::{ColorChoice, Ctx, ErrorMessage, MessageFormat, Shell, StdCtx};
+use crate::terminal::{TerminalText, terminal_json};
 use anyhow::Context;
 use clap::{ArgAction, Parser, Subcommand, builder::BoolishValueParser, error::ErrorKind};
 use std::ffi::OsString;
@@ -115,7 +115,11 @@ impl Cli {
                 // Make a best-effort warning on stderr and still exit successfully.
                 if let Err(emit_error) = ctx.shell().emit(&outcome) {
                     let mut stderr = std::io::stderr();
-                    let _ = writeln!(stderr, "warning: failed to write CLI output: {emit_error}");
+                    let _ = writeln!(
+                        stderr,
+                        "warning: failed to write CLI output: {}",
+                        TerminalText(emit_error)
+                    );
                 }
                 ExitCode::SUCCESS
             }
@@ -133,7 +137,11 @@ impl Cli {
                 };
                 if let Err(emit_error) = emit_result {
                     let mut stderr = std::io::stderr();
-                    let _ = writeln!(stderr, "error: failed to write CLI error: {emit_error}");
+                    let _ = writeln!(
+                        stderr,
+                        "error: failed to write CLI error: {}",
+                        TerminalText(emit_error)
+                    );
                 }
                 ExitCode::FAILURE
             }
@@ -146,39 +154,45 @@ const USAGE_ERROR_EXIT_CODE: i32 = 2;
 
 /// Handle a clap parse failure.
 ///
-/// `--help`/`-h` and `--version` also surface as `Err`; those must always print
-/// clap's own text (never JSON), so we defer to `error.exit()` for them. Real
-/// parse failures are emitted as a single `command_error`/`usage_error` NDJSON
-/// line on stdout when `--message-format json` was requested, otherwise handed
-/// back to clap's default rendering via `error.exit()`.
+/// `--help`/`-h` and `--version` also surface as `Err`; those always print
+/// clap's own text (never JSON). Real parse failures emit a single
+/// `command_error`/`usage_error` NDJSON line on stdout when JSON was requested,
+/// otherwise terminal-safe text on clap's chosen stream.
 fn handle_parse_error(error: clap::Error) -> ExitCode {
     match error.kind() {
-        // Help/version output must never be JSON — let clap print and exit.
+        // Help/version output must never be JSON.
         ErrorKind::DisplayHelp
         | ErrorKind::DisplayVersion
-        | ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand => error.exit(),
+        | ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand => print_parse_error(&error),
         _ => {
             if args_request_json_output(std::env::args_os()) {
-                // Emit clap's full text (including the "Usage:" line) with any
-                // ANSI stripped so agents get pure NDJSON they can self-correct
-                // from, regardless of terminal/color detection.
-                let message = strip_ansi(&error.render().to_string())
-                    .trim_end()
-                    .to_string();
+                // StyledStr's Display omits clap's styling. JSON escaping
+                // preserves control characters in data without executing them.
+                let message = error.render().to_string().trim_end().to_string();
                 let error_message = ErrorMessage::usage_error(message);
                 let mut stdout = std::io::stdout();
 
                 // it shouldn't be possible for serialization to fail here.
-                let msg = serde_json::to_string(&error_message).unwrap_or_else(|e| e.to_string());
+                let msg = terminal_json(&error_message).unwrap_or_else(|e| e.to_string());
 
                 // Best-effort: if writing fails we still exit with the usage code.
                 let _ = writeln!(stdout, "{msg}");
                 std::process::exit(USAGE_ERROR_EXIT_CODE)
             } else {
-                error.exit()
+                print_parse_error(&error)
             }
         }
     }
+}
+
+fn print_parse_error(error: &clap::Error) -> ExitCode {
+    let text = TerminalText(error.render());
+    if error.use_stderr() {
+        let _ = write!(std::io::stderr(), "{text}");
+    } else {
+        let _ = write!(std::io::stdout(), "{text}");
+    }
+    ExitCode::from(error.exit_code() as u8)
 }
 
 /// Check if the command args wanted `json` output.

@@ -306,33 +306,6 @@ fn classify_turnkey_client_error(error: &TurnkeyClientError) -> Classification {
     }
 }
 
-/// Remove ANSI escape sequences (CSI `\x1b[ ... m` etc.) from `input`.
-///
-/// clap's error rendering embeds styling escapes; strip them so a JSON error
-/// `message` built from clap's text is plain regardless of terminal detection.
-pub fn strip_ansi(input: &str) -> String {
-    let mut out = String::with_capacity(input.len());
-    let mut chars = input.chars().peekable();
-    while let Some(c) = chars.next() {
-        if c == '\x1b' {
-            // CSI sequences are ESC '[' <params/intermediates> <final>, where
-            // the final byte is in the range @-~ (0x40-0x7e). Skip the leading
-            // '[' (also in that range) before scanning for the final byte.
-            if chars.peek() == Some(&'[') {
-                chars.next();
-            }
-            for next in chars.by_ref() {
-                if ('@'..='~').contains(&next) {
-                    break;
-                }
-            }
-        } else {
-            out.push(c);
-        }
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -578,12 +551,6 @@ mod tests {
             classify(&error),
             Classification::new(ErrorCode::CommandError, None)
         );
-    }
-
-    #[test]
-    fn strip_ansi_removes_escape_sequences() {
-        let styled = "\x1b[1mUsage:\x1b[0m tvc \x1b[32m<COMMAND>\x1b[0m";
-        assert_eq!(strip_ansi(styled), "Usage: tvc <COMMAND>");
     }
 
     #[test]

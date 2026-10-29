@@ -71,6 +71,14 @@ Add `--message-format json` to **every** command in scripts and agents:
 - Each success line carries a `reason` naming the outcome (e.g. `app_created`, `deployment_created`, `manifest_approval_posted`, `live_deployment_set`, `deployment_runtime_status`). One command → one terminal outcome line (except streaming commands like `deploy debug-logs`, which emit `debug_log_line` events).
 - Errors are a single line: `{ "reason": "command_error", "code": "<code>", "httpStatus"?: <n>, "message": "<full chain>" }`. Branch on `code`, not on `message` text. See **[references/error-reference.md](references/error-reference.md)** for the full taxonomy and recovery per code.
 
+Human output, prompts, and diagnostic logs show terminal control characters and
+Unicode direction controls as visible escapes, such as `\u{1b}` and `\r`.
+Multiline output preserves layout; manifest fields, prompt labels, and choices
+also escape newlines and tabs and show a warning when controls are detected.
+CLI status colors and interactive prompt controls still work.
+Diagnostic logs use plain text. JSON uses JSON escapes for controls and preserves
+the original values when decoded. Files written by commands keep their original data.
+
 Exit codes: `0` success, `1` runtime error, `2` usage error.
 
 ## Core workflows

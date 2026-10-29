@@ -3,6 +3,7 @@
 //! Public functions use standard streams, while internals accept injected IO
 //! so tests can exercise prompt behavior without terminal input.
 
+use crate::terminal::TerminalText;
 use anyhow::{Result, bail};
 use std::io::{BufRead, Write};
 
@@ -31,7 +32,7 @@ fn confirm_yes_no_with_io<R: BufRead, W: Write>(
     reader: &mut R,
     writer: &mut W,
 ) -> Result<()> {
-    write!(writer, "{prompt} [y/N]: ")?;
+    write!(writer, "{} [y/N]: ", TerminalText(prompt).single_line())?;
     writer.flush()?;
 
     let mut input = String::new();
@@ -53,7 +54,7 @@ fn confirm_typed_with_io<R: BufRead, W: Write>(
     reader: &mut R,
     writer: &mut W,
 ) -> Result<()> {
-    write!(writer, "{prompt}: ")?;
+    write!(writer, "{}: ", TerminalText(prompt).single_line())?;
     writer.flush()?;
 
     let mut input = String::new();
@@ -131,6 +132,18 @@ mod tests {
         let mut output = Vec::new();
 
         confirm_typed_with_io("Type app id", "app_123", &mut input, &mut output).unwrap();
+    }
+
+    #[test]
+    fn confirmation_escapes_its_label_and_compares_the_original_value() {
+        let mut input = Cursor::new("app_\x1b[2J\n");
+        let mut output = Vec::new();
+        confirm_typed_with_io("Type app_\x1b[2J\n", "app_\x1b[2J", &mut input, &mut output)
+            .unwrap();
+        assert_eq!(
+            output,
+            r"[warning: escaped control characters] Type app_\u{1b}[2J\n: ".as_bytes()
+        );
     }
 
     #[test]

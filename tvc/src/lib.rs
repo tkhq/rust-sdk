@@ -24,5 +24,6 @@ pub mod prompts;
 pub(crate) mod provisioning;
 pub mod pull_secret;
 pub(crate) mod quorum_key_metadata;
+pub(crate) mod terminal;
 pub mod util;
 pub(crate) mod yubikey;
