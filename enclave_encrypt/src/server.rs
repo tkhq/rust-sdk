@@ -3,6 +3,7 @@ use hpke::{Deserializable, Kem as KemTrait, Serializable};
 use p256::ecdsa::{Signature, SigningKey, signature::Signer};
 use p256::elliptic_curve::sec1::ToEncodedPoint;
 use rand_core::OsRng;
+use std::mem;
 use zeroize::Zeroizing;
 
 use crate::{
@@ -188,6 +189,7 @@ impl EnclaveEncryptServerRecv {
     /// out of band in the Ump policy engine.
     pub fn decrypt(&mut self, msg: &ClientSendMsg) -> Result<Vec<u8>, EnclaveEncryptError> {
         self.decrypt_with_purpose_binding(msg, &[])
+            .map(|mut plaintext| mem::take(&mut *plaintext))
     }
 
     /// Decrypt a message from a client that was encrypted with `purpose_binding` appended to the
@@ -196,7 +198,7 @@ impl EnclaveEncryptServerRecv {
         &mut self,
         msg: &ClientSendMsg,
         purpose_binding: &[u8],
-    ) -> Result<Vec<u8>, EnclaveEncryptError> {
+    ) -> Result<Zeroizing<Vec<u8>>, EnclaveEncryptError> {
         let encapped_public = <Kem as KemTrait>::EncappedKey::from_bytes(&*msg.encapped_public)
             .map_err(EnclaveEncryptError::InvalidEncappedKey)?;
 
@@ -215,7 +217,7 @@ impl EnclaveEncryptServerRecv {
             self.target_public = None;
             self.target_private = None;
 
-            result
+            result.map(Zeroizing::new)
         } else {
             Err(EnclaveEncryptError::ServerAlreadyUsedToDecrypt)
         }

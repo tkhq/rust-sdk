@@ -1065,7 +1065,7 @@ mod test {
         let (mut receiver, msg) = encrypt();
         let binding = purpose_binding::import_secrets(Some("card"), &properties).unwrap();
         assert_eq!(
-            receiver
+            *receiver
                 .decrypt_with_purpose_binding(&msg, &binding)
                 .unwrap(),
             secret.as_bytes(),
