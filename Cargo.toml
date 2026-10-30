@@ -8,6 +8,8 @@ members = [
   "codegen",
   # Contains utilities to encrypt and decrypt data to and from Turnkey secure enclaves
   "enclave_encrypt",
+  # Verifier for Turnkey http-authz/v1 request-bound JWTs
+  "http_authz",
   # Examples using the Turnkey stamper
   "examples",
   # Contains utilities to work with Turnkey proofs (boot proofs, app proofs)
