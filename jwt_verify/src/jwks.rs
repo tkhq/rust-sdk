@@ -1,19 +1,19 @@
-//! Trusted verification keys for http-authz/v1 JWTs.
+//! Trusted ES256 verification keys.
 //!
-//! `kid` is the unpadded base64url RFC 7638 thumbprint of the Turnkey signer
-//! public key and selects among already-trusted keys; it is never a trust
-//! root. Keys come from a JWK Set that the application pins in its
-//! configuration ([`PinnedKeySet`]). The verifier only sees the
-//! [`KeySource`] trait, so another source can replace the pinned one without
-//! changes to verification.
+//! [`crate::verify`] gets keys only through the [`KeySource`] trait. A
+//! source sees the verified-shape protected header and returns a key it
+//! already trusts. [`PinnedKeySet`] selects by `kid`, the unpadded base64url
+//! RFC 7638 thumbprint, from a JWK Set that the application pins in its
+//! configuration. `kid` selects among trusted keys; it is never a trust root.
 //!
-//! The verifier never derives a key location from `iss`, `jku`, `x5u`, or any
-//! other token value.
+//! No source in this crate derives a key location from `iss`, `jku`, `x5u`,
+//! or any other token value.
 
 use std::fmt;
 
 use serde::Deserialize;
 
+use crate::ProtectedHeader;
 use crate::b64;
 
 /// A trusted ES256 public key.
@@ -25,10 +25,14 @@ pub struct VerificationKey {
     pub point: [u8; 65],
 }
 
-/// A source of trusted keys, looked up by `kid`.
+/// A source of trusted keys.
+///
+/// [`crate::verify`] calls [`KeySource::key`] after the header passes the
+/// `alg` and `typ` checks and before the signature check. When the header has
+/// a `kid`, the returned key's `kid` must equal it.
 pub trait KeySource: Send + Sync {
-    /// The trusted key with this `kid`, if any.
-    fn key(&self, kid: &str) -> Option<&VerificationKey>;
+    /// The trusted key that `header` selects, if any.
+    fn key(&self, header: &ProtectedHeader) -> Option<VerificationKey>;
 }
 
 /// A JWK Set parse or validation error.
@@ -139,9 +143,17 @@ impl PinnedKeySet {
     }
 }
 
-impl KeySource for PinnedKeySet {
-    fn key(&self, kid: &str) -> Option<&VerificationKey> {
+impl PinnedKeySet {
+    /// The key with this `kid`, if any.
+    #[must_use]
+    pub fn get(&self, kid: &str) -> Option<&VerificationKey> {
         self.keys.iter().find(|k| k.kid == kid)
+    }
+}
+
+impl KeySource for PinnedKeySet {
+    fn key(&self, header: &ProtectedHeader) -> Option<VerificationKey> {
+        header.kid().and_then(|kid| self.get(kid)).cloned()
     }
 }
 
@@ -172,7 +184,7 @@ mod tests {
         let ok = format!(r#"{{"keys":[{{"kty":"EC","crv":"P-256","x":"{X}","y":"{Y}"}}]}}"#);
         let set = PinnedKeySet::from_jwks_json(ok.as_bytes()).unwrap();
         assert!(
-            set.key("oKIywvGUpTVTyxMQ3bwIIeQUudfr_CkLMjCE19ECD-U")
+            set.get("oKIywvGUpTVTyxMQ3bwIIeQUudfr_CkLMjCE19ECD-U")
                 .is_some()
         );
     }

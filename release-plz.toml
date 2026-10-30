@@ -30,7 +30,14 @@ publish = false
 release = false
 
 [[package]]
-name = "turnkey_http_authz"
+name = "turnkey_jwt_profiles"
+changelog_update = true
+version_group = "rust-sdk"
+# Hold the first release until the Mint JWT activity is publicly available.
+release = false
+
+[[package]]
+name = "turnkey_jwt_verify"
 changelog_update = true
 version_group = "rust-sdk"
 # Hold the first release until the Mint JWT activity is publicly available.

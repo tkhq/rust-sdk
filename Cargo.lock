@@ -4308,7 +4308,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "turnkey_http_authz"
+name = "turnkey_jwt_profiles"
 version = "0.16.0"
 dependencies = [
  "axum",
@@ -4323,6 +4323,19 @@ dependencies = [
  "tokio",
  "tower",
  "tracing",
+ "turnkey_jwt_verify",
+]
+
+[[package]]
+name = "turnkey_jwt_verify"
+version = "0.16.0"
+dependencies = [
+ "base64 0.22.1",
+ "p256 0.13.2",
+ "rand_core 0.6.4",
+ "serde",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]

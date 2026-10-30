@@ -42,7 +42,7 @@ pub fn is_digest(s: &str) -> bool {
 pub(crate) mod tests {
     use super::*;
 
-    pub(crate) const VECTORS: &str = include_str!("../testdata/digests.json");
+    pub(crate) const VECTORS: &str = include_str!("../../testdata/digests.json");
 
     #[test]
     fn sha256_digest_matches_shared_body_vectors() {

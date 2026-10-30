@@ -1,7 +1,7 @@
 //! Verify a file of minted tokens against the requests they were minted for.
 //!
 //! ```text
-//! cargo run -p turnkey_http_authz --example verify_tokens -- tokens.json
+//! cargo run -p turnkey_jwt_profiles --example verify_tokens -- tokens.json
 //! ```
 //!
 //! The file is `{signer_public_uncompressed_hex, parent_organization_id,
@@ -16,8 +16,8 @@ use std::sync::Arc;
 
 use http::{HeaderMap, HeaderName, HeaderValue};
 use serde::Deserialize;
-use turnkey_http_authz::jwks::{PinnedKeySet, thumbprint_p256};
-use turnkey_http_authz::{ReceivedRequest, RouteRule, Verifier, VerifierConfig, b64};
+use turnkey_jwt_profiles::http_authz::jwks::{PinnedKeySet, thumbprint_p256};
+use turnkey_jwt_profiles::http_authz::{ReceivedRequest, RouteRule, Verifier, VerifierConfig, b64};
 
 #[derive(Deserialize)]
 struct Fixture {

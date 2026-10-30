@@ -1,4 +1,14 @@
-# turnkey_http_authz
+# `turnkey_jwt_profiles`
+
+Verifiers for Turnkey JWT profiles. Each profile is a module behind a cargo
+feature. The shared JWS and key checks live in
+[`turnkey_jwt_verify`](https://docs.rs/turnkey_jwt_verify).
+
+| Module | Feature | Profile |
+| ------ | ------- | ------- |
+| `http_authz` | `http-authz` (default) | `turnkey.io/http-authz/v1` request-bound JWTs |
+
+## http-authz/v1
 
 Verify Turnkey http-authz/v1 request-bound JWTs in a Rust HTTP service.
 
@@ -7,12 +17,12 @@ A Turnkey organization can mint a JWT for one exact HTTP request with
 enum `JWT_PROFILE_HTTP_AUTHZ_V1`). The service that receives the request uses
 this crate to check the token and to check that the token matches the request.
 
-## Example
+### Example
 
 ```rust,no_run
 use std::sync::Arc;
-use turnkey_http_authz::jwks::PinnedKeySet;
-use turnkey_http_authz::{ReceivedRequest, RouteRule, Verifier, VerifierConfig};
+use turnkey_jwt_profiles::http_authz::jwks::PinnedKeySet;
+use turnkey_jwt_profiles::http_authz::{ReceivedRequest, RouteRule, Verifier, VerifierConfig};
 
 fn handle(
     jwks: &[u8],
@@ -35,13 +45,13 @@ fn handle(
         headers,
         body,
     };
-    let claims = verifier.authorize(token, &rule, &received, turnkey_http_authz::unix_now())?;
+    let claims = verifier.authorize(token, &rule, &received, turnkey_jwt_profiles::http_authz::unix_now())?;
     println!("{} acting in {}", claims.sub, claims.iss);
     Ok(())
 }
 ```
 
-## What the verifier checks
+### What the verifier checks
 
 - The token is a compact JWS of at most 9 KiB. The protected header has
   exactly `alg`, `kid`, and `typ`. `alg` is `ES256`, pinned by
@@ -82,7 +92,9 @@ fn handle(
 The handler gets the verified claims. Use `iss` (the sub-organization) and
 `sub` (the user) to scope each action.
 
-## Public API
+### Public API
+
+All items are in `turnkey_jwt_profiles::http_authz`.
 
 - `Verifier::new(VerifierConfig, Arc<dyn KeySource>)`, then `verify_token` or
   `authorize`. `VerifierConfig::new(audience, parent_organization_id)` sets
@@ -91,7 +103,8 @@ The handler gets the verified claims. Use `iss` (the sub-organization) and
   without the URN prefix.
 - `RouteRule { required_headers, require_body_digest }`.
 - `ReceivedRequest` and `bind_request` for the request binding step alone.
-- The `KeySource` trait and `jwks::PinnedKeySet::from_jwks_json`.
+- The `KeySource` trait and `jwks::PinnedKeySet::from_jwks_json`,
+  re-exported from `turnkey_jwt_verify`.
 - `middleware::route_layer(verifier, rule)` (feature `axum`): a
   `tower::Layer` for `MethodRouter::route_layer` or `Router::layer`. The
   handler reads the claims from the `middleware::Verified` extension.
@@ -104,21 +117,16 @@ The handler gets the verified claims. Use `iss` (the sub-organization) and
   message in the body, for debugging only.
 - Helpers: `digest::{sha256_digest, is_digest}`,
   `headers::{header_value, header_digest, header_digests,
-  check_header_names}`, and `b64::{url_encode, url_decode, sha256_url}`.
+  check_header_names}`, `b64::{url_encode, url_decode, sha256_url}`, and
+  `unix_now`.
 - `jwt::ORG_URN_PREFIX` and `jwt::USER_URN_PREFIX` hold the URN prefixes.
 
-## Features
-
-- `axum` (off by default): the Axum route layer in `middleware`. Without it,
-  the crate depends on `http` but not on Axum, so any HTTP stack can call
-  `Verifier::authorize` with a `ReceivedRequest`.
-
-## Trusted keys
+### Trusted keys
 
 Keys come from a JWK Set that the service pins in its configuration. The
 `KeySource` trait lets a service supply keys from another source.
 
-## Test vectors
+### Test vectors
 
 `testdata/digests.json` holds body digests, digest-format accept and reject
 cases (base64url, missing padding, `sha-512`, two members, parameters,
@@ -130,5 +138,13 @@ The `verify_tokens` example checks a file of minted tokens against the
 requests they were minted for:
 
 ```sh
-cargo run -p turnkey_http_authz --example verify_tokens -- tokens.json
+cargo run -p turnkey_jwt_profiles --example verify_tokens -- tokens.json
 ```
+
+## Features
+
+- `http-authz` (on by default): the `http_authz` module.
+- `axum` (off by default, turns on `http-authz`): the Axum route layer in
+  `http_authz::middleware`. Without it, the crate depends on `http` but not
+  on Axum, so any HTTP stack can call `Verifier::authorize` with a
+  `ReceivedRequest`.

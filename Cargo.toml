@@ -8,10 +8,12 @@ members = [
   "codegen",
   # Contains utilities to encrypt and decrypt data to and from Turnkey secure enclaves
   "enclave_encrypt",
-  # Verifier for Turnkey http-authz/v1 request-bound JWTs
-  "http_authz",
   # Examples using the Turnkey stamper
   "examples",
+  # Turnkey JWT profile verifiers (http-authz/v1)
+  "jwt_profiles",
+  # Strict compact-JWS parsing and ES256 verification for Turnkey JWTs
+  "jwt_verify",
   # Contains utilities to work with Turnkey proofs (boot proofs, app proofs)
   "proofs",
   "tvc"
@@ -116,4 +118,5 @@ rand = { version = "0.8", default-features = false }
 turnkey_api_key_stamper = { path = "api_key_stamper", version = "0.17.0" }
 turnkey_client = { path = "client", version = "0.17.0" }
 turnkey_enclave_encrypt = { path = "enclave_encrypt", version = "0.17.0" }
+turnkey_jwt_verify = { path = "jwt_verify", version = "0.16.0" }
 turnkey_proofs = { path = "proofs", version = "0.17.0" }

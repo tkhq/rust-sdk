@@ -1,0 +1,75 @@
+# `turnkey_jwt_verify`
+
+Strict compact-JWS parsing and ES256 verification for JWTs that Turnkey
+signs. This crate is the shared core of the profile verifiers in
+[`turnkey_jwt_profiles`](https://docs.rs/turnkey_jwt_profiles). It has no profile claims, no
+request binding, and no HTTP framework code.
+
+Most services use a profile from `turnkey_jwt_profiles` and do not call this
+crate directly.
+
+## Example
+
+```rust,no_run
+use serde::Deserialize;
+use turnkey_jwt_verify::{JwsRules, PinnedKeySet, TimeRules, check_times, unix_now, verify};
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Claims {
+    iat: u64,
+    exp: u64,
+    sub: String,
+}
+
+fn check(jwks: &[u8], token: &str) -> Result<String, Box<dyn std::error::Error>> {
+    // In a real service, load the key set once at startup.
+    let keys = PinnedKeySet::from_jwks_json(jwks)?;
+    let rules = JwsRules::new("application/example+jwt", 4096);
+    let claims: Claims = verify(token, &rules, &keys)?.claims()?;
+    check_times(claims.iat, claims.exp, unix_now(), &TimeRules::new(5, 300))?;
+    Ok(claims.sub)
+}
+```
+
+## What `verify` checks
+
+- The token is a compact JWS of at most `JwsRules::max_token_bytes` bytes,
+  with exactly three parts in strict unpadded base64url.
+- The protected header has exactly `alg`, `kid`, and `typ`. Unknown and
+  repeated members are rejected.
+- `alg` is `ES256`. No other algorithm is accepted.
+- `typ` equals `JwsRules::typ` exactly. The caller supplies it, so tokens of
+  one profile cannot pass as another.
+- A `KeySource` selects the key from the header. The selected key's `kid`
+  must equal the header `kid`. Nothing in the token can name a key location.
+- The ES256 signature verifies over the signing input. No claim is read
+  before this.
+
+`VerifiedJws::claims` then parses the payload. Use a struct with
+`#[serde(deny_unknown_fields)]` for a closed claim schema; repeated claim
+names are rejected. A payload that is not JSON is `Malformed`. A payload
+that is not an object, has a null, or does not match the struct is
+`BadClaim`.
+
+`check_times` checks, in order: `exp > iat`, `exp - iat` at most the
+maximum lifetime, `iat <= now + skew`, and `now < exp`. `unix_now` returns
+`u64::MAX` if the clock is before 1970, so the expiry check fails closed.
+
+Replay protection is not part of this crate.
+
+## Public API
+
+- `verify(token, &JwsRules, &dyn KeySource) -> Result<VerifiedJws, Error>`.
+- `JwsRules::new(typ, max_token_bytes)`.
+- `VerifiedJws::{header, payload, claims}` and
+  `ProtectedHeader::{alg, typ, kid}`.
+- `KeySource`: returns the trusted `VerificationKey` that a header selects.
+- `PinnedKeySet::from_jwks_json` and `PinnedKeySet::get`: a fixed set of
+  public P-256 keys from a JWK Set. A `kid` in the set must be the RFC 7638
+  thumbprint.
+- `thumbprint_p256(x, y)`: the RFC 7638 thumbprint of a P-256 JWK.
+- `check_times`, `TimeRules::new(clock_skew_secs, max_lifetime_secs)`, and
+  `unix_now`.
+- `b64::{url_encode, url_decode, sha256_url}`: strict unpadded base64url.
+- `Error`: the verification failure. `JwksError`: a key set error.

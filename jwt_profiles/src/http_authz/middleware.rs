@@ -7,7 +7,7 @@
 //!    ([`Verifier::verify_token`]);
 //! 2. buffering the body (at most the layer's body limit, `MAX_BODY_BYTES`
 //!    by default);
-//! 3. [`crate::bind_request`] with the route's [`RouteRule`]: method, path,
+//! 3. [`super::bind_request`] with the route's [`RouteRule`]: method, path,
 //!    query, required and bound headers (rebuilt from the lowercase names
 //!    that hyper delivers), and the body digest.
 //!
@@ -30,8 +30,8 @@
 //! use std::sync::Arc;
 //! use axum::routing::post;
 //! use axum::{Extension, Router};
-//! use turnkey_http_authz::middleware::{Verified, route_layer};
-//! use turnkey_http_authz::{RouteRule, Verifier};
+//! use turnkey_jwt_profiles::http_authz::middleware::{Verified, route_layer};
+//! use turnkey_jwt_profiles::http_authz::{RouteRule, Verifier};
 //!
 //! # fn build(verifier: Arc<Verifier>) -> Router {
 //! let rule = RouteRule {
@@ -61,8 +61,8 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::MethodRouter;
 use tower::{Layer, Service};
 
-use crate::jwt::Claims;
-use crate::{AuthError, RouteRule, Verifier, unix_now};
+use super::jwt::Claims;
+use super::{AuthError, RouteRule, Verifier, unix_now};
 
 const MAX_BODY_BYTES: usize = 4 * 1024;
 
@@ -237,7 +237,7 @@ async fn authorize(layer: &Inner, req: Request) -> Result<Request, Response> {
         .extensions
         .get::<OriginalUri>()
         .map_or(&parts.uri, |o| &o.0);
-    crate::bind_request(
+    super::bind_request(
         &claims,
         &layer.rule,
         parts.method.as_str(),
@@ -272,7 +272,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tests::{BODY, PATH, QUERY, TestKey, cfg, claims, header, rule, sent_headers};
+    use crate::http_authz::tests::{
+        BODY, PATH, QUERY, TestKey, cfg, claims, header, rule, sent_headers,
+    };
     use axum::Router;
     use axum::routing::post;
     use serde_json::json;

@@ -1,9 +1,9 @@
-#![doc = include_str!("../README.md")]
+//! The `turnkey.io/http-authz/v1` profile (feature `http-authz`): verify
+//! request-bound JWTs minted with `ACTIVITY_TYPE_MINT_JWT` and bind them to
+//! the received HTTP request. See the crate documentation for the checks.
 
-pub mod b64;
 pub mod digest;
 pub mod headers;
-pub mod jwks;
 pub mod jwt;
 #[cfg(feature = "axum")]
 pub mod middleware;
@@ -15,18 +15,8 @@ use http::HeaderMap;
 
 use digest::sha256_digest;
 use headers::HeaderError;
-pub use jwks::KeySource;
 pub use jwt::{Claims, VerifierConfig};
-
-/// Current Unix time in seconds. Returns u64::MAX if the clock is before 1970,
-/// so the expiry check (now >= exp) fails closed.
-#[must_use]
-pub fn unix_now() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(u64::MAX)
-}
+pub use turnkey_jwt_verify::{KeySource, b64, jwks, unix_now};
 
 /// What one protected route requires beyond the profile checks.
 #[derive(Debug, Clone, Default)]
@@ -114,6 +104,24 @@ impl fmt::Display for AuthError {
 }
 
 impl std::error::Error for AuthError {}
+
+impl From<turnkey_jwt_verify::Error> for AuthError {
+    fn from(e: turnkey_jwt_verify::Error) -> Self {
+        use turnkey_jwt_verify::Error as E;
+        match e {
+            E::Malformed(d) => Self::Malformed(d),
+            E::UnsupportedAlgorithm => Self::UnsupportedAlgorithm,
+            E::WrongType => Self::WrongType,
+            E::UnknownKey => Self::UnknownKey,
+            E::BadSignature => Self::BadSignature,
+            E::BadClaim(d) => Self::BadClaim(d),
+            E::LifetimeTooLong => Self::LifetimeTooLong,
+            E::NotYetValid => Self::NotYetValid,
+            E::Expired => Self::Expired,
+            _ => Self::Malformed("token"),
+        }
+    }
+}
 
 /// An invalid [`VerifierConfig`].
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -259,13 +267,13 @@ impl Verifier {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use super::jwks::{KeySource, VerificationKey, thumbprint_p256};
     use super::jwt::{TYP, VerifierConfig, verify};
     use super::*;
     use p256::ecdsa::signature::Signer;
     use p256::ecdsa::{Signature, SigningKey};
     use rand_core::OsRng;
     use serde_json::{Value, json};
+    use turnkey_jwt_verify::{ProtectedHeader, VerificationKey, thumbprint_p256};
 
     pub(crate) struct TestKey {
         key: SigningKey,
@@ -315,8 +323,11 @@ pub(crate) mod tests {
 
     pub(crate) struct Keys(pub(crate) Vec<VerificationKey>);
     impl KeySource for Keys {
-        fn key(&self, kid: &str) -> Option<&VerificationKey> {
-            self.0.iter().find(|k| k.kid == kid)
+        fn key(&self, header: &ProtectedHeader) -> Option<VerificationKey> {
+            self.0
+                .iter()
+                .find(|k| header.kid() == Some(&k.kid))
+                .cloned()
         }
     }
 

@@ -1,23 +1,16 @@
-//! Strict verifier for http-authz/v1 JWTs.
+//! The http-authz/v1 claim set and profile rules.
 //!
 //! Nothing in the token is trusted until the signature is verified with a
 //! key that the configuration already trusts.
 
-use std::fmt;
-
-use p256::ecdsa::signature::Verifier as _;
-use p256::ecdsa::{Signature, VerifyingKey};
-use serde::de::{self, IgnoredAny, MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
+use turnkey_jwt_verify::{JwsRules, KeySource, TimeRules, check_times};
 
-use crate::b64;
-use crate::digest::is_digest;
-use crate::headers::{check_header_names, is_tchar_except_alpha};
-use crate::jwks::KeySource;
-use crate::{AuthError, ConfigError};
+use super::digest::is_digest;
+use super::headers::{check_header_names, is_tchar_except_alpha};
+use super::{AuthError, ConfigError};
 
 pub(crate) const TYP: &str = "application/vnd.turnkey.http-authz-v1+jwt";
-const ALG: &str = "ES256";
 /// Profile maximum lifetime, `exp - iat`. A destination can configure a
 /// shorter one ([`VerifierConfig::max_lifetime_secs`]), never a longer one.
 pub const MAX_LIFETIME_SECS: u64 = 300;
@@ -87,14 +80,6 @@ impl VerifierConfig {
     }
 }
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Header {
-    alg: String,
-    kid: String,
-    typ: String,
-}
-
 /// The `tk_request` claim.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -152,54 +137,6 @@ impl Claims {
     }
 }
 
-struct NoNulls;
-
-impl<'de> Deserialize<'de> for NoNulls {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        deserializer.deserialize_any(NoNullsVisitor)
-    }
-}
-
-struct NoNullsVisitor;
-
-macro_rules! scalar_visits {
-    ($($method:ident($ty:ty)),* $(,)?) => {
-        $(
-            fn $method<E: de::Error>(self, _: $ty) -> Result<NoNulls, E> {
-                Ok(NoNulls)
-            }
-        )*
-    };
-}
-
-impl<'de> Visitor<'de> for NoNullsVisitor {
-    type Value = NoNulls;
-
-    fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("a JSON value without nulls")
-    }
-
-    scalar_visits! {
-        visit_bool(bool),
-        visit_i64(i64),
-        visit_u64(u64),
-        visit_f64(f64),
-        visit_str(&str),
-    }
-
-    fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<NoNulls, A::Error> {
-        while seq.next_element::<NoNulls>()?.is_some() {}
-        Ok(NoNulls)
-    }
-
-    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<NoNulls, A::Error> {
-        while map.next_key::<IgnoredAny>()?.is_some() {
-            map.next_value::<NoNulls>()?;
-        }
-        Ok(NoNulls)
-    }
-}
-
 fn non_null<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
 where
     D: Deserializer<'de>,
@@ -229,8 +166,8 @@ fn is_method(m: &str) -> bool {
 
 /// Verify a compact JWS against the profile, the configuration, and `now`.
 ///
-/// This does not check the request binding. See [`crate::bind_request`] and
-/// [`crate::Verifier`].
+/// This does not check the request binding. See [`super::bind_request`] and
+/// [`super::Verifier`].
 ///
 /// # Errors
 ///
@@ -241,57 +178,8 @@ pub(crate) fn verify(
     keys: &dyn KeySource,
     now: u64,
 ) -> Result<Claims, AuthError> {
-    if token.len() > MAX_TOKEN_BYTES {
-        return Err(AuthError::Malformed("token too large"));
-    }
-    let mut parts = token.split('.');
-    let (Some(h64), Some(p64), Some(s64), None) =
-        (parts.next(), parts.next(), parts.next(), parts.next())
-    else {
-        return Err(AuthError::Malformed("not a compact JWS"));
-    };
-    let header_bytes = b64::url_decode(h64).ok_or(AuthError::Malformed("header encoding"))?;
-    let header: Header =
-        serde_json::from_slice(&header_bytes).map_err(|_| AuthError::Malformed("header"))?;
-    if header.alg != ALG {
-        return Err(AuthError::UnsupportedAlgorithm);
-    }
-    if header.typ != TYP {
-        return Err(AuthError::WrongType);
-    }
-    let key = keys.key(&header.kid).ok_or(AuthError::UnknownKey)?;
-    if key.kid != header.kid {
-        return Err(AuthError::UnknownKey);
-    }
-    let sig = b64::url_decode(s64).ok_or(AuthError::Malformed("signature encoding"))?;
-    let signing_input_len = h64.len() + 1 + p64.len();
-    let signing_input = &token[..signing_input_len];
-    let verifying_key =
-        VerifyingKey::from_sec1_bytes(&key.point).map_err(|_| AuthError::UnknownKey)?;
-    let signature = Signature::from_slice(&sig).map_err(|_| AuthError::BadSignature)?;
-    verifying_key
-        .verify(signing_input.as_bytes(), &signature)
-        .map_err(|_| AuthError::BadSignature)?;
-
-    let payload = b64::url_decode(p64).ok_or(AuthError::Malformed("payload encoding"))?;
-    let claims: Claims = match serde_json::from_slice(&payload) {
-        Ok(claims) => claims,
-        Err(_) => {
-            let nonulls = serde_json::from_slice::<NoNulls>(&payload);
-            if nonulls.is_err() && serde_json::from_slice::<IgnoredAny>(&payload).is_err() {
-                return Err(AuthError::Malformed("payload"));
-            }
-            let is_object = payload.trim_ascii_start().first() == Some(&b'{');
-            if !is_object || nonulls.is_err() {
-                return Err(AuthError::BadClaim(
-                    "claims must be an object without nulls",
-                ));
-            }
-            return Err(AuthError::BadClaim(
-                "claim set does not match the profile schema",
-            ));
-        }
-    };
+    let jws = turnkey_jwt_verify::verify(token, &JwsRules::new(TYP, MAX_TOKEN_BYTES), keys)?;
+    let claims: Claims = jws.claims()?;
 
     if claims.aud != cfg.audience {
         return Err(AuthError::WrongAudience);
@@ -312,18 +200,12 @@ pub(crate) fn verify(
         return Err(AuthError::WrongParentOrganization);
     }
 
-    if claims.exp <= claims.iat {
-        return Err(AuthError::BadClaim("exp must be after iat"));
-    }
-    if claims.exp - claims.iat > cfg.max_lifetime_secs {
-        return Err(AuthError::LifetimeTooLong);
-    }
-    if claims.iat > now.saturating_add(cfg.clock_skew_secs) {
-        return Err(AuthError::NotYetValid);
-    }
-    if now >= claims.exp {
-        return Err(AuthError::Expired);
-    }
+    check_times(
+        claims.iat,
+        claims.exp,
+        now,
+        &TimeRules::new(cfg.clock_skew_secs, cfg.max_lifetime_secs),
+    )?;
 
     let r = &claims.tk_request;
     if !is_method(&r.method) {
