@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.17.1](https://github.com/tkhq/rust-sdk/compare/turnkey_api_key_stamper-v0.17.0...turnkey_api_key_stamper-v0.17.1) - 2026-10-30
+
+### Other
+
+- release v0.17.1
+
 ## [0.15.0](https://github.com/tkhq/rust-sdk/compare/turnkey_api_key_stamper-v0.14.0...turnkey_api_key_stamper-v0.15.0) - 2026-08-28
 
 ### Other
