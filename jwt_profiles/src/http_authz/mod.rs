@@ -45,10 +45,8 @@ pub enum AuthError {
     BadSignature,
     /// `aud` is not the configured origin.
     WrongAudience,
-    /// The token has no `tk_parent_organization`.
-    ParentOrganizationMissing,
-    /// `tk_parent_organization` is not the configured parent organization.
-    WrongParentOrganization,
+    /// `iss` is not the configured top-level organization.
+    WrongIssuer,
     /// `exp - iat` exceeds the configured maximum.
     LifetimeTooLong,
     /// `iat` is in the future beyond skew.
@@ -78,8 +76,7 @@ impl AuthError {
             Self::UnknownKey => "unknown_kid",
             Self::BadSignature => "bad_signature",
             Self::WrongAudience => "wrong_aud",
-            Self::ParentOrganizationMissing => "parent_org_missing",
-            Self::WrongParentOrganization => "wrong_parent_org",
+            Self::WrongIssuer => "wrong_iss",
             Self::LifetimeTooLong => "lifetime_too_long",
             Self::NotYetValid => "not_yet_valid",
             Self::Expired => "expired",
@@ -221,7 +218,7 @@ impl Verifier {
     ///
     /// # Errors
     ///
-    /// Returns [`ConfigError`] for an empty audience, a malformed parent
+    /// Returns [`ConfigError`] for an empty audience, a malformed
     /// organization ID, a skew above [`jwt::MAX_CLOCK_SKEW_SECS`], or a
     /// lifetime of zero or above [`jwt::MAX_LIFETIME_SECS`].
     pub fn new(config: VerifierConfig, keys: Arc<dyn KeySource>) -> Result<Self, ConfigError> {
@@ -340,9 +337,9 @@ pub(crate) mod tests {
     }
 
     pub(crate) const AUD: &str = "https://app.example";
-    const ISS: &str = "urn:turnkey:org:sub_org_1";
-    const PARENT_ID: &str = "parent_org_1";
-    const PARENT: &str = "urn:turnkey:org:parent_org_1";
+    const ORG_ID: &str = "parent_org_1";
+    const ISS: &str = "https://id.turnkey.com/t/parent_org_1";
+    const ORG: &str = "urn:turnkey:org:sub_org_1";
     const SUB: &str = "urn:turnkey:user:user_1";
     pub(crate) const NOW: u64 = 1_800_000_000;
     pub(crate) const PATH: &str = "/v1/resources/12345/actions";
@@ -369,7 +366,7 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn cfg() -> VerifierConfig {
-        VerifierConfig::new(AUD, PARENT_ID)
+        VerifierConfig::new(AUD, ORG_ID)
     }
 
     pub(crate) fn header(k: &TestKey) -> Value {
@@ -378,7 +375,7 @@ pub(crate) mod tests {
 
     pub(crate) fn claims() -> Value {
         json!({
-            "aud": AUD, "iss": ISS, "sub": SUB, "tk_parent_organization": PARENT,
+            "aud": AUD, "iss": ISS, "sub": SUB, "org": ORG,
             "iat": NOW, "exp": NOW + 300,
             "tk_request": {
                 "method": "POST", "path": PATH, "query": QUERY, "headers": BOUND,
@@ -468,7 +465,7 @@ pub(crate) mod tests {
         let c = run(&k, &header(&k), &claims(), NOW + 1).unwrap();
         assert_eq!(c.iss, ISS);
         assert_eq!(c.sub, SUB);
-        assert_eq!(c.tk_parent_organization.as_deref(), Some(PARENT));
+        assert_eq!(c.org, ORG);
         bind(&c, &sent_headers(), BODY).unwrap();
     }
 
@@ -507,11 +504,15 @@ pub(crate) mod tests {
     fn config_is_validated() {
         let keys: Arc<dyn KeySource> = Arc::new(Keys(vec![]));
         let bad = |c: VerifierConfig| Verifier::new(c, Arc::clone(&keys)).is_err();
-        assert!(bad(VerifierConfig::new("", PARENT_ID)));
+        assert!(bad(VerifierConfig::new("", ORG_ID)));
         assert!(bad(VerifierConfig::new(AUD, "")));
         assert!(
-            bad(VerifierConfig::new(AUD, PARENT)),
+            bad(VerifierConfig::new(AUD, "urn:turnkey:org:parent_org_1")),
             "URN instead of an ID"
+        );
+        assert!(
+            bad(VerifierConfig::new(AUD, ISS)),
+            "issuer URL instead of an ID"
         );
         assert!(bad(VerifierConfig::new(AUD, "a b")));
         let mut c = cfg();
@@ -623,43 +624,42 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn parent_organization_must_be_the_configured_parent_urn() {
-        assert_eq!(
-            claim_error(without(claims(), "tk_parent_organization")),
-            AuthError::ParentOrganizationMissing
-        );
+    fn iss_must_be_the_configured_top_level_organization() {
         assert_eq!(
             claim_error(with(
                 claims(),
-                "tk_parent_organization",
-                json!("urn:turnkey:org:parent_org_2")
+                "iss",
+                json!("https://id.turnkey.com/t/parent_org_2")
             )),
-            AuthError::WrongParentOrganization
-        );
-        assert_eq!(
-            claim_error(with(claims(), "tk_parent_organization", json!(ISS))),
-            AuthError::WrongParentOrganization
+            AuthError::WrongIssuer
         );
         for bad in [
-            json!(PARENT_ID),
-            json!("urn:turnkey:organization:parent_org_1"),
-            json!("urn:turnkey:org:"),
-            json!([PARENT]),
+            json!(ORG_ID),
+            json!("urn:turnkey:org:parent_org_1"),
+            json!("https://auth.turnkey.com/t/parent_org_1"),
+            json!("https://id.turnkey.com/t/"),
+            json!("https://id.turnkey.com/t/parent_org_1/"),
+            json!([ISS]),
         ] {
-            assert!(
-                is_bad_claim(with(claims(), "tk_parent_organization", bad.clone())),
-                "{bad}"
-            );
+            assert!(is_bad_claim(with(claims(), "iss", bad.clone())), "{bad}");
         }
-        assert!(verify_claims(&with(claims(), "iss", json!("urn:turnkey:org:sub_org_2"))).is_ok());
+        assert!(verify_claims(&with(claims(), "org", json!("urn:turnkey:org:sub_org_2"))).is_ok());
+        assert!(
+            verify_claims(&with(
+                claims(),
+                "org",
+                json!("urn:turnkey:org:parent_org_1")
+            ))
+            .is_ok()
+        );
     }
 
     #[test]
-    fn iss_and_sub_need_their_urn_prefix_and_an_id() {
+    fn org_and_sub_need_their_urn_prefix_and_an_id() {
         for (claim, bad) in [
-            ("iss", "urn:turnkey:organization:sub_org_1"),
-            ("iss", "urn:turnkey:org:"),
-            ("iss", "sub_org_1"),
+            ("org", "urn:turnkey:organization:sub_org_1"),
+            ("org", "urn:turnkey:org:"),
+            ("org", "sub_org_1"),
             ("sub", "urn:turnkey:user:"),
             ("sub", "user_1"),
             ("sub", "urn:turnkey:org:user_1"),
@@ -738,12 +738,13 @@ pub(crate) mod tests {
         assert!(is_bad_claim(with(claims(), "tk_activity", json!("a"))));
         assert!(is_bad_claim(with(claims(), "tk_body_sha256", json!("x"))));
         assert!(is_bad_claim(with(claims(), "tk_body_digest", Value::Null)));
+        assert!(is_bad_claim(with(claims(), "org", Value::Null)));
         assert!(is_bad_claim(with(
             claims(),
             "tk_parent_organization",
-            Value::Null
+            json!("urn:turnkey:org:parent_org_1")
         )));
-        for claim in ["aud", "iss", "sub", "iat", "exp", "tk_request"] {
+        for claim in ["aud", "iss", "org", "sub", "iat", "exp", "tk_request"] {
             assert!(is_bad_claim(without(claims(), claim)), "missing {claim}");
         }
         assert!(

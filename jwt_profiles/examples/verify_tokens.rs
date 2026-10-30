@@ -4,7 +4,7 @@
 //! cargo run -p turnkey_jwt_profiles --example verify_tokens -- tokens.json
 //! ```
 //!
-//! The file is `{signer_public_uncompressed_hex, parent_organization_id,
+//! The file is `{signer_public_uncompressed_hex, organization_id,
 //! cases: [{name, expect_ok, jwt, method, path, query, headers, body,
 //! audience}]}`. `signer_public_uncompressed_hex` is the Turnkey signer
 //! public key as a 65-byte uncompressed SEC1 point. Each case passes when the
@@ -22,7 +22,7 @@ use turnkey_jwt_profiles::http_authz::{ReceivedRequest, RouteRule, Verifier, Ver
 #[derive(Deserialize)]
 struct Fixture {
     signer_public_uncompressed_hex: String,
-    parent_organization_id: String,
+    organization_id: String,
     cases: Vec<Case>,
 }
 
@@ -60,8 +60,8 @@ fn iat(jwt: &str) -> Option<u64> {
     serde_json::from_slice::<serde_json::Value>(&payload).ok()?["iat"].as_u64()
 }
 
-fn run_case(keys: &Arc<PinnedKeySet>, parent: &str, case: &Case) -> Result<(), String> {
-    let config = VerifierConfig::new(&case.audience, parent);
+fn run_case(keys: &Arc<PinnedKeySet>, organization_id: &str, case: &Case) -> Result<(), String> {
+    let config = VerifierConfig::new(&case.audience, organization_id);
     let verifier = Verifier::new(config, keys.clone()).map_err(|e| e.to_string())?;
     let mut headers = HeaderMap::new();
     for (name, value) in &case.headers {
@@ -109,7 +109,7 @@ fn main() -> ExitCode {
     };
     let mut failed = 0;
     for case in &fixture.cases {
-        let outcome = run_case(&keys, &fixture.parent_organization_id, case);
+        let outcome = run_case(&keys, &fixture.organization_id, case);
         let pass = outcome.is_ok() == case.expect_ok;
         failed += usize::from(!pass);
         let verdict = if pass { "PASS" } else { "FAIL" };

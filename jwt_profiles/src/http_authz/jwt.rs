@@ -23,7 +23,9 @@ pub const DEFAULT_CLOCK_SKEW_SECS: u64 = 5;
 pub(crate) const MAX_TOKEN_BYTES: usize = 9 * 1024;
 pub(crate) const MAX_PATH_BYTES: usize = 2048;
 pub(crate) const MAX_QUERY_BYTES: usize = 2048;
-/// URN prefix of an organization (`iss`, `tk_parent_organization`).
+/// Prefix of `iss`, followed by the top-level organization ID.
+pub const ISSUER_PREFIX: &str = "https://id.turnkey.com/t/";
+/// URN prefix of an organization (`org`).
 pub const ORG_URN_PREFIX: &str = "urn:turnkey:org:";
 /// URN prefix of a user (`sub`).
 pub const USER_URN_PREFIX: &str = "urn:turnkey:user:";
@@ -33,10 +35,9 @@ pub const USER_URN_PREFIX: &str = "urn:turnkey:user:";
 pub struct VerifierConfig {
     /// The app's exact origin, compared byte for byte with `aud`.
     pub audience: String,
-    /// The app's parent organization ID (without the URN prefix). A token
-    /// must carry `tk_parent_organization` equal to
-    /// `urn:turnkey:org:<parent_organization_id>`.
-    pub parent_organization_id: String,
+    /// The app's top-level organization ID (without a prefix). A token's
+    /// `iss` must equal `https://id.turnkey.com/t/<organization_id>`.
+    pub organization_id: String,
     /// Allowed clock skew in seconds, at most [`MAX_CLOCK_SKEW_SECS`].
     pub clock_skew_secs: u64,
     /// Longest accepted `exp - iat`, at most [`MAX_LIFETIME_SECS`].
@@ -46,10 +47,10 @@ pub struct VerifierConfig {
 impl VerifierConfig {
     /// A configuration with the profile defaults: skew
     /// [`DEFAULT_CLOCK_SKEW_SECS`] and lifetime [`MAX_LIFETIME_SECS`].
-    pub fn new(audience: impl Into<String>, parent_organization_id: impl Into<String>) -> Self {
+    pub fn new(audience: impl Into<String>, organization_id: impl Into<String>) -> Self {
         Self {
             audience: audience.into(),
-            parent_organization_id: parent_organization_id.into(),
+            organization_id: organization_id.into(),
             clock_skew_secs: DEFAULT_CLOCK_SKEW_SECS,
             max_lifetime_secs: MAX_LIFETIME_SECS,
         }
@@ -59,11 +60,12 @@ impl VerifierConfig {
         if self.audience.is_empty() {
             return Err(ConfigError("audience must not be empty".into()));
         }
-        if !printable_id(&self.parent_organization_id, 128)
-            || self.parent_organization_id.starts_with("urn:")
+        if !printable_id(&self.organization_id, 128)
+            || self.organization_id.starts_with("urn:")
+            || self.organization_id.contains('/')
         {
             return Err(ConfigError(
-                "parent_organization_id must be a bare organization ID (1 to 128 visible ASCII characters, no urn: prefix)".into(),
+                "organization_id must be a bare organization ID (1 to 128 visible ASCII characters, no prefix)".into(),
             ));
         }
         if self.clock_skew_secs > MAX_CLOCK_SKEW_SECS {
@@ -109,15 +111,14 @@ pub struct Claims {
     pub exp: u64,
     /// Issued-at, NumericDate (activity timestamp).
     pub iat: u64,
-    /// `urn:turnkey:org:<id>` of the issuing organization (a
-    /// sub-organization).
+    /// `https://id.turnkey.com/t/<id>` of the top-level organization: the
+    /// parent of the minting organization, or the minting organization itself.
     pub iss: String,
     /// `urn:turnkey:user:<id>`.
     pub sub: String,
-    /// `urn:turnkey:org:<id>` of the issuing organization's parent. Required:
-    /// a token without it is rejected with `ParentOrganizationMissing`.
-    #[serde(default, deserialize_with = "non_null")]
-    pub tk_parent_organization: Option<String>,
+    /// `urn:turnkey:org:<id>` of the organization that minted the token: the
+    /// top-level organization or one of its sub-organizations.
+    pub org: String,
     /// Request descriptor.
     #[serde(deserialize_with = "object")]
     pub tk_request: RequestDescriptor,
@@ -200,20 +201,17 @@ pub(crate) fn verify(
     if claims.aud != cfg.audience {
         return Err(AuthError::WrongAudience);
     }
-    if urn_id(&claims.iss, ORG_URN_PREFIX).is_none() {
-        return Err(AuthError::BadClaim("iss"));
+    let issuer_id = urn_id(&claims.iss, ISSUER_PREFIX)
+        .filter(|id| !id.contains('/'))
+        .ok_or(AuthError::BadClaim("iss"))?;
+    if issuer_id != cfg.organization_id {
+        return Err(AuthError::WrongIssuer);
+    }
+    if urn_id(&claims.org, ORG_URN_PREFIX).is_none() {
+        return Err(AuthError::BadClaim("org"));
     }
     if urn_id(&claims.sub, USER_URN_PREFIX).is_none() {
         return Err(AuthError::BadClaim("sub"));
-    }
-    let parent = claims
-        .tk_parent_organization
-        .as_deref()
-        .ok_or(AuthError::ParentOrganizationMissing)?;
-    let parent_id =
-        urn_id(parent, ORG_URN_PREFIX).ok_or(AuthError::BadClaim("tk_parent_organization"))?;
-    if parent_id != cfg.parent_organization_id {
-        return Err(AuthError::WrongParentOrganization);
     }
 
     check_window(&claims, cfg, now)?;

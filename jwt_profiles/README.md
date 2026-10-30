@@ -46,7 +46,7 @@ fn handle(
         body,
     };
     let claims = verifier.authorize(token, &rule, &received, turnkey_jwt_profiles::http_authz::unix_now())?;
-    println!("{} acting in {}", claims.sub, claims.iss);
+    println!("{} acting in {}", claims.sub, claims.org);
     Ok(())
 }
 ```
@@ -59,16 +59,17 @@ fn handle(
 - `kid` is the RFC 7638 thumbprint of the Turnkey signer key. It selects a
   key from a set that the service already trusts. Nothing in the token can
   name a key location. No claim is trusted before the signature verifies.
-- The claim set is closed: `iss` (`urn:turnkey:org:<id>`, the issuing
-  sub-organization), `sub` (`urn:turnkey:user:<id>`), `aud`, `iat`, `exp`,
-  `tk_parent_organization`, `tk_request {method, path, query, headers?}`,
+- The claim set is closed: `iss` (`https://id.turnkey.com/t/<id>`, the
+  top-level organization), `org` (`urn:turnkey:org:<id>`, the organization
+  that minted the token), `sub` (`urn:turnkey:user:<id>`), `aud`, `iat`,
+  `exp`, `tk_request {method, path, query, headers?}`,
   `tk_header_digest?`, and `tk_body_digest?`. Unknown members, nulls, and
   wrong types are rejected. There is no `jti`.
 - `tk_header_digest` has one digest per name in `tk_request.headers`, in the
   same order. With no bound headers, both are absent or both are empty
   arrays. Any other combination is a bad claim.
-- `tk_parent_organization` must equal the configured parent organization. A
-  token without it (minted by a parent organization) is rejected.
+- `iss` must name the configured top-level organization. `org` is the
+  top-level organization itself or one of its sub-organizations.
 - `aud` equals the configured origin byte for byte. `now < exp`,
   `iat <= now + skew`, `exp > iat`, and `exp - iat` is at most 300 s (a
   service can require less). Skew defaults to 5 s and is at most 30 s.
@@ -89,18 +90,20 @@ fn handle(
 - Tokens are not single-use. The holder can repeat the exact request until
   `exp`.
 
-The handler gets the verified claims. Use `iss` (the sub-organization) and
-`sub` (the user) to scope each action.
+The handler gets the verified claims. Use `org` (the organization that
+approved the request) and `sub` (the user) to scope each action. Accepting
+`iss` trusts every sub-organization's policy, so always check that `org` or
+`sub` owns the resource.
 
 ### Public API
 
 All items are in `turnkey_jwt_profiles::http_authz`.
 
 - `Verifier::new(VerifierConfig, Arc<dyn KeySource>)`, then `verify_token` or
-  `authorize`. `VerifierConfig::new(audience, parent_organization_id)` sets
+  `authorize`. `VerifierConfig::new(audience, organization_id)` sets
   the profile defaults. `clock_skew_secs` and `max_lifetime_secs` are checked
-  against the profile bounds. The parent organization ID is the bare ID,
-  without the URN prefix.
+  against the profile bounds. The organization ID is the bare ID of the
+  top-level organization, without a prefix.
 - `RouteRule { required_headers, require_body_digest }`.
 - `ReceivedRequest` and `bind_request` for the request binding step alone.
 - The `KeySource` trait and `jwks::PinnedKeySet::from_jwks_json`,

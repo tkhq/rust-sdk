@@ -42,7 +42,7 @@
 //!     require_body_digest: true,
 //! };
 //! let handler = |Extension(Verified(claims)): Extension<Verified>| async move {
-//!     format!("{} in {}", claims.sub, claims.iss)
+//!     format!("{} in {}", claims.sub, claims.org)
 //! };
 //! Router::new().route(
 //!     "/v1/things",
@@ -300,7 +300,7 @@ mod tests {
         let route = protect(
             post(
                 |axum::Extension(Verified(c)): axum::Extension<Verified>| async move {
-                    format!("{} {}", c.iss, c.sub)
+                    format!("{} {}", c.org, c.sub)
                 },
             ),
             verifier(k),
@@ -356,7 +356,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn repeats_are_accepted_and_the_handler_gets_iss_and_sub() {
+    async fn repeats_are_accepted_and_the_handler_gets_org_and_sub() {
         let k = TestKey::new();
         let app = app(&k);
         let jwt = token(&k);
