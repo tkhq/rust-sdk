@@ -34,6 +34,8 @@ pub fn is_digest(s: &str) -> bool {
     else {
         return false;
     };
+    // One byte more than a 32-byte digest. A longer decode fails, and the
+    // length check rejects a shorter one.
     let mut buf = [0u8; 33];
     STANDARD.decode_slice(b64, &mut buf).is_ok_and(|n| n == 32)
 }

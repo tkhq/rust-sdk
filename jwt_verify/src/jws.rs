@@ -158,9 +158,9 @@ fn from_object<T: DeserializeOwned>(bytes: &[u8]) -> serde_json::Result<T> {
 /// Parse a compact JWS and verify its ES256 signature.
 ///
 /// The checks run in this order: size, three-part shape, header encoding and
-/// closed member set, `alg`, `typ`, key selection, signature, payload
-/// encoding. Claims are not checked; see [`VerifiedJws::claims`] and
-/// [`crate::check_times`].
+/// closed member set, `alg`, `typ`, key selection, `kid` match, signature
+/// encoding, public key decoding, signature, payload encoding. Claims are not
+/// checked; see [`VerifiedJws::claims`] and [`crate::check_times`].
 ///
 /// # Errors
 ///
@@ -189,7 +189,7 @@ pub fn verify(
         return Err(Error::WrongType);
     }
     let key = keys.key(&header).ok_or(Error::UnknownKey)?;
-    if header.kid().is_some_and(|kid| kid != key.kid) {
+    if header.kid != key.kid {
         return Err(Error::UnknownKey);
     }
     let sig = b64::url_decode(s64).ok_or(Error::Malformed("signature encoding"))?;
@@ -341,7 +341,10 @@ mod tests {
             &k,
         )
         .unwrap();
-        assert!(matches!(dup.claims::<Claims>(), Err(Error::BadClaim(_))));
+        assert_eq!(
+            dup.claims::<Claims>().unwrap_err(),
+            Error::BadClaim("claims must be an object without nulls or repeated names")
+        );
         let null = verify(
             &k.sign(&k.header().to_string(), r#"{"sub":null}"#),
             &RULES,

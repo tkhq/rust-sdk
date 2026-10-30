@@ -166,11 +166,11 @@ pub fn bind_request(
     if let Some(missing) = rule.required_headers.iter().find(|h| !bound.contains(h)) {
         return Err(AuthError::HeaderBindingRequired(missing.clone()));
     }
-    let want: &[String] = claims.tk_header_digest.as_deref().unwrap_or_default();
-    if want.len() != bound.len() {
+    let want_digests: &[String] = claims.tk_header_digest.as_deref().unwrap_or_default();
+    if want_digests.len() != bound.len() {
         return Err(AuthError::RequestMismatch("header digest"));
     }
-    for (name, want) in bound.iter().zip(want) {
+    for (name, want) in bound.iter().zip(want_digests) {
         let got = headers::header_digest(name, received_headers).map_err(|e| match e {
             HeaderError::Absent(_) => AuthError::RequestMismatch("bound header is absent"),
             HeaderError::BadValue(_) => AuthError::RequestMismatch(
@@ -243,16 +243,7 @@ impl Verifier {
     /// so a slow body cannot carry a token past `exp`.
     #[cfg(feature = "axum")]
     pub(crate) fn check_still_valid(&self, claims: &Claims, now: u64) -> Result<(), AuthError> {
-        turnkey_jwt_verify::check_times(
-            claims.iat,
-            claims.exp,
-            now,
-            &turnkey_jwt_verify::TimeRules::new(
-                self.config.clock_skew_secs,
-                self.config.max_lifetime_secs,
-            ),
-        )?;
-        Ok(())
+        jwt::check_window(claims, &self.config, now)
     }
 
     /// The full check for one request: verify the token, then bind it to the
@@ -463,7 +454,8 @@ pub(crate) mod tests {
         without(without_request("headers"), "tk_header_digest")
     }
 
-    fn lax_rule() -> RouteRule {
+    /// A rule with no required headers. It still requires a body digest.
+    fn body_digest_rule() -> RouteRule {
         RouteRule {
             require_body_digest: true,
             ..RouteRule::default()
@@ -715,14 +707,14 @@ pub(crate) mod tests {
             t(NOW + 6, NOW + 30, NOW).unwrap_err(),
             AuthError::NotYetValid
         );
-        assert!(matches!(
+        assert_eq!(
             t(NOW, NOW, NOW).unwrap_err(),
-            AuthError::BadClaim(_)
-        ));
-        assert!(matches!(
+            AuthError::BadClaim("exp must be after iat")
+        );
+        assert_eq!(
             t(NOW, NOW - 1, NOW).unwrap_err(),
-            AuthError::BadClaim(_)
-        ));
+            AuthError::BadClaim("exp must be after iat")
+        );
         assert!(matches!(
             run(&k, &h, &with(claims(), "exp", json!(1.8e9)), NOW).unwrap_err(),
             AuthError::BadClaim(_)
@@ -771,8 +763,16 @@ pub(crate) mod tests {
         assert!(is_bad_claim(without_request("query")));
         assert!(is_bad_claim(with_request(
             "query",
-            json!(format!("a={}", "x".repeat(2047)))
+            json!(format!("a={}", "x".repeat(jwt::MAX_QUERY_BYTES - 1)))
         )));
+        assert!(
+            verify_claims(&with_request(
+                "query",
+                json!(format!("a={}", "x".repeat(jwt::MAX_QUERY_BYTES - 2)))
+            ))
+            .is_ok(),
+            "a query of exactly MAX_QUERY_BYTES is accepted"
+        );
         assert!(is_bad_claim(with_request(
             "path",
             json!(format!("/{}", "x".repeat(jwt::MAX_PATH_BYTES)))
@@ -868,7 +868,7 @@ pub(crate) mod tests {
 
     #[test]
     fn no_bound_headers_is_both_absent_or_both_empty() {
-        let lax = lax_rule();
+        let body_digest = body_digest_rule();
         let h = sent_headers();
         for c in [
             no_bound_headers_claims(),
@@ -877,7 +877,7 @@ pub(crate) mod tests {
             let c = verify_claims(&c).unwrap();
             assert!(c.bound_headers().is_empty());
             assert_eq!(
-                bind_request(&c, &lax, "POST", PATH, Some(QUERY), &h, BODY),
+                bind_request(&c, &body_digest, "POST", PATH, Some(QUERY), &h, BODY),
                 Ok(())
             );
             assert_eq!(

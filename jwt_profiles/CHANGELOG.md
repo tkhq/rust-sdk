@@ -19,4 +19,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for `413`) and logs the specific reason. `AuthzLayer::with_detailed_errors`
   turns on the specific code and message in the body for debugging.
   `AuthzLayer::with_max_body_bytes` sets the body limit (4096 bytes by
-  default). The layer checks `exp` again after it buffers the body.
+  default). The layer checks `iat` and `exp` again after it buffers the body.

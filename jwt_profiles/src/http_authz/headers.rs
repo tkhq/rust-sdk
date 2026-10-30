@@ -103,8 +103,8 @@ fn check_header_name(name: &str) -> Result<(), HeaderError> {
     Ok(())
 }
 
-/// Check a list of bound names: at most [`MAX_HEADER_NAMES`] valid names, each once, in any
-/// order. An empty list binds nothing.
+/// Check a list of bound names: at most [`MAX_HEADER_NAMES`] valid names,
+/// each once, in any order. An empty list binds nothing.
 ///
 /// # Errors
 ///

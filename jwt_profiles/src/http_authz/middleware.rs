@@ -285,7 +285,7 @@ where
 mod tests {
     use super::*;
     use crate::http_authz::tests::{
-        BODY, PATH, QUERY, TestKey, cfg, claims, header, rule, sent_headers,
+        BODY, PATH, QUERY, TestKey, cfg, claims, header as signed_header, rule, sent_headers,
     };
     use axum::Router;
     use axum::routing::post;
@@ -314,7 +314,7 @@ mod tests {
         let mut c = claims();
         c["iat"] = json!(now);
         c["exp"] = json!(now + 60);
-        k.sign(&header(k), &c)
+        k.sign(&signed_header(k), &c)
     }
 
     fn request(jwt: &str, headers: &HeaderMap) -> Request {
@@ -391,7 +391,8 @@ mod tests {
     #[tokio::test]
     async fn nested_route_binds_the_full_request_path() {
         let k = TestKey::new();
-        let (prefix, rest) = PATH.split_at(PATH[1..].find('/').unwrap() + 1);
+        let (prefix, rest) = ("/v1", "/resources/12345/actions");
+        assert_eq!(format!("{prefix}{rest}"), PATH);
         let route = protect(post(|| async { "ok" }), verifier(&k), rule());
         let app = Router::new().nest(prefix, Router::new().route(rest, route));
         assert_eq!(
@@ -500,7 +501,7 @@ mod tests {
         let mut c = claims();
         c["iat"] = json!(now);
         c["exp"] = json!(now + 1);
-        let jwt = k.sign(&header(&k), &c);
+        let jwt = k.sign(&signed_header(&k), &c);
         let (release, rx) = tokio::sync::oneshot::channel();
         let (parts, _) = request(&jwt, &sent_headers()).into_parts();
         let req = Request::from_parts(parts, Body::new(DelayedBody(Some(rx))));
@@ -523,7 +524,7 @@ mod tests {
         c["iat"] = json!(now);
         c["exp"] = json!(now + 60);
         c["tk_body_digest"] = json!(crate::http_authz::digest::sha256_digest(&big));
-        let jwt = k.sign(&header(&k), &c);
+        let jwt = k.sign(&signed_header(&k), &c);
         let req = || {
             let (parts, _) = request(&jwt, &sent_headers()).into_parts();
             Request::from_parts(parts, Body::from(big.clone()))

@@ -71,7 +71,10 @@ mod tests {
         assert_eq!(check_times(t, t + 301, t, &r), Err(Error::LifetimeTooLong));
         assert_eq!(check_times(t + 5, t + 30, t, &r), Ok(()));
         assert_eq!(check_times(t + 6, t + 30, t, &r), Err(Error::NotYetValid));
-        assert!(matches!(check_times(t, t, t, &r), Err(Error::BadClaim(_))));
+        assert_eq!(
+            check_times(t, t, t, &r),
+            Err(Error::BadClaim("exp must be after iat"))
+        );
         assert_eq!(check_times(0, 300, u64::MAX, &r), Err(Error::Expired));
     }
 }

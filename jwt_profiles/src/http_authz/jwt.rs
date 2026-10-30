@@ -22,7 +22,7 @@ pub const DEFAULT_CLOCK_SKEW_SECS: u64 = 5;
 /// which is 8 KiB in base64url, plus the header and signature.
 pub(crate) const MAX_TOKEN_BYTES: usize = 9 * 1024;
 pub(crate) const MAX_PATH_BYTES: usize = 2048;
-const MAX_QUERY_BYTES: usize = 2048;
+pub(crate) const MAX_QUERY_BYTES: usize = 2048;
 /// URN prefix of an organization (`iss`, `tk_parent_organization`).
 pub const ORG_URN_PREFIX: &str = "urn:turnkey:org:";
 /// URN prefix of a user (`sub`).
@@ -105,7 +105,7 @@ pub struct RequestDescriptor {
 pub struct Claims {
     /// Exact audience origin.
     pub aud: String,
-    /// Expiry, NumericDate (`iat + time_to_live_seconds`).
+    /// Expiry, NumericDate. At most `iat + max_lifetime_secs` (see `VerifierConfig`).
     pub exp: u64,
     /// Issued-at, NumericDate (activity timestamp).
     pub iat: u64,
@@ -165,6 +165,21 @@ fn is_method(m: &str) -> bool {
             .all(|b| b.is_ascii_uppercase() || is_tchar_except_alpha(b))
 }
 
+/// Check `iat` and `exp` at `now` with the configured skew and lifetime.
+pub(crate) fn check_window(
+    claims: &Claims,
+    cfg: &VerifierConfig,
+    now: u64,
+) -> Result<(), AuthError> {
+    check_times(
+        claims.iat,
+        claims.exp,
+        now,
+        &TimeRules::new(cfg.clock_skew_secs, cfg.max_lifetime_secs),
+    )?;
+    Ok(())
+}
+
 /// Verify a compact JWS against the profile, the configuration, and `now`.
 ///
 /// This does not check the request binding. See [`super::bind_request`] and
@@ -201,12 +216,7 @@ pub(crate) fn verify(
         return Err(AuthError::WrongParentOrganization);
     }
 
-    check_times(
-        claims.iat,
-        claims.exp,
-        now,
-        &TimeRules::new(cfg.clock_skew_secs, cfg.max_lifetime_secs),
-    )?;
+    check_window(&claims, cfg, now)?;
 
     let r = &claims.tk_request;
     if !is_method(&r.method) {
@@ -221,9 +231,8 @@ pub(crate) fn verify(
     if check_header_names(claims.bound_headers()).is_err() {
         return Err(AuthError::BadClaim("tk_request.headers"));
     }
-    // No bound headers has two encodings: both members absent, or both
-    // present as empty arrays (what the Turnkey minter emits). Anything else
-    // must pair each name with one digest.
+    // Both members absent, or both present as empty arrays (what the Turnkey
+    // minter emits). See `RequestDescriptor::headers`.
     match (r.headers.as_deref(), claims.tk_header_digest.as_deref()) {
         (None, None) => {}
         (Some(names), Some(d)) if d.len() == names.len() => {

@@ -58,17 +58,19 @@ struct Jwk {
     crv: String,
     x: String,
     y: String,
-    #[serde(default, deserialize_with = "present")]
+    #[serde(default, deserialize_with = "reject_null")]
     kid: Option<String>,
-    #[serde(default, deserialize_with = "present")]
+    #[serde(default, deserialize_with = "reject_null")]
     alg: Option<String>,
-    #[serde(rename = "use", default, deserialize_with = "present")]
+    #[serde(rename = "use", default, deserialize_with = "reject_null")]
     use_: Option<String>,
-    #[serde(default, deserialize_with = "present")]
+    #[serde(default, deserialize_with = "reject_null")]
     d: Option<serde::de::IgnoredAny>,
 }
 
-fn present<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+/// Deserialize a value that must not be JSON null. Used with `Option` fields so
+/// an explicit `null` is an error. A missing field still uses `#[serde(default)]`.
+fn reject_null<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
 where
     D: serde::Deserializer<'de>,
     T: Deserialize<'de>,
@@ -95,9 +97,10 @@ impl PinnedKeySet {
     ///
     /// # Errors
     ///
-    /// Returns an error for a malformed set, a private key, a non-P-256 key,
-    /// a point that is not on the curve, or a `kid` that is not the
-    /// thumbprint.
+    /// Returns an error for a malformed set, an empty set, a private key, a
+    /// non-P-256 key, an `alg` other than ES256, a `use` other than sig, an
+    /// `x` or `y` that is not 32-byte base64url, a point that is not on the
+    /// curve, or a `kid` that is not the thumbprint.
     pub fn from_jwks_json(bytes: &[u8]) -> Result<Self, JwksError> {
         let set: JwkSet =
             serde_json::from_slice(bytes).map_err(|e| JwksError(format!("parse: {e}")))?;
@@ -112,7 +115,7 @@ impl PinnedKeySet {
             if jwk.kty != "EC" || jwk.crv != "P-256" {
                 return Err(JwksError("only EC P-256 keys are accepted".into()));
             }
-            if jwk.alg.as_deref().is_some_and(|a| a != "ES256") {
+            if jwk.alg.as_deref().is_some_and(|a| a != crate::ES256) {
                 return Err(JwksError("alg must be ES256 when present".into()));
             }
             if jwk.use_.as_deref().is_some_and(|u| u != "sig") {
@@ -141,9 +144,7 @@ impl PinnedKeySet {
         }
         Ok(Self { keys })
     }
-}
 
-impl PinnedKeySet {
     /// The key with this `kid`, if any.
     #[must_use]
     pub fn get(&self, kid: &str) -> Option<&VerificationKey> {

@@ -54,14 +54,14 @@ fn handle(
 ### What the verifier checks
 
 - The token is a compact JWS of at most 9 KiB. The protected header has
-  exactly `alg`, `kid`, and `typ`. `alg` is `ES256`, pinned by
-  configuration. `typ` is `application/vnd.turnkey.http-authz-v1+jwt`.
+  exactly `alg`, `kid`, and `typ`. `alg` must be `ES256`. `typ` is
+  `application/vnd.turnkey.http-authz-v1+jwt`.
 - `kid` is the RFC 7638 thumbprint of the Turnkey signer key. It selects a
   key from a set that the service already trusts. Nothing in the token can
   name a key location. No claim is trusted before the signature verifies.
 - The claim set is closed: `iss` (`urn:turnkey:org:<id>`, the issuing
   sub-organization), `sub` (`urn:turnkey:user:<id>`), `aud`, `iat`, `exp`,
-  `tk_parent_organization?`, `tk_request {method, path, query, headers?}`,
+  `tk_parent_organization`, `tk_request {method, path, query, headers?}`,
   `tk_header_digest?`, and `tk_body_digest?`. Unknown members, nulls, and
   wrong types are rejected. There is no `jti`.
 - `tk_header_digest` has one digest per name in `tk_request.headers`, in the
