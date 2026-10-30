@@ -137,8 +137,9 @@ impl AuthzLayer {
 
     /// Set the largest request body the layer buffers, in bytes. A larger
     /// body is rejected with `413` before the handler runs. The layer must
-    /// hold the whole body to check `tk_body_digest`, so keep this bound to
-    /// what the route needs.
+    /// hold the whole body in memory to check `tk_body_digest`, so a large
+    /// value lets each request use that much memory. Keep this bound to what
+    /// the route needs.
     #[must_use]
     pub fn with_max_body_bytes(mut self, max_body_bytes: usize) -> Self {
         Arc::make_mut(&mut self.inner).max_body_bytes = max_body_bytes;
