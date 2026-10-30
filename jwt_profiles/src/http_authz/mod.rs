@@ -278,30 +278,25 @@ pub(crate) mod tests {
     use p256::ecdsa::{Signature, SigningKey};
     use rand_core::OsRng;
     use serde_json::{Value, json};
-    use turnkey_jwt_verify::{ProtectedHeader, VerificationKey, thumbprint_p256};
+    use turnkey_jwt_verify::{ProtectedHeader, VerificationKey};
 
     pub(crate) struct TestKey {
         key: SigningKey,
-        point: [u8; 65],
+        public: VerificationKey,
         pub kid: String,
     }
 
     impl TestKey {
         pub(crate) fn new() -> Self {
             let key = SigningKey::random(&mut OsRng);
-            let point = Self::point_of(&key);
-            let kid = thumbprint_p256(
-                &b64::url_encode(&point[1..33]),
-                &b64::url_encode(&point[33..]),
-            );
-            Self { key, point, kid }
-        }
-
-        fn point_of(key: &SigningKey) -> [u8; 65] {
-            let encoded = key.verifying_key().to_encoded_point(false);
-            let mut point = [0u8; 65];
-            point.copy_from_slice(encoded.as_bytes());
-            point
+            let point = key.verifying_key().to_encoded_point(false);
+            let (Some(x), Some(y)) = (point.x(), point.y()) else {
+                panic!("an uncompressed point has both coordinates");
+            };
+            let public = VerificationKey::from_p256_xy(&b64::url_encode(x), &b64::url_encode(y))
+                .expect("a generated key is a valid P-256 point");
+            let kid = public.kid().to_owned();
+            Self { key, public, kid }
         }
 
         pub(crate) fn sign(&self, header: &Value, claims: &Value) -> String {
@@ -319,10 +314,7 @@ pub(crate) mod tests {
         }
 
         pub(crate) fn keys(&self) -> Keys {
-            Keys(vec![VerificationKey {
-                kid: self.kid.clone(),
-                point: self.point,
-            }])
+            Keys(vec![self.public.clone()])
         }
     }
 
@@ -331,7 +323,7 @@ pub(crate) mod tests {
         fn key(&self, header: &ProtectedHeader) -> Option<VerificationKey> {
             self.0
                 .iter()
-                .find(|k| header.kid() == Some(&k.kid))
+                .find(|k| header.kid() == Some(k.kid()))
                 .cloned()
         }
     }
@@ -598,6 +590,37 @@ pub(crate) mod tests {
             verify(&huge, &cfg(), &keys, NOW),
             Err(AuthError::Malformed("token too large"))
         );
+    }
+
+    #[test]
+    fn accepts_a_token_at_the_minters_largest_bounds() {
+        const UUID: &str = "00000000-0000-4000-8000-000000000000";
+        let audience = format!("https://{}", "a".repeat(248));
+        let names: Vec<String> = (0..headers::MAX_HEADER_NAMES)
+            .map(|i| format!("x-{i:0>62}"))
+            .collect();
+        let digest = digest::sha256_digest(b"v");
+        let claims = json!({
+            "aud": audience,
+            "iss": format!("{}{UUID}", jwt::ISSUER_PREFIX),
+            "sub": format!("{}{UUID}", jwt::USER_URN_PREFIX),
+            "org": format!("{}{UUID}", jwt::ORG_URN_PREFIX),
+            "iat": NOW, "exp": NOW + 300,
+            "tk_request": {
+                "method": "A".repeat(32),
+                "path": format!("/{}", "a".repeat(jwt::MAX_PATH_BYTES - 1)),
+                "query": format!("q={}", "a".repeat(jwt::MAX_QUERY_BYTES - 2)),
+                "headers": names,
+            },
+            "tk_body_digest": digest,
+            "tk_header_digest": vec![digest.clone(); names.len()],
+        });
+        let k = TestKey::new();
+        let token = k.sign(&header(&k), &claims);
+        assert!(token.len() > 9 * 1024, "{} bytes", token.len());
+        assert!(token.len() <= jwt::MAX_TOKEN_BYTES, "{} bytes", token.len());
+        let config = VerifierConfig::new(audience, UUID);
+        assert!(verify(&token, &config, &k.keys(), NOW).is_ok());
     }
 
     #[test]

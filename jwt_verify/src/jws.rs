@@ -6,8 +6,8 @@
 use std::collections::HashSet;
 use std::fmt;
 
+use p256::ecdsa::Signature;
 use p256::ecdsa::signature::Verifier as _;
-use p256::ecdsa::{Signature, VerifyingKey};
 use serde::de::value::MapAccessDeserializer;
 use serde::de::{self, DeserializeOwned, IgnoredAny, MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
@@ -56,9 +56,7 @@ impl<'a> JwsRules<'a> {
     }
 }
 
-/// The protected header. The member set is closed: exactly `alg`, `kid`, and
-/// `typ`, or `alg` and `typ` under [`JwsRules::kid_optional`]. Unknown,
-/// repeated, and null members are rejected.
+/// The protected header.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProtectedHeader {
@@ -236,16 +234,15 @@ pub fn verify(
         return Err(Error::WrongType);
     }
     let key = keys.key(&header).ok_or(Error::UnknownKey)?;
-    if header.kid.as_ref().is_some_and(|kid| *kid != key.kid) {
+    if header.kid.as_deref().is_some_and(|kid| kid != key.kid()) {
         return Err(Error::UnknownKey);
     }
     let sig = b64::url_decode(s64).ok_or(Error::Malformed("signature encoding"))?;
     let (signing_input, _) = token
         .rsplit_once('.')
         .ok_or(Error::Malformed("not a compact JWS"))?;
-    let verifying_key = VerifyingKey::from_sec1_bytes(&key.point).map_err(|_| Error::UnknownKey)?;
     let signature = Signature::from_slice(&sig).map_err(|_| Error::BadSignature)?;
-    verifying_key
+    key.verifying_key()
         .verify(signing_input.as_bytes(), &signature)
         .map_err(|_| Error::BadSignature)?;
     let payload = b64::url_decode(p64).ok_or(Error::Malformed("payload encoding"))?;
@@ -317,7 +314,7 @@ impl<'de> Visitor<'de> for Strict {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::jwks::{VerificationKey, thumbprint_p256};
+    use crate::jwks::VerificationKey;
     use p256::ecdsa::SigningKey;
     use p256::ecdsa::signature::Signer;
     use rand_core::OsRng;
@@ -334,16 +331,13 @@ mod tests {
     impl Key {
         fn new() -> Self {
             let signing = SigningKey::random(&mut OsRng);
-            let mut point = [0u8; 65];
-            point.copy_from_slice(signing.verifying_key().to_encoded_point(false).as_bytes());
-            let kid = thumbprint_p256(
-                &b64::url_encode(&point[1..33]),
-                &b64::url_encode(&point[33..]),
-            );
-            Self {
-                signing,
-                public: VerificationKey { kid, point },
-            }
+            let point = signing.verifying_key().to_encoded_point(false);
+            let (Some(x), Some(y)) = (point.x(), point.y()) else {
+                panic!("an uncompressed point has both coordinates");
+            };
+            let public = VerificationKey::from_p256_xy(&b64::url_encode(x), &b64::url_encode(y))
+                .expect("a generated key is a valid P-256 point");
+            Self { signing, public }
         }
 
         fn sign(&self, header: &str, payload: &str) -> String {
@@ -357,13 +351,13 @@ mod tests {
         }
 
         fn header(&self) -> serde_json::Value {
-            json!({"alg": ES256, "kid": self.public.kid, "typ": TYP})
+            json!({"alg": ES256, "kid": self.public.kid(), "typ": TYP})
         }
     }
 
     impl KeySource for Key {
         fn key(&self, header: &ProtectedHeader) -> Option<VerificationKey> {
-            (header.kid() == Some(self.public.kid.as_str())).then(|| self.public.clone())
+            (header.kid() == Some(self.public.kid())).then(|| self.public.clone())
         }
     }
 
@@ -469,14 +463,14 @@ mod tests {
         let mut h = k.header();
         h["jwk"] = json!({});
         assert_eq!(e(h), Error::Malformed("header"));
-        let positional = json!([ES256, k.public.kid, TYP]).to_string();
+        let positional = json!([ES256, k.public.kid(), TYP]).to_string();
         assert_eq!(
             verify(&k.sign(&positional, "{}"), &RULES, &k).unwrap_err(),
             Error::Malformed("header")
         );
         let dup = format!(
             r#"{{"alg":"ES256","alg":"ES256","kid":"{}","typ":"{TYP}"}}"#,
-            k.public.kid
+            k.public.kid()
         );
         assert_eq!(
             verify(&k.sign(&dup, "{}"), &RULES, &k).unwrap_err(),

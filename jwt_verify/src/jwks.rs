@@ -1,28 +1,56 @@
-//! Trusted ES256 verification keys.
-//!
-//! [`crate::verify`] gets keys only through the [`KeySource`] trait. A
-//! source sees the verified-shape protected header and returns a key it
-//! already trusts. [`PinnedKeySet`] selects by `kid`, the unpadded base64url
-//! RFC 7638 thumbprint, from a JWK Set that the application pins in its
-//! configuration. `kid` selects among trusted keys; it is never a trust root.
-//!
-//! No source in this crate derives a key location from `iss`, `jku`, `x5u`,
-//! or any other token value.
+//! Types for parsing and accessing already trusted ES256 verification keys.
 
 use std::fmt;
 
+use p256::ecdsa::VerifyingKey;
 use serde::Deserialize;
 
 use crate::ProtectedHeader;
 use crate::b64;
 
-/// A trusted ES256 public key.
+/// A trusted ES256 public key, identified by its RFC 7638 thumbprint.
 #[derive(Clone)]
 pub struct VerificationKey {
-    /// RFC 7638 thumbprint of the key.
-    pub kid: String,
-    /// SEC1 uncompressed point, `04 || x || y`.
-    pub point: [u8; 65],
+    kid: String,
+    key: VerifyingKey,
+}
+
+impl VerificationKey {
+    /// A key from the JWK `x` and `y` members (unpadded base64url), with its
+    /// `kid` set to the RFC 7638 thumbprint.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when `x` or `y` is not 32-byte base64url or the point
+    /// is not on P-256.
+    pub fn from_p256_xy(x: &str, y: &str) -> Result<Self, JwksError> {
+        let (Some(x_bytes), Some(y_bytes)) = (
+            b64::url_decode(x).filter(|v| v.len() == 32),
+            b64::url_decode(y).filter(|v| v.len() == 32),
+        ) else {
+            return Err(JwksError("x and y must be 32-byte base64url".into()));
+        };
+        let mut point = Vec::with_capacity(65);
+        point.push(0x04);
+        point.extend_from_slice(&x_bytes);
+        point.extend_from_slice(&y_bytes);
+        let key = VerifyingKey::from_sec1_bytes(&point)
+            .map_err(|_| JwksError("point is not on P-256".into()))?;
+        Ok(Self {
+            kid: thumbprint_p256(x, y),
+            key,
+        })
+    }
+
+    /// The RFC 7638 thumbprint of the key.
+    #[must_use]
+    pub fn kid(&self) -> &str {
+        &self.kid
+    }
+
+    pub(crate) fn verifying_key(&self) -> &VerifyingKey {
+        &self.key
+    }
 }
 
 /// A source of trusted keys.
@@ -128,26 +156,14 @@ impl PinnedKeySet {
             if jwk.use_.as_deref().is_some_and(|u| u != "sig") {
                 return Err(JwksError("use must be sig when present".into()));
             }
-            let (Some(x), Some(y)) = (
-                b64::url_decode(&jwk.x).filter(|v| v.len() == 32),
-                b64::url_decode(&jwk.y).filter(|v| v.len() == 32),
-            ) else {
-                return Err(JwksError("x and y must be 32-byte base64url".into()));
-            };
-            let mut point = [0u8; 65];
-            point[0] = 0x04;
-            point[1..33].copy_from_slice(&x);
-            point[33..].copy_from_slice(&y);
-            if p256::PublicKey::from_sec1_bytes(&point).is_err() {
-                return Err(JwksError("point is not on P-256".into()));
-            }
-            let kid = thumbprint_p256(&jwk.x, &jwk.y);
-            if jwk.kid.as_deref().is_some_and(|k| k != kid) {
+            let key = VerificationKey::from_p256_xy(&jwk.x, &jwk.y)?;
+            if jwk.kid.as_deref().is_some_and(|k| k != key.kid()) {
                 return Err(JwksError(format!(
-                    "kid is not the RFC 7638 thumbprint ({kid})"
+                    "kid is not the RFC 7638 thumbprint ({})",
+                    key.kid()
                 )));
             }
-            keys.push(VerificationKey { kid, point });
+            keys.push(key);
         }
         Ok(Self { keys })
     }
@@ -155,7 +171,7 @@ impl PinnedKeySet {
     /// The key with this `kid`, if any.
     #[must_use]
     pub fn get(&self, kid: &str) -> Option<&VerificationKey> {
-        self.keys.iter().find(|k| k.kid == kid)
+        self.keys.iter().find(|k| k.kid() == kid)
     }
 }
 

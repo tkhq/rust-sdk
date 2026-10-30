@@ -18,9 +18,10 @@ pub const MAX_LIFETIME_SECS: u64 = 300;
 pub const MAX_CLOCK_SKEW_SECS: u64 = 30;
 /// Default clock skew.
 pub const DEFAULT_CLOCK_SKEW_SECS: u64 = 5;
-/// Largest accepted compact JWS. The profile allows a 6 KiB claim object,
-/// which is 8 KiB in base64url, plus the header and signature.
-pub(crate) const MAX_TOKEN_BYTES: usize = 9 * 1024;
+/// Largest accepted compact JWS. It covers the minter's combined maximum:
+/// audience, method, path, query, and 32 bound header names with their
+/// digests.
+pub(crate) const MAX_TOKEN_BYTES: usize = 12 * 1024;
 pub(crate) const MAX_PATH_BYTES: usize = 2048;
 pub(crate) const MAX_QUERY_BYTES: usize = 2048;
 /// Prefix of `iss`, followed by the top-level organization ID.
