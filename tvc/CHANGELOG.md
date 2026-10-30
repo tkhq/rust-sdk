@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.17.1](https://github.com/tkhq/rust-sdk/compare/tvc-v0.17.0...tvc-v0.17.1) - 2026-10-30
+
+### Fixed
+
+- *(tvc)* keep escaped prompt defaults fully visible
+- *(tvc)* flag escaped controls and keep manifest fields on one line
+- *(tvc)* match rustfmt output in terminal rendering
+- *(tvc)* escape control characters at terminal output boundaries
+
+### Other
+
+- Merge pull request #303 from tkhq/avi/tvc-safe-terminal-output
+- *(tvc)* explain terminal-safe presentation in agent guidance
+
 ## [0.17.0](https://github.com/tkhq/rust-sdk/compare/tvc-v0.16.0...tvc-v0.17.0) - 2026-10-29
 
 ### Added
