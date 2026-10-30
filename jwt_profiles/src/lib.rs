@@ -1,4 +1,4 @@
-#![cfg_attr(feature = "http-authz", doc = include_str!("../README.md"))]
+#![doc = include_str!("../README.md")]
 
 #[cfg(feature = "http-authz")]
 pub mod http_authz;
