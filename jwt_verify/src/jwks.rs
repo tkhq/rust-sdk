@@ -8,6 +8,9 @@ use serde::Deserialize;
 use crate::ProtectedHeader;
 use crate::b64;
 
+const P256_CRV: &str = "P-256";
+const SIG_USE: &str = "sig";
+
 /// A trusted ES256 public key, identified by its RFC 7638 thumbprint.
 #[derive(Clone)]
 pub struct VerificationKey {
@@ -117,7 +120,7 @@ where
 /// lexicographic order, with no whitespace, as unpadded base64url.
 #[must_use]
 pub fn thumbprint_p256(x: &str, y: &str) -> String {
-    let canonical = format!(r#"{{"crv":"P-256","kty":"EC","x":"{x}","y":"{y}"}}"#);
+    let canonical = format!(r#"{{"crv":"{P256_CRV}","kty":"EC","x":"{x}","y":"{y}"}}"#);
     b64::sha256_url(canonical.as_bytes())
 }
 
@@ -127,15 +130,13 @@ pub struct PinnedKeySet {
 }
 
 impl PinnedKeySet {
-    /// Parse a JWK Set. Every key must be a public P-256 key. A `kid`, when
-    /// present, must equal the RFC 7638 thumbprint.
+    /// Parse a JWK Set of public ES256 keys. A `kid`, when present, must equal
+    /// the RFC 7638 thumbprint.
     ///
     /// # Errors
     ///
-    /// Returns an error for a malformed set, an empty set, a private key, a
-    /// non-P-256 key, an `alg` other than ES256, a `use` other than sig, an
-    /// `x` or `y` that is not 32-byte base64url, a point that is not on the
-    /// curve, or a `kid` that is not the thumbprint.
+    /// Returns an error when the set is empty or malformed, or a key is not a
+    /// valid public ES256 key.
     pub fn from_jwks_json(bytes: &[u8]) -> Result<Self, JwksError> {
         let set: JwkSet =
             serde_json::from_slice(bytes).map_err(|e| JwksError(format!("parse: {e}")))?;
@@ -147,13 +148,13 @@ impl PinnedKeySet {
             if jwk.d.is_some() {
                 return Err(JwksError("the set contains a private key".into()));
             }
-            if jwk.kty != "EC" || jwk.crv != "P-256" {
+            if jwk.kty != "EC" || jwk.crv != P256_CRV {
                 return Err(JwksError("only EC P-256 keys are accepted".into()));
             }
             if jwk.alg.as_deref().is_some_and(|a| a != crate::ES256) {
                 return Err(JwksError("alg must be ES256 when present".into()));
             }
-            if jwk.use_.as_deref().is_some_and(|u| u != "sig") {
+            if jwk.use_.as_deref().is_some_and(|u| u != SIG_USE) {
                 return Err(JwksError("use must be sig when present".into()));
             }
             let key = VerificationKey::from_p256_xy(&jwk.x, &jwk.y)?;

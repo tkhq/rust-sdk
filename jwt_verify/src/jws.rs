@@ -114,9 +114,20 @@ impl VerifiedJws {
     /// Parse the payload as a claim set of type `T`.
     ///
     /// The payload must be a JSON object with no nulls and no repeated member
-    /// names at any depth, and `T` must accept it. Use a struct with
-    /// `#[serde(deny_unknown_fields)]` for a closed claim schema, and
-    /// [`object`] on nested struct members so they too must be objects.
+    /// names at any depth. Everything else is up to `T`, so define it as
+    /// follows:
+    ///
+    /// - Derive `Deserialize` on a struct with `#[serde(deny_unknown_fields)]`,
+    ///   so a claim the profile does not define is an error instead of being
+    ///   ignored.
+    /// - Put `#[serde(deny_unknown_fields)]` on every nested struct too.
+    /// - Put `#[serde(deserialize_with = "object")]` on each member whose type
+    ///   is a struct. Serde's derived `Deserialize` also accepts a JSON array
+    ///   of the fields in order, and [`object`] rejects that form. It covers a
+    ///   member that is a struct directly: a `Vec<Inner>` or `Option<Inner>`
+    ///   member still accepts the array form for each `Inner`.
+    /// - Use `Option<_>` with `#[serde(default)]` for an optional claim. A
+    ///   missing claim is `None`.
     ///
     /// # Errors
     ///

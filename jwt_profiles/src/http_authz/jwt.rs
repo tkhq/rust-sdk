@@ -3,7 +3,7 @@
 //! Nothing in the token is trusted until the signature is verified with a
 //! key that the configuration already trusts.
 
-use serde::{Deserialize, Deserializer};
+use serde::Deserialize;
 use turnkey_jwt_verify::{JwsRules, KeySource, TimeRules, check_times, object};
 
 use super::digest::is_digest;
@@ -98,7 +98,7 @@ pub struct RequestDescriptor {
     /// `tk_header_digest`. The pair with `tk_header_digest` has two
     /// encodings: both absent, or both present as empty arrays. Any other
     /// combination is a `BadClaim`.
-    #[serde(default, deserialize_with = "non_null")]
+    #[serde(default)]
     pub headers: Option<Vec<String>>,
 }
 
@@ -124,12 +124,12 @@ pub struct Claims {
     #[serde(deserialize_with = "object")]
     pub tk_request: RequestDescriptor,
     /// Digest of the body as received, if bound.
-    #[serde(default, deserialize_with = "non_null")]
+    #[serde(default)]
     pub tk_body_digest: Option<String>,
     /// One digest per name in `tk_request.headers`, in the same order. The
     /// pair with `tk_request.headers` has two encodings: both absent, or both
     /// present as empty arrays. Any other combination is a `BadClaim`.
-    #[serde(default, deserialize_with = "non_null")]
+    #[serde(default)]
     pub tk_header_digest: Option<Vec<String>>,
 }
 
@@ -138,14 +138,6 @@ impl Claims {
     pub(crate) fn bound_headers(&self) -> &[String] {
         self.tk_request.headers.as_deref().unwrap_or_default()
     }
-}
-
-fn non_null<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
-where
-    D: Deserializer<'de>,
-    T: Deserialize<'de>,
-{
-    T::deserialize(deserializer).map(Some)
 }
 
 fn printable_id(s: &str, max: usize) -> bool {

@@ -25,3 +25,47 @@ fn check(jwks: &[u8], token: &str) -> Result<String, Box<dyn std::error::Error>>
     Ok(claims.sub)
 }
 ```
+
+`VerifiedJws::claims` then parses the payload. The payload must be a JSON
+object with no nulls and no repeated member names at any depth. A payload
+that is not JSON is `Malformed`. A payload that is not a strict object or
+does not match the struct is `BadClaim`.
+
+### Defining a claims struct
+
+`claims` checks only the top level and the rules above. The struct decides
+the rest, so define it as follows:
+
+- Derive `Deserialize` with `#[serde(deny_unknown_fields)]`. Without it,
+  serde ignores claims the profile does not define.
+- Put `#[serde(deny_unknown_fields)]` on every nested struct too.
+- Put `#[serde(deserialize_with = "turnkey_jwt_verify::object")]` on each
+  member whose type is a struct. Serde also accepts a struct as a JSON array
+  of its fields in order, and `object` rejects that form. A `Vec<Inner>` or
+  `Option<Inner>` member is not covered: each `Inner` still accepts the array
+  form.
+- Use `Option<_>` with `#[serde(default)]` for an optional claim.
+
+```rust
+use serde::Deserialize;
+use turnkey_jwt_verify::object;
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Claims {
+    sub: String,
+    exp: u64,
+    iat: u64,
+    #[serde(deserialize_with = "object")]
+    request: Request,
+    #[serde(default)]
+    note: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Request {
+    method: String,
+    path: String,
+}
+```
