@@ -27,27 +27,49 @@ pub struct JwsRules<'a> {
     pub typ: &'a str,
     /// Largest accepted compact JWS, in bytes.
     pub max_token_bytes: usize,
+    /// Whether the header must carry `kid`. True unless
+    /// [`JwsRules::kid_optional`] is used.
+    pub require_kid: bool,
 }
 
 impl<'a> JwsRules<'a> {
-    /// Rules for tokens of media type `typ` and at most `max_token_bytes`.
+    /// Rules for tokens of media type `typ` and at most `max_token_bytes`,
+    /// with a required `kid`.
     #[must_use]
     pub const fn new(typ: &'a str, max_token_bytes: usize) -> Self {
         Self {
             typ,
             max_token_bytes,
+            require_kid: true,
+        }
+    }
+
+    /// The same rules, but a header without `kid` is accepted. Use only with
+    /// a [`KeySource`] that already holds one specific key, such as the `cnf`
+    /// key a Key Binding JWT is checked with.
+    #[must_use]
+    pub const fn kid_optional(self) -> Self {
+        Self {
+            require_kid: false,
+            ..self
         }
     }
 }
 
 /// The protected header. The member set is closed: exactly `alg`, `kid`, and
-/// `typ`. Unknown and repeated members are rejected.
+/// `typ`, or `alg` and `typ` under [`JwsRules::kid_optional`]. Unknown,
+/// repeated, and null members are rejected.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProtectedHeader {
     alg: String,
-    kid: String,
+    #[serde(default, deserialize_with = "non_null")]
+    kid: Option<String>,
     typ: String,
+}
+
+fn non_null<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<String>, D::Error> {
+    String::deserialize(deserializer).map(Some)
 }
 
 impl ProtectedHeader {
@@ -63,10 +85,11 @@ impl ProtectedHeader {
         &self.typ
     }
 
-    /// The `kid` member. Always present in the accepted header set today.
+    /// The `kid` member. Always present unless the rules used
+    /// [`JwsRules::kid_optional`].
     #[must_use]
     pub fn kid(&self) -> Option<&str> {
-        Some(&self.kid)
+        self.kid.as_deref()
     }
 }
 
@@ -148,6 +171,29 @@ where
     deserializer.deserialize_map(ObjectVisitor(std::marker::PhantomData))
 }
 
+/// Parse JSON that is not necessarily an object, with the same strictness as
+/// [`VerifiedJws::claims`]: no nulls and no repeated member names at any depth.
+///
+/// For JSON that a signature covers only indirectly, such as SD-JWT
+/// disclosures, whose digests are in a signed payload.
+///
+/// # Errors
+///
+/// Returns [`Error::Malformed`] when `bytes` is not JSON, and
+/// [`Error::BadClaim`] when it has a null or a repeated name, or does not
+/// match `T`.
+pub fn strict_json<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, Error> {
+    if serde_json::from_slice::<Strict>(bytes).is_err() {
+        if serde_json::from_slice::<IgnoredAny>(bytes).is_err() {
+            return Err(Error::Malformed("json"));
+        }
+        return Err(Error::BadClaim(
+            "json must not contain nulls or repeated names",
+        ));
+    }
+    serde_json::from_slice(bytes).map_err(|_| Error::BadClaim("json does not match the schema"))
+}
+
 fn from_object<T: DeserializeOwned>(bytes: &[u8]) -> serde_json::Result<T> {
     let mut de = serde_json::Deserializer::from_slice(bytes);
     let value = object(&mut de)?;
@@ -182,6 +228,9 @@ pub fn verify(
     let header_bytes = b64::url_decode(h64).ok_or(Error::Malformed("header encoding"))?;
     let header: ProtectedHeader =
         from_object(&header_bytes).map_err(|_| Error::Malformed("header"))?;
+    if rules.require_kid && header.kid.is_none() {
+        return Err(Error::Malformed("header"));
+    }
     if header.alg != ES256 {
         return Err(Error::UnsupportedAlgorithm);
     }
@@ -189,7 +238,7 @@ pub fn verify(
         return Err(Error::WrongType);
     }
     let key = keys.key(&header).ok_or(Error::UnknownKey)?;
-    if header.kid != key.kid {
+    if header.kid.as_ref().is_some_and(|kid| *kid != key.kid) {
         return Err(Error::UnknownKey);
     }
     let sig = b64::url_decode(s64).ok_or(Error::Malformed("signature encoding"))?;
@@ -443,6 +492,58 @@ mod tests {
         assert_eq!(
             verify(&forged, &RULES, &k).unwrap_err(),
             Error::BadSignature
+        );
+        let mut h = k.header();
+        h["kid"] = json!(null);
+        assert_eq!(e(h), Error::Malformed("header"));
+    }
+
+    #[test]
+    fn header_without_kid_needs_a_single_trusted_key() {
+        let k = Key::new();
+        let no_kid = json!({"alg": ES256, "typ": TYP}).to_string();
+        let token = k.sign(&no_kid, "{}");
+        let optional = RULES.kid_optional();
+
+        // The default rules still require kid, whatever the key source.
+        assert_eq!(
+            verify(&token, &RULES, &k.public).unwrap_err(),
+            Error::Malformed("header")
+        );
+        // `Key` selects by kid, like `PinnedKeySet`.
+        assert_eq!(
+            verify(&token, &optional, &k).unwrap_err(),
+            Error::UnknownKey
+        );
+
+        let jws = verify(&token, &optional, &k.public).unwrap();
+        assert_eq!(jws.header().kid(), None);
+
+        let other = Key::new();
+        let wrong_kid = k.sign(&other.header().to_string(), "{}");
+        assert_eq!(
+            verify(&wrong_kid, &optional, &k.public).unwrap_err(),
+            Error::UnknownKey
+        );
+    }
+
+    #[test]
+    fn strict_json_rejects_nulls_and_repeated_names() {
+        assert_eq!(
+            strict_json::<serde_json::Value>(br#"["s","n",{"a":1}]"#),
+            Ok(json!(["s", "n", {"a": 1}]))
+        );
+        let strict = Err(Error::BadClaim(
+            "json must not contain nulls or repeated names",
+        ));
+        assert_eq!(strict_json::<serde_json::Value>(br#"["s",null]"#), strict);
+        assert_eq!(
+            strict_json::<serde_json::Value>(br#"["s","n",{"a":1,"a":2}]"#),
+            strict
+        );
+        assert_eq!(
+            strict_json::<serde_json::Value>(b"["),
+            Err(Error::Malformed("json"))
         );
     }
 }

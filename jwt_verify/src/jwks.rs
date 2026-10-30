@@ -35,6 +35,15 @@ pub trait KeySource: Send + Sync {
     fn key(&self, header: &ProtectedHeader) -> Option<VerificationKey>;
 }
 
+/// A single key the caller already trusts, for example the `cnf` key that a
+/// Key Binding JWT must be signed with. A header `kid`, when present, must
+/// still equal the key's thumbprint.
+impl KeySource for VerificationKey {
+    fn key(&self, _header: &ProtectedHeader) -> Option<VerificationKey> {
+        Some(self.clone())
+    }
+}
+
 /// A JWK Set parse or validation error.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JwksError(pub String);
