@@ -53,7 +53,7 @@ fn handle(
 
 ### What the verifier checks
 
-- The token is a compact JWS of at most 9 KiB. The protected header has
+- The token is a compact JWS of at most 12 KiB. The protected header has
   exactly `alg`, `kid`, and `typ`. `alg` must be `ES256`. `typ` is
   `application/vnd.turnkey.http-authz-v1+jwt`.
 - `kid` is the RFC 7638 thumbprint of the Turnkey signer key. It selects a
