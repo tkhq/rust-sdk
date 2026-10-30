@@ -1,10 +1,9 @@
-//! The profile digest format for `tk_body_digest` and `tk_header_digest`.
+//! RFC 9530 digests as Turnkey profiles use them.
 //!
-//! A digest is exactly one RFC 9530 dictionary member, `sha-256=:<b64>:`,
-//! where `<b64>` is standard base64 with padding (44 characters). No other
-//! algorithm, no parameters, no whitespace, and no second member. The body
-//! digest equals a valid `Content-Digest` value for the body bytes as
-//! received.
+//! A digest is exactly one dictionary member, `sha-256=:<b64>:`, where
+//! `<b64>` is standard base64 with padding (44 characters). No other
+//! algorithm, no parameters, no whitespace, and no second member. A digest of
+//! body bytes equals a valid `Content-Digest` value for them.
 //!
 //! The test vectors live in `testdata/digests.json`.
 
@@ -25,7 +24,7 @@ pub(crate) fn format_digest(d: &[u8]) -> String {
     format!("{DIGEST_PREFIX}{}{DIGEST_SUFFIX}", STANDARD.encode(d))
 }
 
-/// Whether `s` is a digest string in the profile format.
+/// Whether `s` is a digest string in this format.
 #[must_use]
 pub fn is_digest(s: &str) -> bool {
     let Some(b64) = s
@@ -44,7 +43,7 @@ pub fn is_digest(s: &str) -> bool {
 pub(crate) mod tests {
     use super::*;
 
-    pub(crate) const VECTORS: &str = include_str!("../../testdata/digests.json");
+    pub(crate) const VECTORS: &str = include_str!("../testdata/digests.json");
 
     #[test]
     fn sha256_digest_matches_shared_body_vectors() {

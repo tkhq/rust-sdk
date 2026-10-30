@@ -4,7 +4,7 @@
 //! `tk_header_digest`, one digest per name in the same order. For each name,
 //! the verifier takes the received field lines for that name in received
 //! order, trims leading and trailing spaces and tabs from each, joins them
-//! with `", "`, and hashes the result ([`super::digest`]). A bound header
+//! with `", "`, and hashes the result ([`crate::rfc9530`]). A bound header
 //! that is absent from the request is a mismatch. A field value with a byte
 //! outside visible ASCII, space, and tab is rejected.
 //!
@@ -16,7 +16,7 @@
 use http::HeaderMap;
 use sha2::{Digest, Sha256};
 
-use super::digest::format_digest;
+use crate::rfc9530::format_digest;
 
 /// Most bound header names.
 pub const MAX_HEADER_NAMES: usize = 32;
@@ -196,8 +196,8 @@ pub fn header_digests<S: AsRef<str>>(
 
 #[cfg(test)]
 mod tests {
-    use super::super::digest::tests::VECTORS;
     use super::*;
+    use crate::rfc9530::tests::VECTORS;
     use http::{HeaderName, HeaderValue};
 
     fn header_map(received: &serde_json::Value) -> HeaderMap {

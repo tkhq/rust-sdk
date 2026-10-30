@@ -2,7 +2,6 @@
 //! request-bound JWTs minted with `ACTIVITY_TYPE_MINT_JWT` and bind them to
 //! the received HTTP request. See the crate documentation for the checks.
 
-pub mod digest;
 pub mod headers;
 pub mod jwt;
 #[cfg(feature = "axum")]
@@ -13,7 +12,7 @@ use std::sync::Arc;
 
 use http::HeaderMap;
 
-use digest::sha256_digest;
+use crate::rfc9530::sha256_digest;
 use headers::HeaderError;
 pub use jwt::{Claims, VerifierConfig};
 pub use turnkey_jwt_verify::{KeySource, b64, jwks, unix_now};
@@ -274,6 +273,7 @@ impl Verifier {
 pub(crate) mod tests {
     use super::jwt::{TYP, VerifierConfig, verify};
     use super::*;
+    use crate::rfc9530;
     use p256::ecdsa::signature::Signer;
     use p256::ecdsa::{Signature, SigningKey};
     use rand_core::OsRng;
@@ -372,7 +372,7 @@ pub(crate) mod tests {
             "tk_request": {
                 "method": "POST", "path": PATH, "query": QUERY, "headers": BOUND,
             },
-            "tk_body_digest": digest::sha256_digest(BODY),
+            "tk_body_digest": rfc9530::sha256_digest(BODY),
             "tk_header_digest": headers::header_digests(&BOUND, &sent_headers()).unwrap(),
         })
     }
@@ -599,7 +599,7 @@ pub(crate) mod tests {
         let names: Vec<String> = (0..headers::MAX_HEADER_NAMES)
             .map(|i| format!("x-{i:0>62}"))
             .collect();
-        let digest = digest::sha256_digest(b"v");
+        let digest = rfc9530::sha256_digest(b"v");
         let claims = json!({
             "aud": audience,
             "iss": format!("{}{UUID}", jwt::ISSUER_PREFIX),
@@ -821,13 +821,13 @@ pub(crate) mod tests {
         assert!(is_bad_claim(with(
             claims(),
             "tk_header_digest",
-            json!([null, digest::sha256_digest(b"")])
+            json!([null, rfc9530::sha256_digest(b"")])
         )));
     }
 
     #[test]
     fn header_names_must_be_valid_unique_and_paired_with_digests() {
-        let d = digest::sha256_digest(b"x");
+        let d = rfc9530::sha256_digest(b"x");
         for names in [
             json!(["accept", "accept"]),
             json!(["Accept"]),
@@ -913,7 +913,7 @@ pub(crate) mod tests {
 
     #[test]
     fn digest_claims_accept_only_the_profile_digest_format() {
-        let v: Value = serde_json::from_str(digest::tests::VECTORS).unwrap();
+        let v: Value = serde_json::from_str(rfc9530::tests::VECTORS).unwrap();
         let cases = v["format"].as_array().unwrap();
         assert!(cases.len() >= 8);
         for case in cases {
@@ -1110,7 +1110,7 @@ pub(crate) mod tests {
         let empty = with(
             claims(),
             "tk_body_digest",
-            json!(digest::sha256_digest(b"")),
+            json!(rfc9530::sha256_digest(b"")),
         );
         let c = verify_claims(&empty).unwrap();
         assert_eq!(bind(&c, &h, b""), Ok(()));

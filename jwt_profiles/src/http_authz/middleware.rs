@@ -518,7 +518,7 @@ mod tests {
         let now = unix_now();
         c["iat"] = json!(now);
         c["exp"] = json!(now + 60);
-        c["tk_body_digest"] = json!(crate::http_authz::digest::sha256_digest(&big));
+        c["tk_body_digest"] = json!(crate::rfc9530::sha256_digest(&big));
         let jwt = k.sign(&signed_header(&k), &c);
         let req = || {
             let (parts, _) = request(&jwt, &sent_headers()).into_parts();

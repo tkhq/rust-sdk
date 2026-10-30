@@ -2,3 +2,4 @@
 
 #[cfg(feature = "http-authz")]
 pub mod http_authz;
+pub mod rfc9530;

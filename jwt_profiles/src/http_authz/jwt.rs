@@ -6,9 +6,9 @@
 use serde::Deserialize;
 use turnkey_jwt_verify::{JwsRules, KeySource, TimeRules, check_times, object};
 
-use super::digest::is_digest;
 use super::headers::{check_header_names, is_tchar_except_alpha};
 use super::{AuthError, ConfigError};
+use crate::rfc9530::is_digest;
 
 pub(crate) const TYP: &str = "application/vnd.turnkey.http-authz-v1+jwt";
 /// Profile maximum lifetime, `exp - iat`. A destination can configure a
