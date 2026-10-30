@@ -399,7 +399,7 @@ mod tests {
             let body = axum::body::to_bytes(resp.into_body(), 1024).await.unwrap();
             assert_eq!(
                 body,
-                "urn:turnkey:org:sub_org_1 urn:turnkey:user:user_1".as_bytes()
+                "urn:turnkey:org:7b9c1d52-3e48-4a07-9c3d-5e8a2f6b0c44 urn:turnkey:user:c2e5f8a1-6d3b-4b9a-a710-3f4e9b8d2c05".as_bytes()
             );
         }
     }

@@ -8,6 +8,7 @@ use turnkey_jwt_verify::{JwsRules, KeySource, TimeRules, check_times, object};
 
 use super::headers::{check_header_names, is_tchar_except_alpha};
 use super::{AuthError, ConfigError};
+use crate::ids;
 use crate::rfc9530::is_digest;
 
 pub(crate) const TYP: &str = "application/vnd.turnkey.http-authz-v1+jwt";
@@ -36,7 +37,7 @@ pub const USER_URN_PREFIX: &str = "urn:turnkey:user:";
 pub struct VerifierConfig {
     /// The app's exact origin, compared byte for byte with `aud`.
     pub audience: String,
-    /// The app's top-level organization ID (without a prefix). A token's
+    /// The app's top-level organization ID, a UUID without a prefix. A token's
     /// `iss` must equal `https://id.turnkey.com/t/<organization_id>`.
     pub organization_id: String,
     /// Allowed clock skew in seconds, at most [`MAX_CLOCK_SKEW_SECS`].
@@ -61,12 +62,10 @@ impl VerifierConfig {
         if self.audience.is_empty() {
             return Err(ConfigError("audience must not be empty".into()));
         }
-        if !printable_id(&self.organization_id, 128)
-            || self.organization_id.starts_with("urn:")
-            || self.organization_id.contains('/')
-        {
+        if !ids::is_uuid(&self.organization_id) {
             return Err(ConfigError(
-                "organization_id must be a bare organization ID (1 to 128 visible ASCII characters, no prefix)".into(),
+                "organization_id must be an organization ID: a lowercase UUID with no prefix"
+                    .into(),
             ));
         }
         if self.clock_skew_secs > MAX_CLOCK_SKEW_SECS {
@@ -140,17 +139,6 @@ impl Claims {
     }
 }
 
-fn printable_id(s: &str, max: usize) -> bool {
-    !s.is_empty() && s.len() <= max && s.bytes().all(|b| (0x21..=0x7e).contains(&b))
-}
-
-fn urn_id<'a>(s: &'a str, prefix: &str) -> Option<&'a str> {
-    if !printable_id(s, 256) {
-        return None;
-    }
-    s.strip_prefix(prefix).filter(|id| !id.is_empty())
-}
-
 #[must_use]
 fn is_method(m: &str) -> bool {
     !m.is_empty()
@@ -194,16 +182,14 @@ pub(crate) fn verify(
     if claims.aud != cfg.audience {
         return Err(AuthError::WrongAudience);
     }
-    let issuer_id = urn_id(&claims.iss, ISSUER_PREFIX)
-        .filter(|id| !id.contains('/'))
-        .ok_or(AuthError::BadClaim("iss"))?;
+    let issuer_id = ids::urn_uuid(&claims.iss, ISSUER_PREFIX).ok_or(AuthError::BadClaim("iss"))?;
     if issuer_id != cfg.organization_id {
         return Err(AuthError::WrongIssuer);
     }
-    if urn_id(&claims.org, ORG_URN_PREFIX).is_none() {
+    if ids::urn_uuid(&claims.org, ORG_URN_PREFIX).is_none() {
         return Err(AuthError::BadClaim("org"));
     }
-    if urn_id(&claims.sub, USER_URN_PREFIX).is_none() {
+    if ids::urn_uuid(&claims.sub, USER_URN_PREFIX).is_none() {
         return Err(AuthError::BadClaim("sub"));
     }
 

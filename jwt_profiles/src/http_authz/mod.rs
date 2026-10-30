@@ -17,7 +17,7 @@
 //! ) -> Result<(), Box<dyn std::error::Error>> {
 //!     // In a real service, build the verifier once at startup.
 //!     let keys = PinnedKeySet::from_jwks_json(jwks)?;
-//!     let config = VerifierConfig::new("https://app.example", "parent_org_1");
+//!     let config = VerifierConfig::new("https://app.example", "4f0a3a8e-9d2b-4c61-8f57-2b1c6d0e7a11");
 //!     let verifier = Verifier::new(config, Arc::new(keys))?;
 //!     let rule = RouteRule {
 //!         required_headers: vec!["accept".into()],
@@ -363,10 +363,10 @@ pub(crate) mod tests {
     }
 
     pub(crate) const AUD: &str = "https://app.example";
-    const ORG_ID: &str = "parent_org_1";
-    const ISS: &str = "https://id.turnkey.com/t/parent_org_1";
-    const ORG: &str = "urn:turnkey:org:sub_org_1";
-    const SUB: &str = "urn:turnkey:user:user_1";
+    const ORG_ID: &str = "4f0a3a8e-9d2b-4c61-8f57-2b1c6d0e7a11";
+    const ISS: &str = "https://id.turnkey.com/t/4f0a3a8e-9d2b-4c61-8f57-2b1c6d0e7a11";
+    const ORG: &str = "urn:turnkey:org:7b9c1d52-3e48-4a07-9c3d-5e8a2f6b0c44";
+    const SUB: &str = "urn:turnkey:user:c2e5f8a1-6d3b-4b9a-a710-3f4e9b8d2c05";
     pub(crate) const NOW: u64 = 1_800_000_000;
     pub(crate) const PATH: &str = "/v1/resources/12345/actions";
     pub(crate) const QUERY: &str = "tag=blue&role=viewer%3Aread";
@@ -532,8 +532,16 @@ pub(crate) mod tests {
         let bad = |c: VerifierConfig| Verifier::new(c, Arc::clone(&keys)).is_err();
         assert!(bad(VerifierConfig::new("", ORG_ID)));
         assert!(bad(VerifierConfig::new(AUD, "")));
+        assert!(bad(VerifierConfig::new(AUD, "parent_org_1")), "not a UUID");
         assert!(
-            bad(VerifierConfig::new(AUD, "urn:turnkey:org:parent_org_1")),
+            bad(VerifierConfig::new(AUD, ORG_ID.to_uppercase())),
+            "uppercase UUID"
+        );
+        assert!(
+            bad(VerifierConfig::new(
+                AUD,
+                "urn:turnkey:org:4f0a3a8e-9d2b-4c61-8f57-2b1c6d0e7a11"
+            )),
             "URN instead of an ID"
         );
         assert!(
@@ -686,26 +694,34 @@ pub(crate) mod tests {
             claim_error(with(
                 claims(),
                 "iss",
-                json!("https://id.turnkey.com/t/parent_org_2")
+                json!("https://id.turnkey.com/t/9a1e4d7c-2b58-4f03-8c6a-1d7e5b3f0a92")
             )),
             AuthError::WrongIssuer
         );
         for bad in [
             json!(ORG_ID),
-            json!("urn:turnkey:org:parent_org_1"),
-            json!("https://auth.turnkey.com/t/parent_org_1"),
+            json!("urn:turnkey:org:4f0a3a8e-9d2b-4c61-8f57-2b1c6d0e7a11"),
+            json!("https://auth.turnkey.com/t/4f0a3a8e-9d2b-4c61-8f57-2b1c6d0e7a11"),
             json!("https://id.turnkey.com/t/"),
-            json!("https://id.turnkey.com/t/parent_org_1/"),
+            json!("https://id.turnkey.com/t/parent_org_1"),
+            json!("https://id.turnkey.com/t/4f0a3a8e-9d2b-4c61-8f57-2b1c6d0e7a11/"),
             json!([ISS]),
         ] {
             assert!(is_bad_claim(with(claims(), "iss", bad.clone())), "{bad}");
         }
-        assert!(verify_claims(&with(claims(), "org", json!("urn:turnkey:org:sub_org_2"))).is_ok());
         assert!(
             verify_claims(&with(
                 claims(),
                 "org",
-                json!("urn:turnkey:org:parent_org_1")
+                json!("urn:turnkey:org:5d2c8e41-7a39-4b60-b1f4-0c9a3e6d8b27")
+            ))
+            .is_ok()
+        );
+        assert!(
+            verify_claims(&with(
+                claims(),
+                "org",
+                json!("urn:turnkey:org:4f0a3a8e-9d2b-4c61-8f57-2b1c6d0e7a11")
             ))
             .is_ok()
         );
@@ -714,12 +730,20 @@ pub(crate) mod tests {
     #[test]
     fn org_and_sub_need_their_urn_prefix_and_an_id() {
         for (claim, bad) in [
-            ("org", "urn:turnkey:organization:sub_org_1"),
+            (
+                "org",
+                "urn:turnkey:organization:7b9c1d52-3e48-4a07-9c3d-5e8a2f6b0c44",
+            ),
             ("org", "urn:turnkey:org:"),
-            ("org", "sub_org_1"),
+            ("org", "urn:turnkey:org:sub_org_1"),
+            ("org", "7b9c1d52-3e48-4a07-9c3d-5e8a2f6b0c44"),
             ("sub", "urn:turnkey:user:"),
-            ("sub", "user_1"),
-            ("sub", "urn:turnkey:org:user_1"),
+            ("sub", "urn:turnkey:user:user_1"),
+            ("sub", "c2e5f8a1-6d3b-4b9a-a710-3f4e9b8d2c05"),
+            (
+                "sub",
+                "urn:turnkey:org:c2e5f8a1-6d3b-4b9a-a710-3f4e9b8d2c05",
+            ),
             ("sub", ""),
         ] {
             assert!(
@@ -799,7 +823,7 @@ pub(crate) mod tests {
         assert!(is_bad_claim(with(
             claims(),
             "tk_parent_organization",
-            json!("urn:turnkey:org:parent_org_1")
+            json!("urn:turnkey:org:4f0a3a8e-9d2b-4c61-8f57-2b1c6d0e7a11")
         )));
         for claim in ["aud", "iss", "org", "sub", "iat", "exp", "tk_request"] {
             assert!(is_bad_claim(without(claims(), claim)), "missing {claim}");
