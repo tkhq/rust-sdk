@@ -56,6 +56,7 @@ use axum::extract::{OriginalUri, Request};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::MethodRouter;
+use http_body_util::{BodyExt, Full, LengthLimitError, Limited};
 use tower::{Layer, Service};
 
 use super::jwt::Claims;
@@ -226,18 +227,32 @@ async fn authorize(layer: &Inner, req: Request) -> Result<Request, Response> {
         .verifier
         .verify_token(token, now)
         .map_err(|e| reject(&e, detailed))?;
-    let body = axum::body::to_bytes(body, layer.max_body_bytes)
+    let collected = Limited::new(body, layer.max_body_bytes)
+        .collect()
         .await
-        .map_err(|_| {
-            let message = format!("body exceeds {} bytes", layer.max_body_bytes);
-            reject_with(
-                StatusCode::PAYLOAD_TOO_LARGE,
-                "body_too_large",
-                "payload_too_large",
-                &message,
-                detailed,
-            )
+        .map_err(|err| {
+            if err.downcast_ref::<LengthLimitError>().is_some() {
+                let message = format!("body exceeds {} bytes", layer.max_body_bytes);
+                reject_with(
+                    StatusCode::PAYLOAD_TOO_LARGE,
+                    "body_too_large",
+                    "payload_too_large",
+                    &message,
+                    detailed,
+                )
+            } else {
+                let message = format!("failed to read the request body: {err}");
+                reject_with(
+                    StatusCode::BAD_REQUEST,
+                    "body_unreadable",
+                    "bad_request",
+                    &message,
+                    detailed,
+                )
+            }
         })?;
+    let trailers = collected.trailers().cloned();
+    let body = collected.to_bytes();
     layer
         .verifier
         .check_still_valid(&claims, unix_now())
@@ -256,8 +271,25 @@ async fn authorize(layer: &Inner, req: Request) -> Result<Request, Response> {
         &body,
     )
     .map_err(|e| reject(&e, detailed))?;
+    for name in claims.bound_headers() {
+        let value = super::headers::header_value(name, &parts.headers)
+            .ok()
+            .and_then(|v| header::HeaderValue::from_str(&v).ok())
+            .ok_or_else(|| reject(&AuthError::RequestMismatch("bound header"), detailed))?;
+        parts.headers.insert(
+            header::HeaderName::from_bytes(name.as_bytes())
+                .map_err(|_| reject(&AuthError::RequestMismatch("bound header"), detailed))?,
+            value,
+        );
+    }
     parts.extensions.insert(Verified(claims));
-    Ok(Request::from_parts(parts, Body::from(body)))
+    let body = match trailers {
+        Some(trailers) => {
+            Body::new(Full::new(body).with_trailers(async move { Some(Ok(trailers)) }))
+        }
+        None => Body::from(body),
+    };
+    Ok(Request::from_parts(parts, body))
 }
 
 /// A layer for `rule`, for `MethodRouter::route_layer` or `Router::layer`.
@@ -510,6 +542,97 @@ mod tests {
         let resp = pending.await.unwrap().unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
         assert_eq!(error_body(resp).await["error"], "expired");
+    }
+
+    struct FailingBody;
+
+    impl http_body::Body for FailingBody {
+        type Data = axum::body::Bytes;
+        type Error = std::io::Error;
+
+        fn poll_frame(
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+        ) -> Poll<Option<Result<http_body::Frame<Self::Data>, Self::Error>>> {
+            Poll::Ready(Some(Err(std::io::ErrorKind::UnexpectedEof.into())))
+        }
+    }
+
+    #[tokio::test]
+    async fn a_body_read_failure_is_not_reported_as_too_large() {
+        let k = TestKey::new();
+        let app = layered(route_layer(verifier(&k), rule()).with_detailed_errors(true));
+        let (parts, _) = request(&token(&k), &sent_headers()).into_parts();
+        let req = Request::from_parts(parts, Body::new(FailingBody));
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(error_body(resp).await["error"], "body_unreadable");
+    }
+
+    #[tokio::test]
+    async fn trailers_reach_the_handler() {
+        let k = TestKey::new();
+        let route = protect(
+            post(|req: Request| async move {
+                let collected = req.into_body().collect().await.unwrap();
+                collected
+                    .trailers()
+                    .and_then(|t| t.get("x-checksum"))
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("none")
+                    .to_owned()
+            }),
+            verifier(&k),
+            rule(),
+        );
+        let app = Router::new().route(PATH, route);
+        let mut trailers = HeaderMap::new();
+        trailers.insert("x-checksum", "abc123".parse().unwrap());
+        let (parts, _) = request(&token(&k), &sent_headers()).into_parts();
+        let body =
+            Body::new(Full::new(BODY.into()).with_trailers(async move { Some(Ok(trailers)) }));
+        let resp = app.oneshot(Request::from_parts(parts, body)).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let out = axum::body::to_bytes(resp.into_body(), 64).await.unwrap();
+        assert_eq!(&out[..], b"abc123");
+    }
+
+    #[tokio::test]
+    async fn the_handler_sees_the_bound_header_as_one_normalized_value() {
+        let k = TestKey::new();
+        let mut bound = sent_headers();
+        bound.insert("accept", "application/json, text/plain".parse().unwrap());
+        let mut c = claims();
+        let now = unix_now();
+        c["iat"] = json!(now);
+        c["exp"] = json!(now + 60);
+        c["tk_header_digest"] = json!(
+            crate::http_authz::headers::header_digests(&["x-api-version", "accept"], &bound)
+                .unwrap()
+        );
+        let jwt = k.sign(&signed_header(&k), &c);
+        let route = protect(
+            post(|req: Request| async move {
+                let lines: Vec<_> = req
+                    .headers()
+                    .get_all("accept")
+                    .iter()
+                    .filter_map(|v| v.to_str().ok())
+                    .collect();
+                format!("{}:{}", lines.len(), lines.join("|"))
+            }),
+            verifier(&k),
+            rule(),
+        );
+        let app = Router::new().route(PATH, route);
+        let mut sent = sent_headers();
+        sent.remove("accept");
+        sent.append("accept", "application/json".parse().unwrap());
+        sent.append("accept", "text/plain".parse().unwrap());
+        let resp = app.oneshot(request(&jwt, &sent)).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let out = axum::body::to_bytes(resp.into_body(), 128).await.unwrap();
+        assert_eq!(&out[..], b"1:application/json, text/plain");
     }
 
     #[test]

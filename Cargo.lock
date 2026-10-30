@@ -4304,6 +4304,7 @@ dependencies = [
  "base64 0.22.1",
  "http",
  "http-body",
+ "http-body-util",
  "p256 0.13.2",
  "rand_core 0.6.4",
  "serde",
