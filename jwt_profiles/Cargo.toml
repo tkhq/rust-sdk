@@ -1,6 +1,6 @@
 [package]
 name = "turnkey_jwt_profiles"
-version = "0.16.0"
+version = "0.17.1"
 edition = "2024"
 license = "Apache-2.0"
 description = "Verify Turnkey JWT profiles, such as http-authz/v1 request-bound JWTs"
