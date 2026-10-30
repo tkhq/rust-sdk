@@ -238,6 +238,23 @@ impl Verifier {
         jwt::verify(token, &self.config, self.keys.as_ref(), now)
     }
 
+    /// Check that already verified `claims` are still within their validity
+    /// window at `now`. The middleware calls this after it buffers the body,
+    /// so a slow body cannot carry a token past `exp`.
+    #[cfg(feature = "axum")]
+    pub(crate) fn check_still_valid(&self, claims: &Claims, now: u64) -> Result<(), AuthError> {
+        turnkey_jwt_verify::check_times(
+            claims.iat,
+            claims.exp,
+            now,
+            &turnkey_jwt_verify::TimeRules::new(
+                self.config.clock_skew_secs,
+                self.config.max_lifetime_secs,
+            ),
+        )?;
+        Ok(())
+    }
+
     /// The full check for one request: verify the token, then bind it to the
     /// received request under `rule`.
     ///
@@ -737,6 +754,19 @@ pub(crate) mod tests {
         for claim in ["aud", "iss", "sub", "iat", "exp", "tk_request"] {
             assert!(is_bad_claim(without(claims(), claim)), "missing {claim}");
         }
+        assert!(
+            is_bad_claim(with(
+                claims(),
+                "tk_request",
+                json!(["POST", PATH, QUERY, []])
+            )),
+            "positional tk_request"
+        );
+        let positional: Vec<Value> = ["aud", "exp", "iat", "iss", "sub"]
+            .iter()
+            .map(|k| claims()[k].clone())
+            .collect();
+        assert!(is_bad_claim(json!(positional)), "positional claim set");
         assert!(is_bad_claim(with_request("nonce", json!("n1"))));
         assert!(is_bad_claim(without_request("query")));
         assert!(is_bad_claim(with_request(

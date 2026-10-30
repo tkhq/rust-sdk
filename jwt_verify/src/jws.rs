@@ -3,10 +3,12 @@
 //! Nothing in the token is trusted until the signature is verified with a
 //! key that a [`KeySource`] already trusts.
 
+use std::collections::HashSet;
 use std::fmt;
 
 use p256::ecdsa::signature::Verifier as _;
 use p256::ecdsa::{Signature, VerifyingKey};
+use serde::de::value::MapAccessDeserializer;
 use serde::de::{self, DeserializeOwned, IgnoredAny, MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 
@@ -90,31 +92,67 @@ impl VerifiedJws {
 
     /// Parse the payload as a claim set of type `T`.
     ///
-    /// Use a struct with `#[serde(deny_unknown_fields)]` for a closed claim
-    /// schema: serde then also rejects repeated claim names.
+    /// The payload must be a JSON object with no nulls and no repeated member
+    /// names at any depth, and `T` must accept it. Use a struct with
+    /// `#[serde(deny_unknown_fields)]` for a closed claim schema, and
+    /// [`object`] on nested struct members so they too must be objects.
     ///
     /// # Errors
     ///
     /// Returns [`Error::Malformed`] when the payload is not JSON, and
-    /// [`Error::BadClaim`] when it is not an object without nulls or does
-    /// not match `T`.
+    /// [`Error::BadClaim`] when it is not an object without nulls or repeated
+    /// names, or does not match `T`.
     pub fn claims<T: DeserializeOwned>(&self) -> Result<T, Error> {
         let payload = &self.payload;
-        if let Ok(claims) = serde_json::from_slice(payload) {
-            return Ok(claims);
+        if serde_json::from_slice::<StrictObject>(payload).is_err() {
+            if serde_json::from_slice::<IgnoredAny>(payload).is_err() {
+                return Err(Error::Malformed("payload"));
+            }
+            return Err(Error::BadClaim(
+                "claims must be an object without nulls or repeated names",
+            ));
         }
-        let nonulls = serde_json::from_slice::<NoNulls>(payload);
-        if nonulls.is_err() && serde_json::from_slice::<IgnoredAny>(payload).is_err() {
-            return Err(Error::Malformed("payload"));
-        }
-        let is_object = payload.trim_ascii_start().first() == Some(&b'{');
-        if !is_object || nonulls.is_err() {
-            return Err(Error::BadClaim("claims must be an object without nulls"));
-        }
-        Err(Error::BadClaim(
-            "claim set does not match the profile schema",
-        ))
+        from_object(payload)
+            .map_err(|_| Error::BadClaim("claim set does not match the profile schema"))
     }
+}
+
+/// Deserialize `T` from a JSON object only.
+///
+/// Serde's derived `Deserialize` for a named struct also accepts a JSON
+/// array of its fields in order. Use this with `#[serde(deserialize_with =
+/// "object")]` on a struct member to require the object form.
+///
+/// # Errors
+///
+/// Fails when the input is not a map or `T` rejects it.
+pub fn object<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    struct ObjectVisitor<T>(std::marker::PhantomData<T>);
+
+    impl<'de, T: Deserialize<'de>> Visitor<'de> for ObjectVisitor<T> {
+        type Value = T;
+
+        fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("a JSON object")
+        }
+
+        fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<T, A::Error> {
+            T::deserialize(MapAccessDeserializer::new(map))
+        }
+    }
+
+    deserializer.deserialize_map(ObjectVisitor(std::marker::PhantomData))
+}
+
+fn from_object<T: DeserializeOwned>(bytes: &[u8]) -> serde_json::Result<T> {
+    let mut de = serde_json::Deserializer::from_slice(bytes);
+    let value = object(&mut de)?;
+    de.end()?;
+    Ok(value)
 }
 
 /// Parse a compact JWS and verify its ES256 signature.
@@ -143,7 +181,7 @@ pub fn verify(
     };
     let header_bytes = b64::url_decode(h64).ok_or(Error::Malformed("header encoding"))?;
     let header: ProtectedHeader =
-        serde_json::from_slice(&header_bytes).map_err(|_| Error::Malformed("header"))?;
+        from_object(&header_bytes).map_err(|_| Error::Malformed("header"))?;
     if header.alg != ES256 {
         return Err(Error::UnsupportedAlgorithm);
     }
@@ -165,31 +203,41 @@ pub fn verify(
     Ok(VerifiedJws { header, payload })
 }
 
-struct NoNulls;
+/// A JSON object with no nulls and no repeated member names at any depth.
+struct StrictObject;
 
-impl<'de> Deserialize<'de> for NoNulls {
+impl<'de> Deserialize<'de> for StrictObject {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        deserializer.deserialize_any(NoNullsVisitor)
+        deserializer
+            .deserialize_map(Strict)
+            .map(|Strict| StrictObject)
     }
 }
 
-struct NoNullsVisitor;
+/// Any JSON value with no nulls and no repeated member names at any depth.
+struct Strict;
+
+impl<'de> Deserialize<'de> for Strict {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        deserializer.deserialize_any(Strict)
+    }
+}
 
 macro_rules! scalar_visits {
     ($($method:ident($ty:ty)),* $(,)?) => {
         $(
-            fn $method<E: de::Error>(self, _: $ty) -> Result<NoNulls, E> {
-                Ok(NoNulls)
+            fn $method<E: de::Error>(self, _: $ty) -> Result<Strict, E> {
+                Ok(Strict)
             }
         )*
     };
 }
 
-impl<'de> Visitor<'de> for NoNullsVisitor {
-    type Value = NoNulls;
+impl<'de> Visitor<'de> for Strict {
+    type Value = Strict;
 
     fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("a JSON value without nulls")
+        f.write_str("a JSON value without nulls or repeated names")
     }
 
     scalar_visits! {
@@ -200,16 +248,20 @@ impl<'de> Visitor<'de> for NoNullsVisitor {
         visit_str(&str),
     }
 
-    fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<NoNulls, A::Error> {
-        while seq.next_element::<NoNulls>()?.is_some() {}
-        Ok(NoNulls)
+    fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Strict, A::Error> {
+        while seq.next_element::<Strict>()?.is_some() {}
+        Ok(Strict)
     }
 
-    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<NoNulls, A::Error> {
-        while map.next_key::<IgnoredAny>()?.is_some() {
-            map.next_value::<NoNulls>()?;
+    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Strict, A::Error> {
+        let mut names = HashSet::new();
+        while let Some(name) = map.next_key::<String>()? {
+            if !names.insert(name) {
+                return Err(de::Error::custom("repeated member name"));
+            }
+            map.next_value::<Strict>()?;
         }
-        Ok(NoNulls)
+        Ok(Strict)
     }
 }
 
@@ -298,8 +350,57 @@ mod tests {
         .unwrap();
         assert_eq!(
             null.claims::<Claims>().unwrap_err(),
-            Error::BadClaim("claims must be an object without nulls")
+            Error::BadClaim("claims must be an object without nulls or repeated names")
         );
+    }
+
+    #[test]
+    fn claims_must_be_a_strict_object() {
+        let k = Key::new();
+        let claims = |payload: &str| {
+            verify(&k.sign(&k.header().to_string(), payload), &RULES, &k)
+                .unwrap()
+                .claims::<serde_json::Value>()
+        };
+        let strict = Err(Error::BadClaim(
+            "claims must be an object without nulls or repeated names",
+        ));
+        for payload in [
+            r#"["a"]"#,
+            "null",
+            "1",
+            r#""a""#,
+            r#"{"a":1,"a":2}"#,
+            r#"{"a":{"b":1,"b":1}}"#,
+            r#"{"a":[null]}"#,
+        ] {
+            assert_eq!(claims(payload), strict, "{payload}");
+        }
+        assert_eq!(claims("{"), Err(Error::Malformed("payload")));
+        assert_eq!(claims(r#"{"a":[1]}"#), Ok(json!({"a": [1]})));
+
+        let positional = verify(&k.sign(&k.header().to_string(), r#"["a"]"#), &RULES, &k).unwrap();
+        assert!(matches!(
+            positional.claims::<Claims>(),
+            Err(Error::BadClaim(_))
+        ));
+
+        #[derive(Debug, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Outer {
+            #[serde(deserialize_with = "object")]
+            inner: Claims,
+        }
+        let nested = |payload: &str| {
+            verify(&k.sign(&k.header().to_string(), payload), &RULES, &k)
+                .unwrap()
+                .claims::<Outer>()
+        };
+        assert_eq!(nested(r#"{"inner":{"sub":"a"}}"#).unwrap().inner.sub, "a");
+        assert!(matches!(
+            nested(r#"{"inner":["a"]}"#),
+            Err(Error::BadClaim(_))
+        ));
     }
 
     #[test]
@@ -316,6 +417,11 @@ mod tests {
         let mut h = k.header();
         h["jwk"] = json!({});
         assert_eq!(e(h), Error::Malformed("header"));
+        let positional = json!([ES256, k.public.kid, TYP]).to_string();
+        assert_eq!(
+            verify(&k.sign(&positional, "{}"), &RULES, &k).unwrap_err(),
+            Error::Malformed("header")
+        );
         let dup = format!(
             r#"{{"alg":"ES256","alg":"ES256","kid":"{}","typ":"{TYP}"}}"#,
             k.public.kid

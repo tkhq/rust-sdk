@@ -4,7 +4,7 @@
 //! key that the configuration already trusts.
 
 use serde::{Deserialize, Deserializer};
-use turnkey_jwt_verify::{JwsRules, KeySource, TimeRules, check_times};
+use turnkey_jwt_verify::{JwsRules, KeySource, TimeRules, check_times, object};
 
 use super::digest::is_digest;
 use super::headers::{check_header_names, is_tchar_except_alpha};
@@ -119,6 +119,7 @@ pub struct Claims {
     #[serde(default, deserialize_with = "non_null")]
     pub tk_parent_organization: Option<String>,
     /// Request descriptor.
+    #[serde(deserialize_with = "object")]
     pub tk_request: RequestDescriptor,
     /// Digest of the body as received, if bound.
     #[serde(default, deserialize_with = "non_null")]

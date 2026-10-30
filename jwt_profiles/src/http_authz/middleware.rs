@@ -5,9 +5,12 @@
 //!
 //! 1. `Authorization: Bearer` extraction and the token checks
 //!    ([`Verifier::verify_token`]);
-//! 2. buffering the body (at most the layer's body limit, `MAX_BODY_BYTES`
-//!    by default);
-//! 3. [`super::bind_request`] with the route's [`RouteRule`]: method, path,
+//! 2. buffering the body (at most the layer's body limit, 4096 bytes by
+//!    default; see [`AuthzLayer::with_max_body_bytes`]);
+//! 3. the `iat`/`exp` checks again at the current time, so the token must
+//!    still be valid when the full request has arrived, not only when its
+//!    headers did;
+//! 4. [`super::bind_request`] with the route's [`RouteRule`]: method, path,
 //!    query, required and bound headers (rebuilt from the lowercase names
 //!    that hyper delivers), and the body digest.
 //!
@@ -64,7 +67,8 @@ use tower::{Layer, Service};
 use super::jwt::Claims;
 use super::{AuthError, RouteRule, Verifier, unix_now};
 
-const MAX_BODY_BYTES: usize = 4 * 1024;
+/// Default body limit of [`AuthzLayer`], in bytes.
+pub const DEFAULT_MAX_BODY_BYTES: usize = 4 * 1024;
 
 /// The verified claims, available to the handler as an extension.
 #[derive(Debug, Clone)]
@@ -124,21 +128,25 @@ pub struct AuthzLayer {
 }
 
 impl AuthzLayer {
-    /// A layer for `rule`, with the default body limit `MAX_BODY_BYTES`.
+    /// A layer for `rule`, with the body limit [`DEFAULT_MAX_BODY_BYTES`].
     #[must_use]
     pub fn new(verifier: Arc<Verifier>, rule: RouteRule) -> Self {
         Self {
             inner: Arc::new(Inner {
                 verifier,
                 rule,
-                max_body_bytes: MAX_BODY_BYTES,
+                max_body_bytes: DEFAULT_MAX_BODY_BYTES,
                 detailed_errors: false,
             }),
         }
     }
 
-    #[cfg(test)]
-    pub(crate) fn with_max_body_bytes(mut self, max_body_bytes: usize) -> Self {
+    /// Set the largest request body the layer buffers, in bytes. A larger
+    /// body is rejected with `413` before the handler runs. The layer must
+    /// hold the whole body to check `tk_body_digest`, so keep this bound to
+    /// what the route needs.
+    #[must_use]
+    pub fn with_max_body_bytes(mut self, max_body_bytes: usize) -> Self {
         Arc::make_mut(&mut self.inner).max_body_bytes = max_body_bytes;
         self
     }
@@ -233,6 +241,10 @@ async fn authorize(layer: &Inner, req: Request) -> Result<Request, Response> {
                 detailed,
             )
         })?;
+    layer
+        .verifier
+        .check_still_valid(&claims, unix_now())
+        .map_err(|e| reject(&e, detailed))?;
     let uri = parts
         .extensions
         .get::<OriginalUri>()
@@ -453,6 +465,80 @@ mod tests {
         assert_eq!(
             error_body(resp).await,
             json!({"error": "body_too_large", "message": "body exceeds 8 bytes"})
+        );
+    }
+
+    /// A body that yields `BODY` only after `release` fires.
+    struct DelayedBody(Option<tokio::sync::oneshot::Receiver<()>>);
+
+    impl http_body::Body for DelayedBody {
+        type Data = axum::body::Bytes;
+        type Error = Infallible;
+
+        fn poll_frame(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+        ) -> Poll<Option<Result<http_body::Frame<Self::Data>, Self::Error>>> {
+            let Some(rx) = self.0.as_mut() else {
+                return Poll::Ready(None);
+            };
+            match Pin::new(rx).poll(cx) {
+                Poll::Pending => Poll::Pending,
+                Poll::Ready(_) => {
+                    self.0 = None;
+                    Poll::Ready(Some(Ok(http_body::Frame::data(BODY.into()))))
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn token_that_expires_while_the_body_arrives_is_rejected() {
+        let k = TestKey::new();
+        let app = layered(route_layer(verifier(&k), rule()).with_detailed_errors(true));
+        let now = unix_now();
+        let mut c = claims();
+        c["iat"] = json!(now);
+        c["exp"] = json!(now + 1);
+        let jwt = k.sign(&header(&k), &c);
+        let (release, rx) = tokio::sync::oneshot::channel();
+        let (parts, _) = request(&jwt, &sent_headers()).into_parts();
+        let req = Request::from_parts(parts, Body::new(DelayedBody(Some(rx))));
+        let pending = tokio::spawn(app.oneshot(req));
+        while unix_now() <= now + 1 {
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        release.send(()).unwrap();
+        let resp = pending.await.unwrap().unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(error_body(resp).await["error"], "expired");
+    }
+
+    #[tokio::test]
+    async fn body_limit_can_be_raised() {
+        let k = TestKey::new();
+        let big = vec![b'x'; DEFAULT_MAX_BODY_BYTES + 1];
+        let mut c = claims();
+        let now = unix_now();
+        c["iat"] = json!(now);
+        c["exp"] = json!(now + 60);
+        c["tk_body_digest"] = json!(crate::http_authz::digest::sha256_digest(&big));
+        let jwt = k.sign(&header(&k), &c);
+        let req = || {
+            let (parts, _) = request(&jwt, &sent_headers()).into_parts();
+            Request::from_parts(parts, Body::from(big.clone()))
+        };
+        let default = layered(route_layer(verifier(&k), rule()));
+        assert_eq!(
+            default.oneshot(req()).await.unwrap().status(),
+            StatusCode::PAYLOAD_TOO_LARGE
+        );
+        let raised = layered(
+            route_layer(verifier(&k), rule()).with_max_body_bytes(DEFAULT_MAX_BODY_BYTES + 1),
+        );
+        assert_eq!(
+            raised.oneshot(req()).await.unwrap().status(),
+            StatusCode::OK
         );
     }
 

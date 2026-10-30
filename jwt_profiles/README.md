@@ -109,6 +109,10 @@ All items are in `turnkey_jwt_profiles::http_authz`.
   `tower::Layer` for `MethodRouter::route_layer` or `Router::layer`. The
   handler reads the claims from the `middleware::Verified` extension.
   `middleware::protect` wraps a `MethodRouter` directly.
+  The layer buffers at most `middleware::DEFAULT_MAX_BODY_BYTES` (4096) of
+  body; `AuthzLayer::with_max_body_bytes` changes the limit. After the body
+  arrives, the layer checks `iat` and `exp` again: the token must still be
+  valid when the whole request has arrived.
   A rejected request gets `401` with `WWW-Authenticate: Bearer` and the
   body `{"error": "unauthorized"}`, or `413` with
   `{"error": "payload_too_large"}` for an oversized body. The body does not

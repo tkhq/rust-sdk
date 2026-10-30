@@ -18,3 +18,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`{"error": "unauthorized"}` for `401`, `{"error": "payload_too_large"}`
   for `413`) and logs the specific reason. `AuthzLayer::with_detailed_errors`
   turns on the specific code and message in the body for debugging.
+  `AuthzLayer::with_max_body_bytes` sets the body limit (4096 bytes by
+  default). The layer checks `exp` again after it buffers the body.

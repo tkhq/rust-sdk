@@ -46,11 +46,16 @@ fn check(jwks: &[u8], token: &str) -> Result<String, Box<dyn std::error::Error>>
 - The ES256 signature verifies over the signing input. No claim is read
   before this.
 
-`VerifiedJws::claims` then parses the payload. Use a struct with
-`#[serde(deny_unknown_fields)]` for a closed claim schema; repeated claim
-names are rejected. A payload that is not JSON is `Malformed`. A payload
-that is not an object, has a null, or does not match the struct is
-`BadClaim`.
+The protected header must be a JSON object; the array form that serde
+accepts for structs is rejected.
+
+`VerifiedJws::claims` then parses the payload. The payload must be a JSON
+object with no nulls and no repeated member names at any depth. Use a struct
+with `#[serde(deny_unknown_fields)]` for a closed claim schema, and
+`#[serde(deserialize_with = "turnkey_jwt_verify::object")]` on nested struct
+members so they must be objects too. A payload that is not JSON is
+`Malformed`. A payload that is not a strict object or does not match the
+struct is `BadClaim`.
 
 `check_times` checks, in order: `exp > iat`, `exp - iat` at most the
 maximum lifetime, `iat <= now + skew`, and `now < exp`. `unix_now` returns
