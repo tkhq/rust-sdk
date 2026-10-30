@@ -63,6 +63,8 @@ use super::{AuthError, RouteRule, Verifier, unix_now};
 
 /// Default body limit of [`AuthzLayer`], in bytes.
 pub const DEFAULT_MAX_BODY_BYTES: usize = 4 * 1024;
+/// Largest body limit [`AuthzLayer::with_max_body_bytes`] accepts, in bytes.
+pub const MAX_BODY_BYTES_LIMIT: usize = 1024 * 1024;
 
 /// The verified claims, available to the handler as an extension.
 #[derive(Debug, Clone)]
@@ -135,14 +137,14 @@ impl AuthzLayer {
         }
     }
 
-    /// Set the largest request body the layer buffers, in bytes. A larger
+    /// Set the largest request body the layer buffers, in bytes, at most
+    /// [`MAX_BODY_BYTES_LIMIT`]; a larger value is lowered to it. A larger
     /// body is rejected with `413` before the handler runs. The layer must
-    /// hold the whole body in memory to check `tk_body_digest`, so a large
-    /// value lets each request use that much memory. Keep this bound to what
-    /// the route needs.
+    /// hold the whole body in memory to check `tk_body_digest`, so keep this
+    /// bound to what the route needs.
     #[must_use]
     pub fn with_max_body_bytes(mut self, max_body_bytes: usize) -> Self {
-        Arc::make_mut(&mut self.inner).max_body_bytes = max_body_bytes;
+        Arc::make_mut(&mut self.inner).max_body_bytes = max_body_bytes.min(MAX_BODY_BYTES_LIMIT);
         self
     }
 
@@ -508,6 +510,13 @@ mod tests {
         let resp = pending.await.unwrap().unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
         assert_eq!(error_body(resp).await["error"], "expired");
+    }
+
+    #[test]
+    fn body_limit_is_capped() {
+        let k = TestKey::new();
+        let layer = route_layer(verifier(&k), rule()).with_max_body_bytes(usize::MAX);
+        assert_eq!(layer.inner.max_body_bytes, MAX_BODY_BYTES_LIMIT);
     }
 
     #[tokio::test]
