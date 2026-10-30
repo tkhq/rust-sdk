@@ -1,18 +1,12 @@
 //! Axum route layer that enforces http-authz/v1 on one route (feature
 //! `axum`).
 //!
-//! [`AuthzLayer`] runs, in order:
-//!
-//! 1. `Authorization: Bearer` extraction and the token checks
-//!    ([`Verifier::verify_token`]);
-//! 2. buffering the body (at most the layer's body limit, 4096 bytes by
-//!    default; see [`AuthzLayer::with_max_body_bytes`]);
-//! 3. the `iat`/`exp` checks again at the current time, so the token must
-//!    still be valid when the full request has arrived, not only when its
-//!    headers did;
-//! 4. [`super::bind_request`] with the route's [`RouteRule`]: method, path,
-//!    query, required and bound headers (rebuilt from the lowercase names
-//!    that hyper delivers), and the body digest.
+//! [`AuthzLayer`] takes the token from `Authorization: Bearer`, verifies it
+//! with [`Verifier::verify_token`], buffers the body (at most the layer's body
+//! limit, 4096 bytes by default; see [`AuthzLayer::with_max_body_bytes`]),
+//! and binds the token to the request with [`super::bind_request`] and the
+//! route's [`RouteRule`]. The token must still be valid when the full request
+//! has arrived, not only when its headers did.
 //!
 //! Tokens are not single-use: the same request passes until `exp`.
 //!

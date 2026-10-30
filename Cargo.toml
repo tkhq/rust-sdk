@@ -10,7 +10,7 @@ members = [
   "enclave_encrypt",
   # Examples using the Turnkey stamper
   "examples",
-  # Turnkey JWT profile verifiers (http-authz/v1)
+  # Turnkey JWT profile verifiers
   "jwt_profiles",
   # Strict compact-JWS parsing and ES256 verification for Turnkey JWTs
   "jwt_verify",

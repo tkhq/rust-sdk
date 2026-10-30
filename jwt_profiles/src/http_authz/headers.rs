@@ -116,7 +116,7 @@ pub fn check_header_names<S: AsRef<str>>(names: &[S]) -> Result<(), HeaderError>
     for (i, n) in names.iter().enumerate() {
         let n = n.as_ref();
         check_header_name(n)?;
-        if names[..i].iter().any(|m| m.as_ref() == n) {
+        if names.iter().take(i).any(|m| m.as_ref() == n) {
             return Err(HeaderError::Duplicate(n.to_owned()));
         }
     }

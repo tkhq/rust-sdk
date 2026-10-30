@@ -40,13 +40,14 @@ struct Case {
 }
 
 fn jwks(point_hex: &str) -> Result<String, String> {
+    const BAD_POINT: &str = "signer_public_uncompressed_hex must be a 65-byte 04||x||y point";
     let point = hex::decode(point_hex)
         .ok()
-        .filter(|p| p.len() == 65 && p[0] == 0x04)
-        .ok_or("signer_public_uncompressed_hex must be a 65-byte 04||x||y point")?;
+        .filter(|p| p.len() == 65 && p.first() == Some(&0x04))
+        .ok_or(BAD_POINT)?;
     let (x, y) = (
-        b64::url_encode(&point[1..33]),
-        b64::url_encode(&point[33..]),
+        b64::url_encode(point.get(1..33).ok_or(BAD_POINT)?),
+        b64::url_encode(point.get(33..).ok_or(BAD_POINT)?),
     );
     let kid = thumbprint_p256(&x, &y);
     Ok(format!(
@@ -57,7 +58,10 @@ fn jwks(point_hex: &str) -> Result<String, String> {
 /// The unverified `iat`, used only to pick a `now` inside the token lifetime.
 fn iat(jwt: &str) -> Option<u64> {
     let payload = b64::url_decode(jwt.split('.').nth(1)?)?;
-    serde_json::from_slice::<serde_json::Value>(&payload).ok()?["iat"].as_u64()
+    serde_json::from_slice::<serde_json::Value>(&payload)
+        .ok()?
+        .get("iat")?
+        .as_u64()
 }
 
 fn run_case(keys: &Arc<PinnedKeySet>, organization_id: &str, case: &Case) -> Result<(), String> {
@@ -76,7 +80,9 @@ fn run_case(keys: &Arc<PinnedKeySet>, organization_id: &str, case: &Case) -> Res
         headers: &headers,
         body: case.body.as_bytes(),
     };
-    let now = iat(&case.jwt).ok_or("token has no readable iat")? + 1;
+    let now = iat(&case.jwt)
+        .and_then(|iat| iat.checked_add(1))
+        .ok_or("token has no readable iat")?;
     verifier
         .authorize(&case.jwt, &RouteRule::default(), &received, now)
         .map(|_| ())
@@ -107,11 +113,11 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let mut failed = 0;
+    let mut failed = 0_usize;
     for case in &fixture.cases {
         let outcome = run_case(&keys, &fixture.organization_id, case);
         let pass = outcome.is_ok() == case.expect_ok;
-        failed += usize::from(!pass);
+        failed = failed.saturating_add(usize::from(!pass));
         let verdict = if pass { "PASS" } else { "FAIL" };
         match outcome {
             Ok(()) => println!("{}: {verdict} (accepted)", case.name),

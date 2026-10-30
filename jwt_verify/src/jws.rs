@@ -1,4 +1,4 @@
-//! Strict compact JWS parsing and ES256 verification.
+//! JWS parsing and ES256 verification for Turnkey minted tokens.
 //!
 //! Nothing in the token is trusted until the signature is verified with a
 //! key that a [`KeySource`] already trusts.
@@ -16,7 +16,7 @@ use crate::Error;
 use crate::b64;
 use crate::jwks::KeySource;
 
-/// The only accepted `alg`.
+/// ES256 `alg`.
 pub const ES256: &str = "ES256";
 
 /// What [`verify`] requires of a token beyond the fixed rules.
@@ -203,10 +203,8 @@ fn from_object<T: DeserializeOwned>(bytes: &[u8]) -> serde_json::Result<T> {
 
 /// Parse a compact JWS and verify its ES256 signature.
 ///
-/// The checks run in this order: size, three-part shape, header encoding and
-/// closed member set, `alg`, `typ`, key selection, `kid` match, signature
-/// encoding, public key decoding, signature, payload encoding. Claims are not
-/// checked; see [`VerifiedJws::claims`] and [`crate::check_times`].
+/// Claims are not checked; see [`VerifiedJws::claims`] and
+/// [`crate::check_times`].
 ///
 /// # Errors
 ///
@@ -242,7 +240,9 @@ pub fn verify(
         return Err(Error::UnknownKey);
     }
     let sig = b64::url_decode(s64).ok_or(Error::Malformed("signature encoding"))?;
-    let signing_input = &token[..h64.len() + 1 + p64.len()];
+    let (signing_input, _) = token
+        .rsplit_once('.')
+        .ok_or(Error::Malformed("not a compact JWS"))?;
     let verifying_key = VerifyingKey::from_sec1_bytes(&key.point).map_err(|_| Error::UnknownKey)?;
     let signature = Signature::from_slice(&sig).map_err(|_| Error::BadSignature)?;
     verifying_key

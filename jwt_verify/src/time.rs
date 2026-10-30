@@ -25,8 +25,9 @@ impl TimeRules {
 
 /// Check `iat` and `exp` (NumericDate seconds) against `now`.
 ///
-/// The checks run in this order: `exp > iat`, `exp - iat` at most
-/// `max_lifetime_secs`, `iat <= now + clock_skew_secs`, and `now < exp`.
+/// A token is accepted when `exp` is after `iat`, its lifetime is at most
+/// `max_lifetime_secs`, `iat` is no later than `now` plus `clock_skew_secs`,
+/// and `now` is before `exp`.
 ///
 /// # Errors
 ///
@@ -36,7 +37,10 @@ pub fn check_times(iat: u64, exp: u64, now: u64, rules: &TimeRules) -> Result<()
     if exp <= iat {
         return Err(Error::BadClaim("exp must be after iat"));
     }
-    if exp - iat > rules.max_lifetime_secs {
+    let lifetime = exp
+        .checked_sub(iat)
+        .ok_or(Error::BadClaim("exp must be after iat"))?;
+    if lifetime > rules.max_lifetime_secs {
         return Err(Error::LifetimeTooLong);
     }
     if iat > now.saturating_add(rules.clock_skew_secs) {
@@ -48,8 +52,8 @@ pub fn check_times(iat: u64, exp: u64, now: u64, rules: &TimeRules) -> Result<()
     Ok(())
 }
 
-/// Current Unix time in seconds. Returns u64::MAX if the clock is before 1970,
-/// so the expiry check (now >= exp) fails closed.
+/// Current Unix time in seconds, or `u64::MAX` if the clock is before 1970,
+/// which makes every token read as expired.
 #[must_use]
 pub fn unix_now() -> u64 {
     std::time::SystemTime::now()

@@ -27,9 +27,7 @@ pub struct VerificationKey {
 
 /// A source of trusted keys.
 ///
-/// [`crate::verify`] calls [`KeySource::key`] after the header passes the
-/// `alg` and `typ` checks and before the signature check. When the header has
-/// a `kid`, the returned key's `kid` must equal it.
+/// When the header has a `kid`, the returned key's `kid` must equal it.
 pub trait KeySource: Send + Sync {
     /// The trusted key that `header` selects, if any.
     fn key(&self, header: &ProtectedHeader) -> Option<VerificationKey>;
