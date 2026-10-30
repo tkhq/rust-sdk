@@ -1,0 +1,22 @@
+[package]
+name = "turnkey_jwt_verify"
+version = "0.16.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "Strict compact JWS parsing and ES256 verification for Turnkey-signed JWTs"
+repository = "https://github.com/tkhq/rust-sdk"
+homepage = "https://turnkey.com"
+readme = "README.md"
+documentation = "https://docs.rs/turnkey_jwt_verify"
+keywords = ["turnkey", "jwt", "jws", "es256", "p256"]
+categories = ["cryptography", "authentication"]
+
+[dependencies]
+base64.workspace = true
+p256.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+
+[dev-dependencies]
+rand_core.workspace = true

@@ -1,0 +1,554 @@
+//! JWS parsing and ES256 verification for Turnkey minted tokens.
+//!
+//! Nothing in the token is trusted until the signature is verified with a
+//! key that a [`KeySource`] already trusts.
+
+use std::collections::HashSet;
+use std::fmt;
+
+use p256::ecdsa::Signature;
+use p256::ecdsa::signature::Verifier as _;
+use serde::de::value::MapAccessDeserializer;
+use serde::de::{self, DeserializeOwned, IgnoredAny, MapAccess, SeqAccess, Visitor};
+use serde::{Deserialize, Deserializer};
+
+use crate::Error;
+use crate::b64;
+use crate::jwks::KeySource;
+
+/// ES256 `alg`.
+pub const ES256: &str = "ES256";
+
+/// What [`verify`] requires of a token beyond the fixed rules.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct JwsRules<'a> {
+    /// The exact `typ` the header must carry.
+    pub typ: &'a str,
+    /// Largest accepted compact JWS, in bytes.
+    pub max_token_bytes: usize,
+    /// Whether the header must carry `kid`. True unless
+    /// [`JwsRules::kid_optional`] is used.
+    pub require_kid: bool,
+}
+
+impl<'a> JwsRules<'a> {
+    /// Rules for tokens of media type `typ` and at most `max_token_bytes`,
+    /// with a required `kid`.
+    #[must_use]
+    pub const fn new(typ: &'a str, max_token_bytes: usize) -> Self {
+        Self {
+            typ,
+            max_token_bytes,
+            require_kid: true,
+        }
+    }
+
+    /// The same rules, but a header without `kid` is accepted. Use only with
+    /// a [`KeySource`] that already holds one specific key, such as the `cnf`
+    /// key a Key Binding JWT is checked with.
+    #[must_use]
+    pub const fn kid_optional(self) -> Self {
+        Self {
+            require_kid: false,
+            ..self
+        }
+    }
+}
+
+/// The protected header.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProtectedHeader {
+    alg: String,
+    #[serde(default, deserialize_with = "non_null")]
+    kid: Option<String>,
+    typ: String,
+}
+
+fn non_null<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<String>, D::Error> {
+    String::deserialize(deserializer).map(Some)
+}
+
+impl ProtectedHeader {
+    /// The `alg` member.
+    #[must_use]
+    pub fn alg(&self) -> &str {
+        &self.alg
+    }
+
+    /// The `typ` member.
+    #[must_use]
+    pub fn typ(&self) -> &str {
+        &self.typ
+    }
+
+    /// The `kid` member. Always present unless the rules used
+    /// [`JwsRules::kid_optional`].
+    #[must_use]
+    pub fn kid(&self) -> Option<&str> {
+        self.kid.as_deref()
+    }
+}
+
+/// A compact JWS whose header and signature passed [`verify`].
+#[derive(Debug, Clone)]
+pub struct VerifiedJws {
+    header: ProtectedHeader,
+    payload: Vec<u8>,
+}
+
+impl VerifiedJws {
+    /// The protected header.
+    #[must_use]
+    pub fn header(&self) -> &ProtectedHeader {
+        &self.header
+    }
+
+    /// The decoded payload bytes.
+    #[must_use]
+    pub fn payload(&self) -> &[u8] {
+        &self.payload
+    }
+
+    /// Parse the payload as a claim set of type `T`.
+    ///
+    /// The payload must be a JSON object with no nulls and no repeated member
+    /// names at any depth. Everything else is up to `T`, so define it as
+    /// follows:
+    ///
+    /// - Derive `Deserialize` on a struct with `#[serde(deny_unknown_fields)]`,
+    ///   so a claim the profile does not define is an error instead of being
+    ///   ignored.
+    /// - Put `#[serde(deny_unknown_fields)]` on every nested struct too.
+    /// - Put `#[serde(deserialize_with = "object")]` on each member whose type
+    ///   is a struct. Serde's derived `Deserialize` also accepts a JSON array
+    ///   of the fields in order, and [`object`] rejects that form. It covers a
+    ///   member that is a struct directly: a `Vec<Inner>` or `Option<Inner>`
+    ///   member still accepts the array form for each `Inner`.
+    /// - Use `Option<_>` with `#[serde(default)]` for an optional claim. A
+    ///   missing claim is `None`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Malformed`] when the payload is not JSON, and
+    /// [`Error::BadClaim`] when it is not an object without nulls or repeated
+    /// names, or does not match `T`.
+    pub fn claims<T: DeserializeOwned>(&self) -> Result<T, Error> {
+        let payload = &self.payload;
+        if serde_json::from_slice::<StrictObject>(payload).is_err() {
+            if serde_json::from_slice::<IgnoredAny>(payload).is_err() {
+                return Err(Error::Malformed("payload"));
+            }
+            return Err(Error::BadClaim(
+                "claims must be an object without nulls or repeated names",
+            ));
+        }
+        from_object(payload)
+            .map_err(|_| Error::BadClaim("claim set does not match the profile schema"))
+    }
+}
+
+/// Deserialize `T` from a JSON object only.
+///
+/// Serde's derived `Deserialize` for a named struct also accepts a JSON
+/// array of its fields in order. Use this with `#[serde(deserialize_with =
+/// "object")]` on a struct member to require the object form.
+///
+/// # Errors
+///
+/// Fails when the input is not a map or `T` rejects it.
+pub fn object<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    struct ObjectVisitor<T>(std::marker::PhantomData<T>);
+
+    impl<'de, T: Deserialize<'de>> Visitor<'de> for ObjectVisitor<T> {
+        type Value = T;
+
+        fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("a JSON object")
+        }
+
+        fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<T, A::Error> {
+            T::deserialize(MapAccessDeserializer::new(map))
+        }
+    }
+
+    deserializer.deserialize_map(ObjectVisitor(std::marker::PhantomData))
+}
+
+/// Parse JSON that is not necessarily an object, with the same strictness as
+/// [`VerifiedJws::claims`]: no nulls and no repeated member names at any depth.
+///
+/// For JSON that a signature covers only indirectly, such as SD-JWT
+/// disclosures, whose digests are in a signed payload.
+///
+/// # Errors
+///
+/// Returns [`Error::Malformed`] when `bytes` is not JSON, and
+/// [`Error::BadClaim`] when it has a null or a repeated name, or does not
+/// match `T`.
+pub fn strict_json<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, Error> {
+    if serde_json::from_slice::<Strict>(bytes).is_err() {
+        if serde_json::from_slice::<IgnoredAny>(bytes).is_err() {
+            return Err(Error::Malformed("json"));
+        }
+        return Err(Error::BadClaim(
+            "json must not contain nulls or repeated names",
+        ));
+    }
+    serde_json::from_slice(bytes).map_err(|_| Error::BadClaim("json does not match the schema"))
+}
+
+fn from_object<T: DeserializeOwned>(bytes: &[u8]) -> serde_json::Result<T> {
+    let mut de = serde_json::Deserializer::from_slice(bytes);
+    let value = object(&mut de)?;
+    de.end()?;
+    Ok(value)
+}
+
+/// Parse a compact JWS and verify its ES256 signature.
+///
+/// Claims are not checked; see [`VerifiedJws::claims`] and
+/// [`crate::check_times`].
+///
+/// # Errors
+///
+/// Returns the first failed check as an [`Error`].
+pub fn verify(
+    token: &str,
+    rules: &JwsRules<'_>,
+    keys: &dyn KeySource,
+) -> Result<VerifiedJws, Error> {
+    if token.len() > rules.max_token_bytes {
+        return Err(Error::Malformed("token too large"));
+    }
+    let mut parts = token.split('.');
+    let (Some(h64), Some(p64), Some(s64), None) =
+        (parts.next(), parts.next(), parts.next(), parts.next())
+    else {
+        return Err(Error::Malformed("not a compact JWS"));
+    };
+    let header_bytes = b64::url_decode(h64).ok_or(Error::Malformed("header encoding"))?;
+    let header: ProtectedHeader =
+        from_object(&header_bytes).map_err(|_| Error::Malformed("header"))?;
+    if rules.require_kid && header.kid.is_none() {
+        return Err(Error::Malformed("header"));
+    }
+    if header.alg != ES256 {
+        return Err(Error::UnsupportedAlgorithm);
+    }
+    if header.typ != rules.typ {
+        return Err(Error::WrongType);
+    }
+    let key = keys.key(&header).ok_or(Error::UnknownKey)?;
+    if header.kid.as_deref().is_some_and(|kid| kid != key.kid()) {
+        return Err(Error::UnknownKey);
+    }
+    let sig = b64::url_decode(s64).ok_or(Error::Malformed("signature encoding"))?;
+    let (signing_input, _) = token
+        .rsplit_once('.')
+        .ok_or(Error::Malformed("not a compact JWS"))?;
+    let signature = Signature::from_slice(&sig).map_err(|_| Error::BadSignature)?;
+    key.verifying_key()
+        .verify(signing_input.as_bytes(), &signature)
+        .map_err(|_| Error::BadSignature)?;
+    let payload = b64::url_decode(p64).ok_or(Error::Malformed("payload encoding"))?;
+    Ok(VerifiedJws { header, payload })
+}
+
+/// A JSON object with no nulls and no repeated member names at any depth.
+struct StrictObject;
+
+impl<'de> Deserialize<'de> for StrictObject {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        deserializer
+            .deserialize_map(Strict)
+            .map(|Strict| StrictObject)
+    }
+}
+
+/// Any JSON value with no nulls and no repeated member names at any depth.
+struct Strict;
+
+impl<'de> Deserialize<'de> for Strict {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        deserializer.deserialize_any(Strict)
+    }
+}
+
+macro_rules! scalar_visits {
+    ($($method:ident($ty:ty)),* $(,)?) => {
+        $(
+            fn $method<E: de::Error>(self, _: $ty) -> Result<Strict, E> {
+                Ok(Strict)
+            }
+        )*
+    };
+}
+
+impl<'de> Visitor<'de> for Strict {
+    type Value = Strict;
+
+    fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("a JSON value without nulls or repeated names")
+    }
+
+    scalar_visits! {
+        visit_bool(bool),
+        visit_i64(i64),
+        visit_u64(u64),
+        visit_f64(f64),
+        visit_str(&str),
+    }
+
+    fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Strict, A::Error> {
+        while seq.next_element::<Strict>()?.is_some() {}
+        Ok(Strict)
+    }
+
+    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Strict, A::Error> {
+        let mut names = HashSet::new();
+        while let Some(name) = map.next_key::<String>()? {
+            if !names.insert(name) {
+                return Err(de::Error::custom("repeated member name"));
+            }
+            map.next_value::<Strict>()?;
+        }
+        Ok(Strict)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::jwks::VerificationKey;
+    use p256::ecdsa::SigningKey;
+    use p256::ecdsa::signature::Signer;
+    use rand_core::OsRng;
+    use serde_json::json;
+
+    const TYP: &str = "application/example+jwt";
+    const RULES: JwsRules<'static> = JwsRules::new(TYP, 1024);
+
+    struct Key {
+        signing: SigningKey,
+        public: VerificationKey,
+    }
+
+    impl Key {
+        fn new() -> Self {
+            let signing = SigningKey::random(&mut OsRng);
+            let point = signing.verifying_key().to_encoded_point(false);
+            let (Some(x), Some(y)) = (point.x(), point.y()) else {
+                panic!("an uncompressed point has both coordinates");
+            };
+            let public = VerificationKey::from_p256_xy(&b64::url_encode(x), &b64::url_encode(y))
+                .expect("a generated key is a valid P-256 point");
+            Self { signing, public }
+        }
+
+        fn sign(&self, header: &str, payload: &str) -> String {
+            let input = format!(
+                "{}.{}",
+                b64::url_encode(header.as_bytes()),
+                b64::url_encode(payload.as_bytes())
+            );
+            let sig: Signature = self.signing.sign(input.as_bytes());
+            format!("{input}.{}", b64::url_encode(&sig.to_bytes()))
+        }
+
+        fn header(&self) -> serde_json::Value {
+            json!({"alg": ES256, "kid": self.public.kid(), "typ": TYP})
+        }
+    }
+
+    impl KeySource for Key {
+        fn key(&self, header: &ProtectedHeader) -> Option<VerificationKey> {
+            (header.kid() == Some(self.public.kid())).then(|| self.public.clone())
+        }
+    }
+
+    #[derive(Debug, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Claims {
+        sub: String,
+    }
+
+    #[test]
+    fn verifies_and_parses_a_closed_claim_set() {
+        let k = Key::new();
+        let jws = verify(
+            &k.sign(&k.header().to_string(), r#"{"sub":"a"}"#),
+            &RULES,
+            &k,
+        )
+        .unwrap();
+        assert_eq!(jws.header().typ(), TYP);
+        assert_eq!(jws.claims::<Claims>().unwrap().sub, "a");
+        let dup = verify(
+            &k.sign(&k.header().to_string(), r#"{"sub":"a","sub":"b"}"#),
+            &RULES,
+            &k,
+        )
+        .unwrap();
+        assert_eq!(
+            dup.claims::<Claims>().unwrap_err(),
+            Error::BadClaim("claims must be an object without nulls or repeated names")
+        );
+        let null = verify(
+            &k.sign(&k.header().to_string(), r#"{"sub":null}"#),
+            &RULES,
+            &k,
+        )
+        .unwrap();
+        assert_eq!(
+            null.claims::<Claims>().unwrap_err(),
+            Error::BadClaim("claims must be an object without nulls or repeated names")
+        );
+    }
+
+    #[test]
+    fn claims_must_be_a_strict_object() {
+        let k = Key::new();
+        let claims = |payload: &str| {
+            verify(&k.sign(&k.header().to_string(), payload), &RULES, &k)
+                .unwrap()
+                .claims::<serde_json::Value>()
+        };
+        let strict = Err(Error::BadClaim(
+            "claims must be an object without nulls or repeated names",
+        ));
+        for payload in [
+            r#"["a"]"#,
+            "null",
+            "1",
+            r#""a""#,
+            r#"{"a":1,"a":2}"#,
+            r#"{"a":{"b":1,"b":1}}"#,
+            r#"{"a":[null]}"#,
+        ] {
+            assert_eq!(claims(payload), strict, "{payload}");
+        }
+        assert_eq!(claims("{"), Err(Error::Malformed("payload")));
+        assert_eq!(claims(r#"{"a":[1]}"#), Ok(json!({"a": [1]})));
+
+        let positional = verify(&k.sign(&k.header().to_string(), r#"["a"]"#), &RULES, &k).unwrap();
+        assert!(matches!(
+            positional.claims::<Claims>(),
+            Err(Error::BadClaim(_))
+        ));
+
+        #[derive(Debug, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Outer {
+            #[serde(deserialize_with = "object")]
+            inner: Claims,
+        }
+        let nested = |payload: &str| {
+            verify(&k.sign(&k.header().to_string(), payload), &RULES, &k)
+                .unwrap()
+                .claims::<Outer>()
+        };
+        assert_eq!(nested(r#"{"inner":{"sub":"a"}}"#).unwrap().inner.sub, "a");
+        assert!(matches!(
+            nested(r#"{"inner":["a"]}"#),
+            Err(Error::BadClaim(_))
+        ));
+    }
+
+    #[test]
+    fn rejects_header_and_size_violations() {
+        let k = Key::new();
+        let e =
+            |h: serde_json::Value| verify(&k.sign(&h.to_string(), "{}"), &RULES, &k).unwrap_err();
+        let mut h = k.header();
+        h["typ"] = json!("JWT");
+        assert_eq!(e(h), Error::WrongType);
+        let mut h = k.header();
+        h["alg"] = json!("none");
+        assert_eq!(e(h), Error::UnsupportedAlgorithm);
+        let mut h = k.header();
+        h["jwk"] = json!({});
+        assert_eq!(e(h), Error::Malformed("header"));
+        let positional = json!([ES256, k.public.kid(), TYP]).to_string();
+        assert_eq!(
+            verify(&k.sign(&positional, "{}"), &RULES, &k).unwrap_err(),
+            Error::Malformed("header")
+        );
+        let dup = format!(
+            r#"{{"alg":"ES256","alg":"ES256","kid":"{}","typ":"{TYP}"}}"#,
+            k.public.kid()
+        );
+        assert_eq!(
+            verify(&k.sign(&dup, "{}"), &RULES, &k).unwrap_err(),
+            Error::Malformed("header")
+        );
+        let huge = "a".repeat(RULES.max_token_bytes + 1);
+        assert_eq!(
+            verify(&huge, &RULES, &k).unwrap_err(),
+            Error::Malformed("token too large")
+        );
+        let other = Key::new();
+        let forged = other.sign(&k.header().to_string(), "{}");
+        assert_eq!(
+            verify(&forged, &RULES, &k).unwrap_err(),
+            Error::BadSignature
+        );
+        let mut h = k.header();
+        h["kid"] = json!(null);
+        assert_eq!(e(h), Error::Malformed("header"));
+    }
+
+    #[test]
+    fn header_without_kid_needs_a_single_trusted_key() {
+        let k = Key::new();
+        let no_kid = json!({"alg": ES256, "typ": TYP}).to_string();
+        let token = k.sign(&no_kid, "{}");
+        let optional = RULES.kid_optional();
+
+        // The default rules still require kid, whatever the key source.
+        assert_eq!(
+            verify(&token, &RULES, &k.public).unwrap_err(),
+            Error::Malformed("header")
+        );
+        // `Key` selects by kid, like `PinnedKeySet`.
+        assert_eq!(
+            verify(&token, &optional, &k).unwrap_err(),
+            Error::UnknownKey
+        );
+
+        let jws = verify(&token, &optional, &k.public).unwrap();
+        assert_eq!(jws.header().kid(), None);
+
+        let other = Key::new();
+        let wrong_kid = k.sign(&other.header().to_string(), "{}");
+        assert_eq!(
+            verify(&wrong_kid, &optional, &k.public).unwrap_err(),
+            Error::UnknownKey
+        );
+    }
+
+    #[test]
+    fn strict_json_rejects_nulls_and_repeated_names() {
+        assert_eq!(
+            strict_json::<serde_json::Value>(br#"["s","n",{"a":1}]"#),
+            Ok(json!(["s", "n", {"a": 1}]))
+        );
+        let strict = Err(Error::BadClaim(
+            "json must not contain nulls or repeated names",
+        ));
+        assert_eq!(strict_json::<serde_json::Value>(br#"["s",null]"#), strict);
+        assert_eq!(
+            strict_json::<serde_json::Value>(br#"["s","n",{"a":1,"a":2}]"#),
+            strict
+        );
+        assert_eq!(
+            strict_json::<serde_json::Value>(b"["),
+            Err(Error::Malformed("json"))
+        );
+    }
+}

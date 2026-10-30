@@ -30,6 +30,16 @@ publish = false
 release = false
 
 [[package]]
+name = "turnkey_jwt_profiles"
+changelog_update = true
+version_group = "rust-sdk"
+
+[[package]]
+name = "turnkey_jwt_verify"
+changelog_update = true
+version_group = "rust-sdk"
+
+[[package]]
 name = "turnkey_proofs"
 changelog_update = true
 version_group = "rust-sdk"

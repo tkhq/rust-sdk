@@ -1,0 +1,58 @@
+{
+  "comment": "Test vectors for the turnkey.io/http-authz/v1 digest format and header binding. 'body': body text (UTF-8) and its digest. 'format': a digest string and whether the profile accepts it (exactly one RFC 9530 member, sha-256=:<standard padded base64>:). 'headers': the bound header name, the received fields in order (lowercase names, as hyper delivers them), the normalized value (lines trimmed of SP and HTAB, joined with ', '), and its digest; a case without 'value' must be rejected. 'header_names': a tk_request.headers list and whether it is valid.",
+  "body": [
+    {"name": "empty body", "body": "", "digest": "sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:"},
+    {"name": "JSON body", "body": "{\"hpke_public_key\":\"BAAA\"}", "digest": "sha-256=:1TqsKT1i2AnulMV4Wwvu2M6UTKbhZ/d89IcwFUW9/cU=:"},
+    {"name": "RFC 9530 Section 2 example", "body": "{\"hello\": \"world\"}", "digest": "sha-256=:X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=:"}
+  ],
+  "format": [
+    {"name": "valid", "value": "sha-256=:X+zrZv/IbzjZUnhsbWlsecLbwjndTpG0ZynXOif7V+k=:", "ok": true},
+    {"name": "valid, empty body", "value": "sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:", "ok": true},
+    {"name": "base64url alphabet", "value": "sha-256=:X-zrZv_IbzjZUnhsbWlsecLbwjndTpG0ZynXOif7V-k=:", "ok": false},
+    {"name": "missing padding", "value": "sha-256=:X+zrZv/IbzjZUnhsbWlsecLbwjndTpG0ZynXOif7V+k:", "ok": false},
+    {"name": "non-canonical trailing bits", "value": "sha-256=:X+zrZv/IbzjZUnhsbWlsecLbwjndTpG0ZynXOif7V+l=:", "ok": false},
+    {"name": "sha-512", "value": "sha-512=:pKvURIxJVi2CgRXROh/M6pJ/UrTVRZKX+LQ+QtqJI4vBNibkPcs43bCCSIkn7JBPtCBXRDmD6IWFF51QVRr+Yg==:", "ok": false},
+    {"name": "uppercase algorithm", "value": "SHA-256=:X+zrZv/IbzjZUnhsbWlsecLbwjndTpG0ZynXOif7V+k=:", "ok": false},
+    {"name": "two members", "value": "sha-256=:X+zrZv/IbzjZUnhsbWlsecLbwjndTpG0ZynXOif7V+k=:, sha-512=:pKvURIxJVi2CgRXROh/M6pJ/UrTVRZKX+LQ+QtqJI4vBNibkPcs43bCCSIkn7JBPtCBXRDmD6IWFF51QVRr+Yg==:", "ok": false},
+    {"name": "parameter", "value": "sha-256=:X+zrZv/IbzjZUnhsbWlsecLbwjndTpG0ZynXOif7V+k=:;q=1", "ok": false},
+    {"name": "leading space", "value": " sha-256=:X+zrZv/IbzjZUnhsbWlsecLbwjndTpG0ZynXOif7V+k=:", "ok": false},
+    {"name": "space after =", "value": "sha-256= :X+zrZv/IbzjZUnhsbWlsecLbwjndTpG0ZynXOif7V+k=:", "ok": false},
+    {"name": "missing colons", "value": "sha-256=X+zrZv/IbzjZUnhsbWlsecLbwjndTpG0ZynXOif7V+k=", "ok": false},
+    {"name": "bare base64", "value": "X+zrZv/IbzjZUnhsbWlsecLbwjndTpG0ZynXOif7V+k=", "ok": false},
+    {"name": "hex", "value": "sha-256=:5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9:", "ok": false},
+    {"name": "truncated", "value": "sha-256=:X+zrZv/IbzjZUnhsbWlsecLbwjndTpG0ZynXOif7:", "ok": false},
+    {"name": "empty", "value": "", "ok": false}
+  ],
+  "headers": [
+    {"name": "single field", "header": "accept", "received": [["accept", "application/vnd.example+json"], ["x-api-version", "2022-11-28"]], "value": "application/vnd.example+json", "digest": "sha-256=:pumEESPjirxP02ktZh4c0wjKno8cJSe8JCSUeCUW7GI=:"},
+    {"name": "repeated fields join with comma space in received order", "header": "accept", "received": [["accept", "text/html"], ["user-agent", "x"], ["accept", "application/json"]], "value": "text/html, application/json", "digest": "sha-256=:kS9T3mQIV/8MHA53lQcIS7Wz6kjB/fgCBh5L3NyYmuE=:"},
+    {"name": "repeated fields, other order is a different value", "header": "accept", "received": [["accept", "application/json"], ["accept", "text/html"]], "value": "application/json, text/html", "digest": "sha-256=:fkjDlm9lJxG2HpEiRN/OpDP2bYQnqizNUEsZrHgEtlM=:"},
+    {"name": "one line with a comma equals two lines", "header": "accept", "received": [["accept", "text/html, application/json"]], "value": "text/html, application/json", "digest": "sha-256=:kS9T3mQIV/8MHA53lQcIS7Wz6kjB/fgCBh5L3NyYmuE=:"},
+    {"name": "leading and trailing SP and HTAB are trimmed per line", "header": "x-api-version", "received": [["x-api-version", " \t2026-01-01\t "], ["x-api-version", "\t b "]], "value": "2026-01-01, b", "digest": "sha-256=:quaTgMnafvJ42Q9NPOJIvMoV6SZnM8JmDSVEHNa+nqo=:"},
+    {"name": "inner whitespace is kept", "header": "x-note", "received": [["x-note", "a  \tb"]], "value": "a  \tb", "digest": "sha-256=:wQNtSxm9wAKM0erDbqd7c+HdGA8nVhcvOpW9YF5riSU=:"},
+    {"name": "empty value", "header": "x-empty", "received": [["x-empty", ""]], "value": "", "digest": "sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:"},
+    {"name": "whitespace-only value trims to empty", "header": "x-empty", "received": [["x-empty", " \t "], ["x-empty", "v"]], "value": ", v", "digest": "sha-256=:4xl7XCv4cZVdBfT2IzBl0aDIOfOvPVOcTDZ/qjVuGQw=:"},
+    {"name": "visible ASCII punctuation", "header": "x-sig", "received": [["x-sig", "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"]], "value": "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~", "digest": "sha-256=:SflRlC4JliMUBXAFu6ImDgWnx0ICFJeJ0yq+u2MQbHk=:"},
+    {"name": "absent header fails closed", "header": "x-api-version", "received": [["accept", "application/json"]]},
+    {"name": "absent header, no fields at all", "header": "accept", "received": []},
+    {"name": "obs-text byte is rejected", "header": "accept", "received": [["accept", "caf\u00e9"]]},
+    {"name": "obs-text in a later line is rejected", "header": "accept", "received": [["accept", "ok"], ["accept", "\u00ff"]]}
+  ],
+  "header_names": [
+    {"name": "empty list binds nothing", "names": [], "ok": true},
+    {"name": "order as listed, unsorted is fine", "names": ["x-api-version", "accept"], "ok": true},
+    {"name": "thirty-two names", "names": ["x-00", "x-01", "x-02", "x-03", "x-04", "x-05", "x-06", "x-07", "x-08", "x-09", "x-10", "x-11", "x-12", "x-13", "x-14", "x-15", "x-16", "x-17", "x-18", "x-19", "x-20", "x-21", "x-22", "x-23", "x-24", "x-25", "x-26", "x-27", "x-28", "x-29", "x-30", "x-31"], "ok": true},
+    {"name": "thirty-three names", "names": ["x-00", "x-01", "x-02", "x-03", "x-04", "x-05", "x-06", "x-07", "x-08", "x-09", "x-10", "x-11", "x-12", "x-13", "x-14", "x-15", "x-16", "x-17", "x-18", "x-19", "x-20", "x-21", "x-22", "x-23", "x-24", "x-25", "x-26", "x-27", "x-28", "x-29", "x-30", "x-31", "x-32"], "ok": false},
+    {"name": "duplicate", "names": ["accept", "accept"], "ok": false},
+    {"name": "uppercase", "names": ["Accept"], "ok": false},
+    {"name": "authorization is never bindable", "names": ["accept", "authorization"], "ok": false},
+    {"name": "proxy-authorization is never bindable", "names": ["proxy-authorization"], "ok": false},
+    {"name": "host", "names": ["host"], "ok": false},
+    {"name": "hop-by-hop connection", "names": ["connection"], "ok": false},
+    {"name": "hop-by-hop transfer-encoding", "names": ["transfer-encoding"], "ok": false},
+    {"name": "te", "names": ["te"], "ok": false},
+    {"name": "pseudo-header", "names": [":path"], "ok": false},
+    {"name": "empty name", "names": [""], "ok": false},
+    {"name": "space in name", "names": ["a b"], "ok": false}
+  ]
+}

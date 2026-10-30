@@ -41,6 +41,7 @@ build:
 .PHONY: test
 test: build
 	cargo test
+	cargo test -p turnkey_jwt_verify -p turnkey_jwt_profiles --all-features
 
 .PHONY: examples
 examples: build
