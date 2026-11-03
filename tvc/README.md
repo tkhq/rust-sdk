@@ -82,3 +82,19 @@ tvc deploy provisioning-details \
   --deploy-id <DEPLOYMENT_UUID> \
   --provision-bundle-out provisioning-bundle.json
 ```
+
+### Base a deployment on an existing one
+
+```bash
+tvc deploy init --from-deployment <DEPLOYMENT_UUID> --output my-deploy.json
+```
+
+Recoverable fields, including the expected pivot digest and debug mode, are copied.
+If the source uses Turnkey's internal imported image, `pivotContainerImageUrl`
+becomes `<FILL_IN_PIVOT_CONTAINER_IMAGE_URL>`. The deployment API does not return
+its original source image. Replace the placeholder with a customer-accessible
+source image pinned by digest, or add `--interactive` to enter it through a prompt.
+Legacy and external image references, including customer-owned ECR images, are preserved.
+`deploy create` rejects unresolved placeholders before submitting an activity.
+If you change the image, recompute `expectedPivotDigest` for its pivot binary.
+Re-supply any private-image pull secret with `--pivot-pull-secret <PATH>`.

@@ -20,6 +20,18 @@ use uuid::Uuid;
 /// (private image). Treated as a placeholder by [`DeployConfig::has_placeholders`].
 const PULL_SECRET_PLACEHOLDER: &str = "<REMOVE_ME_IF_PIVOT_CONTAINER_URL_IS_PUBLIC>";
 
+/// Shared image sentinel for blank templates and unrecoverable imported sources.
+const IMAGE_PLACEHOLDER: &str = "<FILL_IN_PIVOT_CONTAINER_IMAGE_URL>";
+
+/// Importer registries configured in gitops envs/tvc-{dev,preprod,prod}.
+/// Match both the registry and the organization-scoped importer repository,
+/// never ECR hosts in general: customers can supply their own ECR images.
+const IMAGE_IMPORTER_REGISTRIES: [&str; 3] = [
+    "361645878370.dkr.ecr.us-east-1.amazonaws.com",
+    "155091848034.dkr.ecr.us-east-1.amazonaws.com",
+    "957814223021.dkr.ecr.us-east-1.amazonaws.com",
+];
+
 /// Default QOS version selected for new deployments.
 pub const DEFAULT_QOS_VERSION: &str = "0.15.0";
 
@@ -69,6 +81,10 @@ pub struct DeployConfig {
 /// manifest is only `Option` because of how the proto is defined; a real
 /// deployment always carries one.
 ///
+/// Imported images expose only Turnkey's internal reference, not the original
+/// source, through the deployment API. These get the same image placeholder as
+/// a blank template. Legacy and external references are preserved.
+///
 /// The pull-secret plaintext is unrecoverable (it is encrypted for the
 /// enclave), so a source deployment that used one gets the placeholder to
 /// prompt the user to re-supply it via `--pivot-pull-secret`.
@@ -78,13 +94,20 @@ impl TryFrom<TvcDeployment> for DeployConfig {
     fn try_from(deployment: TvcDeployment) -> std::result::Result<Self, Self::Error> {
         let TvcDeployment {
             id,
+            organization_id,
             app_id,
             qos_version,
             pivot_container,
             manifest,
             instance_size_cpus,
             instance_size_ram,
-            ..
+            manifest_set: _,
+            share_set: _,
+            manifest_approvals: _,
+            created_at: _,
+            updated_at: _,
+            delete: _,
+            debug_mode: _,
         } = deployment;
 
         let tvc_manifest =
@@ -108,10 +131,21 @@ impl TryFrom<TvcDeployment> for DeployConfig {
         let public_ingress_port = u16::try_from(public_ingress_port)
             .context("deployment public ingress port does not fit in u16")?;
 
+        // The API can insert a tag before the digest. Compare the repository
+        // without either suffix to the importer's exact destination contract.
+        let image_repository = container_url.split(['@', ':']).next().unwrap_or_default();
+        let internal_image = IMAGE_IMPORTER_REGISTRIES.iter().any(|registry| {
+            image_repository == format!("{registry}/tvc-customers/{organization_id}/pivot")
+        });
+
         Ok(Self {
             app_id,
             qos_version,
-            pivot_container_image_url: container_url,
+            pivot_container_image_url: if internal_image {
+                IMAGE_PLACEHOLDER.to_string()
+            } else {
+                container_url
+            },
             pivot_path: path,
             pivot_args: args,
             expected_pivot_digest: hex::encode(manifest.pivot_hash()),
@@ -135,7 +169,7 @@ impl DeployConfig {
         Self {
             app_id: app_id.unwrap_or("<FILL_IN_APP_ID>").to_string(),
             qos_version: DEFAULT_QOS_VERSION.to_string(),
-            pivot_container_image_url: "<FILL_IN_PIVOT_CONTAINER_IMAGE_URL>".to_string(),
+            pivot_container_image_url: IMAGE_PLACEHOLDER.to_string(),
             pivot_path: "<FILL_IN_PIVOT_PATH>".to_string(),
             pivot_args: vec![],
             expected_pivot_digest: "<FILL_IN_EXPECTED_PIVOT_DIGEST>".to_string(),
@@ -413,6 +447,59 @@ mod tests {
         assert_eq!(config.health_check_type, TvcHealthCheckType::Http);
         assert_eq!(config.health_check_port, 8080);
         assert_eq!(config.public_ingress_port, 9090);
+    }
+
+    #[test]
+    fn from_deployment_replaces_only_internal_importer_images() {
+        for registry in IMAGE_IMPORTER_REGISTRIES {
+            for suffix in ["@sha256:abc", ":latest@sha256:abc"] {
+                let mut deployment = sample_deployment(false);
+                deployment.pivot_container.as_mut().unwrap().container_url =
+                    format!("{registry}/tvc-customers/org-1/pivot{suffix}");
+                let config = DeployConfig::try_from(deployment).unwrap();
+                assert_eq!(config.pivot_container_image_url, IMAGE_PLACEHOLDER);
+                assert!(config.has_placeholders());
+                assert_eq!(config.missing_required_fields(), vec!["--pivot-image-url"]);
+                assert_eq!(config.expected_pivot_digest, FIXTURE_PIVOT_HASH);
+            }
+        }
+    }
+
+    #[test]
+    fn from_deployment_preserves_external_and_legacy_images() {
+        for image in [
+            "ghcr.io/x/y@sha256:abc",
+            "docker.io/library/example:v1",
+            "localhost:5000/my-pivot@sha256:abc",
+            "123456789012.dkr.ecr.us-east-1.amazonaws.com/my-pivot@sha256:abc",
+            "123456789012.dkr.ecr.us-east-1.amazonaws.com/tvc-customers/org-1/pivot@sha256:abc",
+            "957814223021.dkr.ecr.us-east-1.amazonaws.com/legacy-pivot@sha256:abc",
+            "957814223021.dkr.ecr.us-east-1.amazonaws.com/tvc-customers/org-1/pivot-other@sha256:abc",
+            "957814223021.dkr.ecr.us-east-1.amazonaws.com/tvc-customers/other-org/pivot@sha256:abc",
+            "957814223021.dkr.ecr.us-east-1.amazonaws.com.example.com/tvc-customers/org-1/pivot@sha256:abc",
+        ] {
+            let mut deployment = sample_deployment(false);
+            deployment.pivot_container.as_mut().unwrap().container_url = image.into();
+            let config = DeployConfig::try_from(deployment).unwrap();
+            assert_eq!(config.pivot_container_image_url, image);
+            assert!(config.missing_required_fields().is_empty());
+        }
+    }
+
+    #[test]
+    fn validate_rejects_unresolved_image_placeholder() {
+        let mut config = valid_config();
+        config.pivot_container_image_url = IMAGE_PLACEHOLDER.into();
+        let errors = config.validate().unwrap_err();
+        assert!(!errors.has_non_placeholder_error());
+        assert!(matches!(
+            errors.0.as_slice(),
+            [DeployConfigValidationError::Placeholder {
+                field: "pivot_container_image_url", placeholder
+            }] if placeholder == IMAGE_PLACEHOLDER
+        ));
+        config.pivot_container_image_url = "ghcr.io/x/y@sha256:abc".into();
+        assert!(config.validate().is_ok());
     }
 
     #[test]

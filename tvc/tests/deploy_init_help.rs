@@ -11,7 +11,9 @@ fn deploy_init_help_documents_from_deployment_flag() {
         .success()
         .stdout(predicate::str::contains("--from-deployment"))
         .stdout(predicate::str::contains("TVC_FROM_DEPLOYMENT"))
-        .stdout(predicate::str::contains("expected pivot digest"));
+        .stdout(predicate::str::contains("expected pivot digest"))
+        .stdout(predicate::str::contains("image placeholder"))
+        .stdout(predicate::str::contains("customer-accessible source"));
 }
 
 #[test]

@@ -19,10 +19,13 @@ use tracing::instrument;
 pub(crate) const LONG_ABOUT: &str = r#"
 Generate a deployment config file to edit, then pass to `tvc deploy create`.
 
---from-deployment <DEPLOY_ID> copies every field from that deployment, including
-the expected pivot digest and debug mode (read from its manifest); a private-image
-pull secret cannot be recovered and must be re-supplied. Without the flag, a blank
-placeholder template is written."#;
+--from-deployment <DEPLOY_ID> copies recoverable fields, including the expected
+pivot digest and debug mode (read from its manifest). Turnkey-internal imported
+images become <FILL_IN_PIVOT_CONTAINER_IMAGE_URL>: replace this with a
+customer-accessible source image. Legacy/external image references are preserved.
+A private-image pull secret cannot be recovered and must be re-supplied.
+Use --interactive to fill placeholders through prompts. Without --from-deployment,
+a blank placeholder template is written."#;
 
 /// Generate a template deployment configuration file.
 #[derive(Debug, ClapArgs)]
@@ -37,7 +40,9 @@ pub struct Args {
     /// Fetches the deployment and copies every recoverable field, including the
     /// expected pivot digest and debug mode (read from its manifest). The digest
     /// is tied to the container image, so recompute it if you change the image. A
-    /// pull secret, if the source used one, must be re-supplied.
+    /// pull secret, if the source used one, must be re-supplied. Turnkey-internal
+    /// images become an image placeholder. Supply a customer-accessible source
+    /// image, or use --interactive to fill the placeholder through a prompt.
     #[arg(long, value_name = "DEPLOY_ID", env = "TVC_FROM_DEPLOYMENT")]
     pub from_deployment: Option<String>,
 
@@ -97,8 +102,8 @@ async fn execute(ctx: &mut StdCtx, args: Args, config: &turnkey::Config) -> Resu
         None => DeployConfig::template(saved_app_id.as_deref()),
     };
 
-    // Optionally walk prompts to fill any remaining placeholders (e.g. the
-    // expected pivot digest that `--from-deployment` deliberately leaves blank).
+    // Optionally walk prompts to fill remaining placeholders, including an
+    // image whose original source is unavailable through the deployment API.
     // In `--from-deployment` mode the app ID is already set, so the saved-app-id
     // default is only consulted for a blank template.
     if is_interactive {
@@ -126,6 +131,10 @@ async fn execute(ctx: &mut StdCtx, args: Args, config: &turnkey::Config) -> Resu
 
 const FROM_DEPLOYMENT_GUIDANCE: &str = r#"
 Seeded from an existing deployment. Before deploying:
+  - If pivotContainerImageUrl is <FILL_IN_PIVOT_CONTAINER_IMAGE_URL>, replace it
+    with a customer-accessible source image pinned by digest. The deployment API
+    only returned Turnkey's internal imported image, not the original source.
+    Use --interactive to fill the image placeholder through a prompt.
   - expectedPivotDigest and debug mode were copied from the source deployment.
     The digest is tied to the container image, so if you change
     pivotContainerImageUrl you MUST recompute the digest to match.

@@ -83,7 +83,7 @@
     {
       "id": 6,
       "prompt": "Create a new version of an existing TVC deployment and cut traffic over to it.",
-      "expected_output": "Uses deploy init --from-deployment to seed config, deploy create, deploy approve with --dangerous-skip-interactive, then app set-live-deploy to switch traffic",
+      "expected_output": "Uses deploy init --from-deployment to seed config, replaces any image placeholder with a customer-accessible source image pinned by digest (asks if unknown, never reuses Turnkey internal ECR or invents cache syntax), recomputes the pivot digest if the image changes and re-supplies private pull secrets, then deploy create, deploy approve with --dangerous-skip-interactive, then app set-live-deploy to switch traffic",
       "files": ["skills/tvc-deployments/references/deploy-lifecycle.md"],
       "assertions": [
         { "type": "regex", "value": "--from-deployment|deploy init" },
@@ -99,6 +99,19 @@
       "assertions": [
         { "type": "contains", "value": "debug-logs" },
         { "type": "regex", "value": "--tail-lines|--poll|timeout|bound" }
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "I cloned an existing TVC deployment with deploy init --from-deployment in CI. pivotContainerImageUrl is now <FILL_IN_PIVOT_CONTAINER_IMAGE_URL>. Can I submit this or use the internal ECR image from deploy status? What about a legacy deployment using my own ECR registry?",
+      "expected_output": "Explains that the deployment API exposes only the imported internal reference. Requires a customer-accessible source image pinned by digest and asks for it if unknown. Does not reuse internal ECR or invent cache syntax. Notes that interactive init prompts, noninteractive init retains the placeholder, and create rejects it locally before submission. Preserves legacy/external images including customer-owned ECR. Recompute expectedPivotDigest if changing the image and re-supply private-image pull secrets.",
+      "files": ["skills/tvc-deployments/references/config-files.md"],
+      "gradeFullResponse": true,
+      "assertions": [
+        { "type": "contains", "value": "<FILL_IN_PIVOT_CONTAINER_IMAGE_URL>" },
+        { "type": "regex", "value": "customer-accessible|source image" },
+        { "type": "regex", "value": "customer-owned|own ECR|external" },
+        { "type": "regex", "value": "reject|before submi|locally" }
       ]
     }
   ]

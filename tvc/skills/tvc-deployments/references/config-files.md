@@ -64,6 +64,24 @@ Seed a new deployment's config from an existing one:
 tvc deploy init --output deploy.json --from-deployment <OLD_DEPLOY_ID>
 ```
 
+The config copies recoverable fields, including `expectedPivotDigest` and debug mode.
+For Turnkey-internal imported images, the deployment API exposes the internal
+reference, not the original source. `pivotContainerImageUrl` therefore becomes
+`<FILL_IN_PIVOT_CONTAINER_IMAGE_URL>`. Legacy/external references, including
+customer-owned ECR images, remain unchanged.
+
+Replace the image placeholder with a customer-accessible source image pinned by
+digest. Do not reuse Turnkey's internal ECR reference. If the source image is
+unknown, ask for it before creating the deployment. There is no supported cache
+reference syntax. `--interactive` prompts for the image. Noninteractive init keeps
+the placeholder, and `deploy create` rejects it locally before submitting an
+activity (`code: command_error`). You can also supply `--pivot-image-url` to
+override it. Recompute `expectedPivotDigest` if you change the image.
+
+A private-image pull secret cannot be recovered. Re-supply it with
+`--pivot-pull-secret <PATH>`, or remove `pivotContainerEncryptedPullSecret` if the
+replacement image is public.
+
 ## The two digests, which are different fields
 
 A deployment pins **two** separate sha256 values. Conflating them yields a config that looks correct and fails at deploy time.

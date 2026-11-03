@@ -2,7 +2,7 @@ use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
 use serde_json::json;
 use std::fs;
-use tempfile::NamedTempFile;
+use tempfile::{NamedTempFile, TempDir};
 use tvc::config::deploy::DeployConfig;
 
 const NON_INTERACTIVE_ENV: &str = "TVC_NON_INTERACTIVE";
@@ -78,4 +78,33 @@ fn app_create_non_interactive_reports_placeholder_and_structural_errors() {
         .stderr(predicate::str::contains("shareSetId"))
         .stderr(predicate::str::contains("shareSetParams"))
         .stderr(predicate::str::contains("shareSetParams.threshold"));
+}
+
+#[test]
+fn deploy_create_rejects_image_placeholder_before_authentication_or_submission() {
+    let mut config = DeployConfig::template(Some("651b573c-861b-4f10-a478-cbcfe0c226af"));
+    config.pivot_path = "/bin/pivot".into();
+    config.expected_pivot_digest = "a".repeat(64);
+    config.pivot_container_encrypted_pull_secret = None;
+    let file = write_json(&serde_json::to_value(config).unwrap());
+    let home = TempDir::new().unwrap();
+
+    cargo_bin_cmd!("tvc")
+        .env_clear()
+        .env("HOME", home.path())
+        .args([
+            "deploy",
+            "create",
+            "--message-format",
+            "json",
+            "--config-file",
+        ])
+        .arg(file.path())
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("command_error"))
+        .stdout(predicate::str::contains(
+            "pivot_container_image_url contains placeholder",
+        ))
+        .stdout(predicate::str::contains("unauthorized").not());
 }

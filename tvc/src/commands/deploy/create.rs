@@ -34,6 +34,9 @@ Required deployment fields:
   --expected-pivot-digest / TVC_EXPECTED_PIVOT_DIGEST
 
 Special rules:
+  Unresolved config placeholders are rejected before activity submission.
+  Replace an image placeholder with a customer-accessible source image, or
+  override it with --pivot-image-url.
   --pivot-args replaces the config file's list entirely (does not append).
   --dangerous-deploy-debug-mode is opt-in only: the flag (or its env var) can
   turn debug mode ON, but omitting it does not turn OFF debug mode enabled in
