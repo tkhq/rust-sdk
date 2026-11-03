@@ -8,8 +8,9 @@ use qos_core::protocol::services::boot::{
 };
 use qos_p256::{P256Pair, P256Public};
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{Value, json};
 use std::fs;
+use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
 #[derive(Debug, Deserialize)]
@@ -21,10 +22,7 @@ struct ReEncryptedShareOutput {
     share_approval: Approval,
 }
 
-fn sample_manifest_envelope(
-    quorum_key: Vec<u8>,
-    share_set_members: Vec<QuorumMember>,
-) -> VersionedManifestEnvelope {
+fn sample_manifest_envelope(quorum_key: Vec<u8>, share_set: ShareSet) -> VersionedManifestEnvelope {
     let envelope = ManifestEnvelope {
         manifest: Manifest {
             namespace: Namespace {
@@ -43,10 +41,7 @@ fn sample_manifest_envelope(
                 threshold: 0,
                 members: vec![],
             },
-            share_set: ShareSet {
-                threshold: share_set_members.len() as u32,
-                members: share_set_members,
-            },
+            share_set,
             enclave: NitroConfig {
                 pcr0: vec![0; 48],
                 pcr1: vec![1; 48],
@@ -64,6 +59,122 @@ fn sample_manifest_envelope(
         share_set_approvals: vec![],
     };
     envelope.into()
+}
+
+fn member(alias: &str, operator_pair: &P256Pair) -> QuorumMember {
+    QuorumMember {
+        alias: alias.to_string(),
+        pub_key: operator_pair.public_key().to_bytes(),
+    }
+}
+
+fn share_entry(operator_pair: &P256Pair, plaintext_share: &[u8]) -> Value {
+    json!({
+        "operatorPublicKey": hex::encode(operator_pair.public_key().to_bytes()),
+        "share": hex::encode(operator_pair.public_key().encrypt(plaintext_share).unwrap()),
+    })
+}
+
+struct ShareInputs {
+    metadata: PathBuf,
+    provision_bundle: PathBuf,
+    operator_seed: PathBuf,
+    output: PathBuf,
+}
+
+fn write_share_inputs(
+    dir: &Path,
+    operator_pair: &P256Pair,
+    metadata: Value,
+    manifest_envelope: &VersionedManifestEnvelope,
+    ephemeral_public_key: &P256Public,
+) -> ShareInputs {
+    let inputs = ShareInputs {
+        metadata: dir.join("quorum_key_metadata.json"),
+        provision_bundle: dir.join("provision_bundle.json"),
+        operator_seed: dir.join("operator_seed.txt"),
+        output: dir.join("re_encrypted_share.json"),
+    };
+
+    fs::write(
+        &inputs.operator_seed,
+        String::from_utf8(operator_pair.to_master_seed_hex().to_vec()).unwrap(),
+    )
+    .unwrap();
+    fs::write(
+        &inputs.metadata,
+        serde_json::to_vec_pretty(&metadata).unwrap(),
+    )
+    .unwrap();
+    fs::write(
+        &inputs.provision_bundle,
+        serde_json::to_vec_pretty(&json!({
+            "attestationDocumentCoseSign1Base64": "not parsed when verification is skipped",
+            "manifestEnvelope": manifest_envelope,
+            "fetchedAtUnixMs": 1_712_345_678_901_u64,
+            "deploymentId": "deploy-123",
+            "ephemeralPublicKeyHex": hex::encode(ephemeral_public_key.to_bytes()),
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    inputs
+}
+
+fn assert_share_set_refused(
+    dir: &Path,
+    operator_pair: &P256Pair,
+    metadata_threshold: u32,
+    share_holders: &[&P256Pair],
+    share_set: ShareSet,
+    message: &str,
+) {
+    let quorum_pair = P256Pair::generate().unwrap();
+    let inputs = write_share_inputs(
+        dir,
+        operator_pair,
+        json!({
+            "quorumKeyPublic": hex::encode(quorum_pair.public_key().to_bytes()),
+            "threshold": metadata_threshold,
+            "shares": share_holders
+                .iter()
+                .map(|holder| share_entry(holder, b"share"))
+                .collect::<Vec<_>>(),
+        }),
+        &sample_manifest_envelope(quorum_pair.public_key().to_bytes(), share_set),
+        &P256Pair::generate().unwrap().public_key(),
+    );
+
+    let assert = cargo_bin_cmd!("tvc")
+        .env("HOME", dir)
+        .env_remove("TVC_OPERATOR_SEED")
+        .arg("--message-format=json")
+        .args(["keys", "re-encrypt-local-share"])
+        .arg("--quorum-key-metadata")
+        .arg(&inputs.metadata)
+        .arg("--provision-bundle")
+        .arg(&inputs.provision_bundle)
+        .arg("--operator-seed-path")
+        .arg(&inputs.operator_seed)
+        .args([
+            "--dangerous-skip-verification",
+            "--dangerous-skip-interactive",
+        ])
+        .arg("--re-encrypted-out")
+        .arg(&inputs.output)
+        .assert()
+        .failure();
+
+    assert_eq!(
+        serde_json::from_slice::<Value>(&assert.get_output().stdout).unwrap(),
+        json!({
+            "reason": "command_error",
+            "code": "command_error",
+            "message": message,
+        })
+    );
+    assert!(!inputs.output.exists());
 }
 
 #[test]
@@ -229,10 +340,8 @@ fn non_interactive_run_requires_a_manifest_review_choice() {
         .assert()
         .failure();
 
-    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
-    let message: serde_json::Value = serde_json::from_str(stdout.trim()).unwrap();
     assert_eq!(
-        message,
+        serde_json::from_slice::<Value>(&assert.get_output().stdout).unwrap(),
         json!({
             "reason": "missing_required_input",
             "code": "missing_required_input",
@@ -244,74 +353,47 @@ fn non_interactive_run_requires_a_manifest_review_choice() {
 #[test]
 fn re_encrypt_local_share_round_trips_metadata_share() {
     let temp = TempDir::new().unwrap();
-    let metadata_path = temp.path().join("quorum_key_metadata.json");
-    let provision_bundle_path = temp.path().join("provision_bundle.json");
-    let operator_seed_path = temp.path().join("operator_seed.txt");
-    let output_path = temp.path().join("re_encrypted_share.json");
-
     let quorum_pair = P256Pair::generate().unwrap();
     let operator_pair = P256Pair::generate().unwrap();
     let operator_public_key = operator_pair.public_key().to_bytes();
     let ephemeral_pair = P256Pair::generate().unwrap();
     let plaintext_share = b"operator quorum key share";
-    let encrypted_share = operator_pair.public_key().encrypt(plaintext_share).unwrap();
     let manifest_envelope = sample_manifest_envelope(
         quorum_pair.public_key().to_bytes(),
-        vec![QuorumMember {
-            alias: "operator-1".to_string(),
-            pub_key: operator_public_key.clone(),
-        }],
+        ShareSet {
+            threshold: 1,
+            members: vec![member("operator-1", &operator_pair)],
+        },
     );
-
-    fs::write(
-        &operator_seed_path,
-        String::from_utf8(operator_pair.to_master_seed_hex().to_vec()).unwrap(),
-    )
-    .unwrap();
-    fs::write(
-        &metadata_path,
-        serde_json::to_vec_pretty(&json!({
+    let inputs = write_share_inputs(
+        temp.path(),
+        &operator_pair,
+        json!({
             "quorumKeyPublic": hex::encode(quorum_pair.public_key().to_bytes()),
             "threshold": 1,
-            "shares": [{
-                "operatorPublicKey": hex::encode(&operator_public_key),
-                "share": hex::encode(&encrypted_share),
-            }],
-        }))
-        .unwrap(),
-    )
-    .unwrap();
-    fs::write(
-        &provision_bundle_path,
-        serde_json::to_vec_pretty(&json!({
-            "attestationDocumentCoseSign1Base64": "not parsed when verification is skipped",
-            "manifestEnvelope": manifest_envelope,
-            "fetchedAtUnixMs": 1_712_345_678_901_u64,
-            "deploymentId": "deploy-123",
-            "ephemeralPublicKeyHex": hex::encode(ephemeral_pair.public_key().to_bytes()),
-        }))
-        .unwrap(),
-    )
-    .unwrap();
+            "shares": [share_entry(&operator_pair, plaintext_share)],
+        }),
+        &manifest_envelope,
+        &ephemeral_pair.public_key(),
+    );
 
     cargo_bin_cmd!("tvc")
         .arg("keys")
         .arg("re-encrypt-local-share")
         .arg("--quorum-key-metadata")
-        .arg(&metadata_path)
+        .arg(&inputs.metadata)
         .arg("--provision-bundle")
-        .arg(&provision_bundle_path)
+        .arg(&inputs.provision_bundle)
         .arg("--operator-seed-path")
-        .arg(&operator_seed_path)
+        .arg(&inputs.operator_seed)
         .arg("--dangerous-skip-verification")
         .arg("--dangerous-skip-interactive")
         .arg("--re-encrypted-out")
-        .arg(&output_path)
+        .arg(&inputs.output)
         .assert()
         .success();
 
-    let value: serde_json::Value =
-        serde_json::from_slice(&fs::read(&output_path).unwrap()).unwrap();
+    let value: Value = serde_json::from_slice(&fs::read(&inputs.output).unwrap()).unwrap();
     assert_eq!(value["deploymentId"], json!("deploy-123"));
     assert_eq!(
         value["ephemeralPublicKeyHex"],
@@ -341,4 +423,207 @@ fn re_encrypt_local_share_round_trips_metadata_share() {
             &output.share_approval.signature,
         )
         .unwrap();
+}
+
+#[test]
+fn re_encrypt_local_share_refuses_a_threshold_the_manifest_overstates() {
+    let temp = TempDir::new().unwrap();
+    let operator_pair = P256Pair::generate().unwrap();
+    let second_operator = P256Pair::generate().unwrap();
+    let third_operator = P256Pair::generate().unwrap();
+
+    assert_share_set_refused(
+        temp.path(),
+        &operator_pair,
+        2,
+        &[&operator_pair, &second_operator, &third_operator],
+        ShareSet {
+            threshold: 3,
+            members: vec![
+                member("operator-1", &operator_pair),
+                member("operator-2", &second_operator),
+                member("operator-3", &third_operator),
+            ],
+        },
+        "quorum key metadata threshold (2) does not match provision bundle manifest share set threshold (3)",
+    );
+}
+
+#[test]
+fn re_encrypt_local_share_refuses_a_share_holder_the_manifest_does_not_name() {
+    let temp = TempDir::new().unwrap();
+    let operator_pair = P256Pair::generate().unwrap();
+    let share_holder = P256Pair::generate().unwrap();
+    let manifest_member = P256Pair::generate().unwrap();
+
+    assert_share_set_refused(
+        temp.path(),
+        &operator_pair,
+        2,
+        &[&operator_pair, &share_holder],
+        ShareSet {
+            threshold: 2,
+            members: vec![
+                member("operator-1", &operator_pair),
+                member("operator-2", &manifest_member),
+            ],
+        },
+        &format!(
+            "quorum key metadata holds a share for operator {}, which is not a provision bundle manifest share set member",
+            hex::encode(share_holder.public_key().to_bytes()),
+        ),
+    );
+}
+
+#[test]
+fn re_encrypt_local_share_refuses_a_share_set_smaller_than_the_metadata() {
+    let temp = TempDir::new().unwrap();
+    let operator_pair = P256Pair::generate().unwrap();
+    let second_operator = P256Pair::generate().unwrap();
+    let third_operator = P256Pair::generate().unwrap();
+
+    assert_share_set_refused(
+        temp.path(),
+        &operator_pair,
+        2,
+        &[&operator_pair, &second_operator, &third_operator],
+        ShareSet {
+            threshold: 2,
+            members: vec![
+                member("operator-1", &operator_pair),
+                member("operator-2", &second_operator),
+            ],
+        },
+        "quorum key metadata holds 3 shares but provision bundle manifest share set has 2 members",
+    );
+}
+
+#[test]
+fn re_encrypt_local_share_refuses_metadata_holding_two_shares_for_one_operator() {
+    let temp = TempDir::new().unwrap();
+    let repeated_operator = P256Pair::generate().unwrap();
+    let shareless_operator = P256Pair::generate().unwrap();
+
+    assert_share_set_refused(
+        temp.path(),
+        &repeated_operator,
+        2,
+        &[&repeated_operator, &repeated_operator],
+        ShareSet {
+            threshold: 2,
+            members: vec![
+                member("operator-1", &repeated_operator),
+                member("operator-2", &shareless_operator),
+            ],
+        },
+        &format!(
+            "quorum key metadata holds more than one share for operator {}",
+            hex::encode(repeated_operator.public_key().to_bytes()),
+        ),
+    );
+}
+
+#[test]
+fn re_encrypt_local_share_refuses_a_share_set_naming_one_operator_twice() {
+    let temp = TempDir::new().unwrap();
+    let repeated_operator = P256Pair::generate().unwrap();
+
+    assert_share_set_refused(
+        temp.path(),
+        &repeated_operator,
+        2,
+        &[&repeated_operator, &repeated_operator],
+        ShareSet {
+            threshold: 2,
+            members: vec![
+                member("operator-1", &repeated_operator),
+                member("operator-2", &repeated_operator),
+            ],
+        },
+        &format!(
+            "provision bundle manifest share set names operator {} more than once",
+            hex::encode(repeated_operator.public_key().to_bytes()),
+        ),
+    );
+}
+
+#[test]
+fn re_encrypt_local_share_refuses_an_operator_seed_the_metadata_has_no_share_for() {
+    let temp = TempDir::new().unwrap();
+    let share_holder = P256Pair::generate().unwrap();
+    let missing_operator = P256Pair::generate().unwrap();
+
+    assert_share_set_refused(
+        temp.path(),
+        &missing_operator,
+        1,
+        &[&share_holder],
+        ShareSet {
+            threshold: 1,
+            members: vec![member("operator-1", &share_holder)],
+        },
+        &format!(
+            "operator ({}) not found in quorum key metadata shares",
+            hex::encode(missing_operator.public_key().to_bytes()),
+        ),
+    );
+}
+
+#[test]
+fn re_encrypt_local_share_refuses_a_quorum_key_the_manifest_does_not_name() {
+    let temp = TempDir::new().unwrap();
+    let quorum_pair = P256Pair::generate().unwrap();
+    let manifest_quorum_pair = P256Pair::generate().unwrap();
+    let operator_pair = P256Pair::generate().unwrap();
+    let inputs = write_share_inputs(
+        temp.path(),
+        &operator_pair,
+        json!({
+            "quorumKeyPublic": hex::encode(quorum_pair.public_key().to_bytes()),
+            "threshold": 1,
+            "shares": [share_entry(&operator_pair, b"share")],
+        }),
+        &sample_manifest_envelope(
+            manifest_quorum_pair.public_key().to_bytes(),
+            ShareSet {
+                threshold: 1,
+                members: vec![member("operator-1", &operator_pair)],
+            },
+        ),
+        &P256Pair::generate().unwrap().public_key(),
+    );
+
+    let assert = cargo_bin_cmd!("tvc")
+        .env("HOME", temp.path())
+        .env_remove("TVC_OPERATOR_SEED")
+        .arg("--message-format=json")
+        .args(["keys", "re-encrypt-local-share"])
+        .arg("--quorum-key-metadata")
+        .arg(&inputs.metadata)
+        .arg("--provision-bundle")
+        .arg(&inputs.provision_bundle)
+        .arg("--operator-seed-path")
+        .arg(&inputs.operator_seed)
+        .args([
+            "--dangerous-skip-verification",
+            "--dangerous-skip-interactive",
+        ])
+        .arg("--re-encrypted-out")
+        .arg(&inputs.output)
+        .assert()
+        .failure();
+
+    assert_eq!(
+        serde_json::from_slice::<Value>(&assert.get_output().stdout).unwrap(),
+        json!({
+            "reason": "command_error",
+            "code": "command_error",
+            "message": format!(
+                "quorum key metadata quorumKeyPublic ({}) does not match provision bundle manifest quorumKey ({})",
+                hex::encode(quorum_pair.public_key().to_bytes()),
+                hex::encode(manifest_quorum_pair.public_key().to_bytes()),
+            ),
+        })
+    );
+    assert!(!inputs.output.exists());
 }

@@ -113,4 +113,6 @@ tvc keys generate-local-quorum-key \
   --quorum-key-metadata-out quorum_key_metadata.json    # -c required; metadata-out defaults to quorum_key_metadata.json
 ```
 
+`quorum_key.json` fixes the key's real Shamir split: `threshold`, and one `operatorPublicKeys` entry per share. `generate-local-quorum-key` records both in the metadata as `threshold` and `shares[].operatorPublicKey`. The app that uses this key has to describe the same split in `app.json`: `quorumPublicKey` set to the metadata's `quorumKeyPublic`, and `shareSetParams` filled in (not the scaffold's `null`, which selects Turnkey's default share set) with the same `threshold` and one `newOperators[].publicKey` per operator key. `app create` does not compare these with the metadata, so a disagreement surfaces only at `keys re-encrypt-local-share`, which refuses to hand over a share until metadata and manifest agree (see [deploy-lifecycle.md](deploy-lifecycle.md#provisioning-variant-localself-hosted-operator-key)). The share set is fixed at `app create`, so fixing a disagreement means creating a new app.
+
 `quorum_key_metadata.json` and any re-encrypted share files contain sensitive shares. Keep them out of source control and out of the working tree you might commit. Prefer writing them to a path outside the repo.
