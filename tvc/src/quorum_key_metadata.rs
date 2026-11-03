@@ -19,33 +19,49 @@ pub(crate) struct EncryptedShareMetadata {
     pub(crate) share: String,
 }
 
+/// A disagreement between local quorum key metadata and the manifest a share
+/// is about to be handed over against.
+///
+/// The metadata records the quorum key and the Shamir parameters it was
+/// really split with; the manifest's share set is what the enclave will
+/// enforce. The two come from independent inputs, so each difference is
+/// refused rather than reconciled: a manifest that overstates the threshold
+/// lets fewer custodians than advertised reconstruct the key, and one that
+/// understates it has the enclave attempt reconstruction before enough real
+/// shares exist. Operators must be distinct on both sides, because the enclave
+/// counts each provisioned share toward the threshold without deduplicating
+/// by member: one operator named twice can meet a threshold of two alone.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum ManifestMismatch {
+    #[error(
+        "quorum key metadata quorumKeyPublic ({metadata}) does not match provision bundle manifest quorumKey ({manifest})"
+    )]
+    QuorumKey { metadata: String, manifest: String },
+    #[error(
+        "quorum key metadata threshold ({metadata}) does not match provision bundle manifest share set threshold ({manifest})"
+    )]
+    Threshold { metadata: u32, manifest: u32 },
+    #[error(
+        "quorum key metadata holds {metadata} shares but provision bundle manifest share set has {manifest} members"
+    )]
+    ShareCount { metadata: usize, manifest: usize },
+    #[error(
+        "quorum key metadata holds a share for operator {operator_public_key}, which is not a provision bundle manifest share set member"
+    )]
+    ShareWithoutMember { operator_public_key: String },
+    #[error("quorum key metadata holds more than one share for operator {operator_public_key}")]
+    DuplicateShare { operator_public_key: String },
+    #[error(
+        "provision bundle manifest share set names operator {operator_public_key} more than once"
+    )]
+    DuplicateMember { operator_public_key: String },
+}
+
 impl QuorumKeyMetadata {
     pub(crate) fn quorum_key_public_bytes(&self) -> anyhow::Result<Vec<u8>> {
         Ok(decode_p256_public_key_hex(&self.quorum_key_public)
             .context("invalid quorumKeyPublic in quorum key metadata")?
             .to_bytes())
-    }
-
-    pub(crate) fn encrypted_share_for_operator(
-        &self,
-        operator_public_key: &[u8],
-    ) -> anyhow::Result<Vec<u8>> {
-        let normalized_operator_public_key = hex::encode(operator_public_key);
-
-        for (index, share) in self.shares.iter().enumerate() {
-            let share_operator_public_key =
-                normalize_p256_public_key_hex(&share.operator_public_key)
-                    .with_context(|| format!("invalid operatorPublicKey at shares[{index}]"))?;
-
-            if share_operator_public_key == normalized_operator_public_key {
-                return hex::decode(share.share.trim())
-                    .with_context(|| format!("invalid encrypted share at shares[{index}]"));
-            }
-        }
-
-        anyhow::bail!(
-            "operator ({normalized_operator_public_key}) not found in quorum key metadata shares"
-        );
     }
 }
 
