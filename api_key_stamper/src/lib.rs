@@ -22,6 +22,7 @@ pub const SIGNATURE_SCHEME_P256: &str = "SIGNATURE_SCHEME_TK_API_P256";
 pub const SIGNATURE_SCHEME_SECP256K1: &str = "SIGNATURE_SCHEME_TK_API_SECP256K1";
 pub const API_KEY_STAMP_HEADER_NAME: &str = "X-Stamp";
 pub const SECP256K1_PRIVATE_KEY_SIZE: usize = 32;
+pub const P256_PRIVATE_KEY_SIZE: usize = 32;
 
 #[derive(Error, Debug, PartialEq)]
 pub enum StamperError {
@@ -82,7 +83,18 @@ impl TurnkeyP256ApiKey {
         private_key_bytes: B,
         public_key_bytes: Option<B>,
     ) -> Result<Self, StamperError> {
-        let secret_key = SecretKey::from_bytes(private_key_bytes.as_ref().into())
+        let priv_bytes = private_key_bytes.as_ref();
+
+        // Converting a slice of any other length into FieldBytes panics.
+        if priv_bytes.len() != P256_PRIVATE_KEY_SIZE {
+            return Err(StamperError::InvalidPrivateKeyBytes(format!(
+                "expected {} bytes, got {}",
+                P256_PRIVATE_KEY_SIZE,
+                priv_bytes.len(),
+            )));
+        }
+
+        let secret_key = SecretKey::from_bytes(priv_bytes.into())
             .map_err(|e| StamperError::InvalidPrivateKeyBytes(e.to_string()))?;
         let signing_key = P256SigningKey::from(secret_key);
 
@@ -498,6 +510,24 @@ mod tests {
         assert_eq!(
             res.unwrap_err(),
             StamperError::InvalidPrivateKeyBytes("crypto error".to_string())
+        );
+    }
+
+    #[test]
+    fn test_from_bytes_with_wrong_length_private_key_bytes() {
+        for len in [0, 31, 33, 64] {
+            assert_eq!(
+                TurnkeyP256ApiKey::from_bytes(vec![1u8; len], None).unwrap_err(),
+                StamperError::InvalidPrivateKeyBytes(format!("expected 32 bytes, got {len}"))
+            );
+        }
+    }
+
+    #[test]
+    fn test_from_strings_with_wrong_length_private_key() {
+        assert_eq!(
+            TurnkeyP256ApiKey::from_strings("abcd", None).unwrap_err(),
+            StamperError::InvalidPrivateKeyBytes("expected 32 bytes, got 2".to_string())
         );
     }
 
