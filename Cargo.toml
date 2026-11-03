@@ -22,11 +22,11 @@ resolver = "2"
 
 [workspace.dependencies]
 # QuorumOS
-qos_client = { version = "0.15.0", default-features = false, features = ["smartcard"] }
-qos_core = { version = "0.15.0", default-features = false }
-qos_crypto = { version = "0.15.0", default-features = false }
-qos_nsm = { version = "0.15.0", default-features = false }
-qos_p256 = { version = "0.15.0", default-features = false }
+qos_client = { git = "https://github.com/tkhq/qos", branch = "zeke/dep-review-reductions", default-features = false, features = ["smartcard"] }
+qos_core = { git = "https://github.com/tkhq/qos", branch = "zeke/dep-review-reductions", default-features = false }
+qos_crypto = { git = "https://github.com/tkhq/qos", branch = "zeke/dep-review-reductions", default-features = false }
+qos_nsm = { git = "https://github.com/tkhq/qos", branch = "zeke/dep-review-reductions", default-features = false }
+qos_p256 = { git = "https://github.com/tkhq/qos", branch = "zeke/dep-review-reductions", default-features = false }
 
 # Encoding and serialization
 base64 = { version = "0.22.0", default-features = false, features = ["std"] }

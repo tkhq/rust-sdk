@@ -2668,9 +2668,8 @@ dependencies = [
 
 [[package]]
 name = "qos_client"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe123899c909fc1dd31dcf0a89ba1bb0fad696164d29884e34008c4109b94f7b"
+version = "0.15.1"
+source = "git+https://github.com/tkhq/qos?branch=zeke%2Fdep-review-reductions#f85f79f1f08b53766d6c11e911de891c35e42030"
 dependencies = [
  "aws-nitro-enclaves-nsm-api",
  "borsh",
@@ -2693,9 +2692,8 @@ dependencies = [
 
 [[package]]
 name = "qos_core"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9317cea3f8ee83cfa422348f0708e3208067443278c9eb2fae2d8c409e3cf418"
+version = "0.15.1"
+source = "git+https://github.com/tkhq/qos?branch=zeke%2Fdep-review-reductions#f85f79f1f08b53766d6c11e911de891c35e42030"
 dependencies = [
  "aws-nitro-enclaves-nsm-api",
  "borsh",
@@ -2718,9 +2716,8 @@ dependencies = [
 
 [[package]]
 name = "qos_crypto"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7fa3ace40d33bac234bc83e13777268dbdbf716667b921f73305eaf83da0cffc"
+version = "0.15.1"
+source = "git+https://github.com/tkhq/qos?branch=zeke%2Fdep-review-reductions#f85f79f1f08b53766d6c11e911de891c35e42030"
 dependencies = [
  "rand 0.9.2",
  "sha2",
@@ -2731,18 +2728,16 @@ dependencies = [
 
 [[package]]
 name = "qos_hex"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e93d654c3d1e0a9264aa284246311993aa5f63309daf5988ed7623eb02e57a57"
+version = "0.15.1"
+source = "git+https://github.com/tkhq/qos?branch=zeke%2Fdep-review-reductions#f85f79f1f08b53766d6c11e911de891c35e42030"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "qos_json"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c07853e47a8f634ab05e841839c9b0ec8d02c7286c0d83a79c7ff14dc213d56a"
+version = "0.15.1"
+source = "git+https://github.com/tkhq/qos?branch=zeke%2Fdep-review-reductions#f85f79f1f08b53766d6c11e911de891c35e42030"
 dependencies = [
  "qos_hex",
  "serde",
@@ -2752,9 +2747,8 @@ dependencies = [
 
 [[package]]
 name = "qos_nsm"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "afe741f5a8cb8d7bee426eda43e44aa09ad42166fe47b976db974e8780e2101e"
+version = "0.15.1"
+source = "git+https://github.com/tkhq/qos?branch=zeke%2Fdep-review-reductions#f85f79f1f08b53766d6c11e911de891c35e42030"
 dependencies = [
  "aws-nitro-enclaves-cose",
  "aws-nitro-enclaves-nsm-api",
@@ -2771,9 +2765,8 @@ dependencies = [
 
 [[package]]
 name = "qos_p256"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a044456faf2ee8923d53c52b8c1496d6d5eb941e5950c2aa48e642a67f8411ea"
+version = "0.15.1"
+source = "git+https://github.com/tkhq/qos?branch=zeke%2Fdep-review-reductions#f85f79f1f08b53766d6c11e911de891c35e42030"
 dependencies = [
  "aes-gcm",
  "borsh",
@@ -4626,7 +4619,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
