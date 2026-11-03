@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+
+- Upgraded `hpke` from 0.10 to 0.13, which drops `p256` 0.11 and `crypto-bigint` 0.4 (RUSTSEC-2026-0387). The HPKE suite and the serialized form of `EnclaveEncryptServerRecv` are unchanged. **Breaking**: `EnclaveEncryptError` variants now carry `hpke` 0.13's `HpkeError`.
+
 ## [0.17.1](https://github.com/tkhq/rust-sdk/compare/turnkey_enclave_encrypt-v0.17.0...turnkey_enclave_encrypt-v0.17.1) - 2026-10-30
 
 ### Other

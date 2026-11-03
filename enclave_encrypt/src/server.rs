@@ -2,7 +2,7 @@
 use hpke::{Deserializable, Kem as KemTrait, Serializable};
 use p256::ecdsa::{Signature, SigningKey, signature::Signer};
 use p256::elliptic_curve::sec1::ToEncodedPoint;
-use rand_core::OsRng;
+use rand_core_0_9::{OsRng, UnwrapErr};
 use zeroize::Zeroizing;
 
 use crate::{
@@ -34,7 +34,7 @@ impl EnclaveEncryptServer {
         organization_id: String,
         user_id: Option<String>,
     ) -> Self {
-        let (target_private, target_public) = Kem::gen_keypair(&mut OsRng);
+        let (target_private, target_public) = Kem::gen_keypair(&mut UnwrapErr(OsRng));
         Self {
             enclave_auth_key,
             target_public,
@@ -175,8 +175,86 @@ impl EnclaveEncryptServer {
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct EnclaveEncryptServerRecv {
     // The underlying type is zero on drop
+    #[serde(with = "hpke_key_serde")]
     target_private: Option<<Kem as KemTrait>::PrivateKey>,
+    #[serde(with = "hpke_key_serde")]
     target_public: Option<<Kem as KemTrait>::PublicKey>,
+}
+
+// hpke dropped its `serde_impls` feature in 0.11; this keeps the wire format it used, a
+// fixed-length tuple of the key's `to_bytes()` octets, so persisted receivers stay readable.
+mod hpke_key_serde {
+    use std::{fmt, marker::PhantomData};
+
+    use hpke::{Deserializable, Serializable};
+    use serde::{
+        Deserialize, Deserializer, Serialize, Serializer,
+        de::{Error, SeqAccess, Visitor},
+        ser::SerializeTuple,
+    };
+    use zeroize::Zeroizing;
+
+    struct KeyBytes<'a>(&'a [u8]);
+
+    impl Serialize for KeyBytes<'_> {
+        fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            let mut tuple = serializer.serialize_tuple(self.0.len())?;
+            for byte in self.0 {
+                tuple.serialize_element(byte)?;
+            }
+            tuple.end()
+        }
+    }
+
+    struct Key<K>(K);
+
+    impl<'de, K: Deserializable> Deserialize<'de> for Key<K> {
+        fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            struct KeyVisitor<K>(PhantomData<K>);
+
+            impl<'de, K: Deserializable> Visitor<'de> for KeyVisitor<K> {
+                type Value = K;
+
+                fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    write!(f, "{} key bytes", K::size())
+                }
+
+                fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<K, A::Error> {
+                    let mut bytes = Zeroizing::new(Vec::with_capacity(K::size()));
+                    for index in 0..K::size() {
+                        bytes.push(
+                            seq.next_element()?
+                                .ok_or_else(|| A::Error::invalid_length(index, &self))?,
+                        );
+                    }
+                    K::from_bytes(&bytes).map_err(A::Error::custom)
+                }
+            }
+
+            deserializer
+                .deserialize_tuple(K::size(), KeyVisitor(PhantomData))
+                .map(Key)
+        }
+    }
+
+    // `#[serde(with)]` dictates the `&Option<K>` parameter.
+    #[allow(clippy::ref_option)]
+    pub fn serialize<K: Serializable, S: Serializer>(
+        key: &Option<K>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        key.as_ref()
+            .map(Serializable::to_bytes)
+            .as_deref()
+            .map(KeyBytes)
+            .serialize(serializer)
+    }
+
+    pub fn deserialize<'de, K: Deserializable, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Option<K>, D::Error> {
+        Ok(Option::<Key<K>>::deserialize(deserializer)?.map(|Key(key)| key))
+    }
 }
 
 impl EnclaveEncryptServerRecv {

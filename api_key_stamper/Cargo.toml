@@ -14,11 +14,16 @@ categories = ["cryptography", "authentication", "api-bindings"]
 base64.workspace = true
 hex.workspace = true
 p256.workspace = true
-k256.workspace = true
+k256 = { workspace = true, optional = true }
 rand_core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+
+[features]
+default = ["secp256k1"]
+# Adds `TurnkeySecp256k1ApiKey`, which signs stamps with a secp256k1 key.
+secp256k1 = ["dep:k256"]
 
 [dev-dependencies]
 tempfile.workspace = true

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- `secp256k1` feature, on by default, gating `TurnkeySecp256k1ApiKey` and the `k256` dependency. Disable default features to build without `k256`.
+
 ## [0.17.1](https://github.com/tkhq/rust-sdk/compare/turnkey_api_key_stamper-v0.17.0...turnkey_api_key_stamper-v0.17.1) - 2026-10-30
 
 ### Other

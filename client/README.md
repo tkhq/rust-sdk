@@ -49,3 +49,5 @@ Additional `reqwest` features can be enabled in your `Cargo.toml`:
 [dependencies]
 turnkey_client = { version = "0.0.2", features = ["reqwest_native_tls", "reqwest_brotli", "reqwest_zstd", "reqwest_hickory_dns"] }
 ```
+
+The default `secp256k1` and `reqwest_http2` features add `TurnkeySecp256k1ApiKey` and HTTP/2 support. Set `default-features = false` to build without `k256` or `h2`.

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- `secp256k1` default feature, gating the `TurnkeySecp256k1ApiKey` re-export, and `reqwest_http2` default feature, gating HTTP/2 support in `reqwest`.
+
+### Removed
+
+- The unused `json` feature of `reqwest` and the `clock` feature of `chrono`.
+
 ## [0.17.1](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.17.0...turnkey_client-v0.17.1) - 2026-10-30
 
 ### Other
