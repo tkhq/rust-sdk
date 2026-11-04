@@ -25,6 +25,10 @@ tvc app create --config-file app.json --message-format json
 - Decided at `app create` and **cannot be changed afterward**. Moving an app to another region means creating a new app.
 - `ap-southeast-1` works only for organizations Turnkey has enabled for it. Otherwise `app create` fails with `api_error` and `region "ap-southeast-1" is not enabled for organization <orgID>`; nothing was created. Ask Turnkey to enable the organization, or create the app in `us-east-1`.
 
+### Egress
+
+`enableEgress` in `app.json` controls whether the app may open outbound network connections. The scaffold writes `"enableEgress": true`, and a file without the key also means `true`; set it to `false` for an app that should not reach the network. There is no flag or env var for it, and `app create` is the only command that sends it, so decide it in the file before creating the app. `app list` and `app status` report the value back as `egressEnabled`.
+
 ### Wiring the operator into `app.json`
 
 The scaffold prefills `manifestSetParams.newOperators[0].publicKey` with your profile's saved default operator when the profile resolves exactly one; otherwise it drops a `<FILL_IN_OPERATOR_PUBLIC_KEY>` sentinel. Branch on which you got:
@@ -50,7 +54,7 @@ Almost every deploy field also has a CLI flag / env var; flags override the file
 | `--pivot-image-url` | `TVC_PIVOT_IMAGE_URL` | OCI image URL for the enclave pivot |
 | `--expected-pivot-digest` | `TVC_EXPECTED_PIVOT_DIGEST` | Expected digest of the pivot binary (integrity pin) |
 | `--pivot-path` | `TVC_PIVOT_PATH` | Path to the pivot binary inside the image |
-| `--pivot-args` | `TVC_PIVOT_ARGS` | Args passed to the pivot (repeatable) |
+| `--pivot-args` | `TVC_PIVOT_ARGS` | Args passed to the pivot (repeatable). Plaintext in the manifest, activity responses, and boot proofs; never secrets |
 | `--qos-version` | `TVC_QOS_VERSION` | QOS version to run; defaults to `0.15.0` for fresh scaffolds and flag-only deployments |
 | `--health-check-port` | `TVC_HEALTH_CHECK_PORT` | Port the health check probes |
 | *(none)* | *(none)* | `healthCheckType` is config-file only: `TVC_HEALTH_CHECK_TYPE_HTTP` (default) or `TVC_HEALTH_CHECK_TYPE_GRPC`. There is no flag and no env var, so it must be set in `deploy.json`. |

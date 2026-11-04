@@ -93,7 +93,7 @@ Poll status (there is no `--wait`):
 tvc deploy get-status --deploy-id <DEPLOY_ID> --message-format json   # reason: deployment_runtime_status
 ```
 
-Right after approval this may return `replicas: null`, a 404 `not_found` ("app status not found"), or a run of transient `api_error` HTTP 500s ("failed to fetch app status: … internal server error") — all mean "no state yet, not ready", keep polling (observed: ~25s of consecutive 500s before the first real status). Once it returns state, read `isTargeted`:
+Right after approval this may return `replicas: null`, a 404 `not_found` ("app status not found"), or a run of `api_error` HTTP 500s ("failed to fetch app status: … internal server error") — all mean "no state yet, not ready", keep polling (observed: ~25s of consecutive 500s before the first real status). The 500s are not an outage: the backend answers 500 for any app that has no live deployment yet, and `tvc app status` on such an app fails the same way until the first deployment goes live. Once it returns state, read `isTargeted`:
 
 - **`isTargeted == true`** → this deployment is receiving traffic. It is live once `replicas.ready == replicas.desired`. First deployments land here with no set-live call.
 - **`isTargeted == false`** → it is not receiving traffic (an older deployment is still live). Switch traffic to it:
@@ -140,15 +140,15 @@ tvc app list --message-format json
 }
 ```
 
-**Read `publicDomain`; do not construct it.** The key is omitted from the JSON whenever its value is the empty string, and empty is the only "absent" signal the API has (the wire type is a non-optional string, so there is no null and no way to tell unset from empty). Treat a missing key as "no domain available right now" rather than an error. `region` is omitted the same way when empty, which happens only for an app whose cluster the server cannot map to a region.
+**Read `publicDomain`; do not construct it.** It is assigned when the app is created and never depends on a deployment: it is present on an app with no deployments at all, and only starts serving traffic once a deployment is live. The key is omitted from the JSON whenever its value is the empty string (the wire type is a non-optional string, so there is no null). `region` is omitted the same way when empty, which happens only for an app whose cluster the server cannot map to a region.
 
-What empty *means* is not firmly established: the CLI documents it as "the app has no public domain configured," but it has not been confirmed whether it can also be empty transiently while a new app's domain is still being provisioned. If you get an empty value on an app you expect to have a domain, poll `app list` again before concluding it has none. There is no constructible fallback: the hostname pattern is environment-specific (production orgs get `app-<APP_ID>.turnkey.cloud`, dev orgs something entirely different, e.g. `app-<APP_ID>.apps.tvc-dev.turnkey.engineering`), so a guessed hostname is a dead end — the returned `publicDomain` is the only reliable source. It is populated as early as `app create`, before any deployment exists; it just serves nothing until a deployment is live.
+`publicDomain` normally holds one hostname, but the contract allows several separated by commas (apps migrated between clusters can carry an old and a new one), so split on `,` and use the first entry for URLs. Never construct the hostname yourself, and never write one out for the user from the app id, not even labelled as a guess — the returned `publicDomain` is the only reliable source. The patterns are listed so you can recognize a value, not produce one: production is `app-<APP_ID>.app.turnkey.cloud` for `us-east-1` and `app-<APP_ID>.app-sin.turnkey.cloud` for `ap-southeast-1`; dev uses a different base domain entirely, e.g. `app-<APP_ID>.apps.tvc-dev.turnkey.engineering`.
 
 If the app exposes an HTTP health endpoint, check it:
 
 ```bash
 DOMAIN=$(tvc app list --message-format json \
-  | jq -r --arg id "<APP_ID>" '.apps[] | select(.id == $id) | .publicDomain // empty')
+  | jq -r --arg id "<APP_ID>" '.apps[] | select(.id == $id) | .publicDomain | split(",")[0]')
 curl "https://$DOMAIN/health"
 ```
 
