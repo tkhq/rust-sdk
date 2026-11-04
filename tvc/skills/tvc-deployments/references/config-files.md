@@ -56,6 +56,7 @@ Almost every deploy field also has a CLI flag / env var; flags override the file
 | *(none)* | *(none)* | `healthCheckType` is config-file only: `TVC_HEALTH_CHECK_TYPE_HTTP` (default) or `TVC_HEALTH_CHECK_TYPE_GRPC`. There is no flag and no env var, so it must be set in `deploy.json`. |
 | `--public-ingress-port` | `TVC_PUBLIC_INGRESS_PORT` | Public ingress port |
 | `--pivot-pull-secret` | `TVC_PIVOT_PULL_SECRET` | Pull secret for a private image |
+| `--pull-secret-expires-at` | — | RFC 3339 expiry for `--pivot-pull-secret`; defaults to two hours |
 | `--dangerous-deploy-debug-mode` | `TVC_DANGEROUS_DEPLOY_DEBUG_MODE` | Debug-mode deploy (logs tailable; never for prod) |
 
 Seed a new deployment's config from an existing one:
@@ -114,3 +115,7 @@ tvc keys generate-local-quorum-key \
 ```
 
 `quorum_key_metadata.json` and any re-encrypted share files contain sensitive shares. Keep them out of source control and out of the working tree you might commit. Prefer writing them to a path outside the repo.
+
+Pull-secret envelopes are bound to the authenticated user and organization. Turnkey
+checks expiry when validating the image and executing the deployment, including after approvals.
+Choose a later `--pull-secret-expires-at` if approval may take more than  the default two hours. 
