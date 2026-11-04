@@ -364,6 +364,85 @@
           "comment": "must gate app create on having the image values"
         }
       ]
+    },
+    {
+      "id": 13,
+      "prompt": "Our GitHub Actions job has TVC_ORG_ID, TVC_API_KEY_PUBLIC and TVC_API_KEY_PRIVATE set as secrets and `tvc deploy create` works, but `tvc deploy approve --deploy-id 7e3a9c1b-2d4f-4a6b-8c0e-1f2a3b4c5d6e --dangerous-skip-interactive --message-format json` fails with {\"reason\":\"command_error\",\"code\":\"command_error\",\"message\":\"No active organization. Run `tvc login` first or provide --operator-seed or --operator-seed-path.\"}. How do I make approval work in CI?",
+      "expected_output": "Explains that env-var auth authenticates API calls but carries no operator signing key, and that hosted/YubiKey operators live in the login profile. Tells the user to pass --operator-seed-path (or TVC_OPERATOR_SEED / --operator-seed) with the hex seed of a local operator whose key is in the app's manifest set, stored as a CI secret. Does not suggest running tvc login in CI.",
+      "files": [
+        "skills/tvc-deployments/SKILL.md",
+        "skills/tvc-deployments/references/ci-recipe.md"
+      ],
+      "gradeFullResponse": true,
+      "assertions": [
+        {
+          "type": "regex",
+          "value": "--operator-seed(-path)?|TVC_OPERATOR_SEED",
+          "comment": "the only env-only approval path"
+        },
+        {
+          "type": "regex",
+          "value": "manifest set|manifestSetOperatorIds",
+          "flags": "i",
+          "comment": "the seed's key must be in the app's manifest set"
+        },
+        {
+          "type": "regex",
+          "value": "secret",
+          "flags": "i",
+          "comment": "must treat the seed as a secret"
+        },
+        {
+          "type": "not_regex",
+          "pattern": "^\\s*\\$?\\s*(-\\s*)?(run:\\s*)?tvc\\s+login\\b",
+          "flags": "m",
+          "comment": "Must not tell CI to run tvc login; it needs a human and a TTY."
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "prompt": "I approved TVC deployment 5c7d9e1f-3a5b-4c7d-9e1f-2a3b4c5d6e7f twenty minutes ago. `tvc deploy get-status` has returned {\"reason\":\"deployment_runtime_status\",\"isTargeted\":true,\"replicas\":{\"ready\":0,\"desired\":3}} every 5 seconds since. The app was created with plain `tvc app create`. What now?",
+      "expected_output": "Stops polling and diagnoses from the inputs: recompute expectedPivotDigest from the pushed image at pivotPath, confirm the image is a single-platform linux/amd64 manifest (not an index), and check healthCheckPort/type against what the binary binds; also mentions pull secret, pivotArgs, egress as later checks. Says debug-logs are impossible for this app (not created with --dangerous-enable-debug-mode-deployments). Does not delete and recreate with the same config, and does not just keep polling.",
+      "files": [
+        "skills/tvc-deployments/SKILL.md",
+        "skills/tvc-deployments/references/failure-diagnosis.md"
+      ],
+      "gradeFullResponse": true,
+      "assertions": [
+        {
+          "type": "regex",
+          "value": "expectedPivotDigest|pivot digest",
+          "flags": "i"
+        },
+        {
+          "type": "regex",
+          "value": "amd64|platform|index",
+          "flags": "i"
+        },
+        {
+          "type": "regex",
+          "value": "healthCheckPort|health[- ]check",
+          "flags": "i"
+        },
+        {
+          "type": "regex",
+          "value": "debug",
+          "flags": "i",
+          "comment": "must address why logs are not available"
+        },
+        {
+          "type": "not_regex",
+          "pattern": "^\\s*\\$?\\s*tvc\\s+deploy\\s+delete\\b",
+          "flags": "m",
+          "comment": "Must not delete the failing deployment; it is the evidence, and the same config fails identically."
+        },
+        {
+          "type": "not_regex",
+          "pattern": "debug-logs[^\\n]*5c7d9e1f-3a5b-4c7d-9e1f-2a3b4c5d6e7f",
+          "comment": "Must not run debug-logs against a non-debug deployment."
+        }
+      ]
     }
   ]
 }

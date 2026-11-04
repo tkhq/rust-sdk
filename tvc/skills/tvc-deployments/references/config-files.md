@@ -4,7 +4,7 @@
 
 Always treat the scaffolded file as the source of truth for the current schema, fields evolve, and the CLI's scaffold is authoritative for the version you have installed.
 
-Scaffold-then-edit is a hard rule for `deploy.json`, not a preference: the parser has **no field defaults**. Eight of its eleven fields are required at parse time — `appId`, `qosVersion`, `pivotContainerImageUrl`, `pivotPath`, `expectedPivotDigest`, `healthCheckType`, `healthCheckPort`, `publicIngressPort` — and a hand-written file missing any of them fails with `command_error` ("missing field `...`"). Only `pivotArgs` (defaults `[]`), `dangerousDeployDebugMode` (defaults `false`), and `pivotContainerEncryptedPullSecret` (defaults absent) may be omitted. The 3000/HTTP defaults you see in scaffolded files live in `deploy init` and the flag-only path, not in the file parser.
+Scaffold-then-edit is a hard rule for `deploy.json`, not a preference: the parser has **no field defaults**. Eight fields are required at parse time — `appId`, `qosVersion`, `pivotContainerImageUrl`, `pivotPath`, `expectedPivotDigest`, `healthCheckType`, `healthCheckPort`, `publicIngressPort` — and a hand-written file missing any of them fails with `command_error` ("missing field `...`"). The optional ones are `pivotArgs` (defaults `[]`), `dangerousDeployDebugMode` (defaults `false`), `pivotContainerEncryptedPullSecret` (defaults absent), and the sizing fields `replicas`, `instanceSizeCpus`, and `instanceSizeRam` (all default to the backend's choice when absent; the scaffold does not write them). The 3000/HTTP defaults you see in scaffolded files live in `deploy init` and the flag-only path, not in the file parser.
 
 ## App config
 
@@ -59,7 +59,8 @@ Almost every deploy field also has a CLI flag / env var; flags override the file
 | `--health-check-port` | `TVC_HEALTH_CHECK_PORT` | Port the health check probes |
 | *(none)* | *(none)* | `healthCheckType` is config-file only: `TVC_HEALTH_CHECK_TYPE_HTTP` (default) or `TVC_HEALTH_CHECK_TYPE_GRPC`. There is no flag and no env var, so it must be set in `deploy.json`. |
 | `--public-ingress-port` | `TVC_PUBLIC_INGRESS_PORT` | Public ingress port |
-| `--pivot-pull-secret` | `TVC_PIVOT_PULL_SECRET` | Pull secret for a private image |
+| `--pivot-pull-secret` | `TVC_PIVOT_PULL_SECRET` | Path to an unencrypted pull secret file for a private image; the CLI encrypts it for the org's environment |
+| `--replicas` | `TVC_REPLICAS` | Replica count (config: `replicas`); omit for the backend default |
 | `--dangerous-deploy-debug-mode` | `TVC_DANGEROUS_DEPLOY_DEBUG_MODE` | Debug-mode deploy (logs tailable; never for prod) |
 
 Seed a new deployment's config from an existing one:
