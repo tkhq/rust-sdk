@@ -7,7 +7,7 @@ A GitHub Actions job that builds the image, pins both digests, creates and appro
 CI cannot create credentials or operators, and env-var auth alone carries no operator key. A human does this once:
 
 1. `tvc login`, choosing the **local key file** operator type. This writes an API key profile and a local operator key (`operator.json`, with `public_key` and a hex `private_key`) under `~/.config/turnkey/`.
-2. Create the app with that operator's key in the manifest set (`tvc app init` prefills it when the profile has exactly one operator; see [config-files.md](config-files.md)). Save `appId` from `app create`.
+2. Create the app with that operator's key in the manifest set (`tvc app init` prefills it when the profile has exactly one operator; see [config-files.md](config-files.md)). Save `appId` from `app create`. Do this on the machine with the profile: under env-only auth, `app create` creates the app and then fails with `no active organization set`, and the printed ids are lost (recoverable only via `app list -n <name>`).
 3. Export the operator seed for CI: `tvc keys backup-operator-key -o operator-backup.json`, then copy the `private_key` value (64 hex chars) into a CI secret. Delete the backup file. This seed signs approvals on behalf of that operator; treat it like the API private key.
 4. Store as repository secrets: `TVC_ORG_ID`, `TVC_API_KEY_PUBLIC`, `TVC_API_KEY_PRIVATE`, `TVC_OPERATOR_SEED`. Store `TVC_APP_ID` as a variable.
 
@@ -116,7 +116,7 @@ jobs:
 - **Flags instead of `deploy.json`.** `deploy create` accepts every field as a flag or `TVC_*` env var, so CI needs no config file. `healthCheckType` defaults to HTTP on this path; set it in a config file only if you need gRPC.
 - **Approval with an explicit seed.** `TVC_OPERATOR_SEED` is read by `--operator-seed`; `--operator-seed-path` reads the same hex from a file. The CLI matches the seed's public key against the manifest set and posts under the matching operator id, so `--operator-id` is unnecessary. `--dangerous-skip-interactive` is required in JSON mode; the approval is blind, which is acceptable only because the pipeline built the inputs it approves.
 - **Conditional set-live.** The first deployment of an app auto-targets on approval. Later ones report `isTargeted == false` until `app set-live-deploy` runs, which this loop does once it sees that state. Calling set-live on an already-targeted deployment fails with HTTP 400, which the gate avoids.
-- **Bounded wait.** Ten minutes is generous; a healthy deployment is usually ready in a few. On timeout, fail the job and leave the deployment in place for diagnosis rather than deleting it.
+- **Bounded wait.** Ten minutes leaves headroom: the verified run took about 5.5 minutes from approval to 3/3 replicas, with the first 45 seconds answering HTTP 500. On timeout, fail the job and leave the deployment in place for diagnosis rather than deleting it.
 
 ## Variations
 
@@ -125,6 +125,13 @@ jobs:
 - **Replica count:** `--replicas <n>` (or `replicas` in the config) overrides the backend default.
 - **Debug builds:** never in this pipeline. Debug mode needs an app created with `--dangerous-enable-debug-mode-deployments`, runs one replica, and marks the quorum key insecure; keep it on a separate dev app.
 
-## Not yet verified end to end
+## Verified
 
-This recipe is assembled from the CLI's `--help` text and source at tvc 0.17.1 and from the image steps in `tkhq/tvc-examples`. It has not been run against a TVC environment from this skill. Before relying on it, run it once against a dev app and fix anything that differs.
+The `tvc` steps were run end to end against a TVC dev organization on 2026-11-04 with tvc 0.17.1, from a shell whose `HOME` had no `~/.config/turnkey/` and whose only credentials were the three `TVC_*` variables plus `TVC_API_BASE_URL`:
+
+- `app list` worked env-only. `deploy create` from flags alone (including `--pivot-args=--host` style values that start with dashes) returned `deployment_created`.
+- `deploy approve` without a seed failed with `No active organization. Run tvc login first or provide --operator-seed or --operator-seed-path.`, as the recipe says. With `--operator-seed-path` it returned `manifest_approval_posted` with `quorumReached: true` and the operator id the manifest set assigned to that key, without `--operator-id`.
+- `get-status` returned HTTP 500 `api_error` for about 45 seconds after approval, then `isTargeted: true` with 1/3 replicas ready at about 50 seconds, 2/3 at about 2 minutes, and 3/3 at about 5.5 minutes. `set-live-deploy` was never needed, since the first deployment auto-targeted.
+- `publicDomain` from `app list` resolved and `/health` returned 200.
+
+The image build step was not part of that run; it is the pattern from `tkhq/tvc-examples` and your toolchain will differ. The one-time setup also surfaced a CLI quirk: `app create` under env-only auth creates the app and then fails with `no active organization set`, losing the printed ids. That is why app creation is listed under human setup above, and why the recipe approves by seed rather than by `--operator-id`.

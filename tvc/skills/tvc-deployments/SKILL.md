@@ -59,7 +59,7 @@ TVC_API_BASE_URL=      # optional, defaults to https://api.turnkey.com
 
 All three set → env auth, which takes precedence over any `tvc login` profile. None → the profile under `~/.config/turnkey/`. Some but not all → error naming the missing one. Empty counts as unset. `tvc login` needs a human; if neither env vars nor a profile exist, stop and ask.
 
-**Env vars authenticate API calls but carry no operator signing key.** With no profile on the machine, `deploy approve` fails with `No active organization` unless you pass `--operator-seed-path <file>` or `--operator-seed` (env `TVC_OPERATOR_SEED`): the hex seed of a local operator whose key is in the app's manifest set. Hosted and YubiKey operators come from the profile. See **[references/ci-recipe.md](references/ci-recipe.md)**.
+**Env vars authenticate API calls but carry no operator signing key, and two commands need the profile anyway.** With no profile on the machine: `deploy approve` fails with `No active organization` unless you pass `--operator-seed-path <file>` or `--operator-seed` (env `TVC_OPERATOR_SEED`), the hex seed of a local operator whose key is in the app's manifest set; `operator create` needs the profile outright; and `app create` creates the app, then fails with `no active organization set` while saving bookkeeping (see Known gaps). Everything else (`deploy create`, `get-status`, `status`, `app set-live-deploy`, `app list`, `app status`, `debug-logs`) works env-only; verified against dev on 2026-11-04. See **[references/ci-recipe.md](references/ci-recipe.md)**.
 
 ## Output contract
 
@@ -121,7 +121,8 @@ Inventing these fails with `usage_error`. Each names the `--help` check for your
 - **No `--wait` / phase flag on `deploy get-status`** (check: `tvc deploy get-status --help`). Poll (Rule 3).
 - **No `--version` flag** (check: `tvc --help`). Use `tvc version`.
 - **`code: invalid_input` is never emitted.** It is in the taxonomy `tvc --help` prints, but the classifier does not produce it; do not branch on it.
-- **`app status` and `deploy get-status` answer HTTP 500 for an app with no live deployment yet.** A backend gap, not an outage: keep polling after approve, and do not read a 500 from `app status` on a never-deployed app as a failure.
+- **`app status` and `deploy get-status` answer HTTP 500 for an app with no live deployment yet.** A backend gap, not an outage: keep polling after approve (observed 25 to 50 seconds of 500s before the first real status), and do not read a 500 from `app status` on a never-deployed app as a failure.
+- **`app create` under env-var auth with no profile creates the app, then fails with `command_error` "no active organization set".** The API call succeeded; the CLI died saving the last app id to a profile that does not exist, and the `app_created` line with `appId` and `manifestSetOperatorIds` is lost. Do **not** retry (you would mint a duplicate). Recover the id with `tvc app list -n <name> --message-format json`; the operator ids are not recoverable, so approve with `--operator-seed-path` instead of `--operator-id`. Create apps from a machine with a `tvc login` profile when you can.
 
 ## Troubleshooting
 

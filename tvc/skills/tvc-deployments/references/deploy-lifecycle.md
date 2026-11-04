@@ -44,6 +44,7 @@ tvc app create --config-file app.json --message-format json   # reason: app_crea
 
 - `--config-file` / `-c` is **required** for `app create` (env `TVC_APP_CONFIG`).
 - `--region <REGION>` (env `TVC_APP_REGION`) overrides `region` in `app.json`: `us-east-1` (default) or `ap-southeast-1`, the latter only for organizations Turnkey has enabled. The region is decided at `app create` and can never be changed afterward. See [config-files.md](config-files.md#region).
+- `app create` needs a `tvc login` profile even when the three `TVC_*` env vars are set: with env-only auth it creates the app at the API and then fails with `command_error` "no active organization set" while saving the last app id, so `appId` and `manifestSetOperatorIds` are never printed. Do not retry; recover the id with `tvc app list -n <name>`, and approve with `--operator-seed-path` since the operator ids are gone. Observed on tvc 0.17.1 (2026-11-04).
 - `--no-operator-reuse` stops the CLI from swapping an existing operator id into the config before sending it. The backend still returns the existing operator when the key *and* operator name match, and reuses an operator set with identical members, threshold, and name; a new operator record appears only when the operator name differs.
 
 ## 3. Create a deployment
@@ -95,7 +96,7 @@ Poll status (there is no `--wait`):
 tvc deploy get-status --deploy-id <DEPLOY_ID> --message-format json   # reason: deployment_runtime_status
 ```
 
-Right after approval this may return `replicas: null`, a 404 `not_found` ("app status not found"), or a run of `api_error` HTTP 500s ("failed to fetch app status: … internal server error") — all mean "no state yet, not ready", keep polling (observed: ~25s of consecutive 500s before the first real status). The 500s are not an outage: the backend answers 500 for any app that has no live deployment yet, and `tvc app status` on such an app fails the same way until the first deployment goes live. Once it returns state, read `isTargeted`:
+Right after approval this may return `replicas: null`, a 404 `not_found` ("app status not found"), or a run of `api_error` HTTP 500s ("failed to fetch app status: … internal server error") — all mean "no state yet, not ready", keep polling (observed: 25 to 50 seconds of consecutive 500s before the first real status; in a verified dev run the first replica was ready at about 50 seconds and all three at about 5.5 minutes). The 500s are not an outage: the backend answers 500 for any app that has no live deployment yet, and `tvc app status` on such an app fails the same way until the first deployment goes live. Once it returns state, read `isTargeted`:
 
 - **`isTargeted == true`** → this deployment is receiving traffic. It is live once `replicas.ready == replicas.desired`. First deployments land here with no set-live call.
 - **`isTargeted == false`** → it is not receiving traffic (an older deployment is still live). Switch traffic to it:

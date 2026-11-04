@@ -3,10 +3,11 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "I need to ship a TVC app end to end with the tvc CLI, from creating the app through to confirming it is serving traffic. This runs unattended in CI, so nothing can prompt for input.",
-      "expected_output": "Runs the CLI with --message-format json (which also puts it in non-interactive mode), follows operator create -> app create -> deploy create -> deploy approve -> poll deploy get-status, and passes --dangerous-skip-interactive to approve since non-interactive mode requires it. Treats set-live-deploy as conditional on isTargeted, because the first deployment auto-targets on approval.",
+      "prompt": "Ship a new TVC deployment end to end with the tvc CLI and confirm it is serving traffic. This runs unattended in CI, so nothing can prompt. The app already exists: appId 8d2f6a1c-4b3e-4f5a-9c7d-0e1f2a3b4c5d. Image: ghcr.io/acme/signer@sha256:9f1e2d3c4b5a69788796a5b4c3d2e1f0aabbccddeeff00112233445566778899 (linux/amd64), pivot binary at /tvc_app with sha256 3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d, no pivot args, listens on port 3000. CI has TVC_ORG_ID, TVC_API_KEY_PUBLIC, TVC_API_KEY_PRIVATE and TVC_OPERATOR_SEED as secrets and no tvc login profile.",
+      "expected_output": "Gives the command sequence with --message-format json on every call: deploy create from flags (or a config file) with the given image, path, digest and ports; deploy approve with --dangerous-skip-interactive, authenticating the signature with the operator seed (TVC_OPERATOR_SEED / --operator-seed-path) rather than tvc login; a bounded poll of deploy get-status; app set-live-deploy only when isTargeted is false, since a first deployment auto-targets. Does not run app create or operator create in CI.",
       "files": [
-        "skills/tvc-deployments/references/deploy-lifecycle.md"
+        "skills/tvc-deployments/SKILL.md",
+        "skills/tvc-deployments/references/ci-recipe.md"
       ],
       "assertions": [
         {
@@ -15,33 +16,43 @@
         },
         {
           "type": "regex",
-          "value": "deploy[\"'\\s,]+approve",
-          "comment": "tolerates both shell form (deploy approve) and argv arrays (\"deploy\", \"approve\")"
+          "value": "deploy[\"'\\s,]+create",
+          "comment": "tolerates both shell form and argv arrays"
+        },
+        {
+          "type": "regex",
+          "value": "deploy[\"'\\s,]+approve"
         },
         {
           "type": "contains",
           "value": "--dangerous-skip-interactive"
         },
         {
-          "type": "contains",
-          "value": "set-live-deploy"
-        },
-        {
           "type": "regex",
-          "value": "isTargeted",
-          "comment": "set-live-deploy must be conditional: the first deployment auto-targets on approval, and calling it on an already-targeted deployment fails with HTTP 400"
+          "value": "--operator-seed(-path)?|TVC_OPERATOR_SEED",
+          "comment": "env-only CI must approve with the seed; no profile exists"
         },
         {
           "type": "regex",
           "value": "deploy get-status|get-status"
         },
         {
+          "type": "contains",
+          "value": "isTargeted",
+          "comment": "set-live-deploy must be conditional: the first deployment auto-targets on approval, and calling it on an already-targeted deployment fails with HTTP 400"
+        },
+        {
+          "type": "contains",
+          "value": "set-live-deploy"
+        },
+        {
           "type": "not_regex",
-          "pattern": "^\\s*\\$?\\s*tvc\\s+deploy\\s+list\\b",
+          "pattern": "^\\s*\\$?\\s*(-\\s*)?(run:\\s*)?tvc\\s+(login|app\\s+create|operator\\s+create)\\b",
           "flags": "m",
-          "comment": "Must not INVOKE `tvc deploy list` (it does not exist). Matches only command position, so correctly saying 'there is no deploy list' still passes."
+          "comment": "None of these work unattended without a profile; the app already exists."
         }
-      ]
+      ],
+      "gradeFullResponse": true
     },
     {
       "id": 2,
@@ -441,6 +452,41 @@
           "type": "not_regex",
           "pattern": "debug-logs[^\\n]*5c7d9e1f-3a5b-4c7d-9e1f-2a3b4c5d6e7f",
           "comment": "Must not run debug-logs against a non-debug deployment."
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "prompt": "In our CI runner (only TVC_ORG_ID, TVC_API_KEY_PUBLIC, TVC_API_KEY_PRIVATE set, no tvc login) I ran `tvc app create --config-file app.json --message-format json` for an app named billing-signer and got {\"reason\":\"command_error\",\"code\":\"command_error\",\"message\":\"no active organization set\"}. Should I just run it again?",
+      "expected_output": "Says no: under env-var auth with no profile the CLI creates the app at the API and then fails while saving bookkeeping, so the app already exists and re-running would create a duplicate. Tells the user to recover the id with tvc app list -n billing-signer and to approve deployments with an operator seed since the manifestSetOperatorIds were not printed.",
+      "files": [
+        "skills/tvc-deployments/SKILL.md",
+        "skills/tvc-deployments/references/error-reference.md"
+      ],
+      "gradeFullResponse": true,
+      "assertions": [
+        {
+          "type": "regex",
+          "value": "app[\"'\\s,]+list",
+          "comment": "must recover the id from app list"
+        },
+        {
+          "type": "regex",
+          "value": "already (exists|created)|was created|did create|duplicate",
+          "flags": "i",
+          "comment": "must say the app exists despite the error"
+        },
+        {
+          "type": "regex",
+          "value": "--operator-seed|TVC_OPERATOR_SEED|profile",
+          "flags": "i",
+          "comment": "must address how approval works without the printed operator ids"
+        },
+        {
+          "type": "not_regex",
+          "pattern": "^\\s*\\$?\\s*(-\\s*)?(run:\\s*)?tvc\\s+app\\s+create\\b",
+          "flags": "m",
+          "comment": "Must not re-run app create; that mints a duplicate app."
         }
       ]
     }

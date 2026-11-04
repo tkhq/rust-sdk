@@ -8,9 +8,9 @@ Within the first minute or two after approval, these are normal and mean keep po
 
 - `get-status` returns `replicas: null`
 - `code: not_found` with "app status not found"
-- a run of `code: api_error` with HTTP 500 (the backend answers 500 for an app with no live deployment yet; about 25 seconds of these has been observed before the first real status)
+- a run of `code: api_error` with HTTP 500 (the backend answers 500 for an app with no live deployment yet; 25 to 50 seconds of these have been observed before the first real status)
 
-Only continue below once real status has been returned and stayed unhealthy for your full timeout (5 to 10 minutes).
+A healthy three-replica deployment has been observed to go 1/3 at about 50 seconds, 2/3 at about 2 minutes, and 3/3 at about 5.5 minutes after approval. Only continue below once real status has been returned and stayed unhealthy for your full timeout (10 minutes is a safe bound).
 
 ## 1. Is the approval actually complete?
 
