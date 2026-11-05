@@ -56,6 +56,7 @@ Almost every deploy field also has a CLI flag / env var; flags override the file
 | *(none)* | *(none)* | `healthCheckType` is config-file only: `TVC_HEALTH_CHECK_TYPE_HTTP` (default) or `TVC_HEALTH_CHECK_TYPE_GRPC`. There is no flag and no env var, so it must be set in `deploy.json`. |
 | `--public-ingress-port` | `TVC_PUBLIC_INGRESS_PORT` | Public ingress port |
 | `--pivot-pull-secret` | `TVC_PIVOT_PULL_SECRET` | Pull secret for a private image |
+| `--pull-secret-expires-at` | — | RFC 3339 expiry for `--pivot-pull-secret`; defaults to two hours |
 | `--dangerous-deploy-debug-mode` | `TVC_DANGEROUS_DEPLOY_DEBUG_MODE` | Debug-mode deploy (logs tailable; never for prod) |
 
 Seed a new deployment's config from an existing one:
@@ -116,3 +117,7 @@ tvc keys generate-local-quorum-key \
 `quorum_key.json` fixes the key's real Shamir split: `threshold`, and one `operatorPublicKeys` entry per share. `generate-local-quorum-key` records both in the metadata as `threshold` and `shares[].operatorPublicKey`. The app that uses this key has to describe the same split in `app.json`: `quorumPublicKey` set to the metadata's `quorumKeyPublic`, and `shareSetParams` filled in (not the scaffold's `null`, which selects Turnkey's default share set) with the same `threshold` and one `newOperators[].publicKey` per operator key. `app create` does not compare these with the metadata, so a disagreement surfaces only at `keys re-encrypt-local-share`, which refuses to hand over a share until metadata and manifest agree (see [deploy-lifecycle.md](deploy-lifecycle.md#provisioning-variant-localself-hosted-operator-key)). The share set is fixed at `app create`, so fixing a disagreement means creating a new app.
 
 `quorum_key_metadata.json` and any re-encrypted share files contain sensitive shares. Keep them out of source control and out of the working tree you might commit. Prefer writing them to a path outside the repo.
+
+Pull-secret envelopes are bound to the authenticated user and organization. Turnkey
+checks expiry when validating the image and executing the deployment, including after approvals.
+Choose a later `--pull-secret-expires-at` if approval may take more than  the default two hours. 
