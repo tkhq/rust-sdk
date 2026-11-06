@@ -14,6 +14,11 @@ Default guidance for coding-agent runs in this repository.
   `reason`s, error `code`s, output fields — update `skills/tvc-deployments/`
   in the same change. The skill is user-facing documentation of exactly this
   crate; letting it drift defeats the version pinning.
+- `SKILL.md` has a "Known gaps in the CLI" section listing commands, flags,
+  and backend behaviors that do not exist yet. A change that closes one of
+  them (adds the command or flag, or fixes the quirk) deletes that bullet and
+  bumps the version the section says it was verified against, in the same PR.
+  Never leave a gap documented after the CLI has closed it.
 - A new file under `skills/` must also be registered in `EMBEDDED_SKILL_FILES`
   (`src/commands/skills/save.rs`); a unit test enforces parity with the
   on-disk tree. `evals/` directories are deliberately excluded from embedding.

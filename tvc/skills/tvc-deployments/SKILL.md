@@ -10,151 +10,126 @@ metadata:
 
 # TVC Deployments
 
-> **This skill drives the `tvc` CLI, not the HTTP API.** Unlike the other Turnkey skills (which call `POST /public/v1/...` with `TURNKEY_API_*` credentials), everything here runs `tvc <command> --message-format json` and reads NDJSON from stdout. Auth uses `TVC_*` env vars, a different set. Do not mix the two.
->
-> **Scope:** this skill covers driving the CLI programmatically, editing/maintaining an already-established TVC project, and carrying TVC knowledge into any repo (install once, invoke anywhere). First-time human onboarding (org setup, `tvc login`, dashboard key registration) is owned by the [TVC quickstart](https://docs.turnkey.com/features/verifiable-cloud/quickstart).
+> **This skill drives the `tvc` CLI, not the HTTP API.** Everything here runs `tvc <command> --message-format json` and reads NDJSON from stdout. Auth uses `TVC_*` env vars, not the `TURNKEY_API_*` set the HTTP-API skills use. Do not mix the two.
 
 ## When to use
 
-Use this skill when driving the `tvc` CLI: building or shipping a TVC deployment, editing/maintaining an established TVC project, cutting traffic to a new version, checking runtime status, or scripting any of the above in CI or an agent loop. For first-time human onboarding (org setup, `tvc login`), point the user at the [TVC quickstart](https://docs.turnkey.com/features/verifiable-cloud/quickstart). For Turnkey wallet/signing/policy work over the HTTP API, use the other Turnkey skills instead, this one is CLI-only.
+Driving the `tvc` CLI: shipping a TVC deployment, maintaining an established TVC project, cutting traffic to a new version, checking runtime status, or scripting any of that in CI or an agent loop. First-time human onboarding (org setup, `tvc login`, dashboard key registration) belongs to the [TVC quickstart](https://docs.turnkey.com/features/verifiable-cloud/quickstart). Wallet, signing, and policy work over the HTTP API belongs to the other Turnkey skills.
+
+**Out of scope, pointers only:** self-provisioned quorum keys and shares (`tvc keys *`, `deploy provisioning-details`, `provision`, `post-share`), YubiKey operators (`tvc yubikey *`, `operator create --kind yubikey`), and `tvc profile delete`. The commands are listed at the end of **[references/deploy-lifecycle.md](references/deploy-lifecycle.md)**; involve a human before using them.
+
+`tvc skills save` installs this skill to `./.claude/skills` (`--global` for `~/.claude/skills`, `--dir <DIR>` elsewhere). Re-run it after upgrading `tvc`.
 
 ## Overview
 
-Turnkey Verifiable Cloud (TVC) runs your container inside a verifiable enclave. The `tvc` CLI is the interface for provisioning operators, creating apps, and shipping deployments. The full lifecycle from an empty directory to a live deployment is:
+From an empty directory to a live deployment:
 
 ```
-app init → (operator create, only if the scaffold shows a sentinel) → (edit) → app create → deploy init → (edit) → deploy create → deploy approve → poll deploy get-status
-# (the first deployment auto-goes-live on approval; app set-live-deploy is only for switching to a new version)
+app init → (operator create, only if the scaffold shows a sentinel) → edit → app create
+→ deploy init → edit → deploy create → deploy approve → poll deploy get-status
+# the first deployment goes live on approval; app set-live-deploy only switches versions
 ```
 
 | What you want to do | Command(s) |
 |---|---|
-| Authenticate | `tvc login`, or set `TVC_*` env vars |
-| Create a hosted operator (approver; only when the `app.json` scaffold lacks a prefilled operator key) | `tvc operator create` |
+| Authenticate | `tvc login` (human), or `TVC_*` env vars (CI, agents) |
+| Create a hosted operator (approver), only when `app.json` shows a sentinel | `tvc operator create` |
 | Scaffold + create an app | `tvc app init` → edit → `tvc app create` |
-| Scaffold + create a deployment | `tvc deploy init` → edit → `tvc deploy create` |
+| Scaffold + create a deployment | `tvc deploy init` (`--from-deployment <ID>` to clone) → edit → `tvc deploy create` |
 | Approve a deployment's manifest | `tvc deploy approve` |
-| Switch traffic to a new deployment | `tvc app set-live-deploy` (the first deployment auto-targets on approval) |
-| Check if a deployment is live | `tvc deploy get-status` (poll) |
-| Inspect an app / list apps | `tvc app status`, `tvc app list` |
-| Tail logs (debug-mode deploys) | `tvc deploy debug-logs` |
-| Roll back / clean up | `tvc deploy restore`, `tvc deploy delete`, `tvc app delete` |
+| Is it live? | `tvc deploy get-status` (poll; no `--wait`) |
+| Switch traffic to a new deployment | `tvc app set-live-deploy` (only when `isTargeted == false`) |
+| Inspect | `tvc app list`, `tvc app status`, `tvc deploy status` |
+| Logs (debug-mode deployments only) | `tvc deploy debug-logs` |
+| Roll back / clean up | `tvc deploy delete` → `tvc deploy restore`; `tvc app delete` (irreversible) |
+| Version, skill install | `tvc version`, `tvc skills save` |
 
-For the exact command-by-command happy path with expected outputs and the polling idiom, read **[references/deploy-lifecycle.md](references/deploy-lifecycle.md)**.
+Command-by-command detail with outputs: **[references/deploy-lifecycle.md](references/deploy-lifecycle.md)**. Config-file shapes: **[references/config-files.md](references/config-files.md)**. Unattended pipeline: **[references/ci-recipe.md](references/ci-recipe.md)**.
 
 ## Authentication
 
-The CLI reads three credentials, **all required together**:
+Three env vars, **all three or none**:
 
 ```env
-TVC_ORG_ID=            # Turnkey organization UUID
+TVC_ORG_ID=            # organization UUID
 TVC_API_KEY_PUBLIC=    # API key public component (hex)
 TVC_API_KEY_PRIVATE=   # API key private component (hex)
 TVC_API_BASE_URL=      # optional, defaults to https://api.turnkey.com
 ```
 
-Resolution order:
-1. **All three env vars set** → env auth is used (the CI / agent path). Empty strings count as unset.
-2. **None set** → the CLI falls back to disk config at `~/.config/turnkey/`, which requires a prior `tvc login`.
-3. **Partial** (some but not all three) → the CLI errors and names the missing variable. Set all three or none.
+All three set → env auth, which takes precedence over any `tvc login` profile. None → the profile under `~/.config/turnkey/`. Some but not all → error naming the missing one. Empty counts as unset. `tvc login` needs a human; if neither env vars nor a profile exist, stop and ask.
 
-For interactive/local setup, `tvc login --org <alias> --api-base-url <url>` persists a profile to disk. Env vars always win over disk config when all three are present.
+**Env vars authenticate API calls but carry no operator signing key, and two commands need the profile anyway.** With no profile on the machine: `deploy approve` fails with `No active organization` unless you pass `--operator-seed-path <file>` or `--operator-seed` (env `TVC_OPERATOR_SEED`), the hex seed of a local operator whose key is in the app's manifest set; `operator create` needs the profile outright; and `app create` creates the app, then fails with `no active organization set` while saving bookkeeping (see Known gaps). Everything else (`deploy create`, `get-status`, `status`, `app set-live-deploy`, `app list`, `app status`, `debug-logs`) works env-only; verified against dev on 2026-11-04. See **[references/ci-recipe.md](references/ci-recipe.md)**.
 
-Credentials cannot be created non-interactively: `tvc login`'s key generation needs a human (TTY prompts plus manual dashboard registration). If neither env vars nor a profile are provisioned, stop and ask the user, do not retry `tvc login`.
+## Output contract
 
-## Output contract (read this before parsing anything)
+Add `--message-format json` to **every** command:
 
-Add `--message-format json` to **every** command in scripts and agents:
+- Stdout is NDJSON, one object per line. JSON mode forces non-interactive: a command that would prompt fails fast with `missing_required_input` or `usage_error` instead of hanging.
+- Success lines carry a `reason` (`app_created`, `deployment_created`, `manifest_approval_posted`, `live_deployment_set`, `deployment_runtime_status`, ...). One command, one terminal line, except `deploy debug-logs`, which streams `debug_log_line` events.
+- Errors are one line: `{"reason":"command_error","code":"<code>","httpStatus"?:n,"message":"..."}`. Branch on `code`, never on `message`. Full taxonomy and recovery: **[references/error-reference.md](references/error-reference.md)**.
+- Exit codes: `0` success, `1` runtime error, `2` usage error.
 
-- Stdout becomes **NDJSON**: exactly one JSON object per line. Parse line by line.
-- **JSON mode forces non-interactive.** A command that would otherwise prompt for a missing value instead fails fast with an error line (`missing_required_input` or `usage_error`) rather than hanging. Provide every required value up front.
-- Each success line carries a `reason` naming the outcome (e.g. `app_created`, `deployment_created`, `manifest_approval_posted`, `live_deployment_set`, `deployment_runtime_status`). One command → one terminal outcome line (except streaming commands like `deploy debug-logs`, which emit `debug_log_line` events).
-- Errors are a single line: `{ "reason": "command_error", "code": "<code>", "httpStatus"?: <n>, "message": "<full chain>" }`. Branch on `code`, not on `message` text. See **[references/error-reference.md](references/error-reference.md)** for the full taxonomy and recovery per code.
+## Build and deploy
 
-Human output, prompts, and diagnostic logs show terminal control characters and
-Unicode direction controls as visible escapes, such as `\u{1b}` and `\r`.
-Multiline output preserves layout; manifest fields, prompt labels, and choices
-also escape newlines and tabs and show a warning when controls are detected.
-CLI status colors and interactive prompt controls still work.
-Diagnostic logs use plain text. JSON uses JSON escapes for controls and preserves
-the original values when decoded. Files written by commands keep their original data.
-
-Exit codes: `0` success, `1` runtime error, `2` usage error.
-
-## Core workflows
-
-### Build and deploy (happy path)
-
-Summarized here; full commands and outputs in **[references/deploy-lifecycle.md](references/deploy-lifecycle.md)**.
-
-**Before you run anything, confirm you have these four values.** None can be obtained from the `tvc` CLI or discovered with `--help`; they come from the container image you built and published:
+**Before running anything, confirm you have these four values.** The CLI cannot discover them; they come from the image you built and published:
 
 | Value | Source |
 |---|---|
 | `pivotContainerImageUrl` | a `linux/amd64` OCI image in a registry TVC can pull, referenced **by digest** |
-| `pivotPath` | the path of the pivot binary *inside* that image |
-| `expectedPivotDigest` | sha256 of that pivot binary, **not** the image digest, they are different fields |
-| `pivotArgs` | the app's own argument contract (often none) |
+| `pivotPath` | path of the pivot binary *inside* that image |
+| `expectedPivotDigest` | sha256 of that pivot binary, **not** the image digest; they are different fields |
+| `pivotArgs` | the app's argument contract (often none). Plaintext in the signed manifest, visible to every approver and in boot proofs: never secrets |
 
-If any are missing, **ask for them before step 2**. `app init` is local-only, but everything from `app create` onward (and `operator create`, when needed) creates real resources, so discovering the gap at step 3 leaves an app already provisioned. Never guess a digest: a plausible wrong value passes every local check and only fails once the enclave refuses to start. See **[references/config-files.md](references/config-files.md)** for how each is derived and what the image must satisfy.
+If any are missing, **ask before step 2**: `app init` is local, but `app create` onward creates real resources. Never guess a digest; a wrong one passes every local check and fails only when the enclave refuses to start. Derivation: **[references/config-files.md](references/config-files.md)**.
 
-1. `tvc app init --output app.json` → `app_config_created`. Check `manifestSetParams.newOperators[0].publicKey`: a **prefilled real key** means your profile already has an operator — keep it and skip `operator create`; a **`<FILL_IN_OPERATOR_PUBLIC_KEY>` sentinel** means run `tvc operator create --message-format json` → `operator_created` and paste its `compositePublicKey` into that field.
-2. Fill the remaining `<FILL_IN_*>` sentinels → `tvc app create --config-file app.json --message-format json` → `app_created` (save `appId` **and** `manifestSetOperatorIds` — the operator ids allowed to approve this app's deployments; nothing returns them later). The app's region (`region` in `app.json` or `--region`: `us-east-1` by default, `ap-southeast-1` only for organizations Turnkey has enabled) is decided here, at `app create`, and cannot be changed later.
-3. `tvc deploy init --output deploy.json` → edit `deploy.json` (pivot image, ports) → `tvc deploy create --config-file deploy.json --app-id <APP_ID> --message-format json` → `deployment_created` (save `deploymentId`)
-4. `tvc deploy approve --deploy-id <DEPLOY_ID> --operator-id <OPERATOR_ID> --dangerous-skip-interactive --message-format json` → `manifest_approval_posted`. `<OPERATOR_ID>` should be one of the app's `manifestSetOperatorIds` from step 2 — the id from `operator create` qualifies only if its key was wired into the manifest set. The backend dedupes operators on public key plus operator name, so reusing a key under a *different* operator name in a new app yields a new operator id; passing the earlier app's id is rejected even though the key matches, and the error names the id to pass instead (`pass --operator-id <ID>`), so retry with that one. That retry does not work for a hosted operator, whose id is fixed in the profile config: create the app under the operator name the profile already uses instead (see `references/deploy-lifecycle.md`). Its `quorumReached` field is a nullable boolean — tri-state: `true` = quorum met, `false` = more approvals needed, `null`/absent = unknown (not a failure; proceed to polling). A repeat approval by the same operator returns `manifest_approval_already_posted`, which is safe to treat as success.
-5. Poll `tvc deploy get-status --deploy-id <DEPLOY_ID> --message-format json` until it returns state, then read `isTargeted`. The **first** deployment of an app auto-targets once approval quorum is reached, so `isTargeted` is already `true` and no set-live call is needed.
-6. **Only if `isTargeted == false`** (switching traffic to a new deployment while an older one is live): `tvc app set-live-deploy --deploy-id <DEPLOY_ID> --message-format json`, then poll again. Live == `isTargeted == true` && `replicas.ready == replicas.desired` (see the polling rule below).
+1. `tvc app init --output app.json`. If `manifestSetParams.newOperators[0].publicKey` is a real key, your profile already has an operator: keep it, skip `operator create`. If it is `<FILL_IN_OPERATOR_PUBLIC_KEY>`, run `tvc operator create --message-format json` and paste its `compositePublicKey`.
+2. Fill the remaining sentinels, then `tvc app create --config-file app.json --message-format json`. Save `appId` **and** `manifestSetOperatorIds` (the ids allowed to approve; nothing returns them later). Region, egress, and debug-mode eligibility are fixed here and cannot change later.
+3. `tvc deploy init --output deploy.json` → set image, digest, path, ports → `tvc deploy create --config-file deploy.json --app-id <APP_ID> --message-format json`. Save `deploymentId`.
+4. `tvc deploy approve --deploy-id <DEPLOY_ID> --operator-id <OPERATOR_ID> --dangerous-skip-interactive --message-format json`, with one of step 2's `manifestSetOperatorIds`. Operators are deduped on public key **plus operator name**, so an id from an earlier app is rejected even when the key matches; the error names the id to pass, so retry with it. A **hosted** operator's id is fixed in the profile, so that retry fails: create the app under the operator name the profile already uses. `quorumReached` is tri-state: `true` poll, `false` more approvals, `null` unknown, poll anyway.
+5. Poll `tvc deploy get-status --deploy-id <DEPLOY_ID> --message-format json`. Live means `isTargeted == true` and `replicas.ready == replicas.desired`. The first deployment auto-targets on approval.
+6. **Only if `isTargeted == false`** (an older deployment is live): `tvc app set-live-deploy --deploy-id <DEPLOY_ID> --message-format json`, then poll again.
 
-Once live, get the app's hostname from `tvc app list --message-format json`: each entry in `apps_listed` carries a `publicDomain` field. **Read it rather than constructing it.** The key is omitted when its value is empty, which is the only "absent" signal the API has; treat that as "no domain available right now" and poll again before assuming the app has none. Never construct the hostname: the pattern is environment-specific (`app-<APP_ID>.turnkey.cloud` in production, a different domain entirely in dev), so a guessed hostname is a dead end. Use the hostname to hit the app's health endpoint (e.g. `curl https://<publicDomain>/health`; the exact path and response are app-specific).
+Hostname: read `publicDomain` from `tvc app list --message-format json`. It is assigned at `app create`, independent of deployments, normally one hostname but possibly several comma-separated (use the first). **Never construct it or write one out from the app id**, not even as a guess. The patterns exist so you can recognize a value, not produce one: `app-<APP_ID>.app.turnkey.cloud` (`us-east-1`), `app-<APP_ID>.app-sin.turnkey.cloud` (`ap-southeast-1`), something else entirely in dev.
 
-Config-file shapes and the scaffold-then-edit pattern are in **[references/config-files.md](references/config-files.md)**.
+## Maintain an established project
 
-### Maintain an established project
-
-- **Find your app:** `tvc app list --message-format json` (optionally `-n <name>`, a substring match) → `apps_listed`. `tvc app status --app-id <APP_ID>` → `app_status` for the app-wide view.
-- **Enumerate an app's deployments:** `tvc app status --app-id <APP_ID>` → `app_status`, whose `deployments[]` array gives `deploymentId` and `replicas{ready,desired}` for each, with `targetedDeploymentId` naming the live one. This is the only way to list deployments; ids are returned bare (the CLI strips the API's `deploy` prefix).
-- **Inspect a deployment:** `tvc deploy get-status --deploy-id <ID>` for one deployment's runtime readiness (`deployment_runtime_status`); `tvc deploy status --deploy-id <ID>` for config-level info like manifest id, QOS version, debug-mode, marked-for-deletion (`deployment_status`).
-- **Debug a deployment** (must be deployed in debug mode): `tvc deploy debug-logs --deploy-id <ID> --tail-lines 200 --message-format json`. Add `--poll` to stream; it never self-terminates, so always bound it with a timeout wrapper. Debug mode is gated at **two** levels: the app must have been created with `--dangerous-enable-debug-mode-deployments` (permanent, decided at `app create`, cannot be added later) *and* the deployment created with `--dangerous-deploy-debug-mode`. An existing non-debug deployment can never produce logs — do not retry; if the app allows it, ship a new debug-mode deployment instead.
-- **Ship a new version:** create a new deployment (`deploy create`), approve it, then `app set-live-deploy` to cut traffic over. Use `deploy init --from-deployment <OLD_ID>` to base the new config on an existing deployment.
-- **Roll back / clean up:** `tvc deploy restore --deploy-id <ID>` undoes a `deploy delete`. `tvc deploy delete` and `tvc app delete` are destructive (see Rules).
+- **Find apps:** `tvc app list --message-format json` (`-n <substring>`) → `apps_listed` with `liveDeploymentId` and `publicDomain`.
+- **Enumerate deployments:** `tvc app status --app-id <APP_ID>` → `deployments[]` (`deploymentId`, `replicas{ready,desired}`) plus `targetedDeploymentId`. The only list; unapproved deployments may be absent, so save ids at create time.
+- **Inspect one:** `deploy get-status` for readiness; `deploy status` for config and `manifestApprovals.quorumReached`.
+- **Logs:** `tvc deploy debug-logs --deploy-id <ID> --tail-lines 200 --message-format json`; `--poll` streams and never exits, so bound it with a timeout. Requires the app created with `--dangerous-enable-debug-mode-deployments` (permanent, decided at `app create`) **and** the deployment created with `--dangerous-deploy-debug-mode`. A non-debug deployment can never produce logs; do not retry. If the app allows it, ship a new debug-mode deployment.
+- **Ship a new version:** `deploy init --from-deployment <OLD_ID>` → edit → `deploy create` → `deploy approve` → `app set-live-deploy`.
+- **Not coming up:** `isTargeted == true` but `replicas.ready` stuck at 0 past your timeout → **[references/failure-diagnosis.md](references/failure-diagnosis.md)**. Do not delete and retry the same config.
 
 ## Rules
 
-1. **Always pass `--message-format json`** for programmatic use. It gives you NDJSON and guarantees non-interactive behavior (no hangs).
-2. **`deploy approve` requires `--dangerous-skip-interactive` in JSON/non-interactive mode.** There is no machine-readable manifest review yet, so non-interactive approval is unavoidably blind. Only approve deployments you created and whose inputs (`appId`, image, digest) you control. Surface this to the human when it matters.
-3. **"Is it live?" is a manual poll, and set-live is conditional.** There is no `--wait` or lifecycle-phase field. After approve, poll `tvc deploy get-status`; a deployment is live when `isTargeted == true` and `replicas.ready == replicas.desired`. The **first** deployment of an app auto-targets on approval, so do not call `app set-live-deploy` for it, calling set-live on an already-targeted deployment fails with `api_error` (HTTP 400) "already set as the live deployment". Only call `set-live-deploy` when `isTargeted == false` (cutting traffic over to a new deployment). Right after approval, `get-status` may return `replicas: null`, a 404 `not_found` ("app status not found"), or a run of transient `api_error` HTTP 500s — all mean "not ready yet," not a real failure, keep polling. Back off between polls (e.g. 5s) with an overall timeout. If the timeout passes with `isTargeted == true` but `replicas.ready` pinned at 0, stop and escalate to a human with the last status and the exact config — the causes (bad digest, wrong health-check port, cluster-side issues) are invisible to the CLI and not agent-recoverable.
-4. **Destructive commands have no undo except where noted.** `tvc app delete` removes the app **and all its deployments**. `tvc deploy delete` can be reversed with `tvc deploy restore`; `app delete` cannot. Confirm the exact `--app-id` / `--deploy-id` before running, and require explicit human confirmation for deletes.
-5. **Branch on `code`, never on `message` text.** Error messages carry the full server chain and will change; the `code` is the stable contract.
-6. **Bound every streaming command.** `deploy debug-logs --poll` runs until killed. Always wrap with a timeout or use `--tail-lines` for a one-shot read.
+1. **Always `--message-format json`** in scripts and agents: NDJSON out, no prompts, no hangs.
+2. **`deploy approve` needs `--dangerous-skip-interactive` in JSON mode.** The approval is blind; only approve deployments whose inputs you control, and say so to the human when it matters.
+3. **Liveness is a poll, set-live is conditional.** Poll `get-status` with backoff (5s) and a timeout. Right after approval, `replicas: null`, a 404 `not_found`, or a run of HTTP 500 `api_error`s all mean "not ready yet" (the 500 is a known backend gap for apps with no live deployment). Call `set-live-deploy` only when `isTargeted == false`; on an already-targeted deployment it fails with HTTP 400 "already set as the live deployment".
+4. **Deletes need explicit human confirmation.** `deploy delete` is reversible with `deploy restore`; `app delete` removes the app and every deployment and is not.
+5. **Branch on `code`, never on `message`.**
+6. **Bound every streaming command.** `debug-logs --poll` runs until killed.
 
-## Current limitations (as of this writing)
+## Known gaps in the CLI (verified against tvc 0.17.1)
 
-Do not assume these exist, they do not, and inventing them will fail:
+Inventing these fails with `usage_error`. Each names the `--help` check for your installed version; when check and text disagree, trust the check.
 
-- **No `tvc deploy list` subcommand**, but deployments *are* enumerable per app: `tvc app status --app-id <APP_ID>` returns a `deployments[]` array of `{deploymentId, replicas{ready,desired}, lastUpdated}` plus `targetedDeploymentId`. Use it to recover deployment ids you no longer have. Caveat: that array reflects runtime state, so a freshly created deployment that has not been approved yet may not appear in it. Still save `deploymentId` at create time. `app list` is the app-level view and carries only `liveDeploymentId`, which is by definition already approved.
-- **No `tvc operator list`** and **no `tvc whoami`.** Save `operatorId` at creation time, and save `manifestSetOperatorIds` from `app create` output — they are the ids that can approve the app's deployments, and no later command returns them.
-- **No `--wait` / phase flag.** Poll `deploy get-status` (Rule 3).
-- **No `--version` flag.** Use the `tvc version` subcommand instead.
-- **`code: invalid_input`** is in the taxonomy but not currently emitted by the classifier.
+<!-- Maintainers: a CLI change that closes one of these deletes the bullet in the same PR and bumps the version above (see tvc/AGENTS.md). -->
 
-If a workflow needs one of these, script around it (save IDs, poll manually), do not call a nonexistent command.
+- **No `tvc deploy list`** (check: `tvc deploy --help`). Use `tvc app status --app-id <APP_ID>` → `deployments[]`; see Maintain above.
+- **No `tvc operator list`** and **no `tvc whoami`** (check: `tvc operator --help`, `tvc --help`). Save `operatorId` and `manifestSetOperatorIds` when they are printed; nothing returns them later.
+- **No `--wait` / phase flag on `deploy get-status`** (check: `tvc deploy get-status --help`). Poll (Rule 3).
+- **No `--version` flag** (check: `tvc --help`). Use `tvc version`.
+- **No command lists supported QOS versions** (check: `tvc deploy --help`). The API endpoint exists (`get_tvc_qos_versions`) but the CLI does not call it. Keep the `qosVersion` that `deploy init` scaffolds; if `deploy create` rejects one, the `api_error` message lists the accepted releases.
+- **`code: invalid_input` is never emitted.** It is in the taxonomy `tvc --help` prints, but the classifier does not produce it; do not branch on it.
+- **`app status` and `deploy get-status` answer HTTP 500 for an app with no live deployment yet.** A backend gap, not an outage: keep polling after approve (observed 25 to 50 seconds of 500s before the first real status), and do not read a 500 from `app status` on a never-deployed app as a failure.
+- **`app create` under env-var auth with no profile creates the app, then fails with `command_error` "no active organization set".** The API call succeeded; the CLI died saving the last app id to a profile that does not exist, and the `app_created` line with `appId` and `manifestSetOperatorIds` is lost. Do **not** retry (you would mint a duplicate). Recover the id with `tvc app list -n <name> --message-format json`; the operator ids are not recoverable, so approve with `--operator-seed-path` instead of `--operator-id`. Create apps from a machine with a `tvc login` profile when you can.
 
 ## Troubleshooting
 
-Errors classify into a `code`. Common ones and first move:
+First move per `code`: `missing_required_input` / `usage_error` fix the invocation; `unauthorized` check the three `TVC_*` vars or the profile; `not_found` check the organization the credentials are scoped to before the id; `approval_required` collect more approvals; `network_error` retry with backoff; `client_version_too_old` upgrade `tvc`, never retry. Per-code detail: **[references/error-reference.md](references/error-reference.md)**. Approved but never ready: **[references/failure-diagnosis.md](references/failure-diagnosis.md)**.
 
-- **`missing_required_input`** — a required flag/value was absent in non-interactive mode. The message names it; supply the flag or its `TVC_*` env var.
-- **`usage_error`** — bad flag or subcommand (clap parse error), exit 2. Re-check the command against this skill.
-- **`unauthorized`** (HTTP 401/403) — credential or permission problem. Verify `TVC_ORG_ID`/`TVC_API_KEY_*` or your `tvc login` profile, and that the key has permission for the action.
-- **`not_found`** (HTTP 404) — wrong `--app-id`/`--deploy-id`, the resource has no state yet, or (when the message reads `cannot find deployment <id> in organization <org-id>`) credentials scoped to a different organization than the deployment's. Check the organization first, then the ID.
-- **`approval_required`** — the manifest needs more approvals before it can proceed. Collect additional operator approvals.
-- **`network_error`** — connect/timeout/DNS; the request never reached the server. Check `TVC_API_BASE_URL` and connectivity, then retry.
-- **`api_error`** — other non-2xx from the API; read the `message` (it now carries the server's error body).
-- **`client_version_too_old`** — the backend refuses `tvc` releases below its minimum version. Upgrade the binary (`cargo install tvc`); do not retry or touch the config.
+## Related
 
-Full per-code recovery is in **[references/error-reference.md](references/error-reference.md)**.
-
-## Related Skills
-
-- [TVC quickstart](https://docs.turnkey.com/features/verifiable-cloud/quickstart) — first-time human onboarding (org setup, `tvc login`, first app). Use this skill for CLI-driven, maintenance, and cross-repo work.
-- `getting-started` — Turnkey HTTP API onboarding (separate `TURNKEY_API_*` credential model; not TVC).
+- [TVC quickstart](https://docs.turnkey.com/features/verifiable-cloud/quickstart): first-time human onboarding.
+- `getting-started`: Turnkey HTTP API onboarding (separate `TURNKEY_API_*` credentials; not TVC).
