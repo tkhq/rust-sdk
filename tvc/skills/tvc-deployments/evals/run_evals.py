@@ -18,7 +18,7 @@ def run_case(case, sandbox, model, max_turns, timeout):
         cmd += ["--model", model]
     env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
     t0 = time.time()
-    proc = subprocess.run(cmd, cwd=sandbox, env=env, capture_output=True, text=True, timeout=timeout)
+    proc = subprocess.run(cmd, cwd=sandbox, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=timeout)
     dur = time.time() - t0
     texts, tools, final, skill_used, files_read, errors, tool_results = [], [], "", False, [], [], []
     for line in proc.stdout.splitlines():
@@ -73,6 +73,20 @@ def grade(case, run):
         results.append({"type": t, "value": a.get("value", a.get("pattern")), "passed": ok, "comment": a.get("comment", "")})
     return results
 
+def record(case, run_no, run):
+    """Grade one run. A run whose subprocess failed or whose result event was an error
+    counts every assertion as failed: a partial response may contain the expected
+    keywords, and the negative assertions pass trivially on an empty one."""
+    g = grade(case, run)
+    run_ok = run["stdout_ok"] and not run["errors"]
+    if not run_ok:
+        for a in g:
+            a["passed"] = False
+            a["comment"] = "run failed; " + (a.get("comment") or "")
+    return {"id": case["id"], "run": run_no, "run_ok": run_ok, "passed": sum(x["passed"] for x in g), "total": len(g),
+            "assertions": g, "skill_used": run["skill_used"], "tools": run["tools"], "files_read": run["files_read"],
+            "duration_s": run["duration_s"], "errors": run["errors"], "stderr": run["stderr"]}
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--evals", required=True)
@@ -101,15 +115,12 @@ def main():
                 run = fut.result()
             except Exception as e:
                 run = {"stdout_ok": False, "stderr": str(e), "duration_s": 0, "final": "", "full": "", "tools": [], "skill_used": False, "files_read": [], "errors": [str(e)]}
-            g = grade(c, run)
-            rec = {"id": c["id"], "run": r, "passed": sum(x["passed"] for x in g), "total": len(g), "assertions": g,
-                   "skill_used": run["skill_used"], "tools": run["tools"], "files_read": run["files_read"],
-                   "duration_s": run["duration_s"], "errors": run["errors"], "stderr": run["stderr"]}
+            rec = record(c, r, run)
             (out / f"eval-{c['id']}-run{r}.json").write_text(json.dumps({**rec, "final": run["final"], "full": run["full"], "tool_results": run.get("tool_results", [])}, indent=2))
             summary.append(rec)
-            status = "PASS" if rec["passed"] == rec["total"] else "FAIL"
+            status = "ERROR" if not rec["run_ok"] else "PASS" if rec["passed"] == rec["total"] else "FAIL"
             print(f"[{status}] eval {c['id']:>2} run {r}: {rec['passed']}/{rec['total']} skill_used={rec['skill_used']} tools={rec['tools']} {rec['duration_s']}s", flush=True)
-            for a in g:
+            for a in rec["assertions"]:
                 if not a["passed"]:
                     print(f"         x {a['type']} {a['value']!r} {('- ' + a['comment']) if a['comment'] else ''}", flush=True)
     summary.sort(key=lambda x: (x["id"], x["run"]))
