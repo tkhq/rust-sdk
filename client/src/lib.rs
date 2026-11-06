@@ -21,7 +21,7 @@ use generated::google::rpc::Status;
 use generated::immutable::models::v1::{KeyValue, TransportEncryptionSuite};
 use generated::result::Inner as ActivityResultInner;
 
-use turnkey_api_key_stamper::{Stamp, StampHeader, StamperError};
+use turnkey_api_key_stamper::{FreshStamp, Stamp, StampHeader, StamperError};
 use turnkey_enclave_encrypt::errors::EnclaveEncryptError;
 use turnkey_enclave_encrypt::{
     ExportClient, ImportClient, QuorumPublicKey, ServerTargetData, ServerTargetMsgV1,
@@ -77,6 +77,13 @@ pub struct ActivityResult<T> {
 pub use turnkey_api_key_stamper::{TurnkeyP256ApiKey, TurnkeySecp256k1ApiKey};
 
 pub mod generated;
+
+mod receipts;
+use receipts::SubmissionInvocation;
+pub use receipts::{
+    ActivityReceipt, RequestFingerprint, SubmissionFailure, SubmissionFailureCause,
+    SubmissionState, SubmittedActivityResult,
+};
 
 pub mod retry;
 pub mod well_known;
@@ -146,6 +153,12 @@ pub enum TurnkeyClientError {
 
     #[error("Refused to follow redirect (status {0}) to {1}")]
     RefusedRedirect(u16, String),
+
+    #[error("invalid stamp for a submission receipt: {0}")]
+    InvalidReceiptStamp(&'static str),
+
+    #[error(transparent)]
+    SubmissionFailed(#[from] SubmissionFailure),
 
     #[error("Stamper error")]
     StamperError(#[from] StamperError),
@@ -370,14 +383,35 @@ impl<S: Stamp> TurnkeyClient<S> {
         request: Request,
         path: String,
     ) -> Result<Activity, TurnkeyClientError> {
+        self.process_activity_with_stamper(&request, path, S::stamp, None)
+            .await
+    }
+
+    async fn process_activity_with_stamper<Request: Serialize>(
+        &self,
+        request: &Request,
+        path: String,
+        stamp: fn(&S, &[u8]) -> Result<StampHeader, StamperError>,
+        mut invocation: Option<&mut SubmissionInvocation>,
+    ) -> Result<Activity, TurnkeyClientError> {
         let mut retry_count = 0;
 
         loop {
-            let response: ActivityResponse = self.process_request(&request, path.clone()).await?;
+            let response: ActivityResponse = self
+                .process_request_with_stamper(
+                    request,
+                    path.clone(),
+                    stamp,
+                    invocation.as_deref_mut(),
+                )
+                .await?;
             let activity = response
                 .activity
                 .ok_or_else(|| TurnkeyClientError::MissingActivity)?;
 
+            if let Some(invocation) = invocation.as_deref_mut() {
+                invocation.observe(&activity);
+            }
             match activity.status {
                 ActivityStatus::Completed => return Ok(activity),
                 ActivityStatus::Pending => {
@@ -431,16 +465,39 @@ impl<S: Stamp> TurnkeyClient<S> {
         Request: Serialize,
         Response: DeserializeOwned,
     {
-        let url = format!("{}{}", self.base_url, path);
-        let post_body = serde_json::to_string(&request)?;
-        let StampHeader { name, value } = self.api_key.stamp(post_body.as_bytes())?;
-        let res = self
-            .http
-            .post(url)
-            .header(name, value)
+        self.process_request_with_stamper(request, path, S::stamp, None)
+            .await
+    }
+
+    async fn process_request_with_stamper<Request: Serialize, Response: DeserializeOwned>(
+        &self,
+        request: &Request,
+        path: String,
+        stamp: fn(&S, &[u8]) -> Result<StampHeader, StamperError>,
+        invocation: Option<&mut SubmissionInvocation>,
+    ) -> Result<Response, TurnkeyClientError> {
+        let post_body = serde_json::to_string(request)?;
+        let header = stamp(&self.api_key, post_body.as_bytes())?;
+        let fingerprint = if invocation.is_some() {
+            Some(RequestFingerprint::from_stamp(&header, &post_body)?)
+        } else {
+            None
+        };
+        let mut request = self.http.post(format!("{}{}", self.base_url, path));
+        if matches!(
+            path.as_str(),
+            "/public/v1/submit/create_tvc_operator" | "/public/v1/submit/create_tvc_quorum_key"
+        ) {
+            request = request.header("X-TVC-CLIENT-VERSION", env!("CARGO_PKG_VERSION"));
+        }
+        let request = request
+            .header(header.name, header.value)
             .body(post_body)
-            .send()
-            .await?;
+            .build()?;
+        if let (Some(invocation), Some(fingerprint)) = (invocation, fingerprint) {
+            invocation.sent.push(fingerprint);
+        }
+        let res = self.http.execute(request).await?;
 
         let status = res.status();
         if status.is_redirection() {
