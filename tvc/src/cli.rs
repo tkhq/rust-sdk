@@ -1,7 +1,7 @@
 //! CLI parsing and dispatch.
 
 use crate::commands::{self, Run};
-use crate::config::turnkey::{CONFIG_DIR, CONFIG_FILE, Config};
+use crate::config::turnkey::{CONFIG_DIR, CONFIG_FILE, ConfigSession};
 use crate::outcome::Outcome;
 use crate::output::{ColorChoice, Ctx, ErrorMessage, MessageFormat, Shell, StdCtx};
 use crate::terminal::{TerminalText, terminal_json};
@@ -124,9 +124,6 @@ impl Cli {
                 ExitCode::SUCCESS
             }
             Err(error) => {
-                // Log the full cause chain (including any raw HTTP body the
-                // human line collapses) before rendering, so `RUST_LOG=tvc=debug`
-                // recovers it in both output modes.
                 debug!(error = ?error, "command failed");
 
                 let shell = ctx.shell();
@@ -230,87 +227,81 @@ impl Commands {
         let path = PathBuf::from(home).join(CONFIG_DIR).join(CONFIG_FILE);
         debug!(config_path = %path.display(), "loading tvc config");
 
-        let config = if !path.exists() {
-            debug!(config_path = %path.display(), "tvc config not found; using defaults");
-            let config = Config::default();
-            config.save().await?;
-            config
-        } else {
-            let content = tokio::fs::read_to_string(&path)
-                .await
-                .with_context(|| format!("failed to read config file: {}", path.display()))?;
-
-            let config = Config::from_toml(&content)
-                .with_context(|| format!("failed to parse config file: {}", path.display()))?;
-
-            debug!(
-                config_path = %path.display(),
-                active_org = ?config.active_org,
-                org_count = config.orgs.len(),
-                "loaded tvc config"
-            );
-
-            config
-        };
+        let config = ConfigSession::load(path).await?;
 
         match command {
             Commands::Deploy { command } => match command {
-                DeployCommands::Approve(args) => args.run(ctx, config).await.map(Into::into),
+                DeployCommands::Approve(args) => {
+                    args.run(ctx, config.into_config()).await.map(Into::into)
+                }
                 DeployCommands::GetStatus(args) => {
-                    commands::deploy::get_status::run(ctx, args, config).await
+                    commands::deploy::get_status::run(ctx, args, config.into_config()).await
                 }
                 DeployCommands::ProvisioningDetails(args) => {
-                    commands::deploy::provisioning_details::run(ctx, args, config).await
+                    commands::deploy::provisioning_details::run(ctx, args, config.into_config())
+                        .await
                 }
                 DeployCommands::Provision(args) => {
-                    commands::deploy::provision::run(ctx, args, config).await
+                    commands::deploy::provision::run(ctx, args, config.into_config()).await
                 }
                 DeployCommands::PostShare(args) => {
-                    commands::deploy::post_share::run(ctx, args, config).await
+                    commands::deploy::post_share::run(ctx, args, config.into_config()).await
                 }
                 DeployCommands::Status(args) => {
-                    commands::deploy::status::run(ctx, args, config).await
+                    commands::deploy::status::run(ctx, args, config.into_config()).await
                 }
                 DeployCommands::Create(args) => {
-                    commands::deploy::create::run(ctx, args, config).await
+                    commands::deploy::create::run(ctx, args, config.into_config()).await
                 }
-                DeployCommands::Init(args) => commands::deploy::init::run(ctx, args, config).await,
+                DeployCommands::Init(args) => {
+                    commands::deploy::init::run(ctx, args, config.into_config()).await
+                }
                 DeployCommands::DebugLogs(args) => {
-                    commands::deploy::debug_logs::run(ctx, args, config).await
+                    commands::deploy::debug_logs::run(ctx, args, config.into_config()).await
                 }
                 DeployCommands::Delete(args) => {
-                    commands::deploy::delete::run(ctx, args, config).await
+                    commands::deploy::delete::run(ctx, args, config.into_config()).await
                 }
                 DeployCommands::Restore(args) => {
-                    commands::deploy::restore::run(ctx, args, config).await
+                    commands::deploy::restore::run(ctx, args, config.into_config()).await
                 }
             },
             Commands::App { command } => match command {
-                AppCommands::Status(args) => commands::app::status::run(ctx, args, config).await,
-                AppCommands::List(args) => commands::app::list::run(ctx, args, config).await,
-                AppCommands::Create(args) => commands::app::create::run(ctx, args, config).await,
-                AppCommands::Init(args) => commands::app::init::run(ctx, args, config).await,
-                AppCommands::SetLiveDeploy(args) => {
-                    commands::app::set_live_deploy::run(ctx, args, config).await
+                AppCommands::Status(args) => {
+                    commands::app::status::run(ctx, args, config.into_config()).await
                 }
-                AppCommands::Delete(args) => commands::app::delete::run(ctx, args, config).await,
+                AppCommands::List(args) => {
+                    commands::app::list::run(ctx, args, config.into_config()).await
+                }
+                AppCommands::Create(args) => commands::app::create::run(ctx, args, config).await,
+                AppCommands::Init(args) => {
+                    commands::app::init::run(ctx, args, config.into_config()).await
+                }
+                AppCommands::SetLiveDeploy(args) => {
+                    commands::app::set_live_deploy::run(ctx, args, config.into_config()).await
+                }
+                AppCommands::Delete(args) => {
+                    commands::app::delete::run(ctx, args, config.into_config()).await
+                }
             },
             Commands::Keys { command } => match command {
                 KeysCommands::BackupOperatorKey(args) => {
-                    args.run(ctx, config).await.map(Into::into)
+                    args.run(ctx, config.into_config()).await.map(Into::into)
                 }
                 KeysCommands::RefreshYubikey(args) => args.run(ctx, config).await.map(Into::into),
                 KeysCommands::CreateQuorumKey(args) => {
-                    commands::keys::create_quorum_key::run(ctx, args, config).await
+                    commands::keys::create_quorum_key::run(ctx, args, config.into_config()).await
                 }
                 KeysCommands::GenerateLocalQuorumKey(args) => {
                     commands::keys::generate_local_quorum_key::run(ctx, args).await
                 }
                 KeysCommands::InitLocalQuorumKey(args) => {
-                    commands::keys::init_local_quorum_key::run(ctx, args, config).await
+                    commands::keys::init_local_quorum_key::run(ctx, args, config.into_config())
+                        .await
                 }
                 KeysCommands::ReEncryptLocalShare(args) => {
-                    commands::keys::re_encrypt_local_share::run(ctx, args, config).await
+                    commands::keys::re_encrypt_local_share::run(ctx, args, config.into_config())
+                        .await
                 }
             },
             Commands::Login(args) => commands::login::run(ctx, args, config).await,

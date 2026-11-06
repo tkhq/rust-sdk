@@ -26,6 +26,8 @@ use turnkey_client::generated::services::coordinator::public::v1::{
 };
 use turnkey_client::{TurnkeyClient, TurnkeyClientError};
 
+pub mod tvc;
+
 mod error;
 mod syntactic_validation;
 mod types;
@@ -385,6 +387,15 @@ pub fn verify(app_proof: &AppProof, boot_proof: &BootProof) -> Result<(), Verify
     )
     .map_err(|e| VerifyError::InvalidAttestation(e.to_string()))?;
 
+    verify_boot_binding(&app_proof.public_key, boot_proof, &attestation_doc, None)
+}
+
+fn verify_boot_binding(
+    app_ephemeral_key: &str,
+    boot_proof: &BootProof,
+    attestation_doc: &AttestationDoc,
+    signer_quorum_key: Option<&[u8; 130]>,
+) -> Result<(), VerifyError> {
     let decoded_boot_proof_manifest = base64::decode(&boot_proof.qos_manifest_b64)
         .map_err(|e| VerifyError::InvalidBootProof(e.to_string()))?;
     let manifest = VersionedManifest::try_from_slice_compat(&decoded_boot_proof_manifest)
@@ -398,6 +409,15 @@ pub fn verify(app_proof: &AppProof, boot_proof: &BootProof) -> Result<(), Verify
     manifest_envelope
         .check_approvals()
         .map_err(|e| VerifyError::InvalidBootProof(format!("{e:?}")))?;
+
+    if let Some(expected) = signer_quorum_key {
+        let supplied = &manifest.namespace().quorum_key;
+        if !supplied.is_empty() && supplied.as_slice() != expected {
+            return Err(VerifyError::InvalidBootProof(
+                "manifest quorum key differs from the selected Signer quorum key".into(),
+            ));
+        }
+    }
 
     let manifest_hash = manifest_envelope.manifest_hash();
     let standalone_manifest_hash = manifest.manifest_hash();
@@ -427,19 +447,19 @@ pub fn verify(app_proof: &AppProof, boot_proof: &BootProof) -> Result<(), Verify
         )
     })?;
     let attestation_pub_key = hex::encode(attestation_pub_key_bytes);
-    if !(app_proof.public_key == attestation_pub_key
+    if !(app_ephemeral_key == attestation_pub_key
         && attestation_pub_key == boot_proof.ephemeral_public_key_hex)
     {
         return Err(VerifyError::DifferentEphemeralKey(format!(
             "Ephemeral pub keys from app proof: {}, boot proof structure {}, and attestation doc {} should all match",
-            app_proof.public_key, boot_proof.ephemeral_public_key_hex, attestation_pub_key
+            app_ephemeral_key, boot_proof.ephemeral_public_key_hex, attestation_pub_key
         )));
     }
 
     let envelope_manifest = manifest_envelope.manifest();
     let enclave = envelope_manifest.enclave();
     verify_attestation_doc_against_manifest_live(
-        &attestation_doc,
+        attestation_doc,
         ManifestAttestationInput {
             manifest_hash: &manifest_hash,
             pcr0: &enclave.pcr0,
@@ -499,6 +519,7 @@ mod tests {
             enclave_app: "signer".to_string(),
             owner: "tkhq".to_string(),
             created_at: Some(Timestamp{seconds: "1758057949".to_string(), nanos: "436158000".to_string()}),
+            quorum_key_attestation_signature_hex: None,
             qos_manifest_version: None,
         }
     }
@@ -513,6 +534,7 @@ mod tests {
             enclave_app: "signer".to_string(),
             owner: "tkhq".to_string(),
             created_at: Some(Timestamp{seconds: "1758057841".to_string(), nanos: "448145000".to_string()}),
+            quorum_key_attestation_signature_hex: None,
             qos_manifest_version: None,
         }
     }

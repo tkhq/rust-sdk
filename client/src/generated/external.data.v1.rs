@@ -432,6 +432,11 @@ pub struct BootProof {
     pub owner: ::prost::alloc::string::String,
     #[serde(default)]
     pub created_at: ::core::option::Option<Timestamp>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub quorum_key_attestation_signature_hex: ::core::option::Option<
+        ::prost::alloc::string::String,
+    >,
     #[serde(default)]
     pub qos_manifest_version: ::core::option::Option<::prost::alloc::string::String>,
 }
@@ -452,6 +457,9 @@ pub struct AppProof {
 pub struct AppProofPayload {
     pub r#type: AppProofType,
     pub timestamp_ms: ::prost::alloc::string::String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub request_context: ::core::option::Option<AppProofRequestContext>,
     #[serde(default)]
     pub proof_payload: ::core::option::Option<app_proof_payload::ProofPayload>,
 }
@@ -465,7 +473,34 @@ pub mod app_proof_payload {
         AddressDerivationProof(super::AddressDerivationProofPayload),
         #[serde(rename = "PROOF_PAYLOAD_POLICY_OUTCOME_PROOF")]
         PolicyOutcomeProof(super::PolicyOutcomeProofPayload),
+        #[serde(rename = "PROOF_PAYLOAD_TVC_QUORUM_KEY_CREATE_PROOF")]
+        TvcQuorumKeyCreateProof(super::TvcQuorumKeyCreateProofPayload),
     }
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct AppProofRequestContext {
+    #[serde(default)]
+    pub version: u32,
+    #[serde(default)]
+    pub verified_signature_digests: ::prost::alloc::vec::Vec<
+        ::prost::alloc::string::String,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct TvcQuorumKeyCreateProofPayload {
+    pub organization_id: ::prost::alloc::string::String,
+    pub quorum_key_id: ::prost::alloc::string::String,
+    pub quorum_public_key: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub threshold: u32,
+    #[serde(default)]
+    pub operator_encrypt_keys: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -532,6 +567,8 @@ pub enum AppProofType {
     AddressDerivation = 1,
     #[serde(rename = "APP_PROOF_TYPE_POLICY_OUTCOME")]
     PolicyOutcome = 2,
+    #[serde(rename = "APP_PROOF_TYPE_TVC_QUORUM_KEY_CREATE")]
+    TvcQuorumKeyCreate = 3,
 }
 impl AppProofType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -543,6 +580,7 @@ impl AppProofType {
             Self::Unspecified => "APP_PROOF_TYPE_UNSPECIFIED",
             Self::AddressDerivation => "APP_PROOF_TYPE_ADDRESS_DERIVATION",
             Self::PolicyOutcome => "APP_PROOF_TYPE_POLICY_OUTCOME",
+            Self::TvcQuorumKeyCreate => "APP_PROOF_TYPE_TVC_QUORUM_KEY_CREATE",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -551,6 +589,7 @@ impl AppProofType {
             "APP_PROOF_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
             "APP_PROOF_TYPE_ADDRESS_DERIVATION" => Some(Self::AddressDerivation),
             "APP_PROOF_TYPE_POLICY_OUTCOME" => Some(Self::PolicyOutcome),
+            "APP_PROOF_TYPE_TVC_QUORUM_KEY_CREATE" => Some(Self::TvcQuorumKeyCreate),
             _ => None,
         }
     }
