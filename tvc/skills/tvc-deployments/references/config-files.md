@@ -118,6 +118,6 @@ tvc keys generate-local-quorum-key \
 
 `quorum_key_metadata.json` and any re-encrypted share files contain sensitive shares. Keep them out of source control and out of the working tree you might commit. Prefer writing them to a path outside the repo.
 
-Pull-secret envelopes are bound to the authenticated user and organization. Turnkey
-checks expiry when validating the image and executing the deployment, including after approvals.
-Choose a later `--pull-secret-expires-at` if approval may take more than  the default two hours. 
+Pull secrets are bound to the authenticated user and organization. Turnkey checks
+ownership and expiry when accepting the secret. Expiry defaults to two hours;
+override it with `--pull-secret-expires-at`.

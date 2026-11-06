@@ -7,12 +7,13 @@ use crate::config::turnkey::Config;
 use crate::outcome::Outcome;
 use crate::output::StdCtx;
 use crate::prompts;
-use crate::pull_secret::encrypt_pivot_pull_secret;
+use crate::pull_secret::{PullSecretMeta, encrypt_pivot_pull_secret};
 use crate::shell_println;
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{DateTime, Duration, Utc};
 use clap::Args as ClapArgs;
 use serde::Serialize;
+use serde_json::value::RawValue;
 use std::fmt::{self, Display, Formatter};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -48,7 +49,7 @@ Special rules:
   --pivot-pull-secret reads an unencrypted pull secret file, encrypts it for the
   active org's API environment, and overrides the encrypted secret in the config.
   --pull-secret-expires-at sets its RFC 3339 expiry (default: two hours).
-  This deadline applies to validation and deployment creation, not later image pulls.
+  Turnkey checks ownership and expiry when accepting the secret.
 
 Interactive vs non-interactive:
   By default, missing required values are filled by interactive prompts when
@@ -89,11 +90,26 @@ pub struct Args {
     pub pivot_pull_secret: Option<PathBuf>,
 
     /// Expiry of a newly encrypted pull secret (RFC 3339); defaults to two hours from now.
-    #[arg(long, value_name = "TIMESTAMP", requires = "pivot_pull_secret")]
+    #[arg(
+        long,
+        value_name = "TIMESTAMP",
+        requires = "pivot_pull_secret",
+        value_parser = parse_pull_secret_expiry
+    )]
     pull_secret_expires_at: Option<DateTime<Utc>>,
 
     #[command(flatten)]
     overrides: Overrides,
+}
+
+fn parse_pull_secret_expiry(value: &str) -> Result<DateTime<Utc>> {
+    let expires_at = DateTime::parse_from_rfc3339(value)
+        .context("parse pull secret expiry as RFC 3339")?
+        .with_timezone(&Utc);
+    if expires_at <= Utc::now() {
+        bail!("pull secret expiry must be in the future");
+    }
+    Ok(expires_at)
 }
 
 #[derive(Debug, ClapArgs)]
@@ -417,6 +433,12 @@ async fn run_with_resolved_inputs(
     config: &Config,
 ) -> Result<Outcome> {
     let deploy_config = inputs.config;
+    let pull_secret = inputs
+        .pivot_pull_secret
+        .as_ref()
+        .map(|secret| serde_json::from_str::<&RawValue>(secret.trim()))
+        .transpose()
+        .context("parse Docker pull secret JSON")?;
 
     shell_println!(
         ctx,
@@ -431,7 +453,7 @@ async fn run_with_resolved_inputs(
     // validate that the app exists
     fetch_tvc_app(&auth, &deploy_config.app_id).await?;
 
-    let pivot_container_encrypted_pull_secret = match inputs.pivot_pull_secret.as_ref() {
+    let pivot_container_encrypted_pull_secret = match pull_secret {
         Some(pull_secret) => {
             let identity = auth
                 .client
@@ -443,15 +465,20 @@ async fn run_with_resolved_inputs(
             let user_id =
                 Uuid::parse_str(&identity.user_id).context("parse authenticated user ID")?;
             let organization_id = Uuid::parse_str(&auth.org_id).context("parse organization ID")?;
+            if user_id.is_nil() || organization_id.is_nil() {
+                bail!("pull secret owner must have a user and organization ID");
+            }
             let expires_at = inputs
                 .pull_secret_expires_at
                 .unwrap_or_else(|| Utc::now() + Duration::hours(2));
             Some(encrypt_pivot_pull_secret(
                 pull_secret,
                 &auth.api_base_url,
-                user_id,
-                organization_id,
-                expires_at,
+                PullSecretMeta {
+                    user_id,
+                    organization_id,
+                    expires_at,
+                },
             )?)
         }
         None => deploy_config.pivot_container_encrypted_pull_secret.clone(),
@@ -1032,29 +1059,31 @@ mod tests {
         let defaults =
             TestCli::try_parse_from(["create", "--pivot-pull-secret", "secret.json"]).unwrap();
         assert_eq!(defaults.args.pull_secret_expires_at, None);
-        let explicit = TestCli::try_parse_from([
-            "create",
-            "--pivot-pull-secret",
-            "secret.json",
-            "--pull-secret-expires-at",
-            "2100-01-01T00:00:00Z",
-        ])
-        .unwrap();
-        assert_eq!(
-            explicit.args.pull_secret_expires_at,
-            Some("2100-01-01T00:00:00Z".parse().unwrap())
-        );
-        for args in [
-            vec!["create", "--pull-secret-expires-at", "2100-01-01T00:00:00Z"],
-            vec![
+        for timestamp in ["2100-01-01T00:00:00Z", "2100-01-01T01:00:00+01:00"] {
+            let explicit = TestCli::try_parse_from([
                 "create",
                 "--pivot-pull-secret",
                 "secret.json",
                 "--pull-secret-expires-at",
-                "invalid",
-            ],
-        ] {
-            assert!(TestCli::try_parse_from(args).is_err());
+                timestamp,
+            ])
+            .unwrap();
+            assert_eq!(
+                explicit.args.pull_secret_expires_at,
+                Some("2100-01-01T00:00:00Z".parse().unwrap())
+            );
+        }
+        for timestamp in ["invalid", "2020-01-01T00:00:00Z"] {
+            let error = TestCli::try_parse_from([
+                "create",
+                "--pivot-pull-secret",
+                "secret.json",
+                "--pull-secret-expires-at",
+                timestamp,
+            ])
+            .err()
+            .expect("invalid or expired timestamp must fail during parsing");
+            assert_eq!(error.kind(), clap::error::ErrorKind::ValueValidation);
         }
     }
 }
