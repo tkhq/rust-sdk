@@ -11,12 +11,13 @@ use p256::{
     SecretKey,
     ecdsa::{
         Signature as P256Signature, SigningKey as P256SigningKey, VerifyingKey as P256VerifyingKey,
-        signature::Signer as _,
+        signature::{RandomizedSigner as _, Signer as _},
     },
 };
-use rand_core::OsRng;
+use rand_core::{CryptoRng, OsRng, RngCore};
 use serde::Serialize;
 use thiserror::Error;
+use zeroize::Zeroizing;
 
 pub const SIGNATURE_SCHEME_P256: &str = "SIGNATURE_SCHEME_TK_API_P256";
 pub const SIGNATURE_SCHEME_SECP256K1: &str = "SIGNATURE_SCHEME_TK_API_SECP256K1";
@@ -39,6 +40,12 @@ pub enum StamperError {
 
     #[error("cannot decode hex: {0}")]
     HexDecode(String),
+
+    #[error("fresh stamping could not obtain OS entropy")]
+    EntropyUnavailable,
+
+    #[error("fresh signing failed")]
+    FreshSigningFailed,
 }
 
 /// A stamp header to attach to an HTTP request.
@@ -51,6 +58,83 @@ pub struct StampHeader {
 /// Generic stamper that operates over raw bytes and returns an HTTP header.
 pub trait Stamp {
     fn stamp(&self, body: &[u8]) -> Result<StampHeader, StamperError>;
+}
+
+mod sealed {
+    pub trait Sealed {}
+}
+
+/// Fresh randomized stamping for the built-in API key types.
+///
+/// Each call uses fallible OS entropy. Custom stampers retain the ordinary
+/// [`Stamp`] API and cannot implement this sealed capability.
+pub trait FreshStamp: Stamp + sealed::Sealed {
+    fn stamp_fresh(&self, body: &[u8]) -> Result<StampHeader, StamperError>;
+}
+
+struct SigningEntropy {
+    bytes: Zeroizing<[u8; 32]>,
+    consumed: usize,
+    exhausted: bool,
+}
+
+impl SigningEntropy {
+    fn collect(rng: &mut (impl RngCore + CryptoRng)) -> Result<Self, StamperError> {
+        let mut bytes = Zeroizing::new([0u8; 32]);
+        rng.try_fill_bytes(bytes.as_mut())
+            .map_err(|_| StamperError::EntropyUnavailable)?;
+        Ok(Self {
+            bytes,
+            consumed: 0,
+            exhausted: false,
+        })
+    }
+
+    fn finish<T>(&self, result: Result<T, p256::ecdsa::Error>) -> Result<T, StamperError> {
+        if self.exhausted || self.consumed != self.bytes.len() {
+            return Err(StamperError::FreshSigningFailed);
+        }
+        result.map_err(|_| StamperError::FreshSigningFailed)
+    }
+}
+
+impl CryptoRng for SigningEntropy {}
+
+impl RngCore for SigningEntropy {
+    fn next_u32(&mut self) -> u32 {
+        let mut bytes = [0; 4];
+        self.fill_bytes(&mut bytes);
+        u32::from_le_bytes(bytes)
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        let mut bytes = [0; 8];
+        self.fill_bytes(&mut bytes);
+        u64::from_le_bytes(bytes)
+    }
+
+    fn fill_bytes(&mut self, dest: &mut [u8]) {
+        // ecdsa 0.16 consumes one 32-byte randomizer for either supported curve.
+        // Any other read invalidates the signature before it can escape.
+        if self.consumed != 0 || dest.len() != self.bytes.len() {
+            self.exhausted = true;
+            dest.fill(0);
+            return;
+        }
+        dest.copy_from_slice(self.bytes.as_ref());
+        self.consumed = dest.len();
+    }
+
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
+        self.fill_bytes(dest);
+        if self.exhausted {
+            Err(rand_core::Error::from(
+                std::num::NonZeroU32::new(rand_core::Error::CUSTOM_START).unwrap(),
+            ))
+        } else {
+            Ok(())
+        }
+    }
 }
 
 /// Represents a Turnkey API key using the P-256 curve.
@@ -176,6 +260,49 @@ impl Stamp for TurnkeyP256ApiKey {
     }
 }
 
+impl sealed::Sealed for TurnkeyP256ApiKey {}
+
+impl FreshStamp for TurnkeyP256ApiKey {
+    fn stamp_fresh(&self, body: &[u8]) -> Result<StampHeader, StamperError> {
+        self.stamp_with_entropy(body, &mut OsRng)
+    }
+}
+
+impl TurnkeyP256ApiKey {
+    fn stamp_with_entropy(
+        &self,
+        body: &[u8],
+        rng: &mut (impl RngCore + CryptoRng),
+    ) -> Result<StampHeader, StamperError> {
+        let mut entropy = SigningEntropy::collect(rng)?;
+        let result: Result<P256Signature, _> =
+            self.signing_key.try_sign_with_rng(&mut entropy, body);
+        let sig = entropy.finish(result)?;
+        fresh_header(
+            self.compressed_public_key(),
+            sig.to_der().as_bytes(),
+            SIGNATURE_SCHEME_P256,
+        )
+    }
+}
+
+fn fresh_header(
+    public_key: Vec<u8>,
+    signature: &[u8],
+    scheme: &str,
+) -> Result<StampHeader, StamperError> {
+    let stamp = TurnkeyApiStamp {
+        public_key: hex::encode(public_key),
+        signature: hex::encode(signature),
+        scheme: scheme.to_string(),
+    };
+    let json = serde_json::to_vec(&stamp).map_err(|_| StamperError::FreshSigningFailed)?;
+    Ok(StampHeader {
+        name: API_KEY_STAMP_HEADER_NAME.to_string(),
+        value: BASE64_URL_SAFE_NO_PAD.encode(json),
+    })
+}
+
 /// Represents a Turnkey API key using the **secp256k1** curve.
 #[derive(Debug, PartialEq)]
 pub struct TurnkeySecp256k1ApiKey {
@@ -266,6 +393,32 @@ impl Stamp for TurnkeySecp256k1ApiKey {
     }
 }
 
+impl sealed::Sealed for TurnkeySecp256k1ApiKey {}
+
+impl FreshStamp for TurnkeySecp256k1ApiKey {
+    fn stamp_fresh(&self, body: &[u8]) -> Result<StampHeader, StamperError> {
+        self.stamp_with_entropy(body, &mut OsRng)
+    }
+}
+
+impl TurnkeySecp256k1ApiKey {
+    fn stamp_with_entropy(
+        &self,
+        body: &[u8],
+        rng: &mut (impl RngCore + CryptoRng),
+    ) -> Result<StampHeader, StamperError> {
+        let mut entropy = SigningEntropy::collect(rng)?;
+        let result: Result<K256Signature, _> =
+            self.signing_key.try_sign_with_rng(&mut entropy, body);
+        let sig = entropy.finish(result)?;
+        fresh_header(
+            self.compressed_public_key(),
+            sig.to_der().as_bytes(),
+            SIGNATURE_SCHEME_SECP256K1,
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use p256::ecdsa::signature::Verifier as _;
@@ -275,6 +428,105 @@ mod tests {
     use k256::ecdsa::{Signature as K256Signature, VerifyingKey as K256VerifyingKey};
     use serde_json::Value;
     use tempfile::NamedTempFile;
+
+    struct FailedEntropy;
+
+    impl CryptoRng for FailedEntropy {}
+
+    impl RngCore for FailedEntropy {
+        fn next_u32(&mut self) -> u32 {
+            panic!("infallible entropy must not be called")
+        }
+        fn next_u64(&mut self) -> u64 {
+            panic!("infallible entropy must not be called")
+        }
+        fn fill_bytes(&mut self, _: &mut [u8]) {
+            panic!("infallible entropy must not be called")
+        }
+        fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
+            dest.fill(0x42);
+            Err(rand_core::Error::from(
+                std::num::NonZeroU32::new(rand_core::Error::CUSTOM_START).unwrap(),
+            ))
+        }
+    }
+
+    #[test]
+    fn fresh_entropy_failure_returns_typed_error_for_both_curves() {
+        let p256 = TurnkeyP256ApiKey::from_bytes([1; 32], None).unwrap();
+        let secp = TurnkeySecp256k1ApiKey::from_bytes([1; 32], None).unwrap();
+        assert_eq!(
+            p256.stamp_with_entropy(b"same", &mut FailedEntropy),
+            Err(StamperError::EntropyUnavailable)
+        );
+        assert_eq!(
+            secp.stamp_with_entropy(b"same", &mut FailedEntropy),
+            Err(StamperError::EntropyUnavailable)
+        );
+    }
+
+    #[test]
+    fn fresh_signatures_reject_entropy_overdraw_for_both_curves() {
+        let p256 = TurnkeyP256ApiKey::from_bytes([1; 32], None).unwrap();
+        let secp = TurnkeySecp256k1ApiKey::from_bytes([1; 32], None).unwrap();
+        let mut entropy = SigningEntropy::collect(&mut OsRng).unwrap();
+        let result: Result<P256Signature, _> =
+            p256.signing_key.try_sign_with_rng(&mut entropy, b"same");
+        assert!(result.is_ok());
+        assert_eq!(entropy.consumed, 32);
+        entropy.fill_bytes(&mut [0; 1]);
+        assert_eq!(
+            entropy.finish(result),
+            Err(StamperError::FreshSigningFailed)
+        );
+        let mut entropy = SigningEntropy::collect(&mut OsRng).unwrap();
+        let result: Result<K256Signature, _> =
+            secp.signing_key.try_sign_with_rng(&mut entropy, b"same");
+        assert!(result.is_ok());
+        assert_eq!(entropy.consumed, 32);
+        entropy.fill_bytes(&mut [0; 32]);
+        assert_eq!(
+            entropy.finish(result),
+            Err(StamperError::FreshSigningFailed)
+        );
+        let mut entropy = SigningEntropy::collect(&mut OsRng).unwrap();
+        assert_eq!(
+            entropy.finish(Ok(())),
+            Err(StamperError::FreshSigningFailed)
+        );
+        assert!(entropy.try_fill_bytes(&mut [0; 33]).is_err());
+    }
+
+    #[test]
+    fn fresh_stamps_verify_and_differ_while_ordinary_stamps_repeat() {
+        let p256 = TurnkeyP256ApiKey::from_bytes([1; 32], None).unwrap();
+        let secp = TurnkeySecp256k1ApiKey::from_bytes([1; 32], None).unwrap();
+        let body = br#"{"timestampMs":"100","message":"same"}"#;
+        for key in [&p256 as &dyn FreshStamp, &secp as &dyn FreshStamp] {
+            assert_eq!(key.stamp(body).unwrap(), key.stamp(body).unwrap());
+            let first = key.stamp_fresh(body).unwrap();
+            let second = key.stamp_fresh(body).unwrap();
+            assert_eq!(first.name, "X-Stamp");
+            assert_ne!(first.value, second.value);
+            for stamp in [first, second] {
+                let decoded = BASE64_URL_SAFE_NO_PAD.decode(stamp.value).unwrap();
+                let json: Value = serde_json::from_slice(&decoded).unwrap();
+                let pk = hex::decode(json["publicKey"].as_str().unwrap()).unwrap();
+                let sig = hex::decode(json["signature"].as_str().unwrap()).unwrap();
+                match json["scheme"].as_str().unwrap() {
+                    SIGNATURE_SCHEME_P256 => P256VerifyingKey::from_sec1_bytes(&pk)
+                        .unwrap()
+                        .verify(body, &P256Signature::from_der(&sig).unwrap())
+                        .unwrap(),
+                    SIGNATURE_SCHEME_SECP256K1 => K256VerifyingKey::from_sec1_bytes(&pk)
+                        .unwrap()
+                        .verify(body, &K256Signature::from_der(&sig).unwrap())
+                        .unwrap(),
+                    other => panic!("unexpected scheme {other}"),
+                }
+            }
+        }
+    }
 
     #[test]
     fn test_generate_and_stamp() {

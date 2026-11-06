@@ -54,3 +54,11 @@ The stamp produced is a base64-encoded value, ready to be used as a stamp header
 ## Error handling
 
 Errors are centralized in `StamperError`.
+
+## Release compatibility
+
+Fresh stamping adds `StamperError::EntropyUnavailable` and
+`StamperError::FreshSigningFailed`. Downstream exhaustive matches on
+`StamperError` must handle these variants, including callers that use only
+ordinary stamping. This change requires a breaking release, not a compatible
+patch release.

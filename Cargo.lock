@@ -4222,6 +4222,7 @@ dependencies = [
  "signature",
  "tempfile",
  "thiserror 2.0.12",
+ "zeroize",
 ]
 
 [[package]]
@@ -4232,6 +4233,7 @@ dependencies = [
  "chrono",
  "hex",
  "http",
+ "k256",
  "mime",
  "p256 0.13.2",
  "prost 0.12.6",
@@ -4240,6 +4242,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with 3.14.0",
+ "sha2",
  "thiserror 2.0.12",
  "tokio",
  "turnkey_api_key_stamper",
