@@ -127,6 +127,8 @@ def main():
     (out / "summary.json").write_text(json.dumps(summary, indent=2))
     tot = sum(r["total"] for r in summary); ok = sum(r["passed"] for r in summary)
     print(f"\nassertions passed: {ok}/{tot}; cases fully green: {sum(1 for r in summary if r['passed']==r['total'])}/{len(summary)}")
+    # Red result, red exit: CI must not accept failed evals or runs that never completed.
+    sys.exit(1 if not summary or ok != tot or not all(r["run_ok"] for r in summary) else 0)
 
 if __name__ == "__main__":
     main()
