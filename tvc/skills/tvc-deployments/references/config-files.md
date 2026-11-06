@@ -59,7 +59,8 @@ Almost every deploy field also has a CLI flag / env var; flags override the file
 | `--health-check-port` | `TVC_HEALTH_CHECK_PORT` | Port the health check probes |
 | *(none)* | *(none)* | `healthCheckType` is config-file only: `TVC_HEALTH_CHECK_TYPE_HTTP` (default) or `TVC_HEALTH_CHECK_TYPE_GRPC`. There is no flag and no env var, so it must be set in `deploy.json`. |
 | `--public-ingress-port` | `TVC_PUBLIC_INGRESS_PORT` | Public ingress port |
-| `--pivot-pull-secret` | `TVC_PIVOT_PULL_SECRET` | Path to an unencrypted pull secret file for a private image; the CLI encrypts it for the org's environment |
+| `--pivot-pull-secret` | `TVC_PIVOT_PULL_SECRET` | Path to an unencrypted pull secret file for a private image; the CLI encrypts it for the org's environment, bound to the calling user and organization, with an expiry |
+| `--pull-secret-expires-at` | *(none)* | RFC 3339 expiry for the encrypted pull secret; defaults to two hours from now. Requires `--pivot-pull-secret`; no env var |
 | `--replicas` | `TVC_REPLICAS` | Replica count (config: `replicas`); omit for the backend default |
 | `--dangerous-deploy-debug-mode` | `TVC_DANGEROUS_DEPLOY_DEBUG_MODE` | Debug-mode deploy (logs tailable; never for prod) |
 
@@ -68,6 +69,10 @@ Seed a new deployment's config from an existing one:
 ```bash
 tvc deploy init --output deploy.json --from-deployment <OLD_DEPLOY_ID>
 ```
+
+### Pull-secret expiry
+
+The encrypted pull secret is an envelope bound to the authenticated user and organization, with an expiry that defaults to two hours after `deploy create`. Turnkey checks it when validating the image and again when the deployment executes, which happens after approvals reach quorum; later image pulls are not re-checked. If approval may take longer than two hours (a manifest set that waits on a human co-approver, for example), pass a later `--pull-secret-expires-at`. An expired envelope cannot be refreshed in place: create a new deployment with a freshly encrypted secret.
 
 ## The two digests, which are different fields
 
@@ -117,5 +122,7 @@ tvc keys generate-local-quorum-key \
   --config-file quorum_key.json \
   --quorum-key-metadata-out quorum_key_metadata.json    # -c required; metadata-out defaults to quorum_key_metadata.json
 ```
+
+`quorum_key.json` fixes the key's real Shamir split: `threshold`, and one `operatorPublicKeys` entry per share. `generate-local-quorum-key` records both in the metadata as `threshold` and `shares[].operatorPublicKey`. The app that uses this key has to describe the same split in `app.json`: `quorumPublicKey` set to the metadata's `quorumKeyPublic`, and `shareSetParams` filled in (not the scaffold's `null`, which selects Turnkey's default share set) with the same `threshold` and one `newOperators[].publicKey` per operator key. `app create` does not compare these with the metadata, so a disagreement surfaces only at `keys re-encrypt-local-share`, which refuses to hand over a share until metadata and manifest agree (see [deploy-lifecycle.md](deploy-lifecycle.md#provisioning-variant-localself-hosted-operator-key)). The share set is fixed at `app create`, so fixing a disagreement means creating a new app.
 
 `quorum_key_metadata.json` and any re-encrypted share files contain sensitive shares. Keep them out of source control and out of the working tree you might commit. Prefer writing them to a path outside the repo.

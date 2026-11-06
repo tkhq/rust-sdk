@@ -10,6 +10,7 @@ use crate::prompts;
 use crate::pull_secret::encrypt_pivot_pull_secret;
 use crate::shell_println;
 use anyhow::{Context, Result, anyhow, bail};
+use chrono::{DateTime, Duration, Utc};
 use clap::Args as ClapArgs;
 use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
@@ -17,7 +18,11 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::try_join;
 use tracing::instrument;
-use turnkey_client::generated::{CreateTvcDeploymentIntent, ValidateTvcImageRequest};
+use turnkey_client::generated::{
+    CreateTvcDeploymentIntent, GetWhoamiRequest, ValidateTvcImageRequest,
+};
+use uuid::Uuid;
+use zeroize::Zeroizing;
 
 pub(crate) const LONG_ABOUT: &str = r#"
 Create a new TVC deployment.
@@ -42,6 +47,8 @@ Special rules:
   deployments for apps without it.
   --pivot-pull-secret reads an unencrypted pull secret file, encrypts it for the
   active org's API environment, and overrides the encrypted secret in the config.
+  --pull-secret-expires-at sets its RFC 3339 expiry (default: two hours).
+  This deadline applies to validation and deployment creation, not later image pulls.
 
 Interactive vs non-interactive:
   By default, missing required values are filled by interactive prompts when
@@ -80,6 +87,10 @@ pub struct Args {
     /// override `pivotContainerEncryptedPullSecret` from the config file.
     #[arg(long, value_name = "PATH", env = "TVC_PIVOT_PULL_SECRET")]
     pub pivot_pull_secret: Option<PathBuf>,
+
+    /// Expiry of a newly encrypted pull secret (RFC 3339); defaults to two hours from now.
+    #[arg(long, value_name = "TIMESTAMP", requires = "pivot_pull_secret")]
+    pull_secret_expires_at: Option<DateTime<Utc>>,
 
     #[command(flatten)]
     overrides: Overrides,
@@ -154,7 +165,8 @@ struct Overrides {
 struct ResolvedDeployInputs {
     config_path: Option<PathBuf>,
     config: DeployConfig,
-    pivot_pull_secret: Option<String>,
+    pivot_pull_secret: Option<Zeroizing<String>>,
+    pull_secret_expires_at: Option<DateTime<Utc>>,
 }
 
 #[instrument(skip_all)]
@@ -176,6 +188,7 @@ async fn build_inputs_interactive(
     let Args {
         config_file: config_path,
         pivot_pull_secret,
+        pull_secret_expires_at,
         overrides,
     } = args;
     let (mut deploy_config, file_loaded) = read_config_file_bytes(config_path.as_deref())
@@ -214,6 +227,7 @@ async fn build_inputs_interactive(
         config_path,
         config: deploy_config,
         pivot_pull_secret,
+        pull_secret_expires_at,
     })
 }
 
@@ -221,6 +235,7 @@ async fn build_inputs_non_interactive(args: Args) -> Result<ResolvedDeployInputs
     let Args {
         config_file: config_path,
         pivot_pull_secret,
+        pull_secret_expires_at,
         overrides,
     } = args;
 
@@ -245,6 +260,7 @@ async fn build_inputs_non_interactive(args: Args) -> Result<ResolvedDeployInputs
         config_path,
         config,
         pivot_pull_secret,
+        pull_secret_expires_at,
     })
 }
 
@@ -260,14 +276,15 @@ async fn read_config_file_bytes(path: Option<&Path>) -> Result<Option<(&Path, St
         .map(Into::into)
 }
 
-async fn read_pivot_pull_secret(path: Option<&Path>) -> Result<Option<String>> {
+async fn read_pivot_pull_secret(path: Option<&Path>) -> Result<Option<Zeroizing<String>>> {
     let Some(path) = path else {
         return Ok(None);
     };
 
-    let pull_secret = tokio::fs::read_to_string(path)
-        .await
-        .with_context(|| format!("failed to read pivot pull secret file: {}", path.display()))?;
+    let pull_secret =
+        Zeroizing::new(tokio::fs::read_to_string(path).await.with_context(|| {
+            format!("failed to read pivot pull secret file: {}", path.display())
+        })?);
 
     if pull_secret.trim().is_empty() {
         bail!(
@@ -276,7 +293,7 @@ async fn read_pivot_pull_secret(path: Option<&Path>) -> Result<Option<String>> {
         );
     }
 
-    Ok(pull_secret.into())
+    Ok(Some(pull_secret))
 }
 
 fn flag_only_template() -> DeployConfig {
@@ -415,7 +432,28 @@ async fn run_with_resolved_inputs(
     fetch_tvc_app(&auth, &deploy_config.app_id).await?;
 
     let pivot_container_encrypted_pull_secret = match inputs.pivot_pull_secret.as_ref() {
-        Some(pull_secret) => Some(encrypt_pivot_pull_secret(pull_secret, &auth.api_base_url)?),
+        Some(pull_secret) => {
+            let identity = auth
+                .client
+                .get_whoami(GetWhoamiRequest {
+                    organization_id: auth.org_id.clone(),
+                })
+                .await
+                .context("resolve pull secret owner")?;
+            let user_id =
+                Uuid::parse_str(&identity.user_id).context("parse authenticated user ID")?;
+            let organization_id = Uuid::parse_str(&auth.org_id).context("parse organization ID")?;
+            let expires_at = inputs
+                .pull_secret_expires_at
+                .unwrap_or_else(|| Utc::now() + Duration::hours(2));
+            Some(encrypt_pivot_pull_secret(
+                pull_secret,
+                &auth.api_base_url,
+                user_id,
+                organization_id,
+                expires_at,
+            )?)
+        }
         None => deploy_config.pivot_container_encrypted_pull_secret.clone(),
     };
 
@@ -981,5 +1019,42 @@ mod tests {
             persisted.has_placeholders(),
             "non-interactive resolution must not offer to save or mutate config files"
         );
+    }
+
+    #[test]
+    fn pull_secret_expiry_flag() {
+        use clap::Parser;
+        #[derive(Parser)]
+        struct TestCli {
+            #[command(flatten)]
+            args: Args,
+        }
+        let defaults =
+            TestCli::try_parse_from(["create", "--pivot-pull-secret", "secret.json"]).unwrap();
+        assert_eq!(defaults.args.pull_secret_expires_at, None);
+        let explicit = TestCli::try_parse_from([
+            "create",
+            "--pivot-pull-secret",
+            "secret.json",
+            "--pull-secret-expires-at",
+            "2100-01-01T00:00:00Z",
+        ])
+        .unwrap();
+        assert_eq!(
+            explicit.args.pull_secret_expires_at,
+            Some("2100-01-01T00:00:00Z".parse().unwrap())
+        );
+        for args in [
+            vec!["create", "--pull-secret-expires-at", "2100-01-01T00:00:00Z"],
+            vec![
+                "create",
+                "--pivot-pull-secret",
+                "secret.json",
+                "--pull-secret-expires-at",
+                "invalid",
+            ],
+        ] {
+            assert!(TestCli::try_parse_from(args).is_err());
+        }
     }
 }

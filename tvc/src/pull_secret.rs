@@ -2,8 +2,12 @@ use crate::config::turnkey::{
     API_BASE_URL_DEV, API_BASE_URL_LOCAL, API_BASE_URL_PREPROD, API_BASE_URL_PROD,
 };
 use anyhow::{Context, Result, anyhow};
+use chrono::{DateTime, SecondsFormat, Utc};
 use p256::elliptic_curve::sec1::ToEncodedPoint;
+use serde::Serialize;
 use turnkey_enclave_encrypt::{P256Public, server::EnclaveEncryptServer};
+use uuid::Uuid;
+use zeroize::Zeroizing;
 
 const LOCALHOST_PULL_SECRET_ENCRYPTION_PUBLIC_KEY: &str =
     "02acadf2025005142224d50ebeb93b91b8c57ef243a96cee44f50cf7051e67a3e2";
@@ -39,11 +43,49 @@ fn encryption_public_key_for_api_base_url(api_base_url: &str) -> Result<&'static
 }
 
 /// Encrypt the pivot container pull secret with the appropriate public key for the environment
-pub fn encrypt_pivot_pull_secret(pull_secret: &str, api_base_url: &str) -> Result<String> {
+pub fn encrypt_pivot_pull_secret(
+    pull_secret: &str,
+    api_base_url: &str,
+    user_id: Uuid,
+    organization_id: Uuid,
+    expires_at: DateTime<Utc>,
+) -> Result<String> {
     let pull_secret = pull_secret.trim();
     if pull_secret.is_empty() {
         anyhow::bail!("pivot pull secret is empty after trimming whitespace");
     }
+
+    if user_id.is_nil() || organization_id.is_nil() {
+        anyhow::bail!("pull secret owner must have a user and organization ID");
+    }
+    if expires_at <= Utc::now() {
+        anyhow::bail!("pull secret expiry must be in the future");
+    }
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Envelope<'a> {
+        version: u8,
+        user_id: Uuid,
+        organization_id: Uuid,
+        expires_at: String,
+        pull_secret: &'a serde_json::value::RawValue,
+    }
+    let pull_secret = serde_json::from_str(pull_secret).context("parse Docker pull secret JSON")?;
+    let envelope = Envelope {
+        version: 1,
+        user_id,
+        organization_id,
+        expires_at: expires_at.to_rfc3339_opts(SecondsFormat::AutoSi, true),
+        pull_secret,
+    };
+    let capacity = envelope
+        .pull_secret
+        .get()
+        .len()
+        .checked_add(512)
+        .context("pull secret envelope size overflow")?;
+    let mut plaintext = Zeroizing::new(Vec::with_capacity(capacity));
+    serde_json::to_writer(&mut *plaintext, &envelope).context("serialize pull secret envelope")?;
 
     // convert the hex public key to uncompressed bytes and then to P256Public
     let target_public_key_hex = encryption_public_key_for_api_base_url(api_base_url)?;
@@ -61,7 +103,7 @@ pub fn encrypt_pivot_pull_secret(pull_secret: &str, api_base_url: &str) -> Resul
 
     // we are not interacting with enclaves nor performing auth here,
     // but reusing the encryption function to perform the same HPKE logic
-    EnclaveEncryptServer::auth_encrypt(&target_public_key, pull_secret.as_bytes())
+    EnclaveEncryptServer::auth_encrypt(&target_public_key, &plaintext)
         .context("failed to encrypt pivot pull secret")
 }
 
@@ -84,7 +126,14 @@ mod tests {
             r#"{"auths": {"ghcr.io": {"username": "user", "password": "pass"}}}"#;
 
         // Encrypt using the LOCALHOST public key
-        let encrypted = encrypt_pivot_pull_secret(fake_pull_secret, API_BASE_URL_LOCAL).unwrap();
+        let encrypted = encrypt_pivot_pull_secret(
+            fake_pull_secret,
+            API_BASE_URL_LOCAL,
+            Uuid::from_u128(1),
+            Uuid::from_u128(2),
+            "2100-01-01T00:00:00Z".parse().unwrap(),
+        )
+        .unwrap();
 
         // Build HPKE key pair from the known LOCALHOST private key
         let private_key_bytes = hex::decode(LOCALHOST_PRIVATE_KEY_HEX).unwrap();
@@ -109,6 +158,61 @@ mod tests {
         );
 
         let decrypted = client.auth_decrypt(&encrypted).unwrap();
-        assert_eq!(decrypted, fake_pull_secret.as_bytes());
+        let envelope: serde_json::Value = serde_json::from_slice(&decrypted).unwrap();
+        assert_eq!(
+            envelope,
+            serde_json::json!({
+                "version": 1,
+                "userId": "00000000-0000-0000-0000-000000000001",
+                "organizationId": "00000000-0000-0000-0000-000000000002",
+                "expiresAt": "2100-01-01T00:00:00Z",
+                "pullSecret": serde_json::from_str::<serde_json::Value>(fake_pull_secret).unwrap(),
+            })
+        );
+    }
+
+    #[test]
+    fn rejects_expired_envelopes() {
+        let error = encrypt_pivot_pull_secret(
+            r#"{"auths":{"ghcr.io":{"username":"user","password":"pass"}}}"#,
+            API_BASE_URL_LOCAL,
+            Uuid::from_u128(1),
+            Uuid::from_u128(2),
+            "2020-01-01T00:00:00Z".parse().unwrap(),
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "pull secret expiry must be in the future"
+        );
+    }
+
+    #[test]
+    fn decrypts_shared_javascript_fixture() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/fixtures/pull-secret-envelope.json"))
+                .unwrap();
+        let private_key_bytes = hex::decode(LOCALHOST_PRIVATE_KEY_HEX).unwrap();
+        let target_private = <Kem as KemTrait>::PrivateKey::from_bytes(&private_key_bytes).unwrap();
+        let public = p256::PublicKey::from_sec1_bytes(
+            &hex::decode(LOCALHOST_PULL_SECRET_ENCRYPTION_PUBLIC_KEY).unwrap(),
+        )
+        .unwrap();
+        let target_public =
+            <Kem as KemTrait>::PublicKey::from_bytes(public.to_encoded_point(false).as_bytes())
+                .unwrap();
+        let signing = p256::ecdsa::SigningKey::from_slice(&private_key_bytes).unwrap();
+        let mut client = EnclaveEncryptClient::from_enclave_auth_key_and_target_key(
+            *signing.verifying_key(),
+            target_public,
+            target_private,
+        );
+        let decrypted = client
+            .auth_decrypt(fixture["ciphertext"].as_str().unwrap())
+            .unwrap();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&decrypted).unwrap(),
+            fixture["envelope"]
+        );
     }
 }

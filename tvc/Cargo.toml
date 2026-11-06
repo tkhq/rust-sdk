@@ -38,7 +38,7 @@ p256 = { workspace = true }
 rand_core = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
-serde_json = { workspace = true }
+serde_json = { workspace = true, features = ["raw_value"] }
 serde_with = { workspace = true }
 thiserror = { workspace = true }
 toml = { workspace = true }
