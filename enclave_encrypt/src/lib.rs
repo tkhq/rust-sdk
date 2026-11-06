@@ -22,9 +22,40 @@ pub use client::ExportClient;
 pub use client::ImportClient;
 pub use quorum_public_key::QuorumPublicKey;
 
+/// Re-export of the `hpke` crate, so callers can name the HPKE types that appear in
+/// this crate's public API (for example
+/// [`EnclaveEncryptClient::from_enclave_auth_key_and_target_key`](client::EnclaveEncryptClient::from_enclave_auth_key_and_target_key))
+/// without having to depend on a matching `hpke` version themselves.
+pub use hpke;
+
 /// See the [readme](README.md#hpke-configuration) for how to configure these value.
 /// HPKE Key encapsulation mechanism
-type Kem = hpke::kem::DhP256HkdfSha256;
+///
+/// This is the `Kem` used by every HPKE operation in this crate. It is public because it
+/// appears in the signatures of [`EnclaveEncryptClient::from_enclave_auth_key_and_target_key`](client::EnclaveEncryptClient::from_enclave_auth_key_and_target_key)
+/// and [`EnclaveEncryptServer::from_enclave_auth_key_and_target_key`](server::EnclaveEncryptServer::from_enclave_auth_key_and_target_key);
+/// the trait providing `gen_keypair` and `derive_keypair` is re-exported as [`hpke::Kem`].
+///
+/// ```
+/// use p256::ecdsa::SigningKey;
+/// use turnkey_enclave_encrypt::client::EnclaveEncryptClient;
+/// use turnkey_enclave_encrypt::{Kem, hpke::Kem as _};
+///
+/// let quorum_public_key = *SigningKey::from_slice(&[42u8; 32])
+///     .unwrap()
+///     .verifying_key();
+///
+/// // The HPKE target keypair, derived from a seed so the example is deterministic.
+/// let (target_private, target_public) = Kem::derive_keypair(&[7u8; 32]);
+///
+/// let client = EnclaveEncryptClient::from_enclave_auth_key_and_target_key(
+///     quorum_public_key,
+///     target_public,
+///     target_private,
+/// );
+/// let published = client.target().unwrap();
+/// ```
+pub type Kem = hpke::kem::DhP256HkdfSha256;
 /// HPKE Authenticated Encryption Scheme
 type Aead = hpke::aead::AesGcm256;
 /// HPKE Key Derivation Function
