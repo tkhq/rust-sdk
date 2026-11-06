@@ -61,7 +61,7 @@ struct Overrides {
 }
 
 #[instrument(skip_all)]
-pub async fn run(ctx: &mut StdCtx, args: Args, config: turnkey::Config) -> Result<Outcome> {
+pub async fn run(ctx: &mut StdCtx, args: Args, config: turnkey::ConfigSession) -> Result<Outcome> {
     let app_config = if ctx.is_non_interactive() {
         build_app_config_non_interactive(&args).await?
     } else {
@@ -251,7 +251,7 @@ fn offer_to_save_app_config(ctx: &mut StdCtx, path: &Path, config: &AppConfig) -
 async fn run_with_app_config(
     ctx: &mut StdCtx,
     args: Args,
-    mut config: turnkey::Config,
+    mut config: turnkey::ConfigSession,
     app_config: AppConfig,
 ) -> Result<Outcome> {
     shell_println!(ctx, "Creating app '{}'...", app_config.name)?;

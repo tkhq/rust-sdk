@@ -118,6 +118,24 @@ tvc keys generate-local-quorum-key \
 
 `quorum_key_metadata.json` and any re-encrypted share files contain sensitive shares. Keep them out of source control and out of the working tree you might commit. Prefer writing them to a path outside the repo.
 
+## Local config persistence
+
+Loading `~/.config/turnkey/tvc.config.toml` does not create it. All current CLI
+writers compare their exact loaded snapshot under a persistent sibling lock and
+atomically replace the file. A stale writer returns `config_conflict`; reload
+before any local recovery. Profile deletion commits removal before deleting its
+default key directory. A failed or uncertain commit leaves those key files intact.
+
+Accepted hosted records carry the `hosted_key_provenance =
+"signer_claim_v1"` extra field. It records acceptance at creation under trusted
+local config; it is not a signature, a tamper-resistant certificate, or a
+retrospective revocation mechanism. Existing config versions and unknown fields
+are preserved. Migration does not add this marker.
+
+The lock coordinates current CLI config writers. Manual edits, older binaries,
+and independent local key-file changes do not obey it. A config commit is not a
+transaction over API keys, operator key files, hardware, or remote resources.
+
 Pull-secret envelopes are bound to the authenticated user and organization. Turnkey
 checks expiry when validating the image and executing the deployment, including after approvals.
-Choose a later `--pull-secret-expires-at` if approval may take more than  the default two hours. 
+Choose a later `--pull-secret-expires-at` if approval may take more than the default two hours.

@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+
+- **Breaking:** hosted operator and quorum creation now require request-bound
+  authenticated claims and a Signer quorum-endorsed AWS boot proof. Production
+  and preproduction pins are selected before creation. Unsupported local API
+  environments reject before submission.
+- **Breaking Rust API:** remove `Config::save`; writers must load an owned,
+  non-cloneable `ConfigSession` and call its mutable `save`. Writer command
+  implementations use `Run<ConfigSession>`; read-only commands retain `Run<Config>`.
+- Config writers use atomic replacement and reject stale snapshots. Profile
+  deletion commits config removal before key-directory cleanup. New typed errors
+  and `ErrorCode` variants require downstream exhaustive matches to be updated.
+- Quorum ID recipients require the creation provenance marker and saved
+  encryption-role keys. Manual recipients remain an explicit user trust assertion.
+  The supported recipient limit includes 255.
+
 ## [0.17.1](https://github.com/tkhq/rust-sdk/compare/tvc-v0.17.0...tvc-v0.17.1) - 2026-10-30
 
 ### Fixed

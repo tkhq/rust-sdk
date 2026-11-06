@@ -4,13 +4,14 @@
 use crate::{
     commands::Run,
     config::turnkey::{
-        Config, QosOperatorPublicKey, Registration, YubiKeySerial, config_file_path,
+        Config, ConfigSaveError, ConfigSession, QosOperatorPublicKey, Registration, YubiKeySerial,
+        config_file_path,
     },
     outcome::Outcome,
     output::{Ctx, StdCtx},
     yubikey::{self, DeviceError, DeviceOps, YubiKeySelectionError},
 };
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use clap::Args as ClapArgs;
 use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
@@ -26,10 +27,10 @@ pub struct Args {
     serial: Option<YubiKeySerial>,
 }
 
-impl Run for Args {
+impl Run<ConfigSession> for Args {
     type Outcome = YubiKeyRefreshed;
 
-    async fn run(self, ctx: &mut StdCtx, mut config: Config) -> Result<YubiKeyRefreshed> {
+    async fn run(self, ctx: &mut StdCtx, mut config: ConfigSession) -> Result<YubiKeyRefreshed> {
         let refreshed = self.refresh(ctx, yubikey::open, &mut config)?;
 
         // Remediation renders from the typed registration outcome: a fresh
@@ -57,8 +58,13 @@ public_key = "{}""#,
         };
 
         if let Some(manual_fix) = manual_fix {
-            config.save().await.with_context(|| {
-                format!("the key was read but saving the config failed; {manual_fix}")
+            config.save().await.map_err(|save_error| {
+                let context = if matches!(save_error, ConfigSaveError::DurabilityUncertain { .. }) {
+                    String::from("the YubiKey registry replacement completed, but durability is uncertain. Inspect the saved config before proceeding. Do not add another registry entry.")
+                } else {
+                    format!("the key was read but saving the config failed; {manual_fix}")
+                };
+                anyhow::Error::new(save_error).context(context)
             })?;
         }
 

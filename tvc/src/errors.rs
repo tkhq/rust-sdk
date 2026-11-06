@@ -84,9 +84,10 @@ pub enum ErrorCode {
     MissingRequiredInput,
     /// Bad flags/args — a clap parse failure
     UsageError,
-    #[allow(dead_code)]
     /// Semantic validation failure in command code.
     InvalidInput,
+    /// Coordinator metadata cannot be converted to the CLI's required types.
+    MalformedResponse,
     /// HTTP 401/403.
     Unauthorized,
     /// HTTP 404, or an OK response with an empty resource.
@@ -100,6 +101,34 @@ pub enum ErrorCode {
     ApprovalRequired,
     /// A connect, timeout, or DNS failure. Submission state is reported separately.
     NetworkError,
+    /// The local environment has no independent Signer quorum root.
+    ProvenanceUnsupportedEnvironment,
+    /// Required proof/context is absent or unsupported.
+    ProvenanceUnavailable,
+    /// Malformed strict proof evidence.
+    ProvenanceMalformed,
+    /// Independent endorsement or exact-byte signature failed.
+    ProvenanceAuthenticationFailed,
+    /// No common invocation submission matches the claims.
+    ProvenanceReceiptMismatch,
+    /// Signed fields disagree with intent or returned output.
+    ProvenanceClaimMismatch,
+    /// A key already occupies a stored operator role.
+    OperatorKeyReuse,
+    /// Saved hosted recipient provenance is absent or unknown.
+    UntrustedRecipient,
+    /// Complete stored operator-role inventory could not be read.
+    KeyInventoryUnavailable,
+    /// Another config writer committed after this session loaded.
+    ConfigConflict,
+    /// Config replacement did not happen.
+    ConfigSaveFailed,
+    /// Config replacement happened but durability is uncertain.
+    ConfigDurabilityUncertain,
+    /// OS entropy acquisition failed before sending that attempt.
+    EntropyUnavailable,
+    /// Receipt stamp is malformed or unsupported.
+    InvalidReceiptStamp,
     /// Fallback for everything else.
     CommandError,
 }
@@ -124,7 +153,65 @@ impl Classification {
 /// chain. Unrecognized errors use [`ErrorCode::CommandError`] with no HTTP
 /// status; callers still render the complete original chain.
 pub fn classify(error: &anyhow::Error) -> Classification {
+    let mut save_code = None;
     for cause in error.chain() {
+        if cause
+            .downcast_ref::<crate::commands::operator::create::MalformedHostedOperatorResponse>()
+            .is_some()
+        {
+            return Classification::new(ErrorCode::MalformedResponse, None);
+        }
+        if let Some(error) = cause.downcast_ref::<turnkey_proofs::tvc::TvcProvenanceError>() {
+            use turnkey_proofs::tvc::TvcProvenanceError as ProofError;
+            let code = match error {
+                ProofError::UnsupportedEnvironment => ErrorCode::ProvenanceUnsupportedEnvironment,
+                ProofError::ProofUnavailable | ProofError::UnsupportedContext => {
+                    ErrorCode::ProvenanceUnavailable
+                }
+                ProofError::BootProofLookup(source) => {
+                    use turnkey_proofs::tvc::BootProofLookupError;
+                    return match source {
+                        BootProofLookupError::Transport => {
+                            Classification::new(ErrorCode::NetworkError, None)
+                        }
+                        BootProofLookupError::HttpStatus(status) => {
+                            Classification::new(ErrorCode::ApiError, Some(*status))
+                        }
+                        BootProofLookupError::InvalidResponse => {
+                            Classification::new(ErrorCode::ProvenanceMalformed, None)
+                        }
+                    };
+                }
+                ProofError::MalformedEvidence(_) => ErrorCode::ProvenanceMalformed,
+                ProofError::EndorsementFailure => ErrorCode::ProvenanceAuthenticationFailed,
+                ProofError::ReceiptMismatch => ErrorCode::ProvenanceReceiptMismatch,
+                ProofError::ClaimMismatch(_) => ErrorCode::ProvenanceClaimMismatch,
+                ProofError::KeyReuse => ErrorCode::OperatorKeyReuse,
+                ProofError::InvalidExpectation(_) => ErrorCode::InvalidInput,
+            };
+            return Classification::new(code, None);
+        }
+        if let Some(error) = cause.downcast_ref::<crate::config::turnkey::ConfigSaveError>() {
+            use crate::config::turnkey::ConfigSaveError;
+            let code = match error {
+                ConfigSaveError::StaleConflict { .. } => ErrorCode::ConfigConflict,
+                ConfigSaveError::BeforeReplacement { .. } => ErrorCode::ConfigSaveFailed,
+                ConfigSaveError::DurabilityUncertain { .. } => ErrorCode::ConfigDurabilityUncertain,
+            };
+            save_code = Some(code);
+        }
+        if cause
+            .downcast_ref::<crate::config::turnkey::KeyInventoryError>()
+            .is_some()
+        {
+            return Classification::new(ErrorCode::KeyInventoryUnavailable, None);
+        }
+        if cause
+            .downcast_ref::<crate::operator::hosted::UntrustedRecipient>()
+            .is_some()
+        {
+            return Classification::new(ErrorCode::UntrustedRecipient, None);
+        }
         if cause.downcast_ref::<MissingResource>().is_some() {
             return Classification::new(ErrorCode::NotFound, None);
         }
@@ -132,7 +219,7 @@ pub fn classify(error: &anyhow::Error) -> Classification {
             return classify_turnkey_client_error(client_error);
         }
     }
-    Classification::new(ErrorCode::CommandError, None)
+    Classification::new(save_code.unwrap_or(ErrorCode::CommandError), None)
 }
 
 /// A remediation hint for recognized error causes, rendered by the human
@@ -252,6 +339,12 @@ fn client_version_rejection(error: &TurnkeyClientError) -> Option<ApiErrorEnvelo
 /// We should explicitly decide what kind of error it is here.
 fn classify_turnkey_client_error(error: &TurnkeyClientError) -> Classification {
     match error {
+        TurnkeyClientError::StamperError(
+            turnkey_api_key_stamper::StamperError::EntropyUnavailable,
+        ) => Classification::new(ErrorCode::EntropyUnavailable, None),
+        TurnkeyClientError::InvalidReceiptStamp(_) => {
+            Classification::new(ErrorCode::InvalidReceiptStamp, None)
+        }
         TurnkeyClientError::UnexpectedHttpStatus(status, _) => {
             let code = if client_version_rejection(error).is_some() {
                 ErrorCode::ClientVersionTooOld
@@ -293,10 +386,13 @@ fn classify_turnkey_client_error(error: &TurnkeyClientError) -> Classification {
                 Cause::InvalidResponse | Cause::ActivityNotCompleted | Cause::ExceededRetries => {
                     Classification::new(ErrorCode::ApiError, None)
                 }
-                Cause::EntropyUnavailable
-                | Cause::FreshSigningFailed
-                | Cause::StampRejected
-                | Cause::InvalidRequest => Classification::new(ErrorCode::CommandError, None),
+                Cause::EntropyUnavailable => {
+                    Classification::new(ErrorCode::EntropyUnavailable, None)
+                }
+                Cause::StampRejected => Classification::new(ErrorCode::InvalidReceiptStamp, None),
+                Cause::FreshSigningFailed | Cause::InvalidRequest => {
+                    Classification::new(ErrorCode::CommandError, None)
+                }
             }
         }
         TurnkeyClientError::ActivityRequiresApproval(_) => {
@@ -332,7 +428,6 @@ fn classify_turnkey_client_error(error: &TurnkeyClientError) -> Classification {
         | TurnkeyClientError::ReqwestBuilder(_)
         | TurnkeyClientError::Http(_)
         | TurnkeyClientError::SerdeJsonFailure(_)
-        | TurnkeyClientError::InvalidReceiptStamp(_)
         | TurnkeyClientError::StamperError(_)
         | TurnkeyClientError::EnclaveEncrypt(_) => {
             Classification::new(ErrorCode::CommandError, None)
@@ -559,12 +654,102 @@ mod tests {
     }
 
     #[test]
+    fn provenance_and_config_causes_remain_classifiable_through_context() {
+        use crate::config::turnkey::ConfigSaveError;
+        use turnkey_proofs::tvc::TvcProvenanceError as ProofError;
+        let cases = [
+            (
+                ProofError::UnsupportedEnvironment,
+                ErrorCode::ProvenanceUnsupportedEnvironment,
+            ),
+            (
+                ProofError::ProofUnavailable,
+                ErrorCode::ProvenanceUnavailable,
+            ),
+            (
+                ProofError::UnsupportedContext,
+                ErrorCode::ProvenanceUnavailable,
+            ),
+            (
+                ProofError::MalformedEvidence("test".into()),
+                ErrorCode::ProvenanceMalformed,
+            ),
+            (
+                ProofError::EndorsementFailure,
+                ErrorCode::ProvenanceAuthenticationFailed,
+            ),
+            (
+                ProofError::ReceiptMismatch,
+                ErrorCode::ProvenanceReceiptMismatch,
+            ),
+            (
+                ProofError::ClaimMismatch("test"),
+                ErrorCode::ProvenanceClaimMismatch,
+            ),
+            (ProofError::KeyReuse, ErrorCode::OperatorKeyReuse),
+            (
+                ProofError::InvalidExpectation("test"),
+                ErrorCode::InvalidInput,
+            ),
+        ];
+        for (cause, code) in cases {
+            let error = anyhow::Error::new(cause).context("remote creation may have succeeded");
+            assert_eq!(classify(&error), Classification::new(code, None));
+        }
+        for (cause, code) in [
+            (
+                ConfigSaveError::StaleConflict {
+                    path: "config".into(),
+                },
+                ErrorCode::ConfigConflict,
+            ),
+            (
+                ConfigSaveError::BeforeReplacement {
+                    path: "config".into(),
+                    source: std::io::Error::other("disk").into(),
+                },
+                ErrorCode::ConfigSaveFailed,
+            ),
+            (
+                ConfigSaveError::DurabilityUncertain {
+                    path: "config".into(),
+                    source: std::io::Error::other("sync").into(),
+                },
+                ErrorCode::ConfigDurabilityUncertain,
+            ),
+            (
+                ConfigSaveError::BeforeReplacement {
+                    path: "config".into(),
+                    source: ProofError::KeyReuse.into(),
+                },
+                ErrorCode::OperatorKeyReuse,
+            ),
+        ] {
+            assert_eq!(
+                classify(&anyhow::Error::new(cause).context("verified recovery record")),
+                Classification::new(code, None)
+            );
+        }
+        assert_eq!(
+            classify(&client_error(TurnkeyClientError::InvalidReceiptStamp(
+                "unsupported"
+            ))),
+            Classification::new(ErrorCode::InvalidReceiptStamp, None)
+        );
+        assert_eq!(
+            classify(&client_error(TurnkeyClientError::StamperError(
+                turnkey_api_key_stamper::StamperError::EntropyUnavailable
+            ))),
+            Classification::new(ErrorCode::EntropyUnavailable, None)
+        );
+    }
+
+    #[test]
     fn local_client_failures_map_to_command_error() {
         let serialization_error = serde_json::from_str::<serde_json::Value>("{").unwrap_err();
         let errors = [
             TurnkeyClientError::BuilderMissingApiKey,
             TurnkeyClientError::SerdeJsonFailure(serialization_error),
-            TurnkeyClientError::InvalidReceiptStamp("invalid stamp JSON"),
             TurnkeyClientError::StamperError(turnkey_api_key_stamper::StamperError::HexDecode(
                 "invalid hex".to_string(),
             )),

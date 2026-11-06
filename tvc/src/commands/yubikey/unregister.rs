@@ -2,7 +2,7 @@
 
 use crate::{
     commands::Run,
-    config::turnkey::{Config, OperatorRecordKind, YubiKeySerial},
+    config::turnkey::{ConfigSession, OperatorRecordKind, YubiKeySerial},
     outcome::Outcome,
     output::StdCtx,
     prompts::{self, error_required_in_non_interactive},
@@ -26,10 +26,10 @@ pub struct Args {
     yes: bool,
 }
 
-impl Run for Args {
+impl Run<ConfigSession> for Args {
     type Outcome = YubiKeyUnregistered;
 
-    async fn run(self, ctx: &mut StdCtx, mut config: Config) -> Result<YubiKeyUnregistered> {
+    async fn run(self, ctx: &mut StdCtx, mut config: ConfigSession) -> Result<YubiKeyUnregistered> {
         let can_prompt = !ctx.is_non_interactive() && prompts::stdin_can_prompt();
 
         if !can_prompt && self.serial.is_none() {

@@ -3,7 +3,7 @@
 
 use super::{OperatorPublicKey, timestamp_ms};
 use crate::client::AuthenticatedClient;
-use crate::config::turnkey::{Config, HostedOperatorRecord, OperatorRecord, OperatorRecordKind};
+use crate::config::turnkey::{Config, HostedOperatorRecord};
 use crate::pair::{Signer, SignerFuture};
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use p256::elliptic_curve::sec1::ToEncodedPoint;
@@ -12,7 +12,7 @@ use std::str::FromStr;
 use turnkey_client::{
     TurnkeyClientError,
     generated::{
-        CreateTvcOperatorResult, SignRawPayloadIntentV2, SignRawPayloadResult,
+        SignRawPayloadIntentV2, SignRawPayloadResult,
         immutable::common::v1::{HashFunction, PayloadEncoding},
     },
 };
@@ -111,51 +111,13 @@ impl OperatorKeyPair {
     }
 }
 
-/// The context of a create-operator request coupled with its API result,
-/// ready to parse into a registry-ready record.
-pub(crate) struct CreateOperatorRequestResult {
-    pub(crate) name: String,
-    pub(crate) path: String,
-    pub(crate) result: CreateTvcOperatorResult,
-}
-
-impl TryFrom<CreateOperatorRequestResult> for OperatorRecord {
-    type Error = anyhow::Error;
-
-    fn try_from(result: CreateOperatorRequestResult) -> Result<Self> {
-        let CreateOperatorRequestResult { name, path, result } = result;
-
-        let CreateTvcOperatorResult {
-            wallet_id,
-            operator_id,
-            encrypt_public_key,
-            sign_public_key,
-        } = result;
-
-        let wallet_id =
-            Uuid::parse_str(&wallet_id).map_err(|_| anyhow!("created wallet ID must be a UUID"))?;
-        let operator_id = Uuid::parse_str(&operator_id)
-            .map_err(|_| anyhow!("created operator ID must be a UUID"))?;
-        let encrypt_public_key = encrypt_public_key
-            .parse()
-            .context("create operator key parsing error")?;
-        let sign_public_key = sign_public_key
-            .parse()
-            .context("create operator key parsing error")?;
-        let keys = OperatorKeyPair::try_new(encrypt_public_key, sign_public_key)?;
-
-        Ok(Self {
-            name,
-            kind: OperatorRecordKind::Hosted(HostedOperatorRecord {
-                operator_id,
-                wallet_id,
-                path,
-                encrypt_public_key: keys.encrypt.to_string(),
-                sign_public_key: keys.sign.to_string(),
-                extra: toml::Table::new(),
-            }),
-        })
-    }
+/// A hosted recipient lacks recognized creation acceptance in local config.
+#[derive(Debug, thiserror::Error)]
+#[error(
+    "hosted operator {operator_id} lacks recognized key provenance; independently verify its encryption key and use explicit recipient keys, or create it with this enforcing release"
+)]
+pub(crate) struct UntrustedRecipient {
+    operator_id: Uuid,
 }
 
 /// One validated hosted operator resolved from the active organization.
@@ -281,7 +243,26 @@ impl Config {
         &self,
         operator_id: &Uuid,
     ) -> Result<EncryptPubKey> {
-        Ok(self.resolve_hosted_operator(operator_id)?.keys.encrypt)
+        let operator = self.resolve_hosted_operator(operator_id)?;
+        let (_, org) = self.active_org_config().context("no active organization")?;
+        let (_, record) = org
+            .hosted_operators()
+            .find(|(_, record)| record.operator_id == *operator_id)
+            .ok_or(UntrustedRecipient {
+                operator_id: *operator_id,
+            })?;
+        if record
+            .extra
+            .get("hosted_key_provenance")
+            .and_then(toml::Value::as_str)
+            != Some("signer_claim_v1")
+        {
+            return Err(UntrustedRecipient {
+                operator_id: *operator_id,
+            }
+            .into());
+        }
+        Ok(operator.keys.encrypt)
     }
 }
 
@@ -364,11 +345,33 @@ pub(crate) fn hosted_activity_error(operation: &str, error: TurnkeyClientError) 
     anyhow::Error::new(error).context(context)
 }
 
+pub(crate) fn hosted_creation_error(operation: &str, error: TurnkeyClientError) -> anyhow::Error {
+    let context = match &error {
+        TurnkeyClientError::SubmissionFailed(failure) => match failure.submission_state() {
+            turnkey_client::SubmissionState::NeverSubmitted => {
+                "creation was never submitted; no keys were saved".to_owned()
+            }
+            turnkey_client::SubmissionState::MayHaveSubmitted => match failure.activity_id() {
+                Some(label) => format!(
+                    "remote creation may have succeeded; untrusted activity label {}; no keys were saved; do not retry creation blindly",
+                    crate::terminal::TerminalText(label).single_line(),
+                ),
+                None => "remote creation may have succeeded; no keys were saved; do not retry creation blindly".to_owned(),
+            },
+        },
+        _ => "remote creation may have succeeded; no keys were saved; do not retry creation blindly".to_owned(),
+    };
+    anyhow::Error::new(error)
+        .context(format!("failed to {operation}"))
+        .context(context)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::config::turnkey::{
-        LocalOperatorRecord, OperatorKind, OrgConfig, SelectHostedOperatorError,
+        LocalOperatorRecord, OperatorKind, OperatorRecord, OperatorRecordKind, OrgConfig,
+        SelectHostedOperatorError,
     };
     use crate::operator::OperatorPublicKeyParseError;
     use qos_p256::P256Pair;
@@ -377,6 +380,127 @@ mod tests {
 
     const OPERATOR_ID: &str = "11111111-1111-4111-8111-111111111111";
     const WALLET_ID: &str = "22222222-2222-4222-8222-222222222222";
+
+    #[test]
+    fn creation_decode_failure_keeps_remote_recovery_guidance_and_sdk_classification() {
+        let decode = serde_json::from_str::<serde_json::Value>("{").unwrap_err();
+        let error = hosted_creation_error(
+            "create hosted TVC operator",
+            TurnkeyClientError::Decode("{".into(), decode),
+        );
+
+        assert_eq!(
+            error.to_string(),
+            "remote creation may have succeeded; no keys were saved; do not retry creation blindly"
+        );
+        assert_eq!(
+            crate::errors::classify(&error).code,
+            crate::errors::ErrorCode::ApiError
+        );
+        assert!(matches!(
+            error.downcast_ref::<TurnkeyClientError>(),
+            Some(TurnkeyClientError::Decode(body, _)) if body == "{"
+        ));
+    }
+
+    #[test]
+    fn creation_stamp_failures_keep_codes_and_allow_for_earlier_pending_attempts() {
+        for (client_error, expected_code) in [
+            (
+                TurnkeyClientError::StamperError(
+                    turnkey_api_key_stamper::StamperError::EntropyUnavailable,
+                ),
+                crate::errors::ErrorCode::EntropyUnavailable,
+            ),
+            (
+                TurnkeyClientError::InvalidReceiptStamp("unsupported stamp"),
+                crate::errors::ErrorCode::InvalidReceiptStamp,
+            ),
+        ] {
+            let error = hosted_creation_error("create hosted TVC quorum key", client_error);
+            assert_eq!(
+                error.to_string(),
+                "remote creation may have succeeded; no keys were saved; do not retry creation blindly"
+            );
+            assert_eq!(crate::errors::classify(&error).code, expected_code);
+            assert!(error.downcast_ref::<TurnkeyClientError>().is_some());
+            assert!(
+                crate::errors::render_error_chain(&error)
+                    .contains("failed to create hosted TVC quorum key")
+            );
+        }
+    }
+
+    #[tokio::test]
+    #[ignore = "requires OS entropy injection; run tvc/tests/entropy_failure.sh"]
+    async fn pending_entropy_failure_preserves_cli_rendering_for_both_curves() {
+        use crate::output::{ErrorMessage, TestShell};
+        use serde_json::{Value, json};
+        use std::time::Duration;
+        use turnkey_api_key_stamper::{FreshStamp, TurnkeyP256ApiKey, TurnkeySecp256k1ApiKey};
+        use turnkey_client::{RetryConfig, TurnkeyClient};
+        use wiremock::{Mock, MockServer, Request, ResponseTemplate, matchers::path};
+
+        let marker = std::path::PathBuf::from(
+            std::env::var("TVC572_ENTROPY_FAILURE_MARKER")
+                .expect("run tvc/tests/entropy_failure.sh"),
+        );
+        let server = MockServer::start().await;
+        let arm = marker.clone();
+        Mock::given(path("/pending")).respond_with(move |_: &Request| {
+            std::fs::write(&arm, b"armed").unwrap();
+            ResponseTemplate::new(200).set_body_json(json!({"activity": {
+                "id":"pending-routing-label", "organizationId":"synthetic-org", "fingerprint":"unsigned",
+                "type":"ACTIVITY_TYPE_CREATE_TVC_OPERATOR", "status":"ACTIVITY_STATUS_PENDING"
+            }}))
+        }).mount(&server).await;
+        async fn check<S: FreshStamp>(server: &MockServer, key: S, marker: &std::path::Path) {
+            let before = server.received_requests().await.unwrap().len();
+            let client = TurnkeyClient::builder()
+                .api_key(key)
+                .base_url(server.uri())
+                .retry_config(RetryConfig {
+                    initial_delay: Duration::from_millis(1),
+                    multiplier: 1.0,
+                    max_delay: Duration::from_millis(1),
+                    max_retries: 3,
+                })
+                .build()
+                .unwrap();
+            let source = client
+                .process_activity_with_receipt((), "/pending".into())
+                .await
+                .unwrap_err();
+            std::fs::remove_file(marker).unwrap();
+            let error = hosted_creation_error("create hosted TVC operator", source);
+            let mut shell = TestShell::with_json_formatter();
+            shell.emit(&ErrorMessage::from_error(&error)).unwrap();
+            let stdout = shell.into_stdout();
+            let output: Value = serde_json::from_slice(&stdout).unwrap();
+            assert_eq!(output["reason"], "command_error");
+            assert_eq!(output["code"], "entropy_unavailable");
+            let message = output["message"].as_str().unwrap();
+            assert!(message.contains("remote creation may have succeeded"));
+            assert!(message.contains("untrusted activity label pending-routing-label"));
+            assert!(message.contains("do not retry creation blindly"));
+            assert!(!message.contains("never submitted"));
+            assert!(output.get("encryptPublicKey").is_none());
+            assert!(output.get("quorumPublicKey").is_none());
+            assert_eq!(server.received_requests().await.unwrap().len(), before + 1);
+        }
+        check(
+            &server,
+            TurnkeyP256ApiKey::from_bytes([1; 32], None).unwrap(),
+            &marker,
+        )
+        .await;
+        check(
+            &server,
+            TurnkeySecp256k1ApiKey::from_bytes([1; 32], None).unwrap(),
+            &marker,
+        )
+        .await;
+    }
 
     fn public_keys() -> (String, String) {
         let first = P256Pair::generate().unwrap().public_key().to_bytes();
@@ -392,7 +516,10 @@ mod tests {
             path: DEFAULT_HOSTED_OPERATOR_BASE_PATH.to_string(),
             encrypt_public_key,
             sign_public_key,
-            extra: toml::Table::new(),
+            extra: toml::Table::from_iter([(
+                "hosted_key_provenance".into(),
+                toml::Value::String("signer_claim_v1".into()),
+            )]),
         }
     }
 
@@ -611,56 +738,28 @@ mod tests {
     }
 
     #[test]
-    fn validates_and_normalizes_creation_result() {
-        let (encrypt_public_key, sign_public_key) = public_keys();
-        let result = CreateTvcOperatorResult {
-            wallet_id: WALLET_ID.to_uppercase(),
-            operator_id: OPERATOR_ID.to_uppercase(),
-            encrypt_public_key: encrypt_public_key.to_uppercase(),
-            sign_public_key: sign_public_key.to_uppercase(),
-        };
-
-        let result = CreateOperatorRequestResult {
-            name: "operator".into(),
-            path: DEFAULT_HOSTED_OPERATOR_BASE_PATH.into(),
-            result,
-        };
-
-        let record = OperatorRecord::try_from(result).unwrap();
-
-        assert_eq!(
-            record,
-            OperatorRecord {
-                name: "operator".to_string(),
-                kind: OperatorRecordKind::Hosted(HostedOperatorRecord {
-                    operator_id: Uuid::parse_str(OPERATOR_ID).unwrap(),
-                    wallet_id: Uuid::parse_str(WALLET_ID).unwrap(),
-                    path: DEFAULT_HOSTED_OPERATOR_BASE_PATH.to_string(),
-                    encrypt_public_key,
-                    sign_public_key,
-                    extra: toml::Table::new(),
-                }),
+    fn trusted_recipients_reject_legacy_unknown_and_wrong_type_markers() {
+        for marker in [
+            None,
+            Some(toml::Value::String("other".into())),
+            Some(toml::Value::Integer(1)),
+        ] {
+            let mut record = hosted_record();
+            record.extra.remove("hosted_key_provenance");
+            if let Some(marker) = marker {
+                record.extra.insert("hosted_key_provenance".into(), marker);
             }
-        );
-    }
-
-    #[test]
-    fn rejects_malformed_operator_id_from_creation_result() {
-        let (encrypt_public_key, sign_public_key) = public_keys();
-        let name = "operator".into();
-        let path = DEFAULT_HOSTED_OPERATOR_BASE_PATH.into();
-
-        let result = CreateTvcOperatorResult {
-            wallet_id: WALLET_ID.to_string(),
-            operator_id: "not-a-uuid".to_string(),
-            encrypt_public_key,
-            sign_public_key,
-        };
-
-        let result = CreateOperatorRequestResult { name, path, result };
-        let error = OperatorRecord::try_from(result).unwrap_err();
-
-        assert_eq!(error.to_string(), "created operator ID must be a UUID");
+            let config = config_with_operators(vec![hosted_operator("hosted", record)]);
+            let id = Uuid::parse_str(OPERATOR_ID).unwrap();
+            assert!(
+                config
+                    .resolve_hosted_operator_encrypt_key(&id)
+                    .unwrap_err()
+                    .downcast_ref::<UntrustedRecipient>()
+                    .is_some()
+            );
+            assert!(config.resolve_hosted_operator(&id).is_ok());
+        }
     }
 
     #[test]

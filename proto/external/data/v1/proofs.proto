@@ -40,6 +40,7 @@ message BootProof {
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Owner of the app i.e. 'tkhq'"}
   ];
   Timestamp created_at = 8 [(google.api.field_behavior) = REQUIRED];
+  optional string quorum_key_attestation_signature_hex = 10;
   optional string qos_manifest_version = 9 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "QOS manifest schema version."}];
 }
 
@@ -80,13 +81,29 @@ message AppProofPayload {
   oneof proof_payload {
     AddressDerivationProofPayload address_derivation_proof = 3;
     PolicyOutcomeProofPayload policy_outcome_proof = 4;
+    TvcQuorumKeyCreateProofPayload tvc_quorum_key_create_proof = 6;
   }
+  AppProofRequestContext request_context = 5;
+}
+
+message AppProofRequestContext {
+  uint32 version = 1;
+  repeated string verified_signature_digests = 2;
+}
+
+message TvcQuorumKeyCreateProofPayload {
+  string organization_id = 1;
+  string quorum_key_id = 2;
+  string quorum_public_key = 3;
+  uint32 threshold = 4;
+  repeated string operator_encrypt_keys = 5;
 }
 
 enum AppProofType {
   APP_PROOF_TYPE_UNSPECIFIED = 0;
   APP_PROOF_TYPE_ADDRESS_DERIVATION = 1;
   APP_PROOF_TYPE_POLICY_OUTCOME = 2;
+  APP_PROOF_TYPE_TVC_QUORUM_KEY_CREATE = 3;
 }
 
 message AddressDerivationProofPayload {

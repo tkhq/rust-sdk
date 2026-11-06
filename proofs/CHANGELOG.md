@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+
+- **Breaking Rust API:** boot-proof struct literals must include the optional
+  endorsement field. The async TVC acceptance methods take the authenticated
+  client so callers cannot supply unverified boot-evidence maps.
+
+### Added
+
+- Async request-bound TVC acceptance verifies the independent Signer quorum
+  endorsement, AWS boot evidence, QOS manifest and live ephemeral-key bindings,
+  and exact signed operator or quorum claims against submission receipts.
+  Production and preproduction roots are selected from the local API URL.
+- Boot proofs carry an optional quorum-key attestation endorsement. Strong TVC
+  acceptance requires it and uses the signed document's issuance time for
+  historical certificate validation. Generic `verify` remains compatible.
+
 ## [0.17.1](https://github.com/tkhq/rust-sdk/compare/turnkey_proofs-v0.17.0...turnkey_proofs-v0.17.1) - 2026-10-30
 
 ### Other

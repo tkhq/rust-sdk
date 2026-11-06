@@ -8,7 +8,7 @@
 pub(crate) mod hosted;
 
 pub use hosted::DEFAULT_HOSTED_OPERATOR_BASE_PATH;
-pub(crate) use hosted::{ResolvedHostedOperator, hosted_activity_error};
+pub(crate) use hosted::{ResolvedHostedOperator, hosted_activity_error, hosted_creation_error};
 
 use crate::{
     approvals::ValidatedManifest,

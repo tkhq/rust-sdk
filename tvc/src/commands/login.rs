@@ -5,8 +5,8 @@ use crate::commands::keys::backup_operator_key::{
     OperatorKeyBackedUp, back_up, prompt_for_backup_destination,
 };
 use crate::config::turnkey::{
-    API_BASE_URL_PROD, Config, KeyCurve, LocalOperatorRecord, NewOrgOperator, OperatorKind,
-    OperatorRecord, OperatorRecordKind, OrgConfig, QosOperatorPublicKey,
+    API_BASE_URL_PROD, Config, ConfigSession, KeyCurve, LocalOperatorRecord, NewOrgOperator,
+    OperatorKind, OperatorRecord, OperatorRecordKind, OrgConfig, QosOperatorPublicKey,
     SelectYubiKeyOperatorError, StoredApiKey, StoredQosOperatorKey, YubiKeyOperatorRecord,
     YubiKeySerial, dashboard_base_url, default_api_key_path, default_operator_key_path,
     default_org_dir,
@@ -94,7 +94,7 @@ struct LoginPlan {
 }
 
 #[instrument(skip_all)]
-pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome> {
+pub async fn run(ctx: &mut StdCtx, args: Args, config: ConfigSession) -> Result<Outcome> {
     debug!(
         non_interactive = ctx.is_non_interactive(),
         org_arg_present = args.org.is_some(),
@@ -115,7 +115,11 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome
 /// any local operator key files on disk. YubiKey operator references vanish
 /// with the profile, but the devices and their shared registry entries are
 /// never touched.
-pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) -> Result<Outcome> {
+pub async fn run_delete(
+    ctx: &mut StdCtx,
+    args: DeleteArgs,
+    mut config: ConfigSession,
+) -> Result<Outcome> {
     let is_non_interactive = ctx.is_non_interactive();
     debug!(
         non_interactive = is_non_interactive,
@@ -240,6 +244,8 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) 
             .iter()
             .all(|path| *path == &default_operator_key);
 
+    config.save().await?;
+
     let removed_dir = if uses_default_layout {
         let dir = default_org_dir(&alias)?;
         match tokio::fs::remove_dir_all(&dir).await {
@@ -254,7 +260,7 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) 
             }
             Err(e) => {
                 return Err(e)
-                    .with_context(|| format!("failed to delete key directory: {}", dir.display()));
+                    .with_context(|| format!("profile removal committed; orphaned key directory could not be deleted: {}", dir.display()));
             }
         }
     } else {
@@ -272,10 +278,6 @@ pub async fn run_delete(ctx: &mut StdCtx, args: DeleteArgs, mut config: Config) 
         }
         None
     };
-
-    // Save last: persist the config removal only after the on-disk cleanup above
-    // succeeds, so a failure leaves the profile listed and the delete retryable.
-    config.save().await?;
 
     // A local delete does not touch the dashboard-registered API key, and we
     // can't tell whether it is still there, so hedge with "may" and give steps.
@@ -415,7 +417,11 @@ fn build_login_plan_non_interactive(args: Args) -> Result<LoginPlan> {
     })
 }
 
-async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) -> Result<Outcome> {
+async fn execute_login(
+    ctx: &mut StdCtx,
+    mut config: ConfigSession,
+    plan: LoginPlan,
+) -> Result<Outcome> {
     let (alias, org_config, yubikey) = match plan.org {
         OrgPlan::Existing(query) => {
             let alias = match find_org(&config, &query) {

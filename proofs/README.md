@@ -4,6 +4,18 @@ This crate contains utilities to parse and verify Turnkey secure enclave proofs.
 * App proofs, signing structured data with enclave ephemeral keys.
 * Boot proofs, which are proofs that a given enclave was provisioned correctly. Boot proofs reference via their `public_key` field the enclave ephemeral key. This links App and Boot proofs together.
 
+## Request-bound TVC acceptance
+
+`tvc::TvcProvenance::for_api_url` selects the independently supplied production
+or preproduction Signer quorum key. Its async acceptance operations fetch each
+relevant Signer instance's boot proof by organization and ephemeral key, verify
+the Q-endorsed AWS attestation and QOS bindings, then bind strict signed claims
+to the invocation's opaque submission receipt and requested output.
+
+Historical boot evidence uses its signed attestation issuance time. The public
+`verify` API retains its existing behavior. An absent boot endorsement remains
+readable by generic callers and cannot satisfy TVC creation acceptance.
+
 ## Boot proofs
 
 Boot Proof: a proof that a particular AWS Nitro Enclave booted with a particular approved manifest envelope and configuration.

@@ -24,12 +24,12 @@ pub mod yubikey;
 /// The associated `Outcome` is a command-local type; `Into<outcome::Outcome>`
 /// is the whole contract, since serialization (including the `reason` tag) and
 /// human rendering both live on the top-level [`outcome::Outcome`].
-pub trait Run {
+pub trait Run<C = Config> {
     type Outcome: Into<outcome::Outcome>;
 
     fn run(
         self,
         ctx: &mut StdCtx,
-        config: Config,
+        config: C,
     ) -> impl Future<Output = anyhow::Result<Self::Outcome>> + Send;
 }

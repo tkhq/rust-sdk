@@ -8,6 +8,8 @@
 //! Key paths are stored in the config so users can customize storage locations.
 
 mod api_key;
+mod session;
+pub use session::{ConfigSaveError, ConfigSession, KeyInventoryError};
 mod qos_operator_key;
 mod yubikey;
 
@@ -24,7 +26,6 @@ use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{self, Display, Formatter};
-use std::path::Path;
 use std::path::PathBuf;
 use thiserror::Error;
 use tracing::debug;
@@ -590,40 +591,6 @@ impl Config {
         disk::from_toml(content)
     }
 
-    /// Save config to disk
-    pub async fn save(&self) -> Result<()> {
-        // Owns its whole failure surface: callers add what only they know
-        // (e.g. recovery guidance), never the file identity.
-        let path = config_file_path().context("failed to resolve the tvc.config.toml path")?;
-        debug!(
-            config_path = %path.display(),
-            active_org = ?self.active_org,
-            org_count = self.orgs.len(),
-            "saving tvc config"
-        );
-
-        self.save_to_path(&path).await
-    }
-
-    async fn save_to_path(&self, path: &Path) -> Result<()> {
-        // Ensure parent directory exists
-        if let Some(parent) = path.parent() {
-            tokio::fs::create_dir_all(parent).await.with_context(|| {
-                format!("failed to create config directory: {}", parent.display())
-            })?;
-        }
-
-        let content = disk::to_toml(self)?;
-
-        tokio::fs::write(&path, content)
-            .await
-            .with_context(|| format!("failed to write config file: {}", path.display()))?;
-
-        debug!(config_path = %path.display(), "saved tvc config");
-
-        Ok(())
-    }
-
     /// Get the active organization config, if any
     pub fn active_org_config(&self) -> Option<(&String, &OrgConfig)> {
         let alias = self.active_org.as_ref()?;
@@ -797,7 +764,8 @@ default = ["operator-123"]
         };
         assert_eq!(local.key_path, PathBuf::from("/keys/operator.json"));
 
-        config.save_to_path(&path).await.unwrap();
+        let mut session = ConfigSession::load(path.clone()).await.unwrap();
+        session.save().await.unwrap();
         let saved = tokio::fs::read_to_string(&path).await.unwrap();
         let actual = disk::from_toml(&saved).unwrap();
         let expected = disk::from_toml(MIGRATED_V1_CONFIG).unwrap();

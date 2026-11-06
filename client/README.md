@@ -72,3 +72,28 @@ The receipt APIs add `TurnkeyClientError::InvalidReceiptStamp` and
 callers that use only the ordinary methods. This change requires a breaking
 release, not a compatible patch release. The new stamper error variants have
 the same requirement. See [stamper release compatibility](../api_key_stamper/README.md#release-compatibility).
+
+### Generated proof schema source compatibility
+
+The request-bound proof schema adds a field and enum variants. These compiler
+fixtures preserve evidence that older exhaustive source forms require changes.
+
+```compile_fail
+use turnkey_client::generated::external::data::v1::{AppProofPayload, AppProofType};
+let old_literal = AppProofPayload {
+    r#type: AppProofType::AddressDerivation,
+    timestamp_ms: "100".into(),
+    proof_payload: None,
+};
+```
+
+```compile_fail
+use turnkey_client::generated::external::data::v1::AppProofType;
+fn old_match(kind: AppProofType) {
+    match kind {
+        AppProofType::Unspecified => (),
+        AppProofType::AddressDerivation => (),
+        AppProofType::PolicyOutcome => (),
+    }
+}
+```

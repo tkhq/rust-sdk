@@ -33,9 +33,16 @@ hex.workspace = true
 qos_core.workspace = true
 qos_nsm.workspace = true
 turnkey_client.workspace = true
+turnkey_enclave_encrypt.workspace = true
 turnkey_api_key_stamper.workspace = true
+tokio = { workspace = true, features = ["time"] }
+
+thiserror.workspace = true
 
 [dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+wiremock.workspace = true
+
 hex.workspace = true
 hex-literal.workspace = true
 rand.workspace = true

@@ -14,6 +14,36 @@ metadata:
 >
 > **Scope:** this skill covers driving the CLI programmatically, editing/maintaining an already-established TVC project, and carrying TVC knowledge into any repo (install once, invoke anywhere). First-time human onboarding (org setup, `tvc login`, dashboard key registration) is owned by the [TVC quickstart](https://docs.turnkey.com/features/verifiable-cloud/quickstart).
 
+## Hosted creation verification
+
+Hosted `operator create` and `keys create-quorum-key` require signed output
+claims bound to a request this invocation submitted. The CLI selects the
+production or preproduction Signer quorum key from the local API URL before
+creation. Other API environments fail as `provenance_unsupported_environment`.
+
+After completed creation, the CLI fetches each relevant Signer instance's boot
+proof by its ephemeral key. It verifies the quorum endorsement, AWS attestation,
+QOS manifest and live-key bindings, then authenticates the original claim bytes
+and checks the requested keys and receipt. Missing or invalid evidence saves
+nothing and emits no accepted-key success. Never retry creation to retry evidence.
+
+Quorum `--operator-ids` resolves hosted encryption keys from the active local
+registry in requested order. Each record requires recognized creation
+provenance. A legacy or unknown marker fails as `untrusted_recipient`; migration
+never grants trust. `--operator-encrypt-keys` is an explicit assertion that you
+independently checked those hosted recipient keys. It does not establish Signer
+origin or bypass server eligibility checks.
+
+Config commits reject stale snapshots as `config_conflict`. After remote
+creation, never recreate automatically. A proof failure provides only untrusted
+recovery labels. Invalid hosted response IDs fail as `malformed_response` with
+those labels and no saved record. Ambiguous submission failures also require
+investigation before retrying, even when classified as `network_error`.
+A verified save failure can provide a recovery record; inspect
+the config before restoring it, especially after `config_durability_uncertain`.
+See [the error reference](references/error-reference.md) and
+[config persistence](references/config-files.md#local-config-persistence).
+
 ## When to use
 
 Use this skill when driving the `tvc` CLI: building or shipping a TVC deployment, editing/maintaining an established TVC project, cutting traffic to a new version, checking runtime status, or scripting any of the above in CI or an agent loop. For first-time human onboarding (org setup, `tvc login`), point the user at the [TVC quickstart](https://docs.turnkey.com/features/verifiable-cloud/quickstart). For Turnkey wallet/signing/policy work over the HTTP API, use the other Turnkey skills instead, this one is CLI-only.
