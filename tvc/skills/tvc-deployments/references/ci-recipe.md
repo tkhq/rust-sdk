@@ -10,6 +10,7 @@ CI cannot create credentials or operators, and env-var auth alone carries no ope
 2. Create the app with that operator's key in the manifest set (`tvc app init` prefills it when the profile has exactly one operator; see [config-files.md](config-files.md)). Save `appId` from `app create`. Do this on the machine with the profile: under env-only auth, `app create` creates the app and then fails with `no active organization set`, and the printed ids are lost (recoverable only via `app list -n <name>`).
 3. Export the operator seed for CI: `tvc keys backup-operator-key -o operator-backup.json`, then copy the `private_key` value (64 hex chars) into a CI secret. Delete the backup file. This seed signs approvals on behalf of that operator; treat it like the API private key.
 4. Store as repository secrets: `TVC_ORG_ID`, `TVC_API_KEY_PUBLIC`, `TVC_API_KEY_PRIVATE`, `TVC_OPERATOR_SEED`. Store `TVC_APP_ID` as a variable.
+5. Decide how TVC will pull the image. The job below assumes a **public** package. GHCR packages are private by default, even in public repositories, and the runner's `docker login` authenticates only the runner, not TVC's pull. Either publish once and set the package visibility to public, or follow **Private registry** under Variations and keep the pull-secret file in a CI secret.
 
 Why a local seed and not a hosted operator: `deploy approve` resolves hosted and YubiKey operators from the login profile on disk. With env vars only, it fails with `No active organization. Run tvc login first or provide --operator-seed or --operator-seed-path.` The explicit seed path is the one that needs no profile. Restoring a full `~/.config/turnkey/` profile onto the runner also works, but is more state to protect.
 
@@ -120,7 +121,7 @@ jobs:
 
 ## Variations
 
-- **Private registry:** add `--pivot-pull-secret <file>` to `deploy create`; the CLI encrypts the file for the org's environment. Omit it for public images.
+- **Private registry:** add `--pivot-pull-secret <file>` to `deploy create`. The file is a Kubernetes-style Docker config, `{"auths": {"ghcr.io": {"username": "<user>", "password": "<token>"}}}`, with a read-only token scoped to that one package; the CLI encrypts it for the org's environment and only the ciphertext is sent (`hasPullSecret: true` in status output). Write the file from a CI secret at job time and never commit it. Encryption needs a `TVC_API_BASE_URL` the CLI recognizes (prod, preprod, or dev); a custom URL fails before any request. Omit the flag for public images.
 - **Reuse the previous config:** `tvc deploy init --from-deployment <OLD_ID> -o deploy.json` copies every field, including the old digest; override `--pivot-image-url` and `--expected-pivot-digest` on `deploy create`.
 - **Replica count:** `--replicas <n>` (or `replicas` in the config) overrides the backend default.
 - **Debug builds:** never in this pipeline. Debug mode needs an app created with `--dangerous-enable-debug-mode-deployments`, runs one replica, and marks the quorum key insecure; keep it on a separate dev app.
@@ -133,5 +134,6 @@ The `tvc` steps were run end to end against a TVC dev organization on 2026-11-04
 - `deploy approve` without a seed failed with `No active organization. Run tvc login first or provide --operator-seed or --operator-seed-path.`, as the recipe says. With `--operator-seed-path` it returned `manifest_approval_posted` with `quorumReached: true` and the operator id the manifest set assigned to that key, without `--operator-id`.
 - `get-status` returned HTTP 500 `api_error` for about 45 seconds after approval, then `isTargeted: true` with 1/3 replicas ready at about 50 seconds, 2/3 at about 2 minutes, and 3/3 at about 5.5 minutes. `set-live-deploy` was never needed, since the first deployment auto-targeted.
 - `publicDomain` from `app list` resolved and `/health` returned 200.
+- The image was an already-public package, so no pull secret was exercised.
 
 The image build step was not part of that run; it is the pattern from `tkhq/tvc-examples` and your toolchain will differ. The one-time setup also surfaced a CLI quirk: `app create` under env-only auth creates the app and then fails with `no active organization set`, losing the printed ids. That is why app creation is listed under human setup above, and why the recipe approves by seed rather than by `--operator-id`.
