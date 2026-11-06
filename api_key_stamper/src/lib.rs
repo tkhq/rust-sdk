@@ -4,6 +4,7 @@ use std::path::Path;
 
 use base64::Engine;
 use base64::prelude::BASE64_URL_SAFE_NO_PAD;
+#[cfg(feature = "secp256k1")]
 use k256::ecdsa::{
     Signature as K256Signature, SigningKey as K256SigningKey, VerifyingKey as K256VerifyingKey,
 };
@@ -177,11 +178,13 @@ impl Stamp for TurnkeyP256ApiKey {
 }
 
 /// Represents a Turnkey API key using the **secp256k1** curve.
+#[cfg(feature = "secp256k1")]
 #[derive(Debug, PartialEq)]
 pub struct TurnkeySecp256k1ApiKey {
     signing_key: K256SigningKey,
 }
 
+#[cfg(feature = "secp256k1")]
 impl TurnkeySecp256k1ApiKey {
     /// Generates a new Secp256k1 API key.
     pub fn generate() -> Self {
@@ -250,6 +253,7 @@ impl TurnkeySecp256k1ApiKey {
     }
 }
 
+#[cfg(feature = "secp256k1")]
 impl Stamp for TurnkeySecp256k1ApiKey {
     fn stamp(&self, body: &[u8]) -> Result<StampHeader, StamperError> {
         let sig: K256Signature = self.signing_key.sign(body);
@@ -272,6 +276,7 @@ mod tests {
     use std::io::Write;
 
     use super::*;
+    #[cfg(feature = "secp256k1")]
     use k256::ecdsa::{Signature as K256Signature, VerifyingKey as K256VerifyingKey};
     use serde_json::Value;
     use tempfile::NamedTempFile;
@@ -320,6 +325,7 @@ mod tests {
         assert!(verifying_key.verify(body, &sig).is_ok());
     }
 
+    #[cfg(feature = "secp256k1")]
     #[test]
     fn test_secp256k1_generate_and_stamp() {
         let key = super::TurnkeySecp256k1ApiKey::generate();
@@ -337,6 +343,7 @@ mod tests {
         assert!(vk.verify(b"hello", &sig).is_ok());
     }
 
+    #[cfg(feature = "secp256k1")]
     #[test]
     fn test_secp256k1_from_bytes_with_incorrect_public_key() {
         let k1 = TurnkeySecp256k1ApiKey::generate();
@@ -350,6 +357,7 @@ mod tests {
         assert!(matches!(res, Err(StamperError::PublicKeyMismatch(_, _))));
     }
 
+    #[cfg(feature = "secp256k1")]
     #[test]
     fn test_secp256k1_from_bytes_with_correct_public_key() {
         let k = TurnkeySecp256k1ApiKey::generate();
@@ -363,6 +371,7 @@ mod tests {
         assert_eq!(rebuilt.compressed_public_key(), k.compressed_public_key());
     }
 
+    #[cfg(feature = "secp256k1")]
     #[test]
     fn test_secp256k1_from_bytes_with_bad_private_key_bytes() {
         // Wrong length (31 bytes) should fail key construction
@@ -370,6 +379,7 @@ mod tests {
         assert!(matches!(res, Err(StamperError::InvalidPrivateKeyBytes(_))));
     }
 
+    #[cfg(feature = "secp256k1")]
     #[test]
     fn test_secp256k1_from_bytes_with_bad_public_key_bytes() {
         let k = TurnkeySecp256k1ApiKey::generate();
@@ -381,6 +391,7 @@ mod tests {
         assert!(matches!(res, Err(StamperError::InvalidPublicKeyBytes(_))));
     }
 
+    #[cfg(feature = "secp256k1")]
     #[test]
     fn test_secp256k1_from_strings_with_correct_public_key() {
         let k = TurnkeySecp256k1ApiKey::generate();
@@ -400,6 +411,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "secp256k1")]
     #[test]
     fn test_secp256k1_from_strings_with_bad_hex() {
         // Bad private key hex
@@ -418,12 +430,14 @@ mod tests {
         ));
     }
 
+    #[cfg(feature = "secp256k1")]
     #[test]
     fn test_secp256k1_compressed_pub_len_is_33() {
         let k = TurnkeySecp256k1ApiKey::generate();
         assert_eq!(k.compressed_public_key().len(), 33);
     }
 
+    #[cfg(feature = "secp256k1")]
     #[test]
     fn test_secp256k1_trait_stamp_header_round_trip_and_verify() {
         let key = TurnkeySecp256k1ApiKey::generate();

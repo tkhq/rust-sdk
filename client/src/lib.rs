@@ -74,7 +74,9 @@ pub struct ActivityResult<T> {
 }
 
 // Re-export this for convenience
-pub use turnkey_api_key_stamper::{TurnkeyP256ApiKey, TurnkeySecp256k1ApiKey};
+pub use turnkey_api_key_stamper::TurnkeyP256ApiKey;
+#[cfg(feature = "secp256k1")]
+pub use turnkey_api_key_stamper::TurnkeySecp256k1ApiKey;
 
 pub mod generated;
 
@@ -689,6 +691,7 @@ mod test {
         (client, server)
     }
 
+    #[cfg(feature = "secp256k1")]
     async fn setup_secp256k1_client_and_server()
     -> (TurnkeyClient<TurnkeySecp256k1ApiKey>, MockServer) {
         let server = MockServer::start().await;
@@ -1519,6 +1522,7 @@ mod test {
             }
         }
 
+        #[cfg(feature = "secp256k1")]
         #[tokio::test]
         async fn test_secp256k1_stamping_sends_correct_scheme() {
             use base64::prelude::{BASE64_URL_SAFE_NO_PAD, Engine as _};
@@ -1587,6 +1591,7 @@ mod test {
                 .unwrap();
         }
 
+        #[cfg(feature = "secp256k1")]
         #[tokio::test]
         async fn test_secp256k1_retry_then_success() {
             let (client, server) = super::setup_secp256k1_client_and_server().await;
@@ -1612,6 +1617,7 @@ mod test {
             assert_eq!(result.unwrap().id, "retried-activity-id");
         }
 
+        #[cfg(feature = "secp256k1")]
         #[tokio::test]
         async fn test_secp256k1_raw_http_error() {
             let (client, server) = super::setup_secp256k1_client_and_server().await;

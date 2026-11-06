@@ -12,6 +12,7 @@ use p256::{
     ecdsa::{DerSignature, SigningKey, VerifyingKey, signature::Verifier},
 };
 use rand_core::OsRng;
+use rand_core_0_9::UnwrapErr;
 use std::str::from_utf8;
 
 /// Expected length (in bytes) for imported private keys
@@ -327,7 +328,8 @@ impl EnclaveEncryptClient {
     /// Create a client from the quorum public key.
     #[must_use]
     pub fn from_enclave_auth_key(enclave_auth_key: VerifyingKey) -> Self {
-        let (target_private, target_public) = Kem::gen_keypair(&mut OsRng);
+        let (target_private, target_public) =
+            Kem::gen_keypair(&mut UnwrapErr(rand_core_0_9::OsRng));
         Self {
             enclave_auth_key,
             target_public: Some(target_public),

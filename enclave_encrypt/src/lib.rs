@@ -10,7 +10,7 @@ use std::ops::Deref;
 
 use hpke::{Kem as KemTrait, OpModeR, OpModeS, Serializable};
 use p256::elliptic_curve::sec1::ToEncodedPoint;
-use rand_core::OsRng;
+use rand_core_0_9::{OsRng, UnwrapErr};
 
 pub mod client;
 pub mod errors;
@@ -227,7 +227,7 @@ fn encrypt(
         &OpModeS::Base,
         receiver_public,
         info_string,
-        &mut OsRng,
+        &mut UnwrapErr(OsRng),
     )
     .map_err(|_| EnclaveEncryptError::FailedToSetupSendCtx)?;
 
@@ -277,7 +277,8 @@ fn additional_associated_data(
 mod tests {
     use crate::{
         client::EnclaveEncryptClient, client::ReusableEnclaveEncryptClientSend,
-        server::EnclaveEncryptServer, server::ReusableEnclaveEncryptServerRecv,
+        server::EnclaveEncryptServer, server::EnclaveEncryptServerRecv,
+        server::ReusableEnclaveEncryptServerRecv,
     };
     use p256::ecdsa::{Signature, SigningKey, VerifyingKey, signature::Signer};
     use qos_p256::P256Pair;
@@ -353,7 +354,7 @@ mod tests {
         // Persist server receiving side
         let mut server_recv = server.into_recv();
 
-        let (target_private, target_public) = Kem::gen_keypair(&mut OsRng);
+        let (target_private, target_public) = Kem::gen_keypair(&mut UnwrapErr(OsRng));
         let client = EnclaveEncryptClient::from_enclave_auth_key_and_target_key(
             quorum_pub(),
             target_public,
@@ -410,7 +411,7 @@ mod tests {
         let client_target = client.target().unwrap();
 
         let organization_id = "b676ee7c-7eb4-47f1-8e1c-ff0e68e376cd";
-        let (target_private, target_public) = Kem::gen_keypair(&mut OsRng);
+        let (target_private, target_public) = Kem::gen_keypair(&mut UnwrapErr(OsRng));
         let server = EnclaveEncryptServer::from_enclave_auth_key_and_target_key(
             quorum_priv(),
             target_public,
@@ -547,5 +548,30 @@ mod tests {
         assert_eq!(server.decrypt(&client_msg).unwrap(), plaintext);
 
         assert_eq!(client.quorum_public_key(), &quorum_public_key_clone);
+    }
+
+    #[test]
+    fn server_recv_serde_matches_hpke_0_10_format() {
+        let expected = r#"{"target_private":[101,214,43,200,195,248,161,91,187,162,99,88,141,192,218,0,68,170,96,230,64,88,208,244,165,131,215,233,88,165,68,10],"target_public":[4,115,142,10,7,121,35,186,232,109,1,38,106,97,21,93,209,133,32,27,170,88,144,234,145,119,118,2,36,7,208,174,18,158,198,255,130,165,105,125,156,169,118,205,244,215,11,128,186,120,250,35,57,189,255,22,221,5,175,37,187,181,98,141,252]}"#;
+        let (target_private, target_public) = Kem::derive_keypair(&[7; 32]);
+        let server = EnclaveEncryptServer::from_enclave_auth_key_and_target_key(
+            quorum_priv(),
+            target_public,
+            target_private,
+            "org".to_string(),
+            Some("user".to_string()),
+        );
+        let server_target_bytes = serde_json::to_vec(&server.publish_target().unwrap()).unwrap();
+        assert_eq!(
+            serde_json::to_string(&server.into_recv()).unwrap(),
+            expected
+        );
+
+        let client = EnclaveEncryptClient::from_enclave_auth_key(quorum_pub());
+        let client_msg = client
+            .encrypt(b"persisted", &server_target_bytes, "org", "user")
+            .unwrap();
+        let mut restored: EnclaveEncryptServerRecv = serde_json::from_str(expected).unwrap();
+        assert_eq!(restored.decrypt(&client_msg).unwrap(), b"persisted");
     }
 }
