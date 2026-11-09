@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.17.2](https://github.com/tkhq/rust-sdk/compare/tvc-v0.17.1...tvc-v0.17.2) - 2026-11-09
+
+### Added
+
+- *(tvc)* add user, org, and expiry binding to deployment pull secrets
+
+### Other
+
+- *(tvc)* followup improvements for pull secret binding
+- Merge pull request #318 from tkhq/annie/bind-pull-secrets-to-org
+
 ## [0.17.1](https://github.com/tkhq/rust-sdk/compare/tvc-v0.17.0...tvc-v0.17.1) - 2026-10-30
 
 ### Fixed
