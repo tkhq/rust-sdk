@@ -1,9 +1,10 @@
 //! Create a hosted quorum key from operator encryption public keys.
 
+use crate::terminal::TerminalText;
 use crate::{
     client::build_client,
     config::turnkey::Config,
-    operator::{OperatorPublicKey, ensure_authenticated_org, hosted_activity_error},
+    operator::{OperatorPublicKey, ensure_authenticated_org, hosted_creation_error},
     outcome::Outcome,
     output::StdCtx,
 };
@@ -17,10 +18,9 @@ use std::{
 };
 use tracing::instrument;
 use turnkey_client::generated::{CreateTvcQuorumKeyIntent, CreateTvcQuorumKeyResult};
+use turnkey_proofs::tvc::{QuorumExpectation, TvcProvenance};
 use uuid::Uuid;
 
-// `qos_crypto::shamir::shares_generate` supports at most 255 shares. Hosted
-// quorum generation keeps the operator key count strictly below that bound.
 const MAX_OPERATOR_ENCRYPT_KEY_COUNT_EXCLUSIVE: usize = 255;
 
 fn threshold_parser() -> RangedU64ValueParser<u8> {
@@ -80,9 +80,13 @@ impl Display for QuorumKeyCreated {
         write!(
             f,
             "Quorum Key ID: {}\nQuorum Public Key: {}\nShare IDs: {}",
-            self.quorum_key_id,
+            TerminalText(&self.quorum_key_id).single_line(),
             self.quorum_public_key,
-            self.share_ids.join(", ")
+            self.share_ids
+                .iter()
+                .map(|id| TerminalText(id).single_line())
+                .collect::<Vec<_>>()
+                .join(", ")
         )
     }
 }
@@ -123,9 +127,11 @@ pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcom
         resolve_operator_encrypt_keys(&config, operator_source)?;
     let operator_encrypt_keys = normalize_operator_encrypt_keys(operator_encrypt_keys)?;
 
+    let recipients = operator_encrypt_keys.clone();
     let intent = build_create_tvc_quorum_key_intent(threshold, operator_encrypt_keys);
     let expected_share_count = intent.operator_encrypt_keys.len();
-    let auth = build_client(&config).await?;
+    let mut auth = build_client(&config).await?;
+    let verifier = TvcProvenance::for_api_url(&auth.api_base_url)?;
     if let Some(configured_org_id) = configured_org_id {
         ensure_authenticated_org(&auth.org_id, &configured_org_id)?;
     }
@@ -134,12 +140,28 @@ pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcom
         .context("system time before unix epoch")?
         .as_millis();
 
+    let expected = QuorumExpectation::parse(auth.org_id.clone(), u32::from(threshold), recipients)?;
+    auth.client = auth.client.with_app_proofs();
     let result = auth
         .client
-        .create_tvc_quorum_key(auth.org_id, timestamp_ms, intent)
+        .create_tvc_quorum_key_with_receipt(auth.org_id, timestamp_ms, intent)
         .await
-        .map_err(|error| hosted_activity_error("create hosted TVC quorum key", error))?;
-    let output = validate_result(result.result, expected_share_count)?;
+        .map_err(|error| hosted_creation_error("create hosted TVC quorum key", error))?;
+    let quorum_label = TerminalText(&result.activity_result().result.quorum_key_id).single_line();
+    let (_, receipt) = result.into_parts();
+    let activity_label = TerminalText(&receipt.activity().id).single_line();
+    let accepted = verifier.accept_quorum(&auth.client, &expected, receipt).await.with_context(|| format!(
+        "remote creation may have succeeded; untrusted activity label {activity_label}, quorum label {quorum_label}; proof acceptance failed; do not retry creation blindly"
+    ))?;
+    let (quorum_key_id, quorum_public_key, share_ids) = accepted.into_parts();
+    let output = validate_result(
+        CreateTvcQuorumKeyResult {
+            quorum_key_id,
+            quorum_public_key,
+            share_ids,
+        },
+        expected_share_count,
+    )?;
 
     Ok(Outcome::QuorumKeyCreated(output))
 }

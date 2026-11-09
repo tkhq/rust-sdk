@@ -14,7 +14,7 @@ metadata:
 
 ## Hosted creation verification
 
-Hosted `operator create` requests app proofs and
+Hosted `operator create` and `keys create-quorum-key` request app proofs and
 verify returned keys against the submitted request before saving or returning
 success. The supported API environments are production, preproduction and
 development, each with its own pinned Signer quorum key.

@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Breaking:** hosted operator creation now requires request-bound
+- **Breaking:** hosted operator and quorum creation now require request-bound
   authenticated claims and a Signer quorum-endorsed AWS boot proof. Production, preproduction
   and development pins are selected before creation. Unsupported local API
   environments reject before submission.
