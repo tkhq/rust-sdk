@@ -399,6 +399,12 @@
         },
         {
           "type": "regex",
+          "value": "local key file|local operator|64 hex|backup-operator-key",
+          "flags": "i",
+          "comment": "skill-specific: the seed comes from a local key file operator exported with keys backup-operator-key; the error message alone does not say which operator type works in CI or where the seed comes from"
+        },
+        {
+          "type": "regex",
           "value": "secret",
           "flags": "i",
           "comment": "must treat the seed as a secret"
