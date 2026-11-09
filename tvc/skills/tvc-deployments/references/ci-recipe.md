@@ -1,6 +1,6 @@
 # CI recipe: ship a deployment unattended
 
-A GitHub Actions job that builds the image, pins both digests, creates and approves a deployment, waits for it to serve, and switches traffic when needed. Everything runs with `--message-format json` and env-var auth. Adapt the build step to your toolchain; the `tvc` steps are the contract.
+A GitHub Actions job that builds the image, pins both digests, creates and approves a deployment, waits for it to serve, and switches traffic when needed. Everything runs with `--message-format json` and env-var auth. Adapt the build step to your toolchain; the `tvc` steps are the contract. When handing someone a job built from this recipe, write every step out in full, including the poll loop: the reader cannot see this file, so a pointer to it is not a runnable job.
 
 ## One-time human setup (not in CI)
 
