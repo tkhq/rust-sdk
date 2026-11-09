@@ -232,9 +232,7 @@ impl Commands {
 
         let config = if !path.exists() {
             debug!(config_path = %path.display(), "tvc config not found; using defaults");
-            let config = Config::default();
-            config.save().await?;
-            config
+            Config::default()
         } else {
             let content = tokio::fs::read_to_string(&path)
                 .await

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+
+- **Breaking:** hosted operator creation now requires request-bound
+  authenticated claims and a Signer quorum-endorsed AWS boot proof. Production, preproduction
+  and development pins are selected before creation. Unsupported local API
+  environments reject before submission.
+
 ## [0.18.0](https://github.com/tkhq/rust-sdk/compare/tvc-v0.17.2...tvc-v0.18.0) - 2026-11-11
 
 ### Added

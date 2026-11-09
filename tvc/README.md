@@ -2,6 +2,12 @@
 
 CLI for [Turnkey Verifiable Cloud](https://turnkey.com) - see [this guide](https://docs.turnkey.com/getting-started/verifiable-cloud-quickstart) for example usage.
 
+Hosted operator creation verifies request-bound signed output under the
+independently pinned Signer quorum key before accepting keys. Supported API
+environments are production, preproduction and development. Missing or invalid boot and app
+evidence rejects creation output without saving keys. See the
+[embedded CLI skill](skills/tvc-deployments/SKILL.md) for usage and recovery guidance.
+
 ## Installation
 
 ```bash

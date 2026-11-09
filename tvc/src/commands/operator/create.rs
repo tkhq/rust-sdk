@@ -5,16 +5,17 @@ use crate::{
     client::build_client,
     commands::Run,
     config::turnkey::{
-        Config, OperatorKind, OperatorRecord, OperatorRecordKind, QosOperatorPublicKey,
-        YubiKeyOperatorRecord, YubiKeySerial,
+        Config, HostedOperatorRecord, OperatorKind, OperatorRecord, OperatorRecordKind,
+        QosOperatorPublicKey, YubiKeyOperatorRecord, YubiKeySerial,
     },
     operator::{
-        DEFAULT_HOSTED_OPERATOR_BASE_PATH, ensure_authenticated_org,
-        hosted::CreateOperatorRequestResult, hosted_activity_error, timestamp_ms,
+        DEFAULT_HOSTED_OPERATOR_BASE_PATH, ensure_authenticated_org, hosted_creation_error,
+        timestamp_ms,
     },
     outcome::Outcome,
     output::StdCtx,
     prompts,
+    terminal::TerminalText,
 };
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use clap::{ArgGroup, Args as ClapArgs, ValueEnum, builder::NonEmptyStringValueParser};
@@ -22,6 +23,7 @@ use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
 use tracing::instrument;
 use turnkey_client::generated::CreateTvcOperatorIntent;
+use turnkey_proofs::tvc::{OperatorExpectation, RolePublicKey, TvcProvenance};
 use uuid::Uuid;
 
 const DEFAULT_OPERATOR_NAME: &str = "tvc-operator";
@@ -186,12 +188,13 @@ impl Run for Args {
     async fn run(self, ctx: &mut StdCtx, mut config: Config) -> Result<CreateOutcome> {
         match CreatePlan::try_from(self)? {
             CreatePlan::Hosted { spec, make_default } => {
+                let mut auth = build_client(&config).await?;
+                let verifier = TvcProvenance::for_api_url(&auth.api_base_url)?;
                 let (alias, configured_org_id) = config
                     .active_org_config()
                     .map(|(alias, org)| (alias.clone(), org.id.as_str()))
                     .context("No active organization. Run `tvc login` first.")?;
 
-                let auth = build_client(&config).await?;
                 ensure_authenticated_org(&auth.org_id, configured_org_id)?;
 
                 let HostedOperatorSpec { name, wallet, path } = spec;
@@ -201,79 +204,44 @@ impl Run for Args {
                     HostedOperatorWallet::Existing(id) => (None, Some(id.to_string())),
                 };
 
+                let expected = OperatorExpectation::parse(
+                    auth.org_id.clone(),
+                    wallet_id.clone(),
+                    path.clone(),
+                )?;
                 let intent = CreateTvcOperatorIntent {
                     wallet_name,
                     wallet_id,
-                    path: path.clone(),
+                    path,
                     operator_name: name.clone(),
                 };
-
-                let result = auth
+                auth.client = auth.client.with_app_proofs();
+                let submitted = auth
                     .client
-                    .create_tvc_operator(auth.org_id.clone(), timestamp_ms()?, intent)
+                    .create_tvc_operator_with_receipt(auth.org_id.clone(), timestamp_ms()?, intent)
                     .await
-                    .map_err(|error| hosted_activity_error("create hosted TVC operator", error))?;
-
-                let result = CreateOperatorRequestResult {
-                    name,
-                    path,
-                    result: result.result,
-                };
-
-                let record = OperatorRecord::try_from(result)?;
-
-                let org = config.orgs.get_mut(&alias).with_context(|| {
-                    format!("active organization '{alias}' disappeared from config")
-                })?;
-                org.operators.push(record.clone());
-
-                if make_default {
-                    org.default_operator_kind = OperatorKind::Hosted;
-                }
-
-                let OperatorRecord { name, kind } = record;
-                let OperatorRecordKind::Hosted(hosted) = kind else {
-                    return Err(anyhow!("hosted operator creation returned a local record"));
-                };
-
-                if let Err(save_error) = config.save().await {
-                    let record = config
-                        .orgs
-                        .get(&alias)
-                        .and_then(|org| org.operators.last())
-                        .with_context(|| {
-                            format!(
-                                "hosted operator disappeared from active organization '{alias}'"
-                            )
-                        })?;
-                    let recovery = recovery_toml(&alias, record)?;
-                    let default_note = if make_default {
-                        "\n\nAlso set default_operator_kind = \"hosted\" in the organization's table."
-                    } else {
-                        ""
-                    };
-
-                    return Err(anyhow!(
-                        r#"hosted operator {} was created remotely, but saving the local config failed: {save_error}
-Do not retry creation blindly; doing so would create another remote operator. Restore this record under the active organization in tvc.config.toml:
-
-{recovery}{default_note}"#,
-                        hosted.operator_id
-                    ));
-                }
-
-                Ok(CreateOutcome::Hosted(OperatorCreated {
-                    name,
-                    composite_public_key: format!(
-                        "{}{}",
-                        hosted.encrypt_public_key, hosted.sign_public_key
-                    ),
-                    operator_id: hosted.operator_id,
-                    wallet_id: hosted.wallet_id,
-                    encrypt_public_key: hosted.encrypt_public_key,
-                    sign_public_key: hosted.sign_public_key,
-                    saved: true,
-                }))
+                    .map_err(|error| hosted_creation_error("create hosted TVC operator", error))?;
+                let wallet_label = submitted.activity_result().result.wallet_id.clone();
+                let (_, receipt) = submitted.into_parts();
+                let activity_label = receipt.activity().id.clone();
+                let accepted = verifier
+                    .accept_operator(&auth.client, &expected, receipt)
+                    .await
+                    .context("proof acceptance failed, no keys were saved")
+                    .map_err(|error| {
+                        hosted_operator_creation_error(&activity_label, &wallet_label, error)
+                    })?;
+                Ok(CreateOutcome::Hosted(
+                    save_hosted_operator(
+                        config,
+                        &alias,
+                        name,
+                        make_default,
+                        &activity_label,
+                        accepted.into_parts(),
+                    )
+                    .await?,
+                ))
             }
             CreatePlan::Yubikey {
                 name,
@@ -364,6 +332,104 @@ Do not retry creation blindly; doing so would create another remote operator. Re
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+#[error("{field} must be a UUID")]
+pub(crate) struct MalformedHostedOperatorResponse {
+    field: &'static str,
+    #[source]
+    source: uuid::Error,
+}
+
+fn hosted_operator_creation_error(
+    activity_id: &str,
+    wallet_id: &str,
+    error: anyhow::Error,
+) -> anyhow::Error {
+    error.context(format!(
+        "remote creation may have succeeded; untrusted activity label {}, wallet label {}; do not retry creation blindly",
+        TerminalText(activity_id).single_line(),
+        TerminalText(wallet_id).single_line(),
+    ))
+}
+
+async fn save_hosted_operator(
+    mut config: Config,
+    alias: &str,
+    name: String,
+    make_default: bool,
+    activity_id: &str,
+    (wallet_id, path, encrypt, sign, operator_id): (
+        String,
+        String,
+        RolePublicKey,
+        RolePublicKey,
+        String,
+    ),
+) -> Result<OperatorCreated> {
+    async {
+        let hosted = HostedOperatorRecord {
+            wallet_id: Uuid::parse_str(&wallet_id).map_err(|source| MalformedHostedOperatorResponse {
+                field: "accepted wallet ID",
+                source,
+            })?,
+            operator_id: Uuid::parse_str(&operator_id).map_err(|source| MalformedHostedOperatorResponse {
+                field: "unsigned operator routing label",
+                source,
+            })?,
+            path,
+            encrypt_public_key: encrypt.to_string(),
+            sign_public_key: sign.to_string(),
+            extra: toml::Table::new(),
+        };
+
+        let record = OperatorRecord {
+            name: name.clone(),
+            kind: OperatorRecordKind::Hosted(hosted.clone()),
+        };
+        let org = config.orgs.get_mut(alias).with_context(|| {
+            format!("active organization '{}' disappeared from config", TerminalText(alias).single_line())
+        })?;
+        org.operators.push(record.clone());
+
+        if make_default {
+            org.default_operator_kind = OperatorKind::Hosted;
+        }
+
+        let recovery = recovery_toml(alias, &record)?;
+        if let Err(save_error) = config.save().await {
+            let default_note = if make_default {
+                r#"
+
+Also set default_operator_kind = "hosted" in the organization's table."#
+            } else {
+                ""
+            };
+            return Err(save_error.context(format!(
+                r#"accepted hosted operator {} was created remotely, but saving the local config failed.
+Do not retry creation blindly. Restore this verified record under the active organization in tvc.config.toml:
+
+{recovery}{default_note}"#,
+                hosted.operator_id
+            )));
+        }
+
+        Ok(OperatorCreated {
+            name,
+            composite_public_key: format!(
+                "{}{}",
+                hosted.encrypt_public_key, hosted.sign_public_key
+            ),
+            operator_id: hosted.operator_id,
+            wallet_id: hosted.wallet_id,
+            encrypt_public_key: hosted.encrypt_public_key,
+            sign_public_key: hosted.sign_public_key,
+            saved: true,
+        })
+    }
+    .await
+    .map_err(|error| hosted_operator_creation_error(activity_id, &wallet_id, error))
+}
+
 /// A resolved YubiKey create using an existing local registry entry.
 struct YubikeyCreate {
     record: OperatorRecord,
@@ -435,7 +501,7 @@ Encryption public key: {}
 Signing public key: {}
 Composite public key: {}
 Saved: true"#,
-            self.name,
+            TerminalText(&self.name).single_line(),
             self.operator_id,
             self.wallet_id,
             self.encrypt_public_key,
@@ -479,7 +545,9 @@ impl Display for YubikeyOperatorAdded {
 Operator name:       {}
 Serial:              {}
 Operator public key: {}{default_note}"#,
-            self.name, self.serial, self.operator_public_key
+            TerminalText(&self.name).single_line(),
+            self.serial,
+            self.operator_public_key
         )
     }
 }
@@ -534,6 +602,35 @@ mod tests {
                 extra: toml::Table::new(),
             }),
         }
+    }
+
+    #[test]
+    fn malformed_routing_labels_preserve_classification_and_recovery_context() {
+        let activity = "activity\n\x1b[2J";
+        let wallet = "wallet\r\n\x1b[2J";
+        let error = hosted_operator_creation_error(
+            activity,
+            wallet,
+            MalformedHostedOperatorResponse {
+                field: "unsigned operator routing label",
+                source: Uuid::parse_str("not-a-uuid").unwrap_err(),
+            }
+            .into(),
+        );
+
+        assert_eq!(
+            serde_json::to_value(crate::errors::classify(&error).code).unwrap(),
+            serde_json::json!("malformed_response")
+        );
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "remote creation may have succeeded; untrusted activity label {}, wallet label {}; do not retry creation blindly",
+                TerminalText(activity).single_line(),
+                TerminalText(wallet).single_line(),
+            )
+        );
+        assert!(error.chain().any(|cause| cause.is::<uuid::Error>()));
     }
 
     #[test]

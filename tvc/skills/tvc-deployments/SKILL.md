@@ -12,6 +12,19 @@ metadata:
 
 > **This skill drives the `tvc` CLI, not the HTTP API.** Everything here runs `tvc <command> --message-format json` and reads NDJSON from stdout. Auth uses `TVC_*` env vars, not the `TURNKEY_API_*` set the HTTP-API skills use. Do not mix the two.
 
+## Hosted creation verification
+
+Hosted `operator create` requests app proofs and
+verify returned keys against the submitted request before saving or returning
+success. The supported API environments are production, preproduction and
+development, each with its own pinned Signer quorum key.
+
+Missing or invalid proof evidence fails as `proof_verification_failed`.
+Unsupported API environments fail before submission. After submission, remote
+creation may already have succeeded even when verification fails. Investigate
+before repeating creation; the CLI does not recreate keys to retry verification.
+See [the error reference](references/error-reference.md).
+
 ## When to use
 
 Driving the `tvc` CLI: shipping a TVC deployment, maintaining an established TVC project, cutting traffic to a new version, checking runtime status, or scripting any of that in CI or an agent loop. First-time human onboarding (org setup, `tvc login`, dashboard key registration) belongs to the [TVC quickstart](https://docs.turnkey.com/features/verifiable-cloud/quickstart). Wallet, signing, and policy work over the HTTP API belongs to the other Turnkey skills.
