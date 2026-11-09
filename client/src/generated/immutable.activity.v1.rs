@@ -178,8 +178,8 @@ pub mod intent {
         CreateSwapQuoteIntent(super::CreateSwapQuoteIntent),
         ImportSecretsIntent(super::ImportSecretsIntent),
         ExportSecretsIntent(super::ExportSecretsIntent),
-        CreateVelocityControlIntent(super::CreateVelocityControlIntent),
-        DeleteVelocityControlsIntent(super::DeleteVelocityControlsIntent),
+        CreateUsageControlIntent(super::CreateUsageControlIntent),
+        DeleteUsageControlsIntent(super::DeleteUsageControlsIntent),
         UpdatePaymentMethodIntent(super::super::billing::UpdatePaymentMethodIntent),
         CreateSwapQuoteIntentV2(super::CreateSwapQuoteIntentV2),
         ExecuteSwapIntentV3(super::ExecuteSwapIntentV3),
@@ -199,6 +199,13 @@ pub mod intent {
         ExecuteSwapIntentV4(super::ExecuteSwapIntentV4),
         CreateWalletAuthenticatorsIntent(super::CreateWalletAuthenticatorsIntent),
         DeleteWalletAuthenticatorsIntent(super::DeleteWalletAuthenticatorsIntent),
+        EnableSmsForCountriesIntent(super::EnableSmsForCountriesIntent),
+        DisableSmsForCountriesIntent(super::DisableSmsForCountriesIntent),
+        CreateFiatRampCredentialIntent(super::CreateFiatRampCredentialIntent),
+        UpdateFiatRampCredentialIntent(super::UpdateFiatRampCredentialIntent),
+        CreateExternalSignerIntentV1(super::CreateExternalSignerIntentV1),
+        DeleteExternalSignerIntentV1(super::DeleteExternalSignerIntentV1),
+        MintJwtIntent(super::MintJwtIntent),
     }
 }
 #[derive(Debug)]
@@ -2363,6 +2370,7 @@ pub struct EmailAuthIntentV3 {
     pub reply_to_email_address: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
+/// Deprecated: use CreateFiatOnRampSessionIntent with a quote from GetFiatOnRampQuotes.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -2580,6 +2588,7 @@ pub struct EthSendRawTransactionIntent {
     pub caip2: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
+/// Deprecated: use CreateFiatRampCredentialIntent.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -2606,6 +2615,22 @@ pub struct CreateFiatOnRampCredentialIntent {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct CreateFiatRampCredentialIntent {
+    /// @inject_tag: validate:"required"
+    pub provider: super::super::common::v1::FiatRampProvider,
+    /// @inject_tag: validate:"required"
+    pub api_key: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub encrypted_secret: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"omitempty"
+    #[serde(default)]
+    pub sandbox_mode: bool,
+}
+#[derive(Debug)]
+/// Deprecated: use UpdateFiatRampCredentialIntent.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct UpdateFiatOnRampCredentialIntent {
     /// @inject_tag: validate:"required"
     pub fiat_onramp_credential_id: ::prost::alloc::string::String,
@@ -2623,6 +2648,20 @@ pub struct UpdateFiatOnRampCredentialIntent {
     pub encrypted_private_api_key: ::core::option::Option<
         ::prost::alloc::string::String,
     >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct UpdateFiatRampCredentialIntent {
+    /// @inject_tag: validate:"required"
+    pub credential_id: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub provider: super::super::common::v1::FiatRampProvider,
+    /// @inject_tag: validate:"required"
+    pub api_key: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub encrypted_secret: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -3006,8 +3045,8 @@ pub mod result {
         CreateSwapQuoteResult(super::CreateSwapQuoteResult),
         ImportSecretsResult(super::ImportSecretsResult),
         ExportSecretsResult(super::ExportSecretsResult),
-        CreateVelocityControlResult(super::CreateVelocityControlResult),
-        DeleteVelocityControlsResult(super::DeleteVelocityControlsResult),
+        CreateUsageControlResult(super::CreateUsageControlResult),
+        DeleteUsageControlsResult(super::DeleteUsageControlsResult),
         UpdatePaymentMethodResult(super::super::billing::UpdatePaymentMethodResult),
         DeleteSecretsResult(super::DeleteSecretsResult),
         EarnClaimRewardsResult(super::EarnClaimRewardsResult),
@@ -3024,6 +3063,13 @@ pub mod result {
         CreateFiatOffRampSessionResult(super::CreateFiatOffRampSessionResult),
         CreateWalletAuthenticatorsResult(super::CreateWalletAuthenticatorsResult),
         DeleteWalletAuthenticatorsResult(super::DeleteWalletAuthenticatorsResult),
+        EnableSmsForCountriesResult(super::EnableSmsForCountriesResult),
+        DisableSmsForCountriesResult(super::DisableSmsForCountriesResult),
+        CreateFiatRampCredentialResult(super::CreateFiatRampCredentialResult),
+        UpdateFiatRampCredentialResult(super::UpdateFiatRampCredentialResult),
+        CreateExternalSignerResultV1(super::CreateExternalSignerResultV1),
+        DeleteExternalSignerResultV1(super::DeleteExternalSignerResultV1),
+        MintJwtResult(super::MintJwtResult),
     }
 }
 #[derive(Debug)]
@@ -3286,6 +3332,63 @@ pub struct CreateFiatOffRampSessionResult {
     pub off_ramp_transaction_id: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct MintJwtIntent {
+    /// @inject_tag: validate:"required"
+    pub profile: super::super::common::v1::JwtProfile,
+    /// @inject_tag: validate:"required,max=256,startswith=<https://">
+    pub audience: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub profile_inputs: ::core::option::Option<mint_jwt_intent::ProfileInputs>,
+}
+/// Nested message and enum types in `MintJwtIntent`.
+pub mod mint_jwt_intent {
+    #[derive(::serde::Serialize, ::serde::Deserialize)]
+    #[derive(Clone, PartialEq)]
+    #[derive(Debug)]
+    pub enum ProfileInputs {
+        #[serde(rename = "PROFILE_INPUTS_HTTP_AUTHZ_V1")]
+        HttpAuthzV1(super::HttpAuthzV1Inputs),
+    }
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct HttpAuthzV1Inputs {
+    /// @inject_tag: validate:"required,oneof=GET HEAD POST PUT PATCH DELETE"
+    pub method: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required,max=2048,startswith=/"
+    pub path: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"max=2048"
+    pub query: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"max=32,unique,dive,required,max=64,lowercase"
+    #[serde(default)]
+    pub header_names: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    /// @inject_tag: validate:"max=32,dive,len=54,startswith=sha-256=:,endswith=:"
+    #[serde(default)]
+    pub header_digest: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    /// @inject_tag: validate:"required,len=54,startswith=sha-256=:,endswith=:"
+    pub body_digest: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required,uuid"
+    pub subject: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required,number,max=3"
+    pub time_to_live_seconds: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required,number,max=20"
+    pub issued_at: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct MintJwtResult {
+    pub jwt: ::prost::alloc::string::String,
+    pub signing_key_jwk: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+/// Deprecated: use CreateFiatOnRampSessionResult.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -3956,6 +4059,7 @@ pub struct EthSendRawTransactionResult {
     pub transaction_hash: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
+/// Deprecated: use CreateFiatRampCredentialResult.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
@@ -3966,8 +4070,23 @@ pub struct CreateFiatOnRampCredentialResult {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct CreateFiatRampCredentialResult {
+    pub credential_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+/// Deprecated: use UpdateFiatRampCredentialResult.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct UpdateFiatOnRampCredentialResult {
     pub fiat_on_ramp_credential_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct UpdateFiatRampCredentialResult {
+    pub credential_id: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -4022,6 +4141,8 @@ pub struct ExecuteSwapResult {
     pub fee_sponsorship: ::core::option::Option<bool>,
     #[serde(default)]
     pub fixed_rate: ::core::option::Option<bool>,
+    #[serde(default)]
+    pub estimated_charges: ::core::option::Option<SwapCharges>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -4536,6 +4657,34 @@ pub struct SetIpAllowlistResult {}
 #[derive(Clone, Copy, PartialEq)]
 pub struct RemoveIpAllowlistResult {}
 #[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct EnableSmsForCountriesIntent {
+    /// @inject_tag: validate:"required,min=1,max=300,dive,required,len=2"
+    #[serde(default)]
+    pub iso_codes: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DisableSmsForCountriesIntent {
+    /// @inject_tag: validate:"required,min=1,max=300,dive,required,len=2"
+    #[serde(default)]
+    pub iso_codes: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, Copy, PartialEq)]
+pub struct EnableSmsForCountriesResult {}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, Copy, PartialEq)]
+pub struct DisableSmsForCountriesResult {}
+#[derive(Debug)]
 /// A FROST commitment pair contributed by one participant in a signing session.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -4913,45 +5062,45 @@ pub struct ExportSecretsResult {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
-pub struct CreateVelocityControlIntent {
-    /// Human-readable name for the Velocity Control.
+pub struct CreateUsageControlIntent {
+    /// Human-readable name for the Usage Control.
     pub name: ::prost::alloc::string::String,
-    /// Data source for the Velocity Control.
+    /// Data source for the Usage Control.
     #[serde(default)]
     pub data_source: ::core::option::Option<
-        super::super::super::external::data::v1::VelocityControlDataSource,
+        super::super::super::external::data::v1::UsageControlDataSource,
     >,
-    /// Aggregation expression that the Velocity Control evaluates.
+    /// Aggregation expression that the Usage Control evaluates.
     #[serde(default)]
-    pub aggregation: ::core::option::Option<
-        super::super::super::external::data::v1::VelocityControlAggregation,
+    pub budget: ::core::option::Option<
+        super::super::super::external::data::v1::UsageControlBudget,
     >,
-    /// Identifier for the Velocity Control. Policies reference it as `controls.<identifier>`. It must be unique within the Organization.
+    /// Identifier for the Usage Control. Policies reference it as `controls.<identifier>`. It must be unique within the Organization.
     pub identifier: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
-pub struct CreateVelocityControlResult {
-    pub velocity_control_id: ::prost::alloc::string::String,
+pub struct CreateUsageControlResult {
+    pub usage_control_id: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
-pub struct DeleteVelocityControlsIntent {
+pub struct DeleteUsageControlsIntent {
     /// @inject_tag: validate:"required,min=1,max=32,unique,dive,uuid"
     #[serde(default)]
-    pub velocity_control_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    pub usage_control_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
-pub struct DeleteVelocityControlsResult {
+pub struct DeleteUsageControlsResult {
     #[serde(default)]
-    pub velocity_control_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    pub usage_control_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -5273,6 +5422,23 @@ pub struct SwapQuoteV2 {
     pub estimated_fixed_rate_adjustment_usd: ::core::option::Option<
         ::prost::alloc::string::String,
     >,
+    #[serde(default)]
+    pub estimated_charges: ::core::option::Option<SwapCharges>,
+}
+#[derive(Debug)]
+/// USD charges a swap adds to the billing organization's invoice, one field per swap line item.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SwapCharges {
+    #[serde(default)]
+    pub execution_usd: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub turnkey_fee_usd: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub fixed_rate_adjustment_usd: ::core::option::Option<
+        ::prost::alloc::string::String,
+    >,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -5351,6 +5517,38 @@ pub struct ExecuteSwapMarketTerms {
     pub fee_sponsorship: ::core::option::Option<bool>,
     #[serde(default)]
     pub fixed_rate: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateExternalSignerIntentV1 {
+    /// @inject_tag: validate:"required,min=1,max=256"
+    pub name: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required,hexadecimal"
+    pub public_key: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct CreateExternalSignerResultV1 {
+    pub public_key: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeleteExternalSignerIntentV1 {
+    /// @inject_tag: validate:"required,hexadecimal"
+    pub public_key: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct DeleteExternalSignerResultV1 {
+    pub public_key: ::prost::alloc::string::String,
 }
 /// Type of Activity, such as Add User, or Sign Transaction.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -5682,10 +5880,10 @@ pub enum ActivityType {
     ImportSecrets = 162,
     #[serde(rename = "ACTIVITY_TYPE_EXPORT_SECRETS")]
     ExportSecrets = 163,
-    #[serde(rename = "ACTIVITY_TYPE_CREATE_VELOCITY_CONTROL")]
-    CreateVelocityControl = 164,
-    #[serde(rename = "ACTIVITY_TYPE_DELETE_VELOCITY_CONTROLS")]
-    DeleteVelocityControls = 165,
+    #[serde(rename = "ACTIVITY_TYPE_CREATE_USAGE_CONTROL")]
+    CreateUsageControl = 164,
+    #[serde(rename = "ACTIVITY_TYPE_DELETE_USAGE_CONTROLS")]
+    DeleteUsageControls = 165,
     #[serde(rename = "ACTIVITY_TYPE_UPDATE_PAYMENT_METHOD")]
     UpdatePaymentMethod = 166,
     #[serde(rename = "ACTIVITY_TYPE_CREATE_SWAP_QUOTE_V2")]
@@ -5710,12 +5908,26 @@ pub enum ActivityType {
     CreateFiatOnRampSession = 177,
     #[serde(rename = "ACTIVITY_TYPE_CREATE_FIAT_OFF_RAMP_SESSION")]
     CreateFiatOffRampSession = 178,
+    #[serde(rename = "ACTIVITY_TYPE_ENABLE_SMS_FOR_COUNTRIES")]
+    EnableSmsForCountries = 179,
+    #[serde(rename = "ACTIVITY_TYPE_DISABLE_SMS_FOR_COUNTRIES")]
+    DisableSmsForCountries = 180,
     #[serde(rename = "ACTIVITY_TYPE_EXECUTE_SWAP_V4")]
     ExecuteSwapV4 = 181,
     #[serde(rename = "ACTIVITY_TYPE_CREATE_WALLET_AUTHENTICATORS")]
     CreateWalletAuthenticators = 182,
     #[serde(rename = "ACTIVITY_TYPE_DELETE_WALLET_AUTHENTICATORS")]
     DeleteWalletAuthenticators = 183,
+    #[serde(rename = "ACTIVITY_TYPE_CREATE_FIAT_RAMP_CREDENTIAL")]
+    CreateFiatRampCredential = 184,
+    #[serde(rename = "ACTIVITY_TYPE_UPDATE_FIAT_RAMP_CREDENTIAL")]
+    UpdateFiatRampCredential = 185,
+    #[serde(rename = "ACTIVITY_TYPE_CREATE_EXTERNAL_SIGNER_V1")]
+    CreateExternalSignerV1 = 186,
+    #[serde(rename = "ACTIVITY_TYPE_DELETE_EXTERNAL_SIGNER_V1")]
+    DeleteExternalSignerV1 = 187,
+    #[serde(rename = "ACTIVITY_TYPE_MINT_JWT")]
+    MintJwt = 188,
 }
 impl ActivityType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -5911,8 +6123,8 @@ impl ActivityType {
             Self::CreateSwapQuote => "ACTIVITY_TYPE_CREATE_SWAP_QUOTE",
             Self::ImportSecrets => "ACTIVITY_TYPE_IMPORT_SECRETS",
             Self::ExportSecrets => "ACTIVITY_TYPE_EXPORT_SECRETS",
-            Self::CreateVelocityControl => "ACTIVITY_TYPE_CREATE_VELOCITY_CONTROL",
-            Self::DeleteVelocityControls => "ACTIVITY_TYPE_DELETE_VELOCITY_CONTROLS",
+            Self::CreateUsageControl => "ACTIVITY_TYPE_CREATE_USAGE_CONTROL",
+            Self::DeleteUsageControls => "ACTIVITY_TYPE_DELETE_USAGE_CONTROLS",
             Self::UpdatePaymentMethod => "ACTIVITY_TYPE_UPDATE_PAYMENT_METHOD",
             Self::CreateSwapQuoteV2 => "ACTIVITY_TYPE_CREATE_SWAP_QUOTE_V2",
             Self::ExecuteSwapV3 => "ACTIVITY_TYPE_EXECUTE_SWAP_V3",
@@ -5933,6 +6145,8 @@ impl ActivityType {
             Self::CreateFiatOffRampSession => {
                 "ACTIVITY_TYPE_CREATE_FIAT_OFF_RAMP_SESSION"
             }
+            Self::EnableSmsForCountries => "ACTIVITY_TYPE_ENABLE_SMS_FOR_COUNTRIES",
+            Self::DisableSmsForCountries => "ACTIVITY_TYPE_DISABLE_SMS_FOR_COUNTRIES",
             Self::ExecuteSwapV4 => "ACTIVITY_TYPE_EXECUTE_SWAP_V4",
             Self::CreateWalletAuthenticators => {
                 "ACTIVITY_TYPE_CREATE_WALLET_AUTHENTICATORS"
@@ -5940,6 +6154,11 @@ impl ActivityType {
             Self::DeleteWalletAuthenticators => {
                 "ACTIVITY_TYPE_DELETE_WALLET_AUTHENTICATORS"
             }
+            Self::CreateFiatRampCredential => "ACTIVITY_TYPE_CREATE_FIAT_RAMP_CREDENTIAL",
+            Self::UpdateFiatRampCredential => "ACTIVITY_TYPE_UPDATE_FIAT_RAMP_CREDENTIAL",
+            Self::CreateExternalSignerV1 => "ACTIVITY_TYPE_CREATE_EXTERNAL_SIGNER_V1",
+            Self::DeleteExternalSignerV1 => "ACTIVITY_TYPE_DELETE_EXTERNAL_SIGNER_V1",
+            Self::MintJwt => "ACTIVITY_TYPE_MINT_JWT",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -6168,10 +6387,8 @@ impl ActivityType {
             "ACTIVITY_TYPE_CREATE_SWAP_QUOTE" => Some(Self::CreateSwapQuote),
             "ACTIVITY_TYPE_IMPORT_SECRETS" => Some(Self::ImportSecrets),
             "ACTIVITY_TYPE_EXPORT_SECRETS" => Some(Self::ExportSecrets),
-            "ACTIVITY_TYPE_CREATE_VELOCITY_CONTROL" => Some(Self::CreateVelocityControl),
-            "ACTIVITY_TYPE_DELETE_VELOCITY_CONTROLS" => {
-                Some(Self::DeleteVelocityControls)
-            }
+            "ACTIVITY_TYPE_CREATE_USAGE_CONTROL" => Some(Self::CreateUsageControl),
+            "ACTIVITY_TYPE_DELETE_USAGE_CONTROLS" => Some(Self::DeleteUsageControls),
             "ACTIVITY_TYPE_UPDATE_PAYMENT_METHOD" => Some(Self::UpdatePaymentMethod),
             "ACTIVITY_TYPE_CREATE_SWAP_QUOTE_V2" => Some(Self::CreateSwapQuoteV2),
             "ACTIVITY_TYPE_EXECUTE_SWAP_V3" => Some(Self::ExecuteSwapV3),
@@ -6196,6 +6413,10 @@ impl ActivityType {
             "ACTIVITY_TYPE_CREATE_FIAT_OFF_RAMP_SESSION" => {
                 Some(Self::CreateFiatOffRampSession)
             }
+            "ACTIVITY_TYPE_ENABLE_SMS_FOR_COUNTRIES" => Some(Self::EnableSmsForCountries),
+            "ACTIVITY_TYPE_DISABLE_SMS_FOR_COUNTRIES" => {
+                Some(Self::DisableSmsForCountries)
+            }
             "ACTIVITY_TYPE_EXECUTE_SWAP_V4" => Some(Self::ExecuteSwapV4),
             "ACTIVITY_TYPE_CREATE_WALLET_AUTHENTICATORS" => {
                 Some(Self::CreateWalletAuthenticators)
@@ -6203,6 +6424,19 @@ impl ActivityType {
             "ACTIVITY_TYPE_DELETE_WALLET_AUTHENTICATORS" => {
                 Some(Self::DeleteWalletAuthenticators)
             }
+            "ACTIVITY_TYPE_CREATE_FIAT_RAMP_CREDENTIAL" => {
+                Some(Self::CreateFiatRampCredential)
+            }
+            "ACTIVITY_TYPE_UPDATE_FIAT_RAMP_CREDENTIAL" => {
+                Some(Self::UpdateFiatRampCredential)
+            }
+            "ACTIVITY_TYPE_CREATE_EXTERNAL_SIGNER_V1" => {
+                Some(Self::CreateExternalSignerV1)
+            }
+            "ACTIVITY_TYPE_DELETE_EXTERNAL_SIGNER_V1" => {
+                Some(Self::DeleteExternalSignerV1)
+            }
+            "ACTIVITY_TYPE_MINT_JWT" => Some(Self::MintJwt),
             _ => None,
         }
     }

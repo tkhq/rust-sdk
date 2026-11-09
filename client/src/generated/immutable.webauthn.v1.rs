@@ -117,6 +117,8 @@ pub enum AuthenticatorTransport {
     Usb = 4,
     #[serde(rename = "AUTHENTICATOR_TRANSPORT_HYBRID")]
     Hybrid = 5,
+    #[serde(rename = "AUTHENTICATOR_TRANSPORT_SMART_CARD")]
+    SmartCard = 6,
 }
 impl AuthenticatorTransport {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -131,6 +133,7 @@ impl AuthenticatorTransport {
             Self::Nfc => "AUTHENTICATOR_TRANSPORT_NFC",
             Self::Usb => "AUTHENTICATOR_TRANSPORT_USB",
             Self::Hybrid => "AUTHENTICATOR_TRANSPORT_HYBRID",
+            Self::SmartCard => "AUTHENTICATOR_TRANSPORT_SMART_CARD",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -142,6 +145,7 @@ impl AuthenticatorTransport {
             "AUTHENTICATOR_TRANSPORT_NFC" => Some(Self::Nfc),
             "AUTHENTICATOR_TRANSPORT_USB" => Some(Self::Usb),
             "AUTHENTICATOR_TRANSPORT_HYBRID" => Some(Self::Hybrid),
+            "AUTHENTICATOR_TRANSPORT_SMART_CARD" => Some(Self::SmartCard),
             _ => None,
         }
     }

@@ -20,7 +20,7 @@ message EarnVault {
   immutable.data.v1.EarnProvider provider = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Yield provider for the vault."}];
   string caip19 = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-19 asset ID of the vault's underlying asset (e.g. 'eip155:8453/erc20:0x833589...'); the chain is encoded in the identifier."}];
   string tvl = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Total value locked in the vault, in raw on-chain units of the underlying asset. The catalog is sorted by the USD value of this."}];
-  string apy_pct = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Current annual percentage yield, expressed as a decimal fraction (e.g., '0.0812' for 8.12%)."}];
+  string apy_pct = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Gross annual percentage yield including protocol rewards, expressed as a decimal fraction (e.g., '0.0812' for 8.12%)."}];
   bool enabled = 6 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether the organization has enabled this vault."}];
   EarnValueDisplay display = 7 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Normalized TVL values for display purposes only (usd + crypto). Do not do arithmetic with these; use tvl instead."}];
   string name = 8 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable vault name from the provider (e.g. 'Steakhouse Prime USDC' for Morpho; the reserve symbol for Aave)."}];
@@ -29,6 +29,7 @@ message EarnVault {
   EarnValueDisplay liquidity_display = 11 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Normalized liquidity values for display purposes only (usd + crypto). Do not do arithmetic with these; use liquidity instead."}];
   string force_deallocatable_liquidity = 12 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Additional assets withdrawable from the vault by force-deallocating its non-liquidity adapters at zero penalty, in raw on-chain units of the underlying asset. Additive to liquidity. Empty when the provider does not report it."}];
   EarnValueDisplay force_deallocatable_liquidity_display = 13 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Normalized force-deallocatable liquidity values for display purposes only (usd + crypto). Do not do arithmetic with these; use force_deallocatable_liquidity instead."}];
+  string rewards_apy_pct = 14 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The protocol-reward portion of apy_pct (e.g. Merkl campaigns), expressed as a decimal fraction."}];
 }
 
 // EarnVaultExposure is one underlying market a vault allocates into, and the
@@ -48,10 +49,10 @@ message EarnEnabledVault {
   string wrapper_address = 2 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Address of the deployed fee wrapper (the deposit target)."}];
   immutable.data.v1.EarnProvider provider = 3 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Yield provider for the vault."}];
   string caip19 = 4 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-19 asset ID of the vault's underlying asset (e.g. 'eip155:8453/erc20:0x833589...'); the chain is encoded in the identifier."}];
-  string apy_pct = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Gross annual percentage yield, expressed as a decimal fraction (before fees)."}];
+  string apy_pct = 5 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Gross annual percentage yield including protocol rewards, expressed as a decimal fraction (before fees)."}];
   string total_deposited = 6 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Total deposited through this wrapper (wrapper TVL), in raw on-chain units of the underlying asset."}];
   EarnValueDisplay display = 7 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Normalized total-deposited values for display only (usd + crypto). Do not do arithmetic with these; use total_deposited instead."}];
-  string net_apy_pct = 8 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Annual percentage yield net of fees, expressed as a decimal fraction."}];
+  string net_apy_pct = 8 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Annual percentage yield net of fees, expressed as a decimal fraction. Fees apply to the non-reward portion only; rewards_apy_pct passes through untouched."}];
   string client_fee_bps = 9 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Client fee taken on yield, in basis points."}];
   bool deposits_disabled = 10 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "When true, deposits to this wrapper are rejected; withdrawals are unaffected. Toggled via EarnSetWrapperState."}];
   string name = 11 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable vault name from the provider (e.g. 'Steakhouse Prime USDC' for Morpho; the reserve symbol for Aave)."}];
@@ -67,6 +68,7 @@ message EarnEnabledVault {
   string deploy_status = 21 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "On-chain status of the wrapper deployment: PENDING, COMPLETED, or FAILED. Only a COMPLETED wrapper is usable. Empty when no deploy is recorded for the wrapper."}];
   string deploy_request_id = 22 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Request id of the wrapper's most recent deploy, for polling GetEarnDeployStatus. Empty when no deploy is recorded."}];
   string deploy_error = 23 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Failure detail when deploy_status is FAILED."}];
+  string rewards_apy_pct = 24 [(grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The protocol-reward portion of apy_pct (e.g. Merkl campaigns), expressed as a decimal fraction."}];
 }
 
 message AssetMetadata {

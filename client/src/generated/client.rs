@@ -746,6 +746,64 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/get_api_keys".to_string())
             .await
     }
+    /// List Fiat Off Ramp quotes
+    ///
+    /// Quote enabled fiat off-ramp providers for a sell. Returns one quote per payment method the provider can offer for this route. Providers and methods that cannot serve the route are omitted.
+    pub async fn get_fiat_off_ramp_quotes(
+        &self,
+        request: coordinator::GetFiatOffRampQuotesRequest,
+    ) -> Result<coordinator::GetFiatOffRampQuotesResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/list_fiat_off_ramp_quotes".to_string(),
+        )
+        .await
+    }
+    /// Create Fiat Off Ramp Session
+    ///
+    /// Open a fiat off-ramp session for a saved quote.
+    pub async fn create_fiat_off_ramp_session(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::CreateFiatOffRampSessionIntent,
+    ) -> Result<
+        ActivityResult<immutable_activity::CreateFiatOffRampSessionResult>,
+        TurnkeyClientError,
+    > {
+        let request = external_activity::CreateFiatOffRampSessionRequest {
+            r#type: "ACTIVITY_TYPE_CREATE_FIAT_OFF_RAMP_SESSION".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/create_fiat_off_ramp_session".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::CreateFiatOffRampSessionResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
     /// Get On Ramp transaction status
     ///
     /// Get the status of an on ramp transaction.
@@ -2356,7 +2414,7 @@ impl<S: Stamp> TurnkeyClient<S> {
     }
     /// Init Fiat On Ramp
     ///
-    /// Initiate a fiat on ramp flow.
+    /// Deprecated: use CreateFiatOnRampSession with a quote from GetFiatOnRampQuotes.
     pub async fn init_fiat_on_ramp(
         &self,
         organization_id: String,
@@ -2380,6 +2438,49 @@ impl<S: Stamp> TurnkeyClient<S> {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         let result = match inner {
             immutable_activity::result::Inner::InitFiatOnRampResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Create Fiat On Ramp Session
+    ///
+    /// Open a fiat on-ramp session for a saved quote.
+    pub async fn create_fiat_on_ramp_session(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::CreateFiatOnRampSessionIntent,
+    ) -> Result<ActivityResult<immutable_activity::CreateFiatOnRampSessionResult>, TurnkeyClientError>
+    {
+        let request = external_activity::CreateFiatOnRampSessionRequest {
+            r#type: "ACTIVITY_TYPE_CREATE_FIAT_ON_RAMP_SESSION".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/create_fiat_on_ramp_session".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::CreateFiatOnRampSessionResult(res) => res,
             other => {
                 return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
                     serde_json::to_string(&other)?,
@@ -3489,7 +3590,7 @@ impl<S: Stamp> TurnkeyClient<S> {
     }
     /// Create a Fiat On Ramp credential
     ///
-    /// Create a fiat on ramp provider credential.
+    /// Deprecated: use CreateFiatRampCredential.
     pub async fn create_fiat_on_ramp_credential(
         &self,
         organization_id: String,
@@ -3534,7 +3635,7 @@ impl<S: Stamp> TurnkeyClient<S> {
     }
     /// Update a Fiat On Ramp credential
     ///
-    /// Update a fiat on ramp provider credential.
+    /// Deprecated: use UpdateFiatRampCredential.
     pub async fn update_fiat_on_ramp_credential(
         &self,
         organization_id: String,
@@ -3564,6 +3665,96 @@ impl<S: Stamp> TurnkeyClient<S> {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         let result = match inner {
             immutable_activity::result::Inner::UpdateFiatOnRampCredentialResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Create a Fiat Ramp credential
+    ///
+    /// Create a fiat ramp provider credential.
+    pub async fn create_fiat_ramp_credential(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::CreateFiatRampCredentialIntent,
+    ) -> Result<
+        ActivityResult<immutable_activity::CreateFiatRampCredentialResult>,
+        TurnkeyClientError,
+    > {
+        let request = external_activity::CreateFiatRampCredentialRequest {
+            r#type: "ACTIVITY_TYPE_CREATE_FIAT_RAMP_CREDENTIAL".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/create_fiat_ramp_credential".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::CreateFiatRampCredentialResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Update a Fiat Ramp credential
+    ///
+    /// Update a fiat ramp provider credential.
+    pub async fn update_fiat_ramp_credential(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::UpdateFiatRampCredentialIntent,
+    ) -> Result<
+        ActivityResult<immutable_activity::UpdateFiatRampCredentialResult>,
+        TurnkeyClientError,
+    > {
+        let request = external_activity::UpdateFiatRampCredentialRequest {
+            r#type: "ACTIVITY_TYPE_UPDATE_FIAT_RAMP_CREDENTIAL".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/update_fiat_ramp_credential".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::UpdateFiatRampCredentialResult(res) => res,
             other => {
                 return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
                     serde_json::to_string(&other)?,
@@ -3632,6 +3823,19 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(
             &request,
             "/public/v1/query/list_fiat_on_ramp_credentials".to_string(),
+        )
+        .await
+    }
+    /// List Fiat On Ramp quotes
+    ///
+    /// Quote enabled fiat on-ramp providers for a buy. Returns one quote per payment method the provider can offer for this route. Providers and methods that cannot serve the route are omitted.
+    pub async fn get_fiat_on_ramp_quotes(
+        &self,
+        request: coordinator::GetFiatOnRampQuotesRequest,
+    ) -> Result<coordinator::GetFiatOnRampQuotesResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/list_fiat_on_ramp_quotes".to_string(),
         )
         .await
     }
@@ -4132,17 +4336,30 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.process_request(&request, "/public/v1/query/get_swap_status".to_string())
             .await
     }
+    /// Get indicative swap quote
+    ///
+    /// Preview the provider's current price for a swap without creating an activity. The quote is not binding and has no quote ID: a market swap executed later fetches its own quote, so its price can differ.
+    pub async fn get_indicative_swap_quote(
+        &self,
+        request: coordinator::GetIndicativeSwapQuoteRequest,
+    ) -> Result<coordinator::GetIndicativeSwapQuoteResponse, TurnkeyClientError> {
+        self.process_request(
+            &request,
+            "/public/v1/query/get_indicative_swap_quote".to_string(),
+        )
+        .await
+    }
     /// Execute Swap
     ///
-    /// Execute the exact provider quote identified by quote_id through the activity pipeline and Turnkey broadcasting. Requests must use ACTIVITY_TYPE_EXECUTE_SWAP_V3.
+    /// Execute a swap through the activity pipeline and Turnkey broadcasting. With bound_quote, execution is bound to the quote create_swap_quote returned. With market, the swap executes at the provider's price when the activity is approved, within slippage_bps and min_output_amount; use get_indicative_swap_quote to preview that price. Requests must use ACTIVITY_TYPE_EXECUTE_SWAP_V4.
     pub async fn execute_swap(
         &self,
         organization_id: String,
         timestamp_ms: u128,
-        params: immutable_activity::ExecuteSwapIntentV3,
+        params: immutable_activity::ExecuteSwapIntentV4,
     ) -> Result<ActivityResult<immutable_activity::ExecuteSwapResult>, TurnkeyClientError> {
         let request = external_activity::ExecuteSwapRequest {
-            r#type: "ACTIVITY_TYPE_EXECUTE_SWAP_V3".to_string(),
+            r#type: "ACTIVITY_TYPE_EXECUTE_SWAP_V4".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
@@ -5172,6 +5389,44 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
+    /// Mint JWT
+    ///
+    /// Mint a Turnkey-signed JWT with a given profile. JWT semantics switch on profile.
+    pub async fn mint_jwt(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::MintJwtIntent,
+    ) -> Result<ActivityResult<immutable_activity::MintJwtResult>, TurnkeyClientError> {
+        let request = external_activity::MintJwtRequest {
+            r#type: "ACTIVITY_TYPE_MINT_JWT".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(&request, "/public/v1/submit/mint_jwt".to_string())
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::MintJwtResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
     /// Delete secrets
     ///
     /// Delete secrets by their unique identifiers. All secrets must belong to the organization.
@@ -5197,6 +5452,90 @@ impl<S: Stamp> TurnkeyClient<S> {
             .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
         let result = match inner {
             immutable_activity::result::Inner::DeleteSecretsResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Create external signer
+    ///
+    /// Register an external signer with the organization.
+    pub async fn create_external_signer(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::CreateExternalSignerIntentV1,
+    ) -> Result<ActivityResult<immutable_activity::CreateExternalSignerResultV1>, TurnkeyClientError>
+    {
+        let request = external_activity::CreateExternalSignerRequest {
+            r#type: "ACTIVITY_TYPE_CREATE_EXTERNAL_SIGNER_V1".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/create_external_signer".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::CreateExternalSignerResultV1(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
+    /// Delete external signer
+    ///
+    /// Remove an external signer from the organization by its public key.
+    pub async fn delete_external_signer(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::DeleteExternalSignerIntentV1,
+    ) -> Result<ActivityResult<immutable_activity::DeleteExternalSignerResultV1>, TurnkeyClientError>
+    {
+        let request = external_activity::DeleteExternalSignerRequest {
+            r#type: "ACTIVITY_TYPE_DELETE_EXTERNAL_SIGNER_V1".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/delete_external_signer".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::DeleteExternalSignerResultV1(res) => res,
             other => {
                 return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
                     serde_json::to_string(&other)?,

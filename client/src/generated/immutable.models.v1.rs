@@ -349,6 +349,50 @@ pub struct IngressTargetKeyPayloadV1 {
     pub target_public_key: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
+#[serde_with::serde_as]
+/// Signed, purpose-bound ingress target issued by an Enclave application.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct IngressTargetKeyPayloadV2 {
+    pub ingress_target_key_id: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    pub purpose: EncryptedIngressPurpose,
+    pub enclave_application: EnclaveApplication,
+    pub quorum_public_key: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub purpose_binding: ::prost::alloc::vec::Vec<u8>,
+    pub enclave_target_message: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub ciphertext: ::prost::alloc::vec::Vec<u8>,
+    pub encryption_suite: TransportEncryptionSuite,
+    pub at_rest_encryption_suite: AtRestEncryptionSuite,
+    #[serde(default)]
+    #[serde_as(as = "serde_with::DisplayFromStr")]
+    pub created_at_unix_ms: u64,
+    #[serde(default)]
+    #[serde_as(as = "serde_with::DisplayFromStr")]
+    pub expires_at_unix_ms: u64,
+    #[serde(default)]
+    pub derivation_salt: ::prost::alloc::vec::Vec<u8>,
+    #[serde(default)]
+    pub nonce: ::prost::alloc::vec::Vec<u8>,
+    pub target_public_key: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub version: u32,
+}
+#[derive(Debug)]
+/// Quorum signature over IngressTargetKeyPayloadV2.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SignedIngressTargetKeyV2 {
+    #[serde(default)]
+    pub payload: ::core::option::Option<IngressTargetKeyPayloadV2>,
+    #[serde(default)]
+    pub signature: ::core::option::Option<Signature>,
+}
+#[derive(Debug)]
 /// Type to represent arbitrary key-value pairs evaluated in the policy engine.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -412,8 +456,8 @@ pub enum SignatureScheme {
     TkAttestedP256 = 7,
     /// Scheme used by enclave applications when the public key is only the SEC1 uncompressed signing
     /// half of the quorum key (e.g. external signer proofs), not the combined encryption+signing key.
-    /// The message is the hex-encoded borsh serialization of the signed payload, and the signature is
-    /// an ECDSA-P256-SHA256 signature over those bytes
+    /// The message is the hex-encoded signed payload bytes (protobuf for external signer proofs),
+    /// and the signature is an ECDSA-P256-SHA256 signature over those bytes.
     #[serde(rename = "SIGNATURE_SCHEME_TK_QUORUM_P256_SIGNING_KEY")]
     TkQuorumP256SigningKey = 8,
 }
@@ -512,6 +556,8 @@ pub enum AtRestResourceType {
     IngressTargetKeyPayloadV1 = 1,
     #[serde(rename = "AT_REST_RESOURCE_TYPE_SECRET_PAYLOAD_V1")]
     SecretPayloadV1 = 2,
+    #[serde(rename = "AT_REST_RESOURCE_TYPE_INGRESS_TARGET_KEY_PAYLOAD_V2")]
+    IngressTargetKeyPayloadV2 = 3,
 }
 impl AtRestResourceType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -525,6 +571,9 @@ impl AtRestResourceType {
                 "AT_REST_RESOURCE_TYPE_INGRESS_TARGET_KEY_PAYLOAD_V1"
             }
             Self::SecretPayloadV1 => "AT_REST_RESOURCE_TYPE_SECRET_PAYLOAD_V1",
+            Self::IngressTargetKeyPayloadV2 => {
+                "AT_REST_RESOURCE_TYPE_INGRESS_TARGET_KEY_PAYLOAD_V2"
+            }
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -535,6 +584,77 @@ impl AtRestResourceType {
                 Some(Self::IngressTargetKeyPayloadV1)
             }
             "AT_REST_RESOURCE_TYPE_SECRET_PAYLOAD_V1" => Some(Self::SecretPayloadV1),
+            "AT_REST_RESOURCE_TYPE_INGRESS_TARGET_KEY_PAYLOAD_V2" => {
+                Some(Self::IngressTargetKeyPayloadV2)
+            }
+            _ => None,
+        }
+    }
+}
+/// Identifies the Enclave application whose quorum-key domain issued an ingress target.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum EnclaveApplication {
+    #[serde(rename = "ENCLAVE_APPLICATION_UNSPECIFIED")]
+    Unspecified = 0,
+    #[serde(rename = "ENCLAVE_APPLICATION_SIGNER")]
+    Signer = 1,
+    #[serde(rename = "ENCLAVE_APPLICATION_TLS_FETCHER")]
+    TlsFetcher = 2,
+    #[serde(rename = "ENCLAVE_APPLICATION_UMP")]
+    Ump = 3,
+}
+impl EnclaveApplication {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "ENCLAVE_APPLICATION_UNSPECIFIED",
+            Self::Signer => "ENCLAVE_APPLICATION_SIGNER",
+            Self::TlsFetcher => "ENCLAVE_APPLICATION_TLS_FETCHER",
+            Self::Ump => "ENCLAVE_APPLICATION_UMP",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "ENCLAVE_APPLICATION_UNSPECIFIED" => Some(Self::Unspecified),
+            "ENCLAVE_APPLICATION_SIGNER" => Some(Self::Signer),
+            "ENCLAVE_APPLICATION_TLS_FETCHER" => Some(Self::TlsFetcher),
+            "ENCLAVE_APPLICATION_UMP" => Some(Self::Ump),
+            _ => None,
+        }
+    }
+}
+/// Restricts an ingress target to one consuming flow.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum EncryptedIngressPurpose {
+    #[serde(rename = "ENCRYPTED_INGRESS_PURPOSE_UNSPECIFIED")]
+    Unspecified = 0,
+    #[serde(rename = "ENCRYPTED_INGRESS_PURPOSE_OAUTH2_AUTHENTICATE")]
+    Oauth2Authenticate = 1,
+}
+impl EncryptedIngressPurpose {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "ENCRYPTED_INGRESS_PURPOSE_UNSPECIFIED",
+            Self::Oauth2Authenticate => "ENCRYPTED_INGRESS_PURPOSE_OAUTH2_AUTHENTICATE",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "ENCRYPTED_INGRESS_PURPOSE_UNSPECIFIED" => Some(Self::Unspecified),
+            "ENCRYPTED_INGRESS_PURPOSE_OAUTH2_AUTHENTICATE" => {
+                Some(Self::Oauth2Authenticate)
+            }
             _ => None,
         }
     }

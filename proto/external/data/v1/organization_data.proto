@@ -399,45 +399,35 @@ message Oauth2Credential {
 }
 
 message FiatOnRampCredential {
-  string fiat_onramp_credential_id = 1 [
+  string credential_id = 1 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Fiat On-Ramp Credential."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given fiat ramp credential."}
   ];
   string organization_id = 2 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for an Organization."}
   ];
-  immutable.common.v1.FiatOnRampProvider onramp_provider = 3 [
+  immutable.common.v1.FiatRampProvider provider = 3 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The fiat on-ramp provider."}
-  ];
-  // @inject_tag: validate:"omitempty"
-  optional string project_id = 4 [
-    (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Project ID for the on-ramp provider. Some providers, like Coinbase, require this additional identifier."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The fiat ramp provider."}
   ];
   // @inject_tag: validate:"required"
-  string publishable_api_key = 5 [
+  string api_key = 4 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Publishable API key for the on-ramp provider."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Non-secret half of the provider credential. MoonPay: publishable key (pk_test_ or pk_live_). Coinbase: CDP API key ID."}
   ];
   // @inject_tag: validate:"required"
-  string encrypted_secret_api_key = 6 [
+  string encrypted_secret = 5 [
     (google.api.field_behavior) = REQUIRED,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Secret API key for the on-ramp provider encrypted to our on-ramp encryption public key."}
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Secret half of the provider credential, encrypted to our on-ramp encryption public key. MoonPay: secret key (sk_test_ or sk_live_). Coinbase: Ed25519 private key."}
   ];
   // @inject_tag: validate:"omitempty"
-  optional string encrypted_private_api_key = 7 [
-    (google.api.field_behavior) = OPTIONAL,
-    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Private API key for the on-ramp provider encrypted to our on-ramp encryption public key. Some providers, like Coinbase, require this additional key."}
-  ];
-  // @inject_tag: validate:"omitempty"
-  bool sandbox_mode = 8 [
+  bool sandbox_mode = 6 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "If the on-ramp credential is a sandbox credential."}
   ];
-  Timestamp created_at = 9 [(google.api.field_behavior) = REQUIRED];
-  Timestamp updated_at = 10 [(google.api.field_behavior) = REQUIRED];
+  Timestamp created_at = 7 [(google.api.field_behavior) = REQUIRED];
+  Timestamp updated_at = 8 [(google.api.field_behavior) = REQUIRED];
 }
 
 message MfaPolicy {

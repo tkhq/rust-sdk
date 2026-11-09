@@ -152,8 +152,8 @@ enum SignatureScheme {
   SIGNATURE_SCHEME_TK_ATTESTED_P256 = 7;
   // Scheme used by enclave applications when the public key is only the SEC1 uncompressed signing
   // half of the quorum key (e.g. external signer proofs), not the combined encryption+signing key.
-  // The message is the hex-encoded borsh serialization of the signed payload, and the signature is
-  // an ECDSA-P256-SHA256 signature over those bytes
+  // The message is the hex-encoded signed payload bytes (protobuf for external signer proofs),
+  // and the signature is an ECDSA-P256-SHA256 signature over those bytes.
   SIGNATURE_SCHEME_TK_QUORUM_P256_SIGNING_KEY = 8;
 }
 
@@ -217,6 +217,7 @@ enum AtRestResourceType {
   AT_REST_RESOURCE_TYPE_UNSPECIFIED = 0;
   AT_REST_RESOURCE_TYPE_INGRESS_TARGET_KEY_PAYLOAD_V1 = 1;
   AT_REST_RESOURCE_TYPE_SECRET_PAYLOAD_V1 = 2;
+  AT_REST_RESOURCE_TYPE_INGRESS_TARGET_KEY_PAYLOAD_V2 = 3;
 }
 
 // Secret signing payload. This is immutable and gets signed by the signers
@@ -306,6 +307,46 @@ message IngressTargetKeyPayloadV1 {
   // Encoding is dictated by `encryption_suite`. For TRANSPORT_ENCRYPTION_SUITE_ENCLAVE_ENCRYPT_V1
   // this is a hex-encoded uncompressed P-256 public key.
   string target_public_key = 10;
+}
+
+// Identifies the Enclave application whose quorum-key domain issued an ingress target.
+enum EnclaveApplication {
+  ENCLAVE_APPLICATION_UNSPECIFIED = 0;
+  ENCLAVE_APPLICATION_SIGNER = 1;
+  ENCLAVE_APPLICATION_TLS_FETCHER = 2;
+  ENCLAVE_APPLICATION_UMP = 3;
+}
+
+// Restricts an ingress target to one consuming flow.
+enum EncryptedIngressPurpose {
+  ENCRYPTED_INGRESS_PURPOSE_UNSPECIFIED = 0;
+  ENCRYPTED_INGRESS_PURPOSE_OAUTH2_AUTHENTICATE = 1;
+}
+
+// Signed, purpose-bound ingress target issued by an Enclave application.
+message IngressTargetKeyPayloadV2 {
+  string ingress_target_key_id = 1;
+  string organization_id = 2;
+  EncryptedIngressPurpose purpose = 3;
+  EnclaveApplication enclave_application = 4;
+  string quorum_public_key = 5;
+  bytes purpose_binding = 6;
+  string enclave_target_message = 7;
+  bytes ciphertext = 8;
+  TransportEncryptionSuite encryption_suite = 9;
+  AtRestEncryptionSuite at_rest_encryption_suite = 10;
+  uint64 created_at_unix_ms = 11;
+  uint64 expires_at_unix_ms = 12;
+  bytes derivation_salt = 13;
+  bytes nonce = 14;
+  string target_public_key = 15;
+  uint32 version = 16;
+}
+
+// Quorum signature over IngressTargetKeyPayloadV2.
+message SignedIngressTargetKeyV2 {
+  IngressTargetKeyPayloadV2 payload = 1;
+  Signature signature = 2;
 }
 
 // Transport encryption suite for enclave ingress and egress.
