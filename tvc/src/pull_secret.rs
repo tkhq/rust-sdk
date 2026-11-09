@@ -5,6 +5,7 @@ use anyhow::{Context, Result, anyhow};
 use chrono::{DateTime, SecondsFormat, Utc};
 use p256::elliptic_curve::sec1::ToEncodedPoint;
 use serde::Serialize;
+use serde_json::value::RawValue;
 use turnkey_enclave_encrypt::{P256Public, server::EnclaveEncryptServer};
 use uuid::Uuid;
 use zeroize::Zeroizing;
@@ -42,22 +43,24 @@ fn encryption_public_key_for_api_base_url(api_base_url: &str) -> Result<&'static
     Ok(key)
 }
 
-/// Encrypt the pivot container pull secret with the appropriate public key for the environment
-pub fn encrypt_pivot_pull_secret(
-    pull_secret: &str,
-    api_base_url: &str,
-    user_id: Uuid,
-    organization_id: Uuid,
-    expires_at: DateTime<Utc>,
-) -> Result<String> {
-    let pull_secret = pull_secret.trim();
-    if pull_secret.is_empty() {
-        anyhow::bail!("pivot pull secret is empty after trimming whitespace");
-    }
+/// Ownership and acceptance deadline for an encrypted pull secret.
+pub struct PullSecretMeta {
+    pub user_id: Uuid,
+    pub organization_id: Uuid,
+    pub expires_at: DateTime<Utc>,
+}
 
-    if user_id.is_nil() || organization_id.is_nil() {
-        anyhow::bail!("pull secret owner must have a user and organization ID");
-    }
+/// Encrypt the pivot container pull secret with the appropriate public key for the environment.
+pub fn encrypt_pivot_pull_secret(
+    pull_secret: &RawValue,
+    api_base_url: &str,
+    metadata: PullSecretMeta,
+) -> Result<String> {
+    let PullSecretMeta {
+        user_id,
+        organization_id,
+        expires_at,
+    } = metadata;
     if expires_at <= Utc::now() {
         anyhow::bail!("pull secret expiry must be in the future");
     }
@@ -68,9 +71,12 @@ pub fn encrypt_pivot_pull_secret(
         user_id: Uuid,
         organization_id: Uuid,
         expires_at: String,
-        pull_secret: &'a serde_json::value::RawValue,
+        pull_secret: &'a RawValue,
     }
-    let pull_secret = serde_json::from_str(pull_secret).context("parse Docker pull secret JSON")?;
+    // Covers the two UUIDs, version, timestamp, field names, and JSON punctuation.
+    // Revisit if the envelope changes: growth can leave unwiped plaintext in old allocations.
+    const ENVELOPE_METADATA_CAPACITY: usize = 512;
+
     let envelope = Envelope {
         version: 1,
         user_id,
@@ -78,12 +84,7 @@ pub fn encrypt_pivot_pull_secret(
         expires_at: expires_at.to_rfc3339_opts(SecondsFormat::AutoSi, true),
         pull_secret,
     };
-    let capacity = envelope
-        .pull_secret
-        .get()
-        .len()
-        .checked_add(512)
-        .context("pull secret envelope size overflow")?;
+    let capacity = pull_secret.get().len() + ENVELOPE_METADATA_CAPACITY;
     let mut plaintext = Zeroizing::new(Vec::with_capacity(capacity));
     serde_json::to_writer(&mut *plaintext, &envelope).context("serialize pull secret envelope")?;
 
@@ -127,11 +128,13 @@ mod tests {
 
         // Encrypt using the LOCALHOST public key
         let encrypted = encrypt_pivot_pull_secret(
-            fake_pull_secret,
+            serde_json::from_str(fake_pull_secret).unwrap(),
             API_BASE_URL_LOCAL,
-            Uuid::from_u128(1),
-            Uuid::from_u128(2),
-            "2100-01-01T00:00:00Z".parse().unwrap(),
+            PullSecretMeta {
+                user_id: Uuid::from_u128(1),
+                organization_id: Uuid::from_u128(2),
+                expires_at: "2100-01-01T00:00:00Z".parse().unwrap(),
+            },
         )
         .unwrap();
 
@@ -174,11 +177,14 @@ mod tests {
     #[test]
     fn rejects_expired_envelopes() {
         let error = encrypt_pivot_pull_secret(
-            r#"{"auths":{"ghcr.io":{"username":"user","password":"pass"}}}"#,
+            serde_json::from_str(r#"{"auths":{"ghcr.io":{"username":"user","password":"pass"}}}"#)
+                .unwrap(),
             API_BASE_URL_LOCAL,
-            Uuid::from_u128(1),
-            Uuid::from_u128(2),
-            "2020-01-01T00:00:00Z".parse().unwrap(),
+            PullSecretMeta {
+                user_id: Uuid::from_u128(1),
+                organization_id: Uuid::from_u128(2),
+                expires_at: "2020-01-01T00:00:00Z".parse().unwrap(),
+            },
         )
         .unwrap_err();
         assert_eq!(

@@ -60,7 +60,7 @@ Almost every deploy field also has a CLI flag / env var; flags override the file
 | *(none)* | *(none)* | `healthCheckType` is config-file only: `TVC_HEALTH_CHECK_TYPE_HTTP` (default) or `TVC_HEALTH_CHECK_TYPE_GRPC`. There is no flag and no env var, so it must be set in `deploy.json`. |
 | `--public-ingress-port` | `TVC_PUBLIC_INGRESS_PORT` | Public ingress port |
 | `--pivot-pull-secret` | `TVC_PIVOT_PULL_SECRET` | Path to an unencrypted pull secret file for a private image; the CLI encrypts it for the org's environment, bound to the calling user and organization, with an expiry |
-| `--pull-secret-expires-at` | *(none)* | RFC 3339 expiry for the encrypted pull secret; defaults to two hours from now. Requires `--pivot-pull-secret`; no env var |
+| `--pull-secret-expires-at` | *(none)* | RFC 3339 expiry for the encrypted pull secret (UTC `Z` or an offset); defaults to two hours from now. Must be in the future, or parsing fails before any request. Requires `--pivot-pull-secret`; no env var |
 | `--replicas` | `TVC_REPLICAS` | Replica count (config: `replicas`); omit for the backend default |
 | `--dangerous-deploy-debug-mode` | `TVC_DANGEROUS_DEPLOY_DEBUG_MODE` | Debug-mode deploy (logs tailable; never for prod) |
 
@@ -72,7 +72,7 @@ tvc deploy init --output deploy.json --from-deployment <OLD_DEPLOY_ID>
 
 ### Pull-secret expiry
 
-The encrypted pull secret is an envelope bound to the authenticated user and organization, with an expiry that defaults to two hours after `deploy create`. Turnkey checks it when validating the image and again when the deployment executes, which happens after approvals reach quorum; later image pulls are not re-checked. If approval may take longer than two hours (a manifest set that waits on a human co-approver, for example), pass a later `--pull-secret-expires-at`. An expired envelope cannot be refreshed in place: create a new deployment with a freshly encrypted secret.
+The encrypted pull secret is an envelope bound to the authenticated user and organization, with an expiry that defaults to two hours after `deploy create`. Turnkey checks ownership and expiry when it accepts the secret. If this deployment may wait a long time before that happens (a manifest set that waits on a human co-approver, for example), pass a later `--pull-secret-expires-at`; the CLI rejects a timestamp that is already in the past. An expired envelope cannot be refreshed in place: create a new deployment with a freshly encrypted secret.
 
 ## The two digests, which are different fields
 
