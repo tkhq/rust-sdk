@@ -14,22 +14,21 @@ fn skills_cmd() -> (TempDir, assert_cmd::Command) {
 /// embedding manifest is checked against. Eval fixtures are deliberately
 /// not embedded, so they are skipped here too.
 fn bundled_file_count() -> u64 {
-    fn walk(dir: &std::path::Path, count: &mut u64) {
+    let mut dirs = vec![std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("skills")];
+    let mut count = 0;
+    while let Some(dir) = dirs.pop() {
         for entry in std::fs::read_dir(dir).unwrap() {
             let path = entry.unwrap().path();
-            if path.is_dir() {
-                if path.file_name().is_some_and(|name| name == "evals") {
-                    continue;
-                }
-                walk(&path, count);
-            } else {
-                *count += 1;
+            if path.is_file() {
+                count += 1;
+                continue;
             }
+            if path.file_name().is_some_and(|name| name == "evals") {
+                continue;
+            }
+            dirs.push(path);
         }
     }
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("skills");
-    let mut count = 0;
-    walk(&root, &mut count);
     count
 }
 
