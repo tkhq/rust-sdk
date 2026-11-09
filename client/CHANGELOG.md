@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+
+- **Breaking generated Rust API:** import request-bound TVC proof schema from the
+  frozen producer. `AppProofPayload` gains optional `request_context`, its oneof
+  gains `TvcQuorumKeyCreateProof`, and `AppProofType` gains `TvcQuorumKeyCreate`.
+  Exhaustive struct literals and enum matches must be updated. The absent context
+  remains omitted on serialization for legacy payloads. Release/semver treatment
+  must account for these source breaks before publication.
+
 ## [0.19.0](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.18.0...turnkey_client-v0.19.0) - 2026-11-18
 
 ### Other

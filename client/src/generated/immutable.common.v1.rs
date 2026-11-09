@@ -692,7 +692,7 @@ impl FeatureName {
         }
     }
 }
-/// The supported Fiat On Ramp Providers.
+/// Deprecated: use FiatRampProvider.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum FiatOnRampProvider {
@@ -721,6 +721,43 @@ impl FiatOnRampProvider {
             "FIAT_ON_RAMP_PROVIDER_UNSPECIFIED" => Some(Self::Unspecified),
             "FIAT_ON_RAMP_PROVIDER_COINBASE" => Some(Self::Coinbase),
             "FIAT_ON_RAMP_PROVIDER_MOONPAY" => Some(Self::Moonpay),
+            _ => None,
+        }
+    }
+}
+/// Providers that can buy or sell cryptocurrency for fiat.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum FiatRampProvider {
+    #[serde(rename = "FIAT_RAMP_PROVIDER_UNSPECIFIED")]
+    Unspecified = 0,
+    #[serde(rename = "FIAT_RAMP_PROVIDER_COINBASE")]
+    Coinbase = 1,
+    #[serde(rename = "FIAT_RAMP_PROVIDER_MOONPAY")]
+    Moonpay = 2,
+    #[serde(rename = "FIAT_RAMP_PROVIDER_MELD")]
+    Meld = 3,
+}
+impl FiatRampProvider {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "FIAT_RAMP_PROVIDER_UNSPECIFIED",
+            Self::Coinbase => "FIAT_RAMP_PROVIDER_COINBASE",
+            Self::Moonpay => "FIAT_RAMP_PROVIDER_MOONPAY",
+            Self::Meld => "FIAT_RAMP_PROVIDER_MELD",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "FIAT_RAMP_PROVIDER_UNSPECIFIED" => Some(Self::Unspecified),
+            "FIAT_RAMP_PROVIDER_COINBASE" => Some(Self::Coinbase),
+            "FIAT_RAMP_PROVIDER_MOONPAY" => Some(Self::Moonpay),
+            "FIAT_RAMP_PROVIDER_MELD" => Some(Self::Meld),
             _ => None,
         }
     }
@@ -770,6 +807,7 @@ impl FiatOnRampCryptoCurrency {
         }
     }
 }
+/// Deprecated: use FiatRampCurrency.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum FiatOnRampCurrency {
@@ -965,6 +1003,202 @@ impl FiatOnRampCurrency {
         }
     }
 }
+/// Fiat currencies supported for on-ramp and off-ramp.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum FiatRampCurrency {
+    /// Unspecified
+    #[serde(rename = "FIAT_RAMP_CURRENCY_UNSPECIFIED")]
+    Unspecified = 0,
+    /// Australian Dollar
+    #[serde(rename = "FIAT_RAMP_CURRENCY_AUD")]
+    Aud = 1,
+    /// Bulgarian Lev
+    #[serde(rename = "FIAT_RAMP_CURRENCY_BGN")]
+    Bgn = 2,
+    /// Brazilian Real
+    #[serde(rename = "FIAT_RAMP_CURRENCY_BRL")]
+    Brl = 3,
+    /// Canadian Dollar
+    #[serde(rename = "FIAT_RAMP_CURRENCY_CAD")]
+    Cad = 4,
+    /// Swiss Franc
+    #[serde(rename = "FIAT_RAMP_CURRENCY_CHF")]
+    Chf = 5,
+    /// Colombian Peso
+    #[serde(rename = "FIAT_RAMP_CURRENCY_COP")]
+    Cop = 6,
+    /// Czech Koruna
+    #[serde(rename = "FIAT_RAMP_CURRENCY_CZK")]
+    Czk = 7,
+    /// Danish Krone
+    #[serde(rename = "FIAT_RAMP_CURRENCY_DKK")]
+    Dkk = 8,
+    /// Dominican Peso
+    #[serde(rename = "FIAT_RAMP_CURRENCY_DOP")]
+    Dop = 9,
+    /// Egyptian Pound
+    #[serde(rename = "FIAT_RAMP_CURRENCY_EGP")]
+    Egp = 10,
+    /// Euro
+    #[serde(rename = "FIAT_RAMP_CURRENCY_EUR")]
+    Eur = 11,
+    /// Pound Sterling
+    #[serde(rename = "FIAT_RAMP_CURRENCY_GBP")]
+    Gbp = 12,
+    /// Hong Kong Dollar
+    #[serde(rename = "FIAT_RAMP_CURRENCY_HKD")]
+    Hkd = 13,
+    /// Indonesian Rupiah
+    #[serde(rename = "FIAT_RAMP_CURRENCY_IDR")]
+    Idr = 14,
+    /// Israeli New Shekel
+    #[serde(rename = "FIAT_RAMP_CURRENCY_ILS")]
+    Ils = 15,
+    /// Jordanian Dinar
+    #[serde(rename = "FIAT_RAMP_CURRENCY_JOD")]
+    Jod = 16,
+    /// Kenyan Shilling
+    #[serde(rename = "FIAT_RAMP_CURRENCY_KES")]
+    Kes = 17,
+    /// Kuwaiti Dinar
+    #[serde(rename = "FIAT_RAMP_CURRENCY_KWD")]
+    Kwd = 18,
+    /// Sri Lankan Rupee
+    #[serde(rename = "FIAT_RAMP_CURRENCY_LKR")]
+    Lkr = 19,
+    /// Mexican Peso
+    #[serde(rename = "FIAT_RAMP_CURRENCY_MXN")]
+    Mxn = 20,
+    /// Nigerian Naira
+    #[serde(rename = "FIAT_RAMP_CURRENCY_NGN")]
+    Ngn = 21,
+    /// Norwegian Krone
+    #[serde(rename = "FIAT_RAMP_CURRENCY_NOK")]
+    Nok = 22,
+    /// New Zealand Dollar
+    #[serde(rename = "FIAT_RAMP_CURRENCY_NZD")]
+    Nzd = 23,
+    /// Omani Rial
+    #[serde(rename = "FIAT_RAMP_CURRENCY_OMR")]
+    Omr = 24,
+    /// Peruvian Sol
+    #[serde(rename = "FIAT_RAMP_CURRENCY_PEN")]
+    Pen = 25,
+    /// Polish Złoty
+    #[serde(rename = "FIAT_RAMP_CURRENCY_PLN")]
+    Pln = 26,
+    /// Romanian Leu
+    #[serde(rename = "FIAT_RAMP_CURRENCY_RON")]
+    Ron = 27,
+    /// Swedish Krona
+    #[serde(rename = "FIAT_RAMP_CURRENCY_SEK")]
+    Sek = 28,
+    /// Thai Baht
+    #[serde(rename = "FIAT_RAMP_CURRENCY_THB")]
+    Thb = 29,
+    /// Turkish Lira
+    #[serde(rename = "FIAT_RAMP_CURRENCY_TRY")]
+    Try = 30,
+    /// Taiwan Dollar
+    #[serde(rename = "FIAT_RAMP_CURRENCY_TWD")]
+    Twd = 31,
+    /// US Dollar
+    #[serde(rename = "FIAT_RAMP_CURRENCY_USD")]
+    Usd = 32,
+    /// Vietnamese Dong
+    #[serde(rename = "FIAT_RAMP_CURRENCY_VND")]
+    Vnd = 33,
+    /// South African Rand
+    #[serde(rename = "FIAT_RAMP_CURRENCY_ZAR")]
+    Zar = 34,
+}
+impl FiatRampCurrency {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "FIAT_RAMP_CURRENCY_UNSPECIFIED",
+            Self::Aud => "FIAT_RAMP_CURRENCY_AUD",
+            Self::Bgn => "FIAT_RAMP_CURRENCY_BGN",
+            Self::Brl => "FIAT_RAMP_CURRENCY_BRL",
+            Self::Cad => "FIAT_RAMP_CURRENCY_CAD",
+            Self::Chf => "FIAT_RAMP_CURRENCY_CHF",
+            Self::Cop => "FIAT_RAMP_CURRENCY_COP",
+            Self::Czk => "FIAT_RAMP_CURRENCY_CZK",
+            Self::Dkk => "FIAT_RAMP_CURRENCY_DKK",
+            Self::Dop => "FIAT_RAMP_CURRENCY_DOP",
+            Self::Egp => "FIAT_RAMP_CURRENCY_EGP",
+            Self::Eur => "FIAT_RAMP_CURRENCY_EUR",
+            Self::Gbp => "FIAT_RAMP_CURRENCY_GBP",
+            Self::Hkd => "FIAT_RAMP_CURRENCY_HKD",
+            Self::Idr => "FIAT_RAMP_CURRENCY_IDR",
+            Self::Ils => "FIAT_RAMP_CURRENCY_ILS",
+            Self::Jod => "FIAT_RAMP_CURRENCY_JOD",
+            Self::Kes => "FIAT_RAMP_CURRENCY_KES",
+            Self::Kwd => "FIAT_RAMP_CURRENCY_KWD",
+            Self::Lkr => "FIAT_RAMP_CURRENCY_LKR",
+            Self::Mxn => "FIAT_RAMP_CURRENCY_MXN",
+            Self::Ngn => "FIAT_RAMP_CURRENCY_NGN",
+            Self::Nok => "FIAT_RAMP_CURRENCY_NOK",
+            Self::Nzd => "FIAT_RAMP_CURRENCY_NZD",
+            Self::Omr => "FIAT_RAMP_CURRENCY_OMR",
+            Self::Pen => "FIAT_RAMP_CURRENCY_PEN",
+            Self::Pln => "FIAT_RAMP_CURRENCY_PLN",
+            Self::Ron => "FIAT_RAMP_CURRENCY_RON",
+            Self::Sek => "FIAT_RAMP_CURRENCY_SEK",
+            Self::Thb => "FIAT_RAMP_CURRENCY_THB",
+            Self::Try => "FIAT_RAMP_CURRENCY_TRY",
+            Self::Twd => "FIAT_RAMP_CURRENCY_TWD",
+            Self::Usd => "FIAT_RAMP_CURRENCY_USD",
+            Self::Vnd => "FIAT_RAMP_CURRENCY_VND",
+            Self::Zar => "FIAT_RAMP_CURRENCY_ZAR",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "FIAT_RAMP_CURRENCY_UNSPECIFIED" => Some(Self::Unspecified),
+            "FIAT_RAMP_CURRENCY_AUD" => Some(Self::Aud),
+            "FIAT_RAMP_CURRENCY_BGN" => Some(Self::Bgn),
+            "FIAT_RAMP_CURRENCY_BRL" => Some(Self::Brl),
+            "FIAT_RAMP_CURRENCY_CAD" => Some(Self::Cad),
+            "FIAT_RAMP_CURRENCY_CHF" => Some(Self::Chf),
+            "FIAT_RAMP_CURRENCY_COP" => Some(Self::Cop),
+            "FIAT_RAMP_CURRENCY_CZK" => Some(Self::Czk),
+            "FIAT_RAMP_CURRENCY_DKK" => Some(Self::Dkk),
+            "FIAT_RAMP_CURRENCY_DOP" => Some(Self::Dop),
+            "FIAT_RAMP_CURRENCY_EGP" => Some(Self::Egp),
+            "FIAT_RAMP_CURRENCY_EUR" => Some(Self::Eur),
+            "FIAT_RAMP_CURRENCY_GBP" => Some(Self::Gbp),
+            "FIAT_RAMP_CURRENCY_HKD" => Some(Self::Hkd),
+            "FIAT_RAMP_CURRENCY_IDR" => Some(Self::Idr),
+            "FIAT_RAMP_CURRENCY_ILS" => Some(Self::Ils),
+            "FIAT_RAMP_CURRENCY_JOD" => Some(Self::Jod),
+            "FIAT_RAMP_CURRENCY_KES" => Some(Self::Kes),
+            "FIAT_RAMP_CURRENCY_KWD" => Some(Self::Kwd),
+            "FIAT_RAMP_CURRENCY_LKR" => Some(Self::Lkr),
+            "FIAT_RAMP_CURRENCY_MXN" => Some(Self::Mxn),
+            "FIAT_RAMP_CURRENCY_NGN" => Some(Self::Ngn),
+            "FIAT_RAMP_CURRENCY_NOK" => Some(Self::Nok),
+            "FIAT_RAMP_CURRENCY_NZD" => Some(Self::Nzd),
+            "FIAT_RAMP_CURRENCY_OMR" => Some(Self::Omr),
+            "FIAT_RAMP_CURRENCY_PEN" => Some(Self::Pen),
+            "FIAT_RAMP_CURRENCY_PLN" => Some(Self::Pln),
+            "FIAT_RAMP_CURRENCY_RON" => Some(Self::Ron),
+            "FIAT_RAMP_CURRENCY_SEK" => Some(Self::Sek),
+            "FIAT_RAMP_CURRENCY_THB" => Some(Self::Thb),
+            "FIAT_RAMP_CURRENCY_TRY" => Some(Self::Try),
+            "FIAT_RAMP_CURRENCY_TWD" => Some(Self::Twd),
+            "FIAT_RAMP_CURRENCY_USD" => Some(Self::Usd),
+            "FIAT_RAMP_CURRENCY_VND" => Some(Self::Vnd),
+            "FIAT_RAMP_CURRENCY_ZAR" => Some(Self::Zar),
+            _ => None,
+        }
+    }
+}
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum FiatOnRampBlockchainNetwork {
@@ -1005,6 +1239,7 @@ impl FiatOnRampBlockchainNetwork {
         }
     }
 }
+/// Deprecated: use FiatRampPaymentMethod.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum FiatOnRampPaymentMethod {
@@ -1109,6 +1344,73 @@ impl FiatOnRampPaymentMethod {
             "FIAT_ON_RAMP_PAYMENT_METHOD_CRYPTO_ACCOUNT" => Some(Self::CryptoAccount),
             "FIAT_ON_RAMP_PAYMENT_METHOD_FIAT_WALLET" => Some(Self::FiatWallet),
             "FIAT_ON_RAMP_PAYMENT_METHOD_ACH_BANK_ACCOUNT" => Some(Self::AchBankAccount),
+            _ => None,
+        }
+    }
+}
+/// Payment methods the on-ramp and off-ramp quote queries can return.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum FiatRampPaymentMethod {
+    /// Unspecified
+    #[serde(rename = "FIAT_RAMP_PAYMENT_METHOD_UNSPECIFIED")]
+    Unspecified = 0,
+    /// On-ramp: MoonPay, Coinbase, Meld. Off-ramp: MoonPay.
+    ///
+    /// MoonPay: CREDIT_DEBIT_CARD, Coinbase: CARD, Meld: CREDIT_DEBIT_CARD
+    #[serde(rename = "FIAT_RAMP_PAYMENT_METHOD_CREDIT_DEBIT_CARD")]
+    CreditDebitCard = 1,
+    /// On-ramp only.
+    ///
+    /// MoonPay: APPLE_PAY, Coinbase: APPLE_PAY, Meld: APPLE_PAY
+    #[serde(rename = "FIAT_RAMP_PAYMENT_METHOD_APPLE_PAY")]
+    ApplePay = 2,
+    /// MoonPay: GOOGLE_PAY, Meld: GOOGLE_PAY
+    #[serde(rename = "FIAT_RAMP_PAYMENT_METHOD_GOOGLE_PAY")]
+    GooglePay = 3,
+    /// MoonPay: PAYPAL, Coinbase: PAYPAL
+    #[serde(rename = "FIAT_RAMP_PAYMENT_METHOD_PAYPAL")]
+    Paypal = 4,
+    /// Off-ramp only.
+    ///
+    /// MoonPay: MOONPAY_BALANCE
+    #[serde(rename = "FIAT_RAMP_PAYMENT_METHOD_MOONPAY_BALANCE")]
+    MoonpayBalance = 5,
+    /// Coinbase: FIAT_WALLET
+    #[serde(rename = "FIAT_RAMP_PAYMENT_METHOD_FIAT_WALLET")]
+    FiatWallet = 6,
+    /// MoonPay: ACH_BANK_TRANSFER, Coinbase: ACH_BANK_ACCOUNT
+    #[serde(rename = "FIAT_RAMP_PAYMENT_METHOD_ACH_BANK_ACCOUNT")]
+    AchBankAccount = 7,
+}
+impl FiatRampPaymentMethod {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "FIAT_RAMP_PAYMENT_METHOD_UNSPECIFIED",
+            Self::CreditDebitCard => "FIAT_RAMP_PAYMENT_METHOD_CREDIT_DEBIT_CARD",
+            Self::ApplePay => "FIAT_RAMP_PAYMENT_METHOD_APPLE_PAY",
+            Self::GooglePay => "FIAT_RAMP_PAYMENT_METHOD_GOOGLE_PAY",
+            Self::Paypal => "FIAT_RAMP_PAYMENT_METHOD_PAYPAL",
+            Self::MoonpayBalance => "FIAT_RAMP_PAYMENT_METHOD_MOONPAY_BALANCE",
+            Self::FiatWallet => "FIAT_RAMP_PAYMENT_METHOD_FIAT_WALLET",
+            Self::AchBankAccount => "FIAT_RAMP_PAYMENT_METHOD_ACH_BANK_ACCOUNT",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "FIAT_RAMP_PAYMENT_METHOD_UNSPECIFIED" => Some(Self::Unspecified),
+            "FIAT_RAMP_PAYMENT_METHOD_CREDIT_DEBIT_CARD" => Some(Self::CreditDebitCard),
+            "FIAT_RAMP_PAYMENT_METHOD_APPLE_PAY" => Some(Self::ApplePay),
+            "FIAT_RAMP_PAYMENT_METHOD_GOOGLE_PAY" => Some(Self::GooglePay),
+            "FIAT_RAMP_PAYMENT_METHOD_PAYPAL" => Some(Self::Paypal),
+            "FIAT_RAMP_PAYMENT_METHOD_MOONPAY_BALANCE" => Some(Self::MoonpayBalance),
+            "FIAT_RAMP_PAYMENT_METHOD_FIAT_WALLET" => Some(Self::FiatWallet),
+            "FIAT_RAMP_PAYMENT_METHOD_ACH_BANK_ACCOUNT" => Some(Self::AchBankAccount),
             _ => None,
         }
     }
@@ -1469,6 +1771,35 @@ impl AuthenticationType {
             "AUTHENTICATION_TYPE_OAUTH" => Some(Self::Oauth),
             "AUTHENTICATION_TYPE_SESSION" => Some(Self::Session),
             "AUTHENTICATION_TYPE_WALLET" => Some(Self::Wallet),
+            _ => None,
+        }
+    }
+}
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum JwtProfile {
+    #[serde(rename = "JWT_PROFILE_UNSPECIFIED")]
+    Unspecified = 0,
+    /// turnkey.io/http-authz/v1
+    #[serde(rename = "JWT_PROFILE_HTTP_AUTHZ_V1")]
+    HttpAuthzV1 = 1,
+}
+impl JwtProfile {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "JWT_PROFILE_UNSPECIFIED",
+            Self::HttpAuthzV1 => "JWT_PROFILE_HTTP_AUTHZ_V1",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "JWT_PROFILE_UNSPECIFIED" => Some(Self::Unspecified),
+            "JWT_PROFILE_HTTP_AUTHZ_V1" => Some(Self::HttpAuthzV1),
             _ => None,
         }
     }

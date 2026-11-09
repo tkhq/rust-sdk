@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package immutable.data.v20;
+
+import "immutable/data/v1/common.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/immutable/data/v20";
+
+message ExternalSigner {
+  string name = 1;
+  string public_key = 2;
+  immutable.data.v1.Timestamp created_at = 3;
+  immutable.data.v1.Timestamp updated_at = 4;
+  bool verified = 5;
+}

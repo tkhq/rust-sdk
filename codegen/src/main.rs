@@ -69,6 +69,14 @@ fn main() {
         .type_attribute(".immutable", SERDE_CAMEL_CASE)
         .type_attribute(".google.rpc", SERDE_DERIVE)
         .field_attribute("google.rpc.Status.details", "#[serde(skip)]")
+        .field_attribute(
+            ".external.data.v1.AppProofPayload.request_context",
+            "#[serde(skip_serializing_if = \"Option::is_none\")]",
+        )
+        .field_attribute(
+            ".external.data.v1.BootProof.quorum_key_attestation_signature_hex",
+            "#[serde(skip_serializing_if = \"Option::is_none\")]",
+        )
         .type_attribute("google.rpc", SERDE_CAMEL_CASE)
         // prost_types::Timestamp has no serde support; our vendored Timestamp
         // (de)serializes as an RFC 3339 string per the proto3 JSON mapping.

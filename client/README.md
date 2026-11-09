@@ -49,3 +49,28 @@ Additional `reqwest` features can be enabled in your `Cargo.toml`:
 [dependencies]
 turnkey_client = { version = "0.0.2", features = ["reqwest_native_tls", "reqwest_brotli", "reqwest_zstd", "reqwest_hickory_dns"] }
 ```
+
+### Generated proof schema source compatibility
+
+The request-bound proof schema adds a field and enum variants. These compiler
+fixtures preserve evidence that older exhaustive source forms require changes.
+
+```compile_fail
+use turnkey_client::generated::external::data::v1::{AppProofPayload, AppProofType};
+let old_literal = AppProofPayload {
+    r#type: AppProofType::AddressDerivation,
+    timestamp_ms: "100".into(),
+    proof_payload: None,
+};
+```
+
+```compile_fail
+use turnkey_client::generated::external::data::v1::AppProofType;
+fn old_match(kind: AppProofType) {
+    match kind {
+        AppProofType::Unspecified => (),
+        AppProofType::AddressDerivation => (),
+        AppProofType::PolicyOutcome => (),
+    }
+}
+```

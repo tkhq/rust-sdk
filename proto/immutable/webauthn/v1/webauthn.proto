@@ -32,6 +32,7 @@ enum AuthenticatorTransport {
   AUTHENTICATOR_TRANSPORT_NFC = 3;
   AUTHENTICATOR_TRANSPORT_USB = 4;
   AUTHENTICATOR_TRANSPORT_HYBRID = 5;
+  AUTHENTICATOR_TRANSPORT_SMART_CARD = 6;
 }
 
 message AuthenticatorAssertionResponse {
