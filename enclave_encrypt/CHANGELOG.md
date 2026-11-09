@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- Development Signer quorum public key for authenticated dev requests.
+
 ## [0.18.0](https://github.com/tkhq/rust-sdk/compare/turnkey_enclave_encrypt-v0.17.2...turnkey_enclave_encrypt-v0.18.0) - 2026-11-11
 
 ### Other
