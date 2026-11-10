@@ -95,6 +95,10 @@ pub struct Args {
     /// Make the new operator the organization's default operator kind.
     #[arg(long)]
     default: bool,
+
+    /// Expand human output with the checks and public proof evidence.
+    #[arg(long)]
+    verbose_proofs: bool,
 }
 
 /// A parsed `operator create` invocation: kind-specific inputs separated,
@@ -104,6 +108,7 @@ enum CreatePlan {
     Hosted {
         spec: HostedOperatorSpec,
         make_default: bool,
+        verbose_proofs: bool,
     },
     Yubikey {
         name: Option<String>,
@@ -124,6 +129,7 @@ impl TryFrom<Args> for CreatePlan {
             account_path,
             serial,
             default,
+            verbose_proofs,
         } = args;
 
         match kind {
@@ -148,9 +154,14 @@ impl TryFrom<Args> for CreatePlan {
                             .unwrap_or_else(|| DEFAULT_HOSTED_OPERATOR_BASE_PATH.to_string()),
                     },
                     make_default: default,
+                    verbose_proofs,
                 })
             }
             CreateKind::Yubikey => {
+                ensure!(
+                    !verbose_proofs,
+                    "--verbose-proofs is only valid with --kind hosted"
+                );
                 ensure!(
                     wallet_name.is_none() && wallet_id.is_none() && account_path.is_none(),
                     "--wallet-name, --wallet-id, and --account-path are only valid with --kind hosted"
@@ -187,7 +198,11 @@ impl Run for Args {
     #[instrument(skip_all)]
     async fn run(self, ctx: &mut StdCtx, mut config: Config) -> Result<CreateOutcome> {
         match CreatePlan::try_from(self)? {
-            CreatePlan::Hosted { spec, make_default } => {
+            CreatePlan::Hosted {
+                spec,
+                make_default,
+                verbose_proofs,
+            } => {
                 let mut auth = build_client(&config).await?;
                 let verifier = TvcProvenance::for_api_url(&auth.api_base_url)?;
                 let (alias, configured_org_id) = config
@@ -224,9 +239,12 @@ impl Run for Args {
                 let wallet_label = submitted.activity_result().result.wallet_id.clone();
                 let (_, receipt) = submitted.into_parts();
                 let activity_label = receipt.activity().id.clone();
-                let accepted = verifier
-                    .accept_operator(&auth.client, &expected, receipt)
+                let (result, report) = verifier
+                    .accept_operator_reported(&auth.client, &expected, receipt)
                     .await
+                    .into_parts();
+                crate::proofs::present(ctx.shell(), &result, &report, verbose_proofs);
+                let accepted = result
                     .context("proof acceptance failed, no keys were saved")
                     .map_err(|error| {
                         hosted_operator_creation_error(&activity_label, &wallet_label, error)
@@ -660,6 +678,7 @@ mod tests {
             account_path: None,
             serial: None,
             default: false,
+            verbose_proofs: false,
         }
     }
 
@@ -667,7 +686,12 @@ mod tests {
     fn a_hosted_plan_applies_the_hosted_defaults() {
         let plan = CreatePlan::try_from(args(CreateKind::Hosted)).unwrap();
 
-        let CreatePlan::Hosted { spec, make_default } = plan else {
+        let CreatePlan::Hosted {
+            spec,
+            make_default,
+            verbose_proofs,
+        } = plan
+        else {
             panic!("a hosted invocation must produce a hosted plan");
         };
         assert_eq!(
@@ -679,6 +703,7 @@ mod tests {
             }
         );
         assert!(!make_default);
+        assert!(!verbose_proofs);
     }
 
     #[test]

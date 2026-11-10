@@ -468,6 +468,18 @@ impl ParsedBootProof {
             .map_err(|e| VerifyError::InvalidBootProof(e.to_string()))?,
         })
     }
+
+    fn evidence(&self) -> tvc::BootEvidence {
+        let supplied_manifest = self.manifest_envelope.clone().manifest();
+        let enclave = supplied_manifest.enclave();
+        tvc::BootEvidence {
+            manifest_hash: hex::encode(self.manifest.manifest_hash()),
+            envelope_manifest_hash: hex::encode(self.manifest_envelope.manifest_hash()),
+            manifest_quorum_key: hex::encode(&self.manifest.namespace().quorum_key),
+            ephemeral_key: self.ephemeral_key.to_string(),
+            pcrs: [&enclave.pcr0, &enclave.pcr1, &enclave.pcr2, &enclave.pcr3].map(hex::encode),
+        }
+    }
 }
 
 /// Checks supplied manifest approvals, commitments, PCRs and the app proof's
@@ -754,13 +766,23 @@ mod tests {
     }
 
     #[test]
-    fn test_verify_boot_binding_checks_signer_pin() {
+    fn test_verify_boot_binding_checks_signer_pin_and_reports_evidence() {
         let (app, boot, attestation) = test_boot_binding_inputs();
         let parsed = ParsedBootProof::parse(&boot).unwrap();
-        let quorum_key =
-            QuorumPublicKey::from_bytes(&parsed.manifest.namespace().quorum_key).unwrap();
+        let details = parsed.evidence();
+        assert_eq!(details.manifest_hash, details.envelope_manifest_hash);
+        assert_eq!(
+            details.manifest_hash,
+            hex::encode(attestation.user_data.as_ref().unwrap())
+        );
+        assert_eq!(details.ephemeral_key, app.public_key);
+        for (index, pcr) in details.pcrs.iter().enumerate() {
+            assert_eq!(pcr, &hex::encode(&attestation.pcrs[&index]));
+        }
         let app_key = EphemeralPublicKey::try_from(app.public_key.as_str()).unwrap();
         verify_boot_binding(app_key.clone(), parsed, attestation.clone(), None).unwrap();
+
+        let quorum_key = QuorumPublicKey::from_string(&details.manifest_quorum_key).unwrap();
         verify_boot_binding(
             app_key.clone(),
             ParsedBootProof::parse(&boot).unwrap(),

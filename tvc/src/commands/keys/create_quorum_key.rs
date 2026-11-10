@@ -65,6 +65,10 @@ pub struct Args {
         env = "TVC_OPERATOR_IDS"
     )]
     operator_ids: Vec<Uuid>,
+
+    /// Expand human output with the checks and public proof evidence.
+    #[arg(long)]
+    verbose_proofs: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -107,11 +111,12 @@ impl OperatorSource {
 
 /// Run the hosted quorum-key creation command.
 #[instrument(skip_all)]
-pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome> {
+pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome> {
     let Args {
         threshold,
         operator_encrypt_keys,
         operator_ids,
+        verbose_proofs,
     } = args;
     // The required, mutually exclusive Clap group guarantees exactly one
     // source is non-empty.
@@ -150,7 +155,12 @@ pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcom
     let quorum_label = TerminalText(&result.activity_result().result.quorum_key_id).single_line();
     let (_, receipt) = result.into_parts();
     let activity_label = TerminalText(&receipt.activity().id).single_line();
-    let accepted = verifier.accept_quorum(&auth.client, &expected, receipt).await.with_context(|| format!(
+    let (result, report) = verifier
+        .accept_quorum_reported(&auth.client, &expected, receipt)
+        .await
+        .into_parts();
+    crate::proofs::present(ctx.shell(), &result, &report, verbose_proofs);
+    let accepted = result.with_context(|| format!(
         "remote creation may have succeeded; untrusted activity label {activity_label}, quorum label {quorum_label}; proof acceptance failed; do not retry creation blindly"
     ))?;
     let (quorum_key_id, quorum_public_key, share_ids) = accepted.into_parts();

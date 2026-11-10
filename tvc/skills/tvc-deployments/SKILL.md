@@ -19,6 +19,20 @@ verify returned keys against the submitted request before saving or returning
 success. The supported API environments are production, preproduction and
 development, each with its own pinned Signer quorum key.
 
+Human output confirms `Proof verification: passed` after acceptance. Add
+`--verbose-proofs` to either hosted creation command to inspect the checks,
+full public keys, manifest/PCR evidence and request/result comparisons, including
+failed and unreached checks. It is unavailable for YubiKey operators and remains
+quiet with `--message-format json`. The report does not establish an independent
+manifest/PCR allowlist, current attestation freshness or revocation status;
+operator IDs and share IDs remain unsigned routing labels.
+
+Identical verified boot evidence is shown once with references from later
+envelopes; each app proof keeps its own checks and signed claim. The report
+shows the policy-compared PCRs and UTC timestamps alongside their Unix values.
+On verbose success, an underscore separator and blank line precede the unchanged
+short result block.
+
 Missing or invalid proof evidence fails as `proof_verification_failed`.
 Unsupported API environments fail before submission. After submission, remote
 creation may already have succeeded even when verification fails. Investigate

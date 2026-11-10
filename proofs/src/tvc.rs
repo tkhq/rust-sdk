@@ -6,6 +6,13 @@
 
 mod claims;
 mod endorsement;
+mod report;
+pub use endorsement::ENDORSEMENT_PREFIX;
+pub use report::*;
+use report::{
+    CheckState::{Fail, Pass},
+    ProofCheck::*,
+};
 
 use claims::{Claim, Context};
 use std::{collections::HashSet, fmt};
@@ -245,6 +252,47 @@ impl TvcProvenance {
         expected: &OperatorExpectation,
         receipt: ActivityReceipt,
     ) -> Result<VerifiedOperatorKeys, Error> {
+        self.accept_operator_reported(client, expected, receipt)
+            .await
+            .into_result()
+    }
+
+    /// Accept creation output while retaining diagnostics on failure.
+    pub async fn accept_operator_reported<S: turnkey_api_key_stamper::Stamp>(
+        &self,
+        client: &TurnkeyClient<S>,
+        expected: &OperatorExpectation,
+        receipt: ActivityReceipt,
+    ) -> ReportedAcceptance<VerifiedOperatorKeys> {
+        let mut report = ProofReport::new(
+            self.endorsement.environment(),
+            self.endorsement.quorum_key(),
+            AcceptanceEvidence::Operator {
+                organization: expected.organization.clone(),
+                wallet: expected.wallet.clone(),
+                base_path: expected.base_path.clone(),
+                returned: None,
+            },
+            receipt
+                .sent_fingerprints()
+                .map(|sent| sent.to_hex())
+                .collect(),
+            receipt.activity().app_proofs.len(),
+        );
+        let result = self
+            .accept_operator_inner(client, expected, receipt, &mut report)
+            .await;
+        ReportedAcceptance { result, report }
+    }
+
+    async fn accept_operator_inner<S: turnkey_api_key_stamper::Stamp>(
+        &self,
+        client: &TurnkeyClient<S>,
+        expected: &OperatorExpectation,
+        receipt: ActivityReceipt,
+        report: &mut ProofReport,
+    ) -> Result<VerifiedOperatorKeys, Error> {
+        report.set(ActivityShape, Fail);
         let activity = receipt.activity();
         if activity.status != ActivityStatus::Completed
             || activity.r#type != ActivityType::CreateTvcOperator
@@ -256,9 +304,19 @@ impl TvcProvenance {
         else {
             return Err(Error::ClaimMismatch("operator result variant"));
         };
+        if let AcceptanceEvidence::Operator { returned, .. } = &mut report.acceptance {
+            *returned = Some(OperatorResultEvidence {
+                wallet: result.wallet_id.clone(),
+                encrypt: result.encrypt_public_key.clone(),
+                sign: result.sign_public_key.clone(),
+                operator_id: result.operator_id.clone(),
+            });
+        }
+        report.set(ActivityShape, Pass);
         let claims = self
-            .claims(client, &expected.organization, &activity.app_proofs)
+            .claims(client, &expected.organization, &activity.app_proofs, report)
             .await?;
+        report.set(ClaimSetAndIntent, Fail);
         let mut encrypt = None;
         let mut sign = None;
         for claim in claims {
@@ -290,20 +348,29 @@ impl TvcProvenance {
         {
             return Err(Error::ClaimMismatch("operator wallet"));
         }
-        if !common_submission(&receipt, &[&encrypt.context, &sign.context]) {
+        report.set(ClaimSetAndIntent, Pass);
+        report.set(CommonSubmission, Fail);
+        report.matched_fingerprint =
+            common_submission(&receipt, &[&encrypt.context, &sign.context]);
+        if report.matched_fingerprint.is_none() {
             return Err(Error::ReceiptMismatch);
         }
+        report.set(CommonSubmission, Pass);
+        report.set(OutputKeyRoles, Fail);
         let encrypt_key = RolePublicKey::parse(&encrypt.body.address)?;
         let sign_key = RolePublicKey::parse(&sign.body.address)?;
         if encrypt_key == sign_key {
             return Err(Error::ClaimMismatch("operator role keys must differ"));
         }
+        report.set(OutputKeyRoles, Pass);
+        report.set(ResultBinding, Fail);
         if result.wallet_id != encrypt.body.wallet_id
             || result.encrypt_public_key != encrypt.body.address
             || result.sign_public_key != sign.body.address
         {
             return Err(Error::ClaimMismatch("operator result wallet/keys"));
         }
+        report.set(ResultBinding, Pass);
         Ok(VerifiedOperatorKeys {
             wallet: encrypt.body.wallet_id,
             base_path: expected.base_path.clone(),
@@ -320,6 +387,47 @@ impl TvcProvenance {
         expected: &QuorumExpectation,
         receipt: ActivityReceipt,
     ) -> Result<VerifiedQuorumKey, Error> {
+        self.accept_quorum_reported(client, expected, receipt)
+            .await
+            .into_result()
+    }
+
+    /// Accept creation output while retaining diagnostics on failure.
+    pub async fn accept_quorum_reported<S: turnkey_api_key_stamper::Stamp>(
+        &self,
+        client: &TurnkeyClient<S>,
+        expected: &QuorumExpectation,
+        receipt: ActivityReceipt,
+    ) -> ReportedAcceptance<VerifiedQuorumKey> {
+        let mut report = ProofReport::new(
+            self.endorsement.environment(),
+            self.endorsement.quorum_key(),
+            AcceptanceEvidence::Quorum {
+                organization: expected.organization.clone(),
+                threshold: expected.threshold,
+                recipients: expected.recipients.clone(),
+                returned: None,
+            },
+            receipt
+                .sent_fingerprints()
+                .map(|sent| sent.to_hex())
+                .collect(),
+            receipt.activity().app_proofs.len(),
+        );
+        let result = self
+            .accept_quorum_inner(client, expected, receipt, &mut report)
+            .await;
+        ReportedAcceptance { result, report }
+    }
+
+    async fn accept_quorum_inner<S: turnkey_api_key_stamper::Stamp>(
+        &self,
+        client: &TurnkeyClient<S>,
+        expected: &QuorumExpectation,
+        receipt: ActivityReceipt,
+        report: &mut ProofReport,
+    ) -> Result<VerifiedQuorumKey, Error> {
+        report.set(ActivityShape, Fail);
         let activity = receipt.activity();
         if activity.status != ActivityStatus::Completed
             || activity.r#type != ActivityType::CreateTvcQuorumKey
@@ -331,10 +439,19 @@ impl TvcProvenance {
         else {
             return Err(Error::ClaimMismatch("quorum result variant"));
         };
+        if let AcceptanceEvidence::Quorum { returned, .. } = &mut report.acceptance {
+            *returned = Some(QuorumResultEvidence {
+                id: result.quorum_key_id.clone(),
+                public_key: result.quorum_public_key.clone(),
+                share_ids: result.share_ids.clone(),
+            });
+        }
+        report.set(ActivityShape, Pass);
         let mut claims = self
-            .claims(client, &expected.organization, &activity.app_proofs)
+            .claims(client, &expected.organization, &activity.app_proofs, report)
             .await?
             .into_iter();
+        report.set(ClaimSetAndIntent, Fail);
         let Some(Claim::Quorum(claim)) = claims.next() else {
             return Err(Error::ProofUnavailable);
         };
@@ -357,20 +474,30 @@ impl TvcProvenance {
                 "quorum organization/threshold/ordered recipients",
             ));
         }
-        if !common_submission(&receipt, &[&claim.context]) {
+        report.set(ClaimSetAndIntent, Pass);
+        report.set(CommonSubmission, Fail);
+        report.matched_fingerprint = common_submission(&receipt, &[&claim.context]);
+        if report.matched_fingerprint.is_none() {
             return Err(Error::ReceiptMismatch);
         }
+        report.set(CommonSubmission, Pass);
+        report.set(OutputKeyRoles, Fail);
         claims::composite(&body.quorum_public_key)?;
+        report.set(OutputKeyRoles, Pass);
+        report.set(ResultBinding, Fail);
         if result.quorum_key_id != body.quorum_key_id
             || result.quorum_public_key != body.quorum_public_key
         {
             return Err(Error::ClaimMismatch("quorum result ID/key"));
         }
+        report.set(ResultBinding, Pass);
+        report.set(ShareRoutingShape, Fail);
         if result.share_ids.len() != expected.recipients.len()
             || result.share_ids.iter().any(String::is_empty)
         {
             return Err(Error::ClaimMismatch("quorum share routing labels"));
         }
+        report.set(ShareRoutingShape, Pass);
         Ok(VerifiedQuorumKey {
             id: body.quorum_key_id,
             public_key: body.quorum_public_key,
@@ -383,44 +510,81 @@ impl TvcProvenance {
         client: &TurnkeyClient<S>,
         organization: &str,
         proofs: &[turnkey_client::generated::external::data::v1::AppProof],
+        report: &mut ProofReport,
     ) -> Result<Vec<Claim>, Error> {
+        report.set(EnvelopeCount, Fail);
         if proofs.len() > 64 {
             return Err(Error::MalformedEvidence(
                 "more than 64 proof envelopes".into(),
             ));
         }
+        report.set(EnvelopeCount, Pass);
         let mut claims = Vec::new();
-        for proof in proofs {
+        for (proof, entry) in proofs.iter().zip(&mut report.envelopes) {
+            entry.set(EnvelopeRouting, Fail);
             if proof.proof_payload.len() > 256 * 1024 {
                 return Err(Error::MalformedEvidence(
                     "inner proof exceeds 256 KiB".into(),
                 ));
             }
             if claims::is_policy(&proof.proof_payload)? {
+                entry.set(EnvelopeRouting, Pass);
+                entry.policy_excluded = true;
                 continue;
             }
+            entry.set(EnvelopeRouting, Pass);
+            entry.set(EphemeralKeyFormat, Fail);
             claims::composite(&proof.public_key)?;
+            entry.ephemeral_key = Some(proof.public_key.clone());
+            entry.set(EphemeralKeyFormat, Pass);
+            entry.set(BootProofLookup, Fail);
             let boot = crate::get_boot_proof_for_app_proof(client, organization.to_owned(), proof)
                 .await
                 .map_err(|error| Error::BootProofLookup(error.into()))?
                 .boot_proof
                 .ok_or(Error::ProofUnavailable)?;
-            let authenticated = self.endorsement.authenticate(proof, &boot)?;
-            claims.push(claims::decode(authenticated.bytes())?);
+            entry.set(BootProofLookup, Pass);
+            let authenticated = self
+                .endorsement
+                .authenticate_reported(proof, &boot, entry)?;
+            entry.set(ClaimDecode, Fail);
+            let claim = claims::decode(authenticated.bytes())?;
+            entry.claim = Some(match &claim {
+                Claim::Operator(claim) => ClaimEvidence::Operator {
+                    organization: claim.body.organization_id.clone(),
+                    wallet: claim.body.wallet_id.clone(),
+                    path: claim.body.derivation_path.clone(),
+                    public_key: claim.body.address.clone(),
+                    digests: claim.context.digests.clone(),
+                },
+                Claim::Quorum(claim) => ClaimEvidence::Quorum {
+                    organization: claim.body.organization_id.clone(),
+                    id: claim.body.quorum_key_id.clone(),
+                    public_key: claim.body.quorum_public_key.clone(),
+                    threshold: claim.body.threshold,
+                    recipients: claim.body.operator_encrypt_keys.clone(),
+                    digests: claim.context.digests.clone(),
+                },
+            });
+            entry.set(ClaimDecode, Pass);
+            claims.push(claim);
         }
         Ok(claims)
     }
 }
 
-fn common_submission(receipt: &ActivityReceipt, contexts: &[&Context]) -> bool {
-    receipt.sent_fingerprints().any(|sent| {
-        contexts.iter().all(|context| {
-            context
-                .digests
-                .iter()
-                .any(|digest| digest == &sent.to_hex())
+fn common_submission(receipt: &ActivityReceipt, contexts: &[&Context]) -> Option<String> {
+    receipt
+        .sent_fingerprints()
+        .find(|sent| {
+            contexts.iter().all(|context| {
+                context
+                    .digests
+                    .iter()
+                    .any(|digest| digest == &sent.to_hex())
+            })
         })
-    })
+        .map(|sent| sent.to_hex())
 }
 
 #[cfg(test)]

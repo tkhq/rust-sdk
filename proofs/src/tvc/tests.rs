@@ -8,7 +8,7 @@ use turnkey_client::{
     RetryConfig, TurnkeyClient, TurnkeyP256ApiKey,
     generated::{
         CreateTvcOperatorIntent, CreateTvcQuorumKeyIntent,
-        external::data::v1::{AppProof, SignatureScheme},
+        external::data::v1::{AppProof, BootProof, SignatureScheme},
     },
 };
 use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate, matchers::method};
@@ -294,7 +294,12 @@ async fn canonical_points_composites_and_maximum_claim_boundaries() {
     ));
     assert!(
         verifier()
-            .claims(&capture_client("http://127.0.0.1:1".into()), "org-id", &[p])
+            .claims(
+                &capture_client("http://127.0.0.1:1".into()),
+                "org-id",
+                &[p],
+                &mut empty_report(1)
+            )
             .await
             .is_err()
     );
@@ -303,7 +308,8 @@ async fn canonical_points_composites_and_maximum_claim_boundaries() {
             .claims(
                 &capture_client("http://127.0.0.1:1".into()),
                 "org-id",
-                &vec![proof(operator_payload(0, vec!["ab".repeat(32)]).to_string()); 65]
+                &vec![proof(operator_payload(0, vec!["ab".repeat(32)]).to_string()); 65],
+                &mut empty_report(65)
             )
             .await
             .is_err()
@@ -314,6 +320,7 @@ async fn canonical_points_composites_and_maximum_claim_boundaries() {
 enum Mode {
     Operator,
     Quorum,
+    QuorumThreeRecipients,
     Split,
     Common,
     SubstituteWallet,
@@ -329,6 +336,7 @@ enum Mode {
     MissingContext,
     WrongType,
     WrongQuorumId,
+    QuorumSubstitutedKey,
     ReorderedRecipients,
     Replay,
     EarlierClaim,
@@ -353,7 +361,11 @@ impl Respond for Producer {
         let mut result = json!({"walletId":"wallet-1","operatorId":"routing-label","encryptPublicKey":point(1),"signPublicKey":point(2)});
         let quorum = matches!(
             self.mode,
-            Mode::Quorum | Mode::WrongQuorumId | Mode::ReorderedRecipients
+            Mode::Quorum
+                | Mode::QuorumThreeRecipients
+                | Mode::WrongQuorumId
+                | Mode::QuorumSubstitutedKey
+                | Mode::ReorderedRecipients
         );
         match self.mode {
             Mode::Split => {
@@ -396,12 +408,21 @@ impl Respond for Producer {
         let mut proofs: Vec<_> = roles.into_iter().map(|v| proof(v.to_string())).collect();
         if quorum {
             let mut payload = quorum_payload(vec![digest(request)]);
+            if matches!(self.mode, Mode::QuorumThreeRecipients) {
+                payload["tvcQuorumKeyCreateProof"]["operatorEncryptKeys"] =
+                    json!([point(1), point(2), point(3)]);
+            }
             if matches!(self.mode, Mode::ReorderedRecipients) {
                 payload["tvcQuorumKeyCreateProof"]["operatorEncryptKeys"] =
                     json!([point(2), point(1)]);
             }
             proofs = vec![proof(payload.to_string())];
-            result = json!({"quorumKeyId":if matches!(self.mode,Mode::WrongQuorumId){"substituted"}else{"quorum-1"},"quorumPublicKey":format!("{}{}",point(3),point(4)),"shareIds":["s1","s2"]});
+            let share_ids = if matches!(self.mode, Mode::QuorumThreeRecipients) {
+                vec!["s1", "s2", "s3"]
+            } else {
+                vec!["s1", "s2"]
+            };
+            result = json!({"quorumKeyId":if matches!(self.mode,Mode::WrongQuorumId){"substituted"}else{"quorum-1"},"quorumPublicKey":if matches!(self.mode,Mode::QuorumSubstitutedKey){format!("{}{}",point(5),point(6))}else{format!("{}{}",point(3),point(4))},"shareIds":share_ids});
         }
         proofs.push(AppProof {
             scheme: SignatureScheme::Unspecified,
@@ -437,8 +458,16 @@ async fn receipt(mode: Mode) -> ActivityReceipt {
         .unwrap()
         .with_app_proofs();
     match mode {
-        Mode::Quorum | Mode::WrongQuorumId | Mode::ReorderedRecipients => {
-            let operator_encrypt_keys = vec![point(1), point(2)];
+        Mode::Quorum
+        | Mode::QuorumThreeRecipients
+        | Mode::WrongQuorumId
+        | Mode::QuorumSubstitutedKey
+        | Mode::ReorderedRecipients => {
+            let operator_encrypt_keys = if matches!(mode, Mode::QuorumThreeRecipients) {
+                vec![point(1), point(2), point(3)]
+            } else {
+                vec![point(1), point(2)]
+            };
             client
                 .create_tvc_quorum_key_with_receipt(
                     "org-id".into(),
@@ -893,4 +922,477 @@ async fn boot_lookup_failure_is_reported_without_resubmitting_creation() {
             .all(|r| serde_json::from_slice::<Value>(&r.body).unwrap()
                 == json!({"organizationId":"org-id", "ephemeralKey":hex::encode(pin())}))
     );
+}
+
+fn empty_report(count: usize) -> ProofReport {
+    ProofReport::new(
+        "synthetic test policy",
+        hex::encode(pin()),
+        AcceptanceEvidence::Operator {
+            organization: "org-id".into(),
+            wallet: None,
+            base_path: "m/0".into(),
+            returned: None,
+        },
+        Vec::new(),
+        count,
+    )
+}
+
+fn states(checks: &[Check]) -> Vec<(ProofCheck, CheckState)> {
+    checks
+        .iter()
+        .map(|check| (check.kind, check.state))
+        .collect()
+}
+
+#[tokio::test]
+async fn reports_actual_operator_and_quorum_acceptance_with_full_public_operands() {
+    let server = boot_server().await;
+    for existing_wallet in [None, Some("wallet-1".to_owned())] {
+        let expected =
+            OperatorExpectation::parse("org-id".into(), existing_wallet, "m/0".into()).unwrap();
+        let (result, report) = verifier()
+            .accept_operator_reported(
+                &capture_client(server.uri()),
+                &expected,
+                receipt(Mode::Operator).await,
+            )
+            .await
+            .into_parts();
+        result.unwrap();
+        assert!(report.checks().iter().all(|check| check.state == Pass));
+        assert_eq!(
+            report.signer_quorum_key(),
+            hex::encode(fixture::quorum_key())
+        );
+        assert_eq!(
+            report.matched_fingerprint(),
+            Some(report.sent_fingerprints()[0].as_str())
+        );
+        for envelope in &report.envelopes()[..2] {
+            assert!(envelope.checks().iter().all(|check| check.state == Pass));
+            assert_eq!(envelope.ephemeral_key(), Some(hex::encode(pin()).as_str()));
+            let attestation = envelope.attestation().unwrap();
+            assert_eq!(attestation.issued_at_ms, fixture::ISSUED_AT);
+            assert_eq!(attestation.public_key, Some(hex::encode(pin())));
+            assert!(
+                attestation
+                    .pcrs
+                    .iter()
+                    .any(|(index, pcr)| *index == 17 && pcr.len() == 96)
+            );
+            assert_eq!(
+                envelope.boot().unwrap().manifest_hash,
+                envelope.boot().unwrap().envelope_manifest_hash
+            );
+            let Some(ClaimEvidence::Operator {
+                public_key,
+                digests,
+                ..
+            }) = envelope.claim()
+            else {
+                panic!("operator claim evidence");
+            };
+            assert_eq!(public_key.len(), 130);
+            assert_eq!(digests, report.sent_fingerprints());
+        }
+        let policy = &report.envelopes()[2];
+        assert!(policy.policy_excluded());
+        assert_eq!(policy.checks()[0].state, Pass);
+        assert!(
+            policy.checks()[1..]
+                .iter()
+                .all(|check| check.state == CheckState::NotRun)
+        );
+        assert!(policy.claim().is_none());
+    }
+    let expected = QuorumExpectation::parse("org-id".into(), 2, vec![point(1), point(2)]).unwrap();
+    let (result, report) = verifier()
+        .accept_quorum_reported(
+            &capture_client(server.uri()),
+            &expected,
+            receipt(Mode::Quorum).await,
+        )
+        .await
+        .into_parts();
+    result.unwrap();
+    assert!(report.checks().iter().all(|check| check.state == Pass));
+    let Some(ClaimEvidence::Quorum {
+        public_key,
+        recipients,
+        ..
+    }) = report.envelopes()[0].claim()
+    else {
+        panic!("quorum claim evidence");
+    };
+    assert_eq!(public_key, &format!("{}{}", point(3), point(4)));
+    assert_eq!(recipients, &vec![point(1), point(2)]);
+    let debug = format!("{report:?}");
+    assert!(!debug.contains("unrelated-ump-key"));
+    assert!(!debug.contains("signature:"));
+    assert!(!debug.contains("synthetic-predicate-test"));
+}
+
+#[test]
+fn authentication_failure_reports_stop_at_the_actual_failed_operation() {
+    let original = proof(operator_payload(0, vec!["ab".repeat(32)]).to_string());
+    let mut bad_endorsement = fixture::boot();
+    bad_endorsement.quorum_key_attestation_signature_hex = Some("00".repeat(64));
+    let manifest = fixture::manifest();
+    let mut doc = fixture::attestation(&manifest);
+    doc.timestamp = 1;
+    let bad_aws = fixture::boot_from(manifest, &doc);
+    let mut bad_boot = fixture::boot();
+    bad_boot.ephemeral_public_key_hex = format!("{}{}", point(7), point(9));
+    let mut malformed_boot = fixture::boot();
+    malformed_boot.qos_manifest_b64 = "not-base64".into();
+    let malformed_envelope = BootProof {
+        qos_manifest_envelope_b64: base64::encode([0]),
+        ..fixture::boot()
+    };
+    let malformed_key = BootProof {
+        ephemeral_public_key_hex: "00".repeat(130),
+        ..fixture::boot()
+    };
+    let mut bad_app = original.clone();
+    bad_app.signature = "00".repeat(64);
+    let operations = [
+        DocumentEndorsement,
+        AwsAttestationAtIssuance,
+        BootBinding,
+        ApplicationSignature,
+    ];
+    for (failed, app, boot, has_boot_evidence) in [
+        (DocumentEndorsement, &original, bad_endorsement, false),
+        (AwsAttestationAtIssuance, &original, bad_aws, false),
+        (BootBinding, &original, bad_boot, true),
+        (BootBinding, &original, malformed_boot, false),
+        (BootBinding, &original, malformed_envelope, false),
+        (BootBinding, &original, malformed_key, false),
+        (ApplicationSignature, &bad_app, fixture::boot(), true),
+    ] {
+        let mut report = EnvelopeReport::new();
+        assert!(matches!(
+            verifier()
+                .endorsement
+                .authenticate_reported(app, &boot, &mut report),
+            Err(Error::EndorsementFailure)
+        ));
+        let index = operations
+            .iter()
+            .position(|operation| *operation == failed)
+            .unwrap();
+        let expected = operations
+            .iter()
+            .enumerate()
+            .map(|(i, kind)| {
+                (
+                    *kind,
+                    if i < index {
+                        Pass
+                    } else if i == index {
+                        Fail
+                    } else {
+                        CheckState::NotRun
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(states(&report.checks()[3..7]), expected);
+        assert_eq!(report.checks().last().unwrap().state, CheckState::NotRun);
+        assert_eq!(report.attestation().is_some(), index >= 2);
+        assert_eq!(report.boot().is_some(), has_boot_evidence);
+        assert!(report.claim().is_none());
+    }
+}
+
+#[tokio::test]
+async fn acceptance_failure_reports_retain_original_errors_and_no_later_passes() {
+    let server = boot_server().await;
+    for (mode, failed) in [
+        (Mode::Replay, CommonSubmission),
+        (Mode::SubstituteKey, ResultBinding),
+        (Mode::MissingContext, ClaimDecode),
+        (Mode::Empty, ClaimSetAndIntent),
+        (Mode::WrongType, ActivityShape),
+    ] {
+        let (result, report) = verifier()
+            .accept_operator_reported(
+                &capture_client(server.uri()),
+                &expected(),
+                receipt(mode).await,
+            )
+            .await
+            .into_parts();
+        match failed {
+            CommonSubmission => assert!(matches!(result, Err(Error::ReceiptMismatch))),
+            ResultBinding | ActivityShape => {
+                assert!(matches!(result, Err(Error::ClaimMismatch(_))))
+            }
+            ClaimDecode => assert!(matches!(result, Err(Error::MalformedEvidence(_)))),
+            ClaimSetAndIntent => assert!(matches!(result, Err(Error::ProofUnavailable))),
+            _ => panic!("unexpected test stage"),
+        }
+        if failed == ClaimDecode {
+            assert_eq!(report.envelopes()[0].checks().last().unwrap().state, Fail);
+            assert!(
+                report.envelopes()[1]
+                    .checks()
+                    .iter()
+                    .all(|check| check.state == CheckState::NotRun)
+            );
+            assert!(
+                report.checks()[2..]
+                    .iter()
+                    .all(|check| check.state == CheckState::NotRun)
+            );
+        } else {
+            let failed_index = report
+                .checks()
+                .iter()
+                .position(|check| check.kind == failed)
+                .unwrap();
+            assert_eq!(report.checks()[failed_index].state, Fail);
+            assert!(
+                report.checks()[failed_index + 1..]
+                    .iter()
+                    .all(|check| check.state == CheckState::NotRun)
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn envelope_bounds_routing_and_key_errors_are_failed_not_unrun() {
+    let client = capture_client("http://127.0.0.1:1".into());
+    let valid = proof(operator_payload(0, vec!["ab".repeat(32)]).to_string());
+    let mut malformed_routing = valid.clone();
+    malformed_routing.proof_payload = "private-sentinel-invalid-json".into();
+    let mut oversized = valid.clone();
+    oversized.proof_payload = "x".repeat(256 * 1024 + 1);
+    let mut bad_key = valid.clone();
+    bad_key.public_key = "secret-sentinel-not-a-key".into();
+    for (proofs, failed) in [
+        (vec![valid; 65], EnvelopeCount),
+        (vec![malformed_routing], EnvelopeRouting),
+        (vec![oversized], EnvelopeRouting),
+        (vec![bad_key], EphemeralKeyFormat),
+    ] {
+        let mut report = empty_report(proofs.len());
+        assert!(matches!(
+            verifier()
+                .claims(&client, "org-id", &proofs, &mut report)
+                .await,
+            Err(Error::MalformedEvidence(_))
+        ));
+        let checks = if failed == EnvelopeCount {
+            report.checks()
+        } else {
+            report.envelopes()[0].checks()
+        };
+        let i = checks
+            .iter()
+            .position(|check| check.kind == failed)
+            .unwrap();
+        assert_eq!(checks[i].state, Fail);
+        assert!(
+            checks[i + 1..]
+                .iter()
+                .all(|check| check.state == CheckState::NotRun)
+        );
+        let diagnostic = format!("{report:?}");
+        assert!(!diagnostic.contains("private-sentinel"));
+        assert!(!diagnostic.contains("secret-sentinel"));
+    }
+}
+
+#[tokio::test]
+async fn quorum_failure_reports_bind_the_complete_key_and_ordered_intent() {
+    let server = boot_server().await;
+    let expected =
+        QuorumExpectation::parse("org-id".into(), 2, vec![point(1), point(2), point(3)]).unwrap();
+    let (result, report) = verifier()
+        .accept_quorum_reported(
+            &capture_client(server.uri()),
+            &expected,
+            receipt(Mode::QuorumThreeRecipients).await,
+        )
+        .await
+        .into_parts();
+    result.unwrap();
+    assert!(report.checks().iter().all(|check| check.state == Pass));
+    for (mode, expected, failed) in [
+        (
+            Mode::WrongQuorumId,
+            QuorumExpectation::parse("org-id".into(), 2, vec![point(1), point(2)]).unwrap(),
+            ResultBinding,
+        ),
+        (
+            Mode::QuorumSubstitutedKey,
+            QuorumExpectation::parse("org-id".into(), 2, vec![point(1), point(2)]).unwrap(),
+            ResultBinding,
+        ),
+        (
+            Mode::ReorderedRecipients,
+            QuorumExpectation::parse("org-id".into(), 2, vec![point(1), point(2)]).unwrap(),
+            ClaimSetAndIntent,
+        ),
+        (
+            Mode::QuorumThreeRecipients,
+            QuorumExpectation::parse("org-id".into(), 3, vec![point(1), point(2), point(3)])
+                .unwrap(),
+            ClaimSetAndIntent,
+        ),
+        (
+            Mode::Quorum,
+            QuorumExpectation::parse("org-id".into(), 2, vec![point(1), point(3)]).unwrap(),
+            ClaimSetAndIntent,
+        ),
+    ] {
+        let (result, report) = verifier()
+            .accept_quorum_reported(
+                &capture_client(server.uri()),
+                &expected,
+                receipt(mode).await,
+            )
+            .await
+            .into_parts();
+        assert!(matches!(result, Err(Error::ClaimMismatch(_))));
+        assert!(
+            report.envelopes()[0]
+                .checks()
+                .iter()
+                .all(|check| check.state == Pass)
+        );
+        let i = report
+            .checks()
+            .iter()
+            .position(|check| check.kind == failed)
+            .unwrap();
+        assert_eq!(report.checks()[i].state, Fail);
+        assert!(
+            report.checks()[i + 1..]
+                .iter()
+                .all(|check| check.state == CheckState::NotRun)
+        );
+        if matches!(mode, Mode::QuorumSubstitutedKey) {
+            let AcceptanceEvidence::Quorum {
+                returned: Some(returned),
+                ..
+            } = report.acceptance()
+            else {
+                panic!("returned quorum evidence");
+            };
+            assert_eq!(returned.public_key, format!("{}{}", point(5), point(6)));
+            let Some(ClaimEvidence::Quorum { public_key, .. }) = report.envelopes()[0].claim()
+            else {
+                panic!("signed quorum evidence");
+            };
+            assert_eq!(public_key, &format!("{}{}", point(3), point(4)));
+        }
+    }
+}
+
+#[tokio::test]
+async fn distinct_ephemeral_keys_stay_scoped_to_each_authenticated_envelope() {
+    use qos_core::protocol::QosHash;
+    let second_key = format!("{}{}", point(12), point(13));
+    let manifest = fixture::manifest();
+    let mut doc = fixture::attestation(&manifest);
+    let key_bytes = hex::decode(&second_key).unwrap();
+    doc.public_key = Some(serde_bytes::ByteBuf::from(key_bytes.clone()));
+    let pcr17 = qos_nsm::nitro::expected_manifest_commitment_pcr::<qos_nsm::nitro::Live>(
+        &manifest.qos_hash(),
+        &key_bytes,
+    )
+    .unwrap();
+    doc.pcrs
+        .insert(17, serde_bytes::ByteBuf::from(pcr17.to_vec()));
+    let mut second_boot = fixture::boot_from(manifest, &doc);
+    second_boot.ephemeral_public_key_hex = second_key.clone();
+    let server = boot_server().await;
+    Mock::given(wiremock::matchers::body_json(
+        json!({"organizationId":"org-id", "ephemeralKey":second_key}),
+    ))
+    .respond_with(ResponseTemplate::new(200).set_body_json(json!({"bootProof":second_boot})))
+    .mount(&server)
+    .await;
+    let first = proof(operator_payload(0, vec!["ab".repeat(32)]).to_string());
+    let mut second = proof(operator_payload(1, vec!["ab".repeat(32)]).to_string());
+    second.public_key = second_key.clone();
+    let signature: Signature = SigningKey::from_slice(&[13; 32])
+        .unwrap()
+        .sign(second.proof_payload.as_bytes());
+    second.signature = hex::encode(signature.to_bytes());
+    let mut report = empty_report(2);
+    verifier()
+        .claims(
+            &capture_client(server.uri()),
+            "org-id",
+            &[first, second],
+            &mut report,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        report.envelopes()[0].ephemeral_key(),
+        Some(hex::encode(pin()).as_str())
+    );
+    assert_eq!(
+        report.envelopes()[1].ephemeral_key(),
+        Some(second_key.as_str())
+    );
+    assert!(
+        report
+            .envelopes()
+            .iter()
+            .all(|entry| entry.checks().iter().all(|check| check.state == Pass))
+    );
+}
+
+#[tokio::test]
+async fn boot_lookup_failure_is_fail_and_leaves_later_envelopes_unrun() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(503).set_body_string("private-backend-sentinel"))
+        .mount(&server)
+        .await;
+    let (result, report) = verifier()
+        .accept_operator_reported(
+            &capture_client(server.uri()),
+            &expected(),
+            receipt(Mode::Operator).await,
+        )
+        .await
+        .into_parts();
+    assert!(matches!(
+        result,
+        Err(Error::BootProofLookup(BootProofLookupError::HttpStatus(
+            503
+        )))
+    ));
+    let checks = report.envelopes()[0].checks();
+    let i = checks
+        .iter()
+        .position(|check| check.kind == BootProofLookup)
+        .unwrap();
+    assert_eq!(checks[i].state, Fail);
+    assert!(
+        checks[i + 1..]
+            .iter()
+            .all(|check| check.state == CheckState::NotRun)
+    );
+    assert!(
+        report.envelopes()[1]
+            .checks()
+            .iter()
+            .all(|check| check.state == CheckState::NotRun)
+    );
+    assert!(
+        report.checks()[2..]
+            .iter()
+            .all(|check| check.state == CheckState::NotRun)
+    );
+    assert!(!format!("{report:?}").contains("private-backend-sentinel"));
 }

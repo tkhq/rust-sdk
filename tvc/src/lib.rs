@@ -27,3 +27,5 @@ pub(crate) mod quorum_key_metadata;
 pub(crate) mod terminal;
 pub mod util;
 pub(crate) mod yubikey;
+
+mod proofs;

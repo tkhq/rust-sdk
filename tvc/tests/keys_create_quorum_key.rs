@@ -24,7 +24,8 @@ fn create_quorum_key_help_lists_required_explicit_inputs() {
         .stdout(predicate::str::contains("--operator-encrypt-keys <HEX>"))
         .stdout(predicate::str::contains("TVC_OPERATOR_ENCRYPT_KEYS"))
         .stdout(predicate::str::contains("--operator-ids <UUID>"))
-        .stdout(predicate::str::contains("TVC_OPERATOR_IDS"));
+        .stdout(predicate::str::contains("TVC_OPERATOR_IDS"))
+        .stdout(predicate::str::contains("--verbose-proofs"));
 }
 
 #[test]
@@ -129,5 +130,27 @@ fn create_quorum_key_rejects_threshold_above_u8_range() {
         .failure()
         .stderr(predicate::str::contains(
             "out of range integral type conversion attempted",
+        ));
+}
+
+#[test]
+fn verbose_proofs_parses_for_quorum_creation() {
+    let home = TempDir::new().unwrap();
+    cargo_bin_cmd!("tvc")
+        .env_clear()
+        .env("HOME", home.path())
+        .args([
+            "keys",
+            "create-quorum-key",
+            "--verbose-proofs",
+            "--threshold",
+            "3",
+            "--operator-ids",
+        ])
+        .arg(format!("{FIRST_OPERATOR_ID},{SECOND_OPERATOR_ID}"))
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "threshold (3) cannot exceed operator encryption public key count (2)",
         ));
 }

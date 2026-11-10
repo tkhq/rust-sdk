@@ -27,7 +27,8 @@ fn operator_create_help_documents_defaults_and_env_inputs() {
         .stdout(predicate::str::contains("m/5527107'/0'/0'"))
         .stdout(predicate::str::contains("TVC_OPERATOR_ACCOUNT_PATH"))
         .stdout(predicate::str::contains("--serial"))
-        .stdout(predicate::str::contains("--default"));
+        .stdout(predicate::str::contains("--default"))
+        .stdout(predicate::str::contains("--verbose-proofs"));
 }
 
 #[test]
@@ -270,4 +271,43 @@ fn a_failed_save_reports_the_recovery_record() {
         .stderr(predicate::str::contains(r#"[[orgs."default".operators]]"#))
         .stderr(predicate::str::contains("kind = \"yubikey\""))
         .stderr(predicate::str::contains("default_operator_kind"));
+}
+
+#[test]
+fn verbose_proofs_is_hosted_only_before_credentials_are_loaded() {
+    let home = tempfile::TempDir::new().unwrap();
+    cargo_bin_cmd!("tvc")
+        .env_clear()
+        .env("HOME", home.path())
+        .args([
+            "operator",
+            "create",
+            "--kind",
+            "yubikey",
+            "--verbose-proofs",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--verbose-proofs is only valid with --kind hosted",
+        ))
+        .stderr(predicate::str::contains("No active organization").not());
+}
+
+#[test]
+fn verbose_proofs_parses_for_new_and_existing_wallets() {
+    let home = tempfile::TempDir::new().unwrap();
+    for wallet in [
+        vec![],
+        vec!["--wallet-id", "11111111-1111-4111-8111-111111111111"],
+    ] {
+        cargo_bin_cmd!("tvc")
+            .env_clear()
+            .env("HOME", home.path())
+            .args(["operator", "create", "--verbose-proofs"])
+            .args(wallet)
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("No active organization"));
+    }
 }
