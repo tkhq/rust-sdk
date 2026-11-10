@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.17.2](https://github.com/tkhq/rust-sdk/compare/turnkey_enclave_encrypt-v0.17.1...turnkey_enclave_encrypt-v0.17.2) - 2026-11-09
+
+### Other
+
+- release v0.17.1
+
 ## [0.17.1](https://github.com/tkhq/rust-sdk/compare/turnkey_enclave_encrypt-v0.17.0...turnkey_enclave_encrypt-v0.17.1) - 2026-10-30
 
 ### Other
