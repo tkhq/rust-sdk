@@ -3,34 +3,78 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "I need to ship a TVC app end to end with the tvc CLI, from creating the app through to confirming it is serving traffic. This runs unattended in CI, so nothing can prompt for input.",
-      "expected_output": "Runs the CLI with --message-format json (which also puts it in non-interactive mode), follows operator create -> app create -> deploy create -> deploy approve -> poll deploy get-status, and passes --dangerous-skip-interactive to approve since non-interactive mode requires it. Treats set-live-deploy as conditional on isTargeted, because the first deployment auto-targets on approval.",
-      "files": ["skills/tvc-deployments/references/deploy-lifecycle.md"],
+      "prompt": "Ship a new TVC deployment end to end with the tvc CLI and confirm it is serving traffic. This runs unattended in CI, so nothing can prompt. The app already exists: appId 8d2f6a1c-4b3e-4f5a-9c7d-0e1f2a3b4c5d. Image: ghcr.io/acme/signer@sha256:9f1e2d3c4b5a69788796a5b4c3d2e1f0aabbccddeeff00112233445566778899 (linux/amd64), pivot binary at /tvc_app with sha256 3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d, no pivot args, listens on port 3000. CI has TVC_ORG_ID, TVC_API_KEY_PUBLIC, TVC_API_KEY_PRIVATE and TVC_OPERATOR_SEED as secrets and no tvc login profile.",
+      "expected_output": "Gives the command sequence with --message-format json on every call: deploy create from flags (or a config file) with the given image, path, digest and ports; deploy approve with --dangerous-skip-interactive, authenticating the signature with the operator seed (TVC_OPERATOR_SEED / --operator-seed-path) rather than tvc login; a bounded poll of deploy get-status; app set-live-deploy only when isTargeted is false, since a first deployment auto-targets. Does not run app create or operator create in CI.",
+      "files": [
+        "skills/tvc-deployments/SKILL.md",
+        "skills/tvc-deployments/references/ci-recipe.md"
+      ],
       "assertions": [
-        { "type": "contains", "value": "--message-format json" },
-        { "type": "regex", "value": "deploy[\"'\\s,]+approve", "comment": "tolerates both shell form (deploy approve) and argv arrays (\"deploy\", \"approve\")" },
-        { "type": "contains", "value": "--dangerous-skip-interactive" },
-        { "type": "contains", "value": "set-live-deploy" },
-        { "type": "regex", "value": "isTargeted", "comment": "set-live-deploy must be conditional: the first deployment auto-targets on approval, and calling it on an already-targeted deployment fails with HTTP 400" },
-        { "type": "regex", "value": "deploy get-status|get-status" },
+        {
+          "type": "contains",
+          "value": "--message-format json"
+        },
+        {
+          "type": "regex",
+          "value": "deploy[\"'\\s,]+create",
+          "comment": "tolerates both shell form and argv arrays"
+        },
+        {
+          "type": "regex",
+          "value": "deploy[\"'\\s,]+approve"
+        },
+        {
+          "type": "contains",
+          "value": "--dangerous-skip-interactive"
+        },
+        {
+          "type": "regex",
+          "value": "--operator-seed(-path)?|TVC_OPERATOR_SEED",
+          "comment": "env-only CI must approve with the seed; no profile exists"
+        },
+        {
+          "type": "regex",
+          "value": "deploy get-status|get-status"
+        },
+        {
+          "type": "contains",
+          "value": "isTargeted",
+          "comment": "set-live-deploy must be conditional: the first deployment auto-targets on approval, and calling it on an already-targeted deployment fails with HTTP 400"
+        },
+        {
+          "type": "contains",
+          "value": "set-live-deploy"
+        },
         {
           "type": "not_regex",
-          "pattern": "^\\s*\\$?\\s*tvc\\s+deploy\\s+list\\b",
+          "pattern": "^\\s*\\$?\\s*(-\\s*)?(run:\\s*)?tvc\\s+(login|app\\s+create|operator\\s+create)\\b",
           "flags": "m",
-          "comment": "Must not INVOKE `tvc deploy list` (it does not exist). Matches only command position, so correctly saying 'there is no deploy list' still passes."
+          "comment": "None of these work unattended without a profile; the app already exists."
         }
-      ]
+      ],
+      "gradeFullResponse": true
     },
     {
       "id": 2,
       "prompt": "How do I check whether my TVC deployment is live and serving traffic from the CLI?",
       "expected_output": "Polls tvc deploy get-status and checks isTargeted true and replicas.ready == replicas.desired; notes there is no --wait flag",
-      "files": ["skills/tvc-deployments/SKILL.md"],
+      "files": [
+        "skills/tvc-deployments/SKILL.md"
+      ],
       "gradeFullResponse": true,
       "assertions": [
-        { "type": "contains", "value": "get-status" },
-        { "type": "contains", "value": "isTargeted" },
-        { "type": "regex", "value": "replicas" },
+        {
+          "type": "contains",
+          "value": "get-status"
+        },
+        {
+          "type": "contains",
+          "value": "isTargeted"
+        },
+        {
+          "type": "regex",
+          "value": "replicas"
+        },
         {
           "type": "not_regex",
           "pattern": "^\\s*\\$?\\s*tvc\\s[^\\n]*--wait\\b",
@@ -43,12 +87,25 @@
       "id": 3,
       "prompt": "List all my TVC deployments with the tvc CLI so I can pick one to approve.",
       "expected_output": "Points at `tvc app status --app-id <APP_ID>`, whose `deployments[]` array enumerates the app's deployments, and uses `targetedDeploymentId` to identify the already-live one (which needs no approval). There is no `tvc deploy list` subcommand. Notes that deployment IDs should still be saved at create time, since the status array reflects runtime state and a freshly created, unapproved deployment may not appear in it.",
-      "files": ["skills/tvc-deployments/SKILL.md"],
+      "files": [
+        "skills/tvc-deployments/SKILL.md"
+      ],
       "gradeFullResponse": true,
       "assertions": [
-        { "type": "regex", "value": "app[\"'\\s,]+status", "comment": "tolerates both shell form and argv arrays" },
-        { "type": "regex", "value": "deployments" },
-        { "type": "regex", "value": "targetedDeploymentId", "comment": "must distinguish the already-live deployment, since a live one is by definition already approved" },
+        {
+          "type": "regex",
+          "value": "app[\"'\\s,]+status",
+          "comment": "tolerates both shell form and argv arrays"
+        },
+        {
+          "type": "regex",
+          "value": "deployments"
+        },
+        {
+          "type": "regex",
+          "value": "targetedDeploymentId",
+          "comment": "must distinguish the already-live deployment, since a live one is by definition already approved"
+        },
         {
           "type": "not_regex",
           "pattern": "^\\s*\\$?\\s*tvc\\s+deploy\\s+list\\b",
@@ -61,44 +118,382 @@
       "id": 4,
       "prompt": "Set up tvc CLI auth for a CI job that has no interactive login.",
       "expected_output": "Uses the TVC_ORG_ID, TVC_API_KEY_PUBLIC, TVC_API_KEY_PRIVATE env vars (all three), not TURNKEY_API_* and not a login prompt",
-      "files": ["skills/tvc-deployments/SKILL.md"],
+      "files": [
+        "skills/tvc-deployments/SKILL.md"
+      ],
       "assertions": [
-        { "type": "contains", "value": "TVC_ORG_ID" },
-        { "type": "contains", "value": "TVC_API_KEY_PUBLIC" },
-        { "type": "contains", "value": "TVC_API_KEY_PRIVATE" },
-        { "type": "not_contains", "value": "TURNKEY_API_PUBLIC_KEY" }
+        {
+          "type": "contains",
+          "value": "TVC_ORG_ID"
+        },
+        {
+          "type": "contains",
+          "value": "TVC_API_KEY_PUBLIC"
+        },
+        {
+          "type": "contains",
+          "value": "TVC_API_KEY_PRIVATE"
+        },
+        {
+          "type": "not_contains",
+          "value": "TURNKEY_API_PUBLIC_KEY"
+        }
       ]
     },
     {
       "id": 5,
       "prompt": "My tvc command failed with {\"reason\":\"command_error\",\"code\":\"unauthorized\",\"httpStatus\":401,\"message\":\"...\"}. What should I do?",
-      "expected_output": "Identifies it as an auth/permission failure, points at verifying TVC_ORG_ID/TVC_API_KEY_* or the login profile and key permissions; branches on code not message",
-      "files": ["skills/tvc-deployments/references/error-reference.md"],
+      "expected_output": "Identifies it as an auth/permission failure and points at the CLI's actual auth model: the three env vars TVC_ORG_ID, TVC_API_KEY_PUBLIC, TVC_API_KEY_PRIVATE must be set together (some-but-not-all errors), and when set they take precedence over the tvc login profile. Branches on code, not message.",
+      "files": [
+        "skills/tvc-deployments/references/error-reference.md"
+      ],
       "gradeFullResponse": true,
       "assertions": [
-        { "type": "regex", "value": "unauthorized|401|credential|permission" },
-        { "type": "regex", "value": "TVC_ORG_ID|TVC_API_KEY|login" }
+        {
+          "type": "regex",
+          "value": "unauthorized|401|credential|permission"
+        },
+        {
+          "type": "contains",
+          "value": "TVC_ORG_ID",
+          "comment": "must name the CLI's actual env vars, not generic TURNKEY_*/config advice"
+        },
+        {
+          "type": "contains",
+          "value": "TVC_API_KEY_PUBLIC"
+        },
+        {
+          "type": "regex",
+          "value": "all three|three (env|variables)|some but not all|precedence|override",
+          "flags": "i",
+          "comment": "skill-specific: the all-or-none rule and env-over-profile precedence"
+        }
       ]
     },
     {
       "id": 6,
       "prompt": "Create a new version of an existing TVC deployment and cut traffic over to it.",
       "expected_output": "Uses deploy init --from-deployment to seed config, deploy create, deploy approve with --dangerous-skip-interactive, then app set-live-deploy to switch traffic",
-      "files": ["skills/tvc-deployments/references/deploy-lifecycle.md"],
+      "files": [
+        "skills/tvc-deployments/references/deploy-lifecycle.md"
+      ],
       "assertions": [
-        { "type": "regex", "value": "--from-deployment|deploy init" },
-        { "type": "regex", "value": "deploy[\"'\\s,]+create", "comment": "tolerates both shell form and argv arrays" },
-        { "type": "contains", "value": "set-live-deploy" }
+        {
+          "type": "regex",
+          "value": "--from-deployment|deploy init"
+        },
+        {
+          "type": "regex",
+          "value": "deploy[\"'\\s,]+create",
+          "comment": "tolerates both shell form and argv arrays"
+        },
+        {
+          "type": "contains",
+          "value": "set-live-deploy"
+        }
       ]
     },
     {
       "id": 7,
       "prompt": "Tail the logs of my TVC deployment from an agent loop.",
       "expected_output": "Uses tvc deploy debug-logs (requires debug-mode deploy), bounds the stream with --tail-lines or a timeout, notes --poll never self-terminates",
-      "files": ["skills/tvc-deployments/SKILL.md"],
+      "files": [
+        "skills/tvc-deployments/SKILL.md"
+      ],
       "assertions": [
-        { "type": "contains", "value": "debug-logs" },
-        { "type": "regex", "value": "--tail-lines|--poll|timeout|bound" }
+        {
+          "type": "contains",
+          "value": "debug-logs"
+        },
+        {
+          "type": "regex",
+          "value": "--tail-lines|--poll|timeout|bound"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "I ran `tvc deploy approve --deploy-id 4c0e7b2a-9f31-4d58-a6e2-7b8c9d0e1f2a --operator-id 6d1a0d5e-0c8b-4e6f-9a2b-3c4d5e6f7a8b --dangerous-skip-interactive --message-format json` with my local (not hosted) operator key and got: operator ID 6d1a0d5e-0c8b-4e6f-9a2b-3c4d5e6f7a8b is not in the deployment's manifest set; operator b7e2c9f4-1d3a-4f5b-8c6d-9e0f1a2b3c4d has the same public key, pass --operator-id b7e2c9f4-1d3a-4f5b-8c6d-9e0f1a2b3c4d. What do I do? Also, in CI I approve with a hosted operator profile instead of this local key. Would the same fix work there?",
+      "expected_output": "Explains that the backend dedupes operators on public key plus operator name, so the id from an earlier app is a different operator record even though the key matches. Retries the same approve with the operator id the error names (b7e2c9f4-...). Does not create a new operator or a new app. For the hosted operator: says the retry does not work there because a hosted operator's id is fixed in the profile config, so the app must be created with the operator name the profile already uses so the backend returns that same operator record.",
+      "files": [
+        "skills/tvc-deployments/SKILL.md"
+      ],
+      "gradeFullResponse": true,
+      "assertions": [
+        {
+          "type": "regex",
+          "value": "--operator-id[\"'\\s=]+b7e2c9f4-1d3a-4f5b-8c6d-9e0f1a2b3c4d",
+          "comment": "must retry with the id the error names"
+        },
+        {
+          "type": "regex",
+          "value": "public key|manifest set|manifestSetOperatorIds"
+        },
+        {
+          "type": "not_regex",
+          "pattern": "^\\s*\\$?\\s*tvc\\s+operator\\s+create\\b",
+          "flags": "m",
+          "comment": "Must not mint a new operator to work around the mismatch; the manifest set already carries this key."
+        },
+        {
+          "type": "not_regex",
+          "pattern": "^\\s*\\$?\\s*tvc\\s+app\\s+create\\b",
+          "flags": "m",
+          "comment": "Must not re-create the app for a non-hosted operator; the fix is a flag value."
+        },
+        {
+          "type": "regex",
+          "value": "hosted",
+          "flags": "i",
+          "comment": "must address the hosted-operator half of the question"
+        },
+        {
+          "type": "regex",
+          "value": "operator name|same name|under the (operator )?name",
+          "flags": "i",
+          "comment": "skill-specific: a hosted operator's id is fixed in the profile, so the fix is creating the app under the operator name the profile already uses (backend dedupes on key + name)"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "I approved the first deployment of a brand-new TVC app, then ran `tvc app set-live-deploy --deploy-id 9a1f3c5e-7b2d-4e8f-a0c1-2d3e4f5a6b7c --message-format json` and got {\"reason\":\"command_error\",\"code\":\"api_error\",\"httpStatus\":400,\"message\":\"... already set as the live deployment\"}. Did the approval fail? How do I make the deployment live?",
+      "expected_output": "Explains nothing failed: the first deployment of an app auto-targets once approval quorum is reached, so set-live-deploy was unnecessary and the 400 confirms the deployment is already targeted. Tells the user to poll tvc deploy get-status and read isTargeted (true) and replicas.ready == replicas.desired, and to call set-live-deploy only when isTargeted is false.",
+      "files": [
+        "skills/tvc-deployments/SKILL.md"
+      ],
+      "gradeFullResponse": true,
+      "assertions": [
+        {
+          "type": "regex",
+          "value": "auto-?target|automatically|already (live|targeted)",
+          "comment": "must explain the first deployment auto-targets"
+        },
+        {
+          "type": "contains",
+          "value": "get-status"
+        },
+        {
+          "type": "contains",
+          "value": "isTargeted"
+        },
+        {
+          "type": "regex",
+          "value": "replicas"
+        },
+        {
+          "type": "not_regex",
+          "pattern": "^\\s*\\$?\\s*tvc\\s+app\\s+set-live-deploy\\s[^\\n]*9a1f3c5e-7b2d-4e8f-a0c1-2d3e4f5a6b7c",
+          "flags": "m",
+          "comment": "Must not retry set-live-deploy on the already-targeted deployment."
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "My TVC deployment 2b4d6f8a-1c3e-4f5a-9b7d-8e9f0a1b2c3d keeps restarting and I need its logs. It was created with a plain `tvc deploy create` (no debug flags) on an app created with plain `tvc app create`. Get me the logs from that deployment.",
+      "expected_output": "States that this deployment can never produce logs: debug logs require the app to have been created with --dangerous-enable-debug-mode-deployments (permanent, decided at app create) and the deployment to have been created with --dangerous-deploy-debug-mode. Does not run or retry debug-logs against the existing deployment. Explains the only path is a new debug-mode deployment, and since this app was not created with debug-mode deployments enabled, that means a new app too.",
+      "files": [
+        "skills/tvc-deployments/SKILL.md"
+      ],
+      "gradeFullResponse": true,
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "--dangerous-deploy-debug-mode"
+        },
+        {
+          "type": "contains",
+          "value": "--dangerous-enable-debug-mode-deployments"
+        },
+        {
+          "type": "regex",
+          "value": "cannot|can't|never|not possible|retroactiv|no way",
+          "comment": "must say the existing deployment cannot produce logs"
+        },
+        {
+          "type": "not_regex",
+          "pattern": "debug-logs[^\\n]*2b4d6f8a-1c3e-4f5a-9b7d-8e9f0a1b2c3d",
+          "comment": "Must not point debug-logs at the non-debug deployment; it has no logs to fetch."
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "My TVC app id is 3f8c1d2e-5b7a-4c9d-8e1f-2a3b4c5d6e7f and its deployment is live in production. What URL do I curl to hit its /health endpoint?",
+      "expected_output": "Runs tvc app list --message-format json, selects the app by id, and reads its publicDomain field. Does not construct a hostname from the app id, since the domain pattern is environment-specific and only the API knows it.",
+      "files": [
+        "skills/tvc-deployments/SKILL.md"
+      ],
+      "gradeFullResponse": true,
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "publicDomain"
+        },
+        {
+          "type": "regex",
+          "value": "app[\"'\\s,]+list",
+          "comment": "tolerates both shell form and argv arrays"
+        },
+        {
+          "type": "not_regex",
+          "pattern": "app-3f8c1d2e-5b7a-4c9d-8e1f-2a3b4c5d6e7f\\.",
+          "comment": "Must not construct a hostname from the app id (any domain suffix). Only the publicDomain the API returns is reliable."
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "Create a TVC app named payments-signer and deploy it. TVC_* credentials are already set in the environment. Run the whole thing for me.",
+      "expected_output": "Before running app create, stops and asks for the four values the CLI cannot discover: pivotContainerImageUrl (linux/amd64 image referenced by digest), pivotPath (path of the pivot binary inside the image), expectedPivotDigest (sha256 of the pivot binary, not the image digest), and pivotArgs. May run app init (local-only) but does not create real resources or guess a digest until those values are provided.",
+      "files": [
+        "skills/tvc-deployments/SKILL.md",
+        "skills/tvc-deployments/references/config-files.md"
+      ],
+      "gradeFullResponse": true,
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "pivotContainerImageUrl"
+        },
+        {
+          "type": "contains",
+          "value": "pivotPath"
+        },
+        {
+          "type": "contains",
+          "value": "expectedPivotDigest"
+        },
+        {
+          "type": "contains",
+          "value": "pivotArgs"
+        },
+        {
+          "type": "regex",
+          "value": "before|first|need|provide|missing|ask",
+          "comment": "must gate app create on having the image values"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "prompt": "Our GitHub Actions job has TVC_ORG_ID, TVC_API_KEY_PUBLIC and TVC_API_KEY_PRIVATE set as secrets and `tvc deploy create` works, but `tvc deploy approve --deploy-id 7e3a9c1b-2d4f-4a6b-8c0e-1f2a3b4c5d6e --dangerous-skip-interactive --message-format json` fails with {\"reason\":\"command_error\",\"code\":\"command_error\",\"message\":\"No active organization. Run `tvc login` first or provide --operator-seed or --operator-seed-path.\"}. How do I make approval work in CI?",
+      "expected_output": "Explains that env-var auth authenticates API calls but carries no operator signing key, and that hosted/YubiKey operators live in the login profile. Tells the user to pass --operator-seed-path (or TVC_OPERATOR_SEED / --operator-seed) with the hex seed of a local operator whose key is in the app's manifest set, stored as a CI secret. Does not suggest running tvc login in CI.",
+      "files": [
+        "skills/tvc-deployments/SKILL.md",
+        "skills/tvc-deployments/references/ci-recipe.md"
+      ],
+      "gradeFullResponse": true,
+      "assertions": [
+        {
+          "type": "regex",
+          "value": "--operator-seed(-path)?|TVC_OPERATOR_SEED",
+          "comment": "the only env-only approval path"
+        },
+        {
+          "type": "regex",
+          "value": "manifest set|manifestSetOperatorIds",
+          "flags": "i",
+          "comment": "the seed's key must be in the app's manifest set"
+        },
+        {
+          "type": "regex",
+          "value": "local key file|local operator|64 hex|backup-operator-key",
+          "flags": "i",
+          "comment": "skill-specific: the seed comes from a local key file operator exported with keys backup-operator-key; the error message alone does not say which operator type works in CI or where the seed comes from"
+        },
+        {
+          "type": "regex",
+          "value": "secret",
+          "flags": "i",
+          "comment": "must treat the seed as a secret"
+        },
+        {
+          "type": "not_regex",
+          "pattern": "^\\s*\\$?\\s*(-\\s*)?(run:\\s*)?tvc\\s+login\\b",
+          "flags": "m",
+          "comment": "Must not tell CI to run tvc login; it needs a human and a TTY."
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "prompt": "I approved TVC deployment 5c7d9e1f-3a5b-4c7d-9e1f-2a3b4c5d6e7f twenty minutes ago. `tvc deploy get-status` has returned {\"reason\":\"deployment_runtime_status\",\"isTargeted\":true,\"replicas\":{\"ready\":0,\"desired\":3}} every 5 seconds since. The app was created with plain `tvc app create`. What now?",
+      "expected_output": "Stops polling and diagnoses from the inputs: recompute expectedPivotDigest from the pushed image at pivotPath, confirm the image is a single-platform linux/amd64 manifest (not an index), and check healthCheckPort/type against what the binary binds; also mentions pull secret, pivotArgs, egress as later checks. Says debug-logs are impossible for this app (not created with --dangerous-enable-debug-mode-deployments). Does not delete and recreate with the same config, and does not just keep polling.",
+      "files": [
+        "skills/tvc-deployments/SKILL.md",
+        "skills/tvc-deployments/references/failure-diagnosis.md"
+      ],
+      "gradeFullResponse": true,
+      "assertions": [
+        {
+          "type": "regex",
+          "value": "expectedPivotDigest|pivot digest",
+          "flags": "i"
+        },
+        {
+          "type": "regex",
+          "value": "amd64|platform|index",
+          "flags": "i"
+        },
+        {
+          "type": "regex",
+          "value": "healthCheckPort|health[- ]check",
+          "flags": "i"
+        },
+        {
+          "type": "regex",
+          "value": "debug",
+          "flags": "i",
+          "comment": "must address why logs are not available"
+        },
+        {
+          "type": "not_regex",
+          "pattern": "^\\s*\\$?\\s*tvc\\s+deploy\\s+delete\\b",
+          "flags": "m",
+          "comment": "Must not delete the failing deployment; it is the evidence, and the same config fails identically."
+        },
+        {
+          "type": "not_regex",
+          "pattern": "debug-logs[^\\n]*5c7d9e1f-3a5b-4c7d-9e1f-2a3b4c5d6e7f",
+          "comment": "Must not run debug-logs against a non-debug deployment."
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "prompt": "In our CI runner (only TVC_ORG_ID, TVC_API_KEY_PUBLIC, TVC_API_KEY_PRIVATE set, no tvc login) I ran `tvc app create --config-file app.json --message-format json` for an app named billing-signer and got {\"reason\":\"command_error\",\"code\":\"command_error\",\"message\":\"no active organization set\"}. Should I just run it again?",
+      "expected_output": "Says no: under env-var auth with no profile the CLI creates the app at the API and then fails while saving bookkeeping, so the app already exists and re-running would create a duplicate. Tells the user to recover the id with tvc app list -n billing-signer and to approve deployments with an operator seed since the manifestSetOperatorIds were not printed.",
+      "files": [
+        "skills/tvc-deployments/SKILL.md",
+        "skills/tvc-deployments/references/error-reference.md"
+      ],
+      "gradeFullResponse": true,
+      "assertions": [
+        {
+          "type": "regex",
+          "value": "app[\"'\\s,]+list",
+          "comment": "must recover the id from app list"
+        },
+        {
+          "type": "regex",
+          "value": "already (exists|created)|was created|did create|duplicate",
+          "flags": "i",
+          "comment": "must say the app exists despite the error"
+        },
+        {
+          "type": "regex",
+          "value": "--operator-seed|TVC_OPERATOR_SEED|profile",
+          "flags": "i",
+          "comment": "must address how approval works without the printed operator ids"
+        },
+        {
+          "type": "not_regex",
+          "pattern": "^\\s*\\$?\\s*(-\\s*)?(run:\\s*)?tvc\\s+app\\s+create\\b",
+          "flags": "m",
+          "comment": "Must not re-run app create; that mints a duplicate app."
+        }
       ]
     }
   ]

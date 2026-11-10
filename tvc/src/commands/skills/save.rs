@@ -28,7 +28,7 @@ passed; unmodified and absent files are always safe to (re)write."#;
 /// Evals are deliberately not bundled: they are test fixtures for the skill's
 /// own CI, not something an agent consumes. The `embedded_manifest_matches_
 /// skills_dir` test keeps this list in sync with `tvc/skills/` on disk.
-const EMBEDDED_SKILL_FILES: [(&str, &str); 4] = [
+const EMBEDDED_SKILL_FILES: [(&str, &str); 6] = [
     (
         "tvc-deployments/SKILL.md",
         include_str!(concat!(
@@ -55,6 +55,20 @@ const EMBEDDED_SKILL_FILES: [(&str, &str); 4] = [
         include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/skills/tvc-deployments/references/error-reference.md"
+        )),
+    ),
+    (
+        "tvc-deployments/references/ci-recipe.md",
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/skills/tvc-deployments/references/ci-recipe.md"
+        )),
+    ),
+    (
+        "tvc-deployments/references/failure-diagnosis.md",
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/skills/tvc-deployments/references/failure-diagnosis.md"
         )),
     ),
 ];

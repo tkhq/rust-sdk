@@ -10,6 +10,28 @@ fn skills_cmd() -> (TempDir, assert_cmd::Command) {
     (temp, cmd)
 }
 
+/// Count the files the binary embeds, from the same on-disk tree the
+/// embedding manifest is checked against. Eval fixtures are deliberately
+/// not embedded, so they are skipped here too.
+fn bundled_file_count() -> u64 {
+    let mut dirs = vec![std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("skills")];
+    let mut count = 0;
+    while let Some(dir) = dirs.pop() {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_file() {
+                count += 1;
+                continue;
+            }
+            if path.file_name().is_some_and(|name| name == "evals") {
+                continue;
+            }
+            dirs.push(path);
+        }
+    }
+    count
+}
+
 fn parse_single_json_line(assert: &assert_cmd::assert::Assert) -> Value {
     let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
     let lines: Vec<_> = stdout.lines().collect();
@@ -33,7 +55,7 @@ fn save_writes_the_bundled_skill_to_an_explicit_dir() {
     assert_eq!(message["reason"], "skills_saved");
     assert_eq!(message["command"], "skills save");
     assert_eq!(message["skills"], serde_json::json!(["tvc-deployments"]));
-    assert_eq!(message["filesWritten"], 4);
+    assert_eq!(message["filesWritten"], bundled_file_count());
     assert_eq!(message["filesUnchanged"], 0);
 
     let skill_md = dest.join("tvc-deployments/SKILL.md");
@@ -65,7 +87,7 @@ fn save_is_idempotent() {
 
     let message = parse_single_json_line(&assert);
     assert_eq!(message["filesWritten"], 0);
-    assert_eq!(message["filesUnchanged"], 4);
+    assert_eq!(message["filesUnchanged"], bundled_file_count());
 }
 
 #[test]
@@ -120,7 +142,7 @@ fn save_force_replaces_a_modified_file() {
 
     let message = parse_single_json_line(&assert);
     assert_eq!(message["filesWritten"], 1);
-    assert_eq!(message["filesUnchanged"], 3);
+    assert_eq!(message["filesUnchanged"], bundled_file_count() - 1);
 
     let content = std::fs::read_to_string(&skill_md).unwrap();
     assert!(content.starts_with("---"), "file must be restored");
