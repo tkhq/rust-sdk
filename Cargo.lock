@@ -4229,6 +4229,7 @@ name = "turnkey_client"
 version = "0.18.0"
 dependencies = [
  "base64 0.22.1",
+ "borsh",
  "chrono",
  "hex",
  "http",
@@ -4240,6 +4241,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with 3.14.0",
+ "sha2",
  "thiserror 2.0.12",
  "tokio",
  "turnkey_api_key_stamper",

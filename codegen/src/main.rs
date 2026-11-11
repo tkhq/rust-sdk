@@ -107,6 +107,7 @@ fn main() {
     let summary_re = Regex::new(r#"summary\s*:\s*\"([^\"]+)\""#).unwrap();
 
     let mut generated_methods = String::new();
+    let mut receipt_methods = String::new();
 
     // The activity type is read directly from the enum annotation on each request message in the external activity proto.
     // Intent and result types are looked up from activities.json using the activity type as the key.
@@ -235,6 +236,47 @@ fn main() {
                             }}
                         "#
                     )
+                } else if supports_receipt(&fn_name) {
+                    receipt_methods.push_str(&format!(r#"
+                        /// {summary} Returns local submission metadata alongside the result.
+                        pub async fn {fn_name}_with_receipt(&self, organization_id: String, timestamp_ms: u128, params: immutable_activity::{activity_intent}) -> Result<SubmittedActivityResult<immutable_activity::{activity_result}>, TurnkeyClientError> {{
+                            let request = self.{fn_name}_request(organization_id, timestamp_ms, params);
+                            let receipt = self.process_activity_with_receipt(&request, "{route}".to_string()).await?;
+                            let result = Self::{fn_name}_result(receipt.activity().clone()).map_err(|error| receipt.submission_error(error))?;
+                            Ok(SubmittedActivityResult::new(result, receipt))
+                        }}
+                    "#));
+                    format!(
+                        r#"
+                        /// {summary}
+                        ///
+                        /// {description}
+                        pub async fn {fn_name}(&self, organization_id: String, timestamp_ms: u128, params: immutable_activity::{activity_intent}) -> Result<ActivityResult<immutable_activity::{activity_result}>, TurnkeyClientError> {{
+                            let request = self.{fn_name}_request(organization_id, timestamp_ms, params);
+                            let activity = self.process_activity(&request, "{route}".to_string()).await?;
+                            Self::{fn_name}_result(activity)
+                        }}
+
+                        fn {fn_name}_request(&self, organization_id: String, timestamp_ms: u128, params: immutable_activity::{activity_intent}) -> {request_type} {{
+                            {request_type} {{
+                                r#type: "{activity_type}".to_string(),
+                                timestamp_ms: timestamp_ms.to_string(),
+                                parameters: Some(params),
+                                organization_id,
+                                {app_proofs_field}
+                            }}
+                        }}
+
+                        fn {fn_name}_result(activity: external_activity::Activity) -> Result<ActivityResult<immutable_activity::{activity_result}>, TurnkeyClientError> {{
+                            let inner = activity.result.ok_or(TurnkeyClientError::MissingResult)?.inner.ok_or(TurnkeyClientError::MissingInnerResult)?;
+                            let result = match inner {{
+                                immutable_activity::result::Inner::{activity_result}(res) => res,
+                                other => return Err(TurnkeyClientError::UnexpectedInnerActivityResult(serde_json::to_string(&other)?)),
+                            }};
+                            Ok(ActivityResult {{ result, activity_id: activity.id, status: activity.status, app_proofs: activity.app_proofs }})
+                        }}
+                    "#
+                    )
                 } else {
                     format!(
                         r#"
@@ -300,7 +342,9 @@ fn main() {
     // Insert the generated methods into the right spot inside of our template
     let method_placeholder = "// <GENERATED_METHODS_PLACEHOLDER>";
     let client_template = fs::read_to_string(CLIENT_TEMPLATE_PATH).unwrap();
-    let output = client_template.replace(method_placeholder, &generated_methods);
+    let output = client_template
+        .replace(method_placeholder, &generated_methods)
+        .replace("// <RECEIPT_METHODS_PLACEHOLDER>", &receipt_methods);
 
     // Write the generated client to the `client` crate
     let generated_client_path = PathBuf::from(GENERATED_CLIENT_DIR).join("client.rs");
@@ -354,6 +398,10 @@ fn main() {
             fs::write(path, new_content).expect("cannot write to file");
         }
     }
+}
+
+fn supports_receipt(method: &str) -> bool {
+    matches!(method, "create_tvc_operator" | "create_tvc_quorum_key")
 }
 
 fn load_activity_version_caps(path: &str) -> ActivityVersionCaps {
@@ -515,6 +563,35 @@ fn requests_with_generate_app_proofs(proto: &str) -> HashSet<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn receipts_are_generated_only_for_the_two_supported_activities() {
+        assert!(supports_receipt("create_tvc_operator"));
+        assert!(supports_receipt("create_tvc_quorum_key"));
+        for method in [
+            "create_wallet",
+            "sign_raw_payload",
+            "get_activity",
+            "create_tvc_app",
+        ] {
+            assert!(!supports_receipt(method));
+        }
+        let generated = include_str!("../../client/src/generated/client.rs");
+        assert_eq!(generated.matches("_with_receipt(").count(), 4);
+        assert_eq!(
+            generated
+                .matches("pub async fn create_tvc_operator_with_receipt(")
+                .count(),
+            1
+        );
+        assert_eq!(
+            generated
+                .matches("pub async fn create_tvc_quorum_key_with_receipt(")
+                .count(),
+            1
+        );
+        assert!(generated.contains("impl<S: RandomizedStamp> TurnkeyClient<S>"));
+    }
 
     #[test]
     fn parse_rpcs_decodes_unary_rpc() {

@@ -21,7 +21,7 @@ use generated::google::rpc::Status;
 use generated::immutable::models::v1::{KeyValue, TransportEncryptionSuite};
 use generated::result::Inner as ActivityResultInner;
 
-use turnkey_api_key_stamper::{Stamp, StampHeader, StamperError};
+use turnkey_api_key_stamper::{RandomizedStamp, Stamp, StamperError};
 use turnkey_enclave_encrypt::errors::EnclaveEncryptError;
 use turnkey_enclave_encrypt::{
     ExportClient, ImportClient, QuorumPublicKey, ServerTargetData, ServerTargetMsgV1,
@@ -77,6 +77,13 @@ pub struct ActivityResult<T> {
 pub use turnkey_api_key_stamper::{TurnkeyP256ApiKey, TurnkeySecp256k1ApiKey};
 
 pub mod generated;
+
+mod receipts;
+use receipts::SubmissionInvocation;
+pub use receipts::{
+    ActivityReceipt, RequestFingerprint, SubmissionFailure, SubmissionFailureCause,
+    SubmissionState, SubmittedActivityResult,
+};
 
 pub mod retry;
 pub mod well_known;
@@ -146,6 +153,12 @@ pub enum TurnkeyClientError {
 
     #[error("Refused to follow redirect (status {0}) to {1}")]
     RefusedRedirect(u16, String),
+
+    #[error("invalid stamp for a submission receipt: {0}")]
+    InvalidReceiptStamp(&'static str),
+
+    #[error(transparent)]
+    SubmissionFailed(#[from] SubmissionFailure),
 
     #[error("Stamper error")]
     StamperError(#[from] StamperError),
@@ -340,11 +353,12 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.generate_app_proofs
     }
 
-    /// POSTs an activity and polls until the status is "COMPLETE"
+    /// Submits an activity and resubmits it while its status is `Pending`.
     ///
-    /// `process_activity` accepts a  arbitrary `Request` and `path` to POST to the Turnkey API.
-    /// It encapsulates the polling logic and is generally meant to be called by other
-    /// activity-specific client functions (e.g. `create_sub_organization`).
+    /// Accepts an arbitrary serializable request and endpoint path. Retries stop
+    /// at the configured retry limit. Returns the activity without a local
+    /// submission receipt; receipt-bearing creation methods retain fingerprints
+    /// for subsequent proof verification.
     ///
     /// Given the Turnkey API is backwards-compatible, this function can be used to submit old versions of activities.
     /// For example, if the latest version for create_sub_organization is "ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V7",
@@ -353,7 +367,8 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// The response is an generic Activity. If you're invoking this function manually you'll have to manually look at
     /// the correct `.activity.result` enum.
     ///
-    /// This function is used by our generated client methods and sets the right request type, URL, and deserializes into the proper result type as well.
+    /// Generated client methods supply the request type and URL, then extract
+    /// the typed result from the returned activity.
     /// Unless you have good reasons, prefer the type-safe client methods such as `sign_raw_payload`.
     ///
     /// # Returns
@@ -370,14 +385,29 @@ impl<S: Stamp> TurnkeyClient<S> {
         request: Request,
         path: String,
     ) -> Result<Activity, TurnkeyClientError> {
+        self.process_activity_with_submission(&request, path, None)
+            .await
+    }
+
+    async fn process_activity_with_submission<Request: Serialize>(
+        &self,
+        request: &Request,
+        path: String,
+        mut submission: Option<&mut SubmissionInvocation>,
+    ) -> Result<Activity, TurnkeyClientError> {
         let mut retry_count = 0;
 
         loop {
-            let response: ActivityResponse = self.process_request(&request, path.clone()).await?;
+            let response: ActivityResponse = self
+                .process_request_with_submission(request, path.clone(), submission.as_deref_mut())
+                .await?;
             let activity = response
                 .activity
                 .ok_or_else(|| TurnkeyClientError::MissingActivity)?;
 
+            if let Some(submission) = submission.as_deref_mut() {
+                submission.observe(&activity);
+            }
             match activity.status {
                 ActivityStatus::Completed => return Ok(activity),
                 ActivityStatus::Pending => {
@@ -422,6 +452,8 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// * POSTing the POST body and the associated stamp to the Turnkey API
     ///
     /// This function is generic and can handle POSTing queries or activities.
+    /// It does not retry based on activity status or return a local submission
+    /// receipt. Use an activity method when Pending retries are needed.
     pub async fn process_request<Request, Response>(
         &self,
         request: &Request,
@@ -431,16 +463,38 @@ impl<S: Stamp> TurnkeyClient<S> {
         Request: Serialize,
         Response: DeserializeOwned,
     {
-        let url = format!("{}{}", self.base_url, path);
-        let post_body = serde_json::to_string(&request)?;
-        let StampHeader { name, value } = self.api_key.stamp(post_body.as_bytes())?;
-        let res = self
-            .http
-            .post(url)
-            .header(name, value)
+        self.process_request_with_submission(request, path, None)
+            .await
+    }
+
+    async fn process_request_with_submission<Request: Serialize, Response: DeserializeOwned>(
+        &self,
+        request: &Request,
+        path: String,
+        submission: Option<&mut SubmissionInvocation>,
+    ) -> Result<Response, TurnkeyClientError> {
+        let post_body = serde_json::to_string(request)?;
+        let header = self.api_key.stamp(post_body.as_bytes())?;
+        let fingerprint = if submission.is_some() {
+            Some(RequestFingerprint::from_stamp(&header, &post_body)?)
+        } else {
+            None
+        };
+        let mut request = self.http.post(format!("{}{}", self.base_url, path));
+        if matches!(
+            path.as_str(),
+            "/public/v1/submit/create_tvc_operator" | "/public/v1/submit/create_tvc_quorum_key"
+        ) {
+            request = request.header("X-TVC-CLIENT-VERSION", env!("CARGO_PKG_VERSION"));
+        }
+        let request = request
+            .header(header.name, header.value)
             .body(post_body)
-            .send()
-            .await?;
+            .build()?;
+        if let (Some(submission), Some(fingerprint)) = (submission, fingerprint) {
+            submission.sent.push(fingerprint);
+        }
+        let res = self.http.execute(request).await?;
 
         let status = res.status();
         if status.is_redirection() {
