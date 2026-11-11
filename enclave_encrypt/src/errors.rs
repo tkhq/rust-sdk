@@ -105,4 +105,7 @@ pub enum EnclaveEncryptError {
 
     #[error("Invalid encryption public key")]
     InvalidEncryptionKey,
+
+    #[error("Purpose binding field is longer than u32::MAX bytes")]
+    PurposeBindingFieldTooLong,
 }
