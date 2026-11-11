@@ -11,7 +11,7 @@ use p256::{
     SecretKey,
     ecdsa::{
         Signature as P256Signature, SigningKey as P256SigningKey, VerifyingKey as P256VerifyingKey,
-        signature::Signer as _,
+        signature::RandomizedSigner as _,
     },
 };
 use rand_core::OsRng;
@@ -39,6 +39,9 @@ pub enum StamperError {
 
     #[error("cannot decode hex: {0}")]
     HexDecode(String),
+
+    #[error("randomized signing failed")]
+    RandomizedSigningFailed,
 }
 
 /// A stamp header to attach to an HTTP request.
@@ -50,8 +53,23 @@ pub struct StampHeader {
 
 /// Generic stamper that operates over raw bytes and returns an HTTP header.
 pub trait Stamp {
+    /// Signs the request body. Built-in API keys use fresh OS randomness on each call.
+    ///
+    /// # Panics
+    ///
+    /// The built-in API key implementations panic if the operating system cannot
+    /// provide randomness. Custom implementations define their own behavior.
     fn stamp(&self, body: &[u8]) -> Result<StampHeader, StamperError>;
 }
+
+mod sealed {
+    pub trait Sealed {}
+}
+
+/// Marks the built-in API keys whose [`Stamp::stamp`] uses fresh OS randomness.
+///
+/// Custom stampers can implement [`Stamp`] but cannot implement this sealed marker.
+pub trait RandomizedStamp: Stamp + sealed::Sealed {}
 
 /// Represents a Turnkey API key using the P-256 curve.
 #[derive(Debug, PartialEq)]
@@ -162,18 +180,40 @@ impl TurnkeyP256ApiKey {
 
 impl Stamp for TurnkeyP256ApiKey {
     fn stamp(&self, body: &[u8]) -> Result<StampHeader, StamperError> {
-        let sig: P256Signature = self.signing_key.sign(body);
-        let stamp = TurnkeyApiStamp {
-            public_key: hex::encode(self.compressed_public_key()),
-            signature: hex::encode(sig.to_der()),
-            scheme: SIGNATURE_SCHEME_P256.to_string(),
-        };
-        let json_stamp = serde_json::to_string(&stamp).unwrap();
-        Ok(StampHeader {
-            name: API_KEY_STAMP_HEADER_NAME.to_string(),
-            value: BASE64_URL_SAFE_NO_PAD.encode(json_stamp.as_bytes()),
-        })
+        let sig: P256Signature = self
+            .signing_key
+            .try_sign_with_rng(&mut OsRng, body)
+            .map_err(|_| StamperError::RandomizedSigningFailed)?;
+        encode_stamp_header(
+            self.compressed_public_key(),
+            sig.to_der().as_bytes(),
+            SIGNATURE_SCHEME_P256,
+        )
     }
+}
+
+impl sealed::Sealed for TurnkeyP256ApiKey {}
+
+impl RandomizedStamp for TurnkeyP256ApiKey {}
+
+/// Formats a request signature as a Turnkey `X-Stamp` header.
+/// The value is base64url-encoded JSON containing the hex-encoded public key,
+/// hex-encoded DER signature, and signature scheme.
+fn encode_stamp_header(
+    public_key: Vec<u8>,
+    signature: &[u8],
+    scheme: &str,
+) -> Result<StampHeader, StamperError> {
+    let stamp = TurnkeyApiStamp {
+        public_key: hex::encode(public_key),
+        signature: hex::encode(signature),
+        scheme: scheme.to_string(),
+    };
+    let json = serde_json::to_vec(&stamp).map_err(|_| StamperError::RandomizedSigningFailed)?;
+    Ok(StampHeader {
+        name: API_KEY_STAMP_HEADER_NAME.to_string(),
+        value: BASE64_URL_SAFE_NO_PAD.encode(json),
+    })
 }
 
 /// Represents a Turnkey API key using the **secp256k1** curve.
@@ -252,19 +292,21 @@ impl TurnkeySecp256k1ApiKey {
 
 impl Stamp for TurnkeySecp256k1ApiKey {
     fn stamp(&self, body: &[u8]) -> Result<StampHeader, StamperError> {
-        let sig: K256Signature = self.signing_key.sign(body);
-        let stamp = TurnkeyApiStamp {
-            public_key: hex::encode(self.compressed_public_key()),
-            signature: hex::encode(sig.to_der()),
-            scheme: SIGNATURE_SCHEME_SECP256K1.to_string(),
-        };
-        let json_stamp = serde_json::to_string(&stamp).unwrap();
-        Ok(StampHeader {
-            name: API_KEY_STAMP_HEADER_NAME.to_string(),
-            value: BASE64_URL_SAFE_NO_PAD.encode(json_stamp.as_bytes()),
-        })
+        let sig: K256Signature = self
+            .signing_key
+            .try_sign_with_rng(&mut OsRng, body)
+            .map_err(|_| StamperError::RandomizedSigningFailed)?;
+        encode_stamp_header(
+            self.compressed_public_key(),
+            sig.to_der().as_bytes(),
+            SIGNATURE_SCHEME_SECP256K1,
+        )
     }
 }
+
+impl sealed::Sealed for TurnkeySecp256k1ApiKey {}
+
+impl RandomizedStamp for TurnkeySecp256k1ApiKey {}
 
 #[cfg(test)]
 mod tests {
@@ -275,6 +317,80 @@ mod tests {
     use k256::ecdsa::{Signature as K256Signature, VerifyingKey as K256VerifyingKey};
     use serde_json::Value;
     use tempfile::NamedTempFile;
+
+    #[test]
+    fn encode_stamp_header_preserves_fields_for_both_schemes() {
+        for (scheme, expected_scheme) in [
+            (SIGNATURE_SCHEME_P256, "SIGNATURE_SCHEME_TK_API_P256"),
+            (
+                SIGNATURE_SCHEME_SECP256K1,
+                "SIGNATURE_SCHEME_TK_API_SECP256K1",
+            ),
+        ] {
+            let header = encode_stamp_header(
+                vec![0x00, 0xab, 0xcd, 0xef],
+                &[0x30, 0x06, 0x02, 0x01, 0x0a, 0x02, 0x01, 0x0f],
+                scheme,
+            )
+            .unwrap();
+            let decoded = BASE64_URL_SAFE_NO_PAD.decode(header.value).unwrap();
+            let json: Value = serde_json::from_slice(&decoded).unwrap();
+            assert_eq!(header.name, "X-Stamp");
+            assert_eq!(
+                json,
+                serde_json::json!({
+                    "publicKey": "00abcdef",
+                    "signature": "300602010a02010f",
+                    "scheme": expected_scheme,
+                })
+            );
+        }
+    }
+
+    #[test]
+    fn encode_stamp_header_is_unpadded_base64url() {
+        let header = encode_stamp_header(vec![0x00, 0xab], &[0x30], SIGNATURE_SCHEME_P256).unwrap();
+        assert!(
+            header
+                .value
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+        );
+        let decoded = BASE64_URL_SAFE_NO_PAD.decode(header.value).unwrap();
+        assert_ne!(decoded.len() % 3, 0);
+        let json: Value = serde_json::from_slice(&decoded).unwrap();
+        assert_eq!(json["scheme"], "SIGNATURE_SCHEME_TK_API_P256");
+    }
+
+    #[test]
+    fn built_in_stamps_verify_and_differ_for_identical_bodies() {
+        let p256 = TurnkeyP256ApiKey::from_bytes([1; 32], None).unwrap();
+        let secp = TurnkeySecp256k1ApiKey::from_bytes([1; 32], None).unwrap();
+        let body = br#"{"timestampMs":"100","message":"same"}"#;
+        for key in [&p256 as &dyn Stamp, &secp as &dyn Stamp] {
+            let first = key.stamp(body).unwrap();
+            let second = key.stamp(body).unwrap();
+            assert_eq!(first.name, "X-Stamp");
+            assert_ne!(first.value, second.value);
+            for stamp in [first, second] {
+                let decoded = BASE64_URL_SAFE_NO_PAD.decode(stamp.value).unwrap();
+                let json: Value = serde_json::from_slice(&decoded).unwrap();
+                let pk = hex::decode(json["publicKey"].as_str().unwrap()).unwrap();
+                let sig = hex::decode(json["signature"].as_str().unwrap()).unwrap();
+                match json["scheme"].as_str().unwrap() {
+                    SIGNATURE_SCHEME_P256 => P256VerifyingKey::from_sec1_bytes(&pk)
+                        .unwrap()
+                        .verify(body, &P256Signature::from_der(&sig).unwrap())
+                        .unwrap(),
+                    SIGNATURE_SCHEME_SECP256K1 => K256VerifyingKey::from_sec1_bytes(&pk)
+                        .unwrap()
+                        .verify(body, &K256Signature::from_der(&sig).unwrap())
+                        .unwrap(),
+                    other => panic!("unexpected scheme {other}"),
+                }
+            }
+        }
+    }
 
     #[test]
     fn test_generate_and_stamp() {
