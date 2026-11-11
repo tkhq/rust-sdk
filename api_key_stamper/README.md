@@ -51,6 +51,16 @@ let stamp = api_key.stamp("POST request body goes here".as_bytes());
 
 The stamp produced is a base64-encoded value, ready to be used as a stamp header. See [our documentation](https://docs.turnkey.com/developer-reference/api-overview/stamps#api-keys) for more information.
 
+## Randomized request signing
+
+The built-in P-256 and secp256k1 API keys use fresh OS randomness on every
+`stamp()` call. This distinguishes repeated submissions of identical request
+bytes when the SDK matches app proofs to request receipts. Stamping panics if
+the operating system cannot provide randomness.
+
+These keys implement the sealed `RandomizedStamp` marker required by receipt
+APIs. Custom stampers can still implement `Stamp`, but do not acquire this marker.
+
 ## Error handling
 
 Errors are centralized in `StamperError`.
