@@ -312,7 +312,7 @@ impl ImportClient {
     }
 
     /// Encrypts a secret like [`Self::encrypt_secret_bundle`], and binds the ciphertext to the
-    /// secret's `name` and `static_properties` with [`purpose_binding::encode`].
+    /// secret's `name` and `static_properties` with [`purpose_binding::import_secrets`].
     ///
     /// The `IMPORT_SECRETS` activity must send the same `name` and the same `static_properties`
     /// in the same order, with `TRANSPORT_ENCRYPTION_SUITE_ENCLAVE_ENCRYPT_V2`.
@@ -324,8 +324,7 @@ impl ImportClient {
         name: Option<&str>,
         static_properties: &[(&str, &str)],
     ) -> Result<String, EnclaveEncryptError> {
-        let binding =
-            purpose_binding::encode(purpose_binding::IMPORT_SECRETS, name, static_properties)?;
+        let binding = purpose_binding::import_secrets(name, static_properties)?;
         let encrypted = self.encrypt_client.encrypt_with_purpose_binding(
             secret.as_ref().as_bytes(),
             import_bundle.as_ref().as_bytes(),
@@ -1058,9 +1057,7 @@ mod test {
             .unwrap();
         let msg: ClientSendMsg = serde_json::from_str(&encrypted).unwrap();
 
-        let binding =
-            purpose_binding::encode(purpose_binding::IMPORT_SECRETS, Some("card"), &properties)
-                .unwrap();
+        let binding = purpose_binding::import_secrets(Some("card"), &properties).unwrap();
         assert_eq!(
             *enclave
                 .into_recv()

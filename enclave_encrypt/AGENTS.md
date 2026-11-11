@@ -16,12 +16,10 @@ Guidance for changes to `turnkey_enclave_encrypt`.
 - Every new activity type that encrypts a payload to the enclave (ingress)
   must bind the ciphertext to its purpose. Never ship a new ingress flow that
   passes an empty `purpose_binding`.
-- Bind the activity with `purpose_binding::encode`, passing the
-  `EncryptedIngressPurpose` proto enum string name for that activity. If the
-  enclave stores or acts on request fields other than a name and key-value
-  properties alongside the plaintext, add an encoder to `purpose_binding` that
-  starts with the length-prefixed purpose, followed by every such field, each
-  length-prefixed.
+- Add an encoder to `purpose_binding` for the activity. It starts with the
+  length-prefixed `EncryptedIngressPurpose` proto enum string name for that
+  activity, followed by every request field the enclave stores or acts on
+  alongside the plaintext, each length-prefixed.
 - Give each activity its own purpose string, so a binding for one activity
   never equals a binding for another.
 - Expose a client helper that builds the binding from the request fields, so

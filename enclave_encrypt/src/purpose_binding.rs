@@ -6,21 +6,18 @@
 
 use crate::errors::EnclaveEncryptError;
 
-/// `EncryptedIngressPurpose` proto enum string name for `ImportSecrets`.
-pub const IMPORT_SECRETS: &str = "ENCRYPTED_INGRESS_PURPOSE_IMPORT_SECRETS";
+const IMPORT_SECRETS_PURPOSE: &str = "ENCRYPTED_INGRESS_PURPOSE_IMPORT_SECRETS";
 
-/// Binding for one ingress request: its `purpose`, its `name`, and its `static_properties`, in
-/// order. `purpose` is the `EncryptedIngressPurpose` proto enum string name of the flow.
+/// Binding for one `ImportSecretParams`: its `name` and its `static_properties`, in order.
 ///
-/// An absent `name` is encoded as the empty string, so the enclave must reject an empty `name`
-/// for the two never to collide (the signer does for `ImportSecrets`).
-pub fn encode(
-    purpose: &str,
+/// An absent `name` is encoded as the empty string; the signer rejects an empty `name`, so the
+/// two never collide.
+pub fn import_secrets(
     name: Option<&str>,
     static_properties: &[(&str, &str)],
 ) -> Result<Vec<u8>, EnclaveEncryptError> {
     let mut binding = Vec::new();
-    push_field(&mut binding, purpose.as_bytes())?;
+    push_field(&mut binding, IMPORT_SECRETS_PURPOSE.as_bytes())?;
     push_field(&mut binding, name.unwrap_or_default().as_bytes())?;
     push_len(&mut binding, static_properties.len())?;
     for (key, value) in static_properties {
@@ -86,7 +83,7 @@ mod tests {
     #[test]
     fn import_secrets_matches_spec_vector() {
         assert_eq!(
-            hex::encode(encode(IMPORT_SECRETS, Some("corp-amex"), PROPERTIES).unwrap()),
+            hex::encode(import_secrets(Some("corp-amex"), PROPERTIES).unwrap()),
             BINDING
         );
     }
@@ -98,27 +95,29 @@ mod tests {
             PLAINTEXT
         );
 
+        let bound = import_secrets(Some("corp-amex"), PROPERTIES).unwrap();
+        let mut other_purpose = Vec::new();
+        push_field(
+            &mut other_purpose,
+            b"ENCRYPTED_INGRESS_PURPOSE_OAUTH2_AUTHENTICATE",
+        )
+        .unwrap();
+        other_purpose.extend_from_slice(&bound[4 + IMPORT_SECRETS_PURPOSE.len()..]);
+
         let reversed: Vec<_> = PROPERTIES.iter().rev().copied().collect();
         for binding in [
             Vec::new(),
-            encode(
-                "ENCRYPTED_INGRESS_PURPOSE_OAUTH2_AUTHENTICATE",
-                Some("corp-amex"),
-                PROPERTIES,
-            )
-            .unwrap(),
-            encode(IMPORT_SECRETS, Some("corp-amex"), &PROPERTIES[..1]).unwrap(),
-            encode(IMPORT_SECRETS, Some("corp-visa"), PROPERTIES).unwrap(),
-            encode(IMPORT_SECRETS, None, PROPERTIES).unwrap(),
-            encode(IMPORT_SECRETS, Some("corp-amex"), &reversed).unwrap(),
-            encode(
-                IMPORT_SECRETS,
+            other_purpose,
+            import_secrets(Some("corp-amex"), &PROPERTIES[..1]).unwrap(),
+            import_secrets(Some("corp-visa"), PROPERTIES).unwrap(),
+            import_secrets(None, PROPERTIES).unwrap(),
+            import_secrets(Some("corp-amex"), &reversed).unwrap(),
+            import_secrets(
                 Some("corp-amex"),
                 &[("kind", "credit-card"), ("dual-agent-consensus", "false")],
             )
             .unwrap(),
-            encode(
-                IMPORT_SECRETS,
+            import_secrets(
                 Some("corp-amex"),
                 &[("kind", "credit-card"), ("dual-agent-override", "true")],
             )
@@ -134,8 +133,8 @@ mod tests {
     #[test]
     fn absent_name_encodes_as_empty() {
         assert_eq!(
-            encode(IMPORT_SECRETS, None, PROPERTIES).unwrap(),
-            encode(IMPORT_SECRETS, Some(""), PROPERTIES).unwrap()
+            import_secrets(None, PROPERTIES).unwrap(),
+            import_secrets(Some(""), PROPERTIES).unwrap()
         );
     }
 }
