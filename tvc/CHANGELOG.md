@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.18.0](https://github.com/tkhq/rust-sdk/compare/tvc-v0.17.2...tvc-v0.18.0) - 2026-11-11
+
+### Added
+
+- *(tvc-deployments)* run each eval three times against a no-skill baseline and emit a report
+- *(tvc-deployments)* trim SKILL.md, add CI recipe and failure-diagnosis references
+- *(tvc-deployments)* add known-gaps section, negative evals, and production hostname fix
+
+### Fixed
+
+- *(tvc-deployments)* tell the agent to write CI steps out in full instead of pointing at the recipe
+- *(tvc-deployments)* exit nonzero from the eval runner when any assertion or run fails
+- *(tvc-deployments)* fail every eval assertion when the agent run itself fails
+- *(tvc-deployments)* document env-only app create quirk and verified CI recipe timings
+
+### Other
+
+- Merge pull request #315 from tkhq/am/TVC-614/tvc-deployments-skill-improvements
+- *(tvc-deployments)* sharpen eval 13 with the skill-only seed export fact
+- *(tvc-deployments)* merge main and align pull-secret expiry wording
+- *(tvc-deployments)* walk the skills tree iteratively in the save test
+- *(tvc-deployments)* merge main and document pull-secret expiry
+- *(tvc-deployments)* make image visibility and pull secrets explicit in the CI recipe
+- *(tvc)* derive skills save file counts from the skills directory
+- *(tvc-deployments)* note that no CLI command lists supported QOS versions
+
 ## [0.17.2](https://github.com/tkhq/rust-sdk/compare/tvc-v0.17.1...tvc-v0.17.2) - 2026-11-09
 
 ### Added

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.18.0](https://github.com/tkhq/rust-sdk/compare/turnkey_enclave_encrypt-v0.17.2...turnkey_enclave_encrypt-v0.18.0) - 2026-11-11
+
+### Other
+
+- Merge pull request #306 from tkhq/zeke/enclave-encrypt-purpose-binding
+- Keep the purpose binding encoder specific to ImportSecrets and test that another purpose with the same fields fails to decrypt.
+- Take the ingress purpose as a parameter of the purpose binding encoder.
+- Add purpose bindings to the enclave encrypt HPKE AAD.
+
 ## [0.17.2](https://github.com/tkhq/rust-sdk/compare/turnkey_enclave_encrypt-v0.17.1...turnkey_enclave_encrypt-v0.17.2) - 2026-11-09
 
 ### Other
