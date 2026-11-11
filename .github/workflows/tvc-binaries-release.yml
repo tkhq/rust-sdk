@@ -45,10 +45,6 @@ jobs:
             os: macos-15
             build_tool: cargo
             rustflags: ""
-          - target: x86_64-apple-darwin
-            os: macos-15-intel
-            build_tool: cargo
-            rustflags: ""
     env:
       RUSTFLAGS: ${{ matrix.rustflags }}
       TARGET: ${{ matrix.target }}
