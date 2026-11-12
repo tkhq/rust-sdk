@@ -4245,6 +4245,7 @@ dependencies = [
  "turnkey_api_key_stamper",
  "turnkey_enclave_encrypt",
  "wiremock",
+ "zeroize",
 ]
 
 [[package]]
