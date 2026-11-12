@@ -71,9 +71,10 @@ tvc deploy approve \
   --operator-id <OPERATOR_UUID> # Turnkey's ID for your operator (from app create response)
 
 # Alternative: provide manifest file and IDs manually
+# Turnkey's ID for the manifest (from deploy create response)
 tvc deploy approve \
   --manifest manifest.json \
-  --manifest-id <MANIFEST_UUID> \  # Turnkey's ID for the manifest (from deploy create response)
+  --manifest-id <MANIFEST_UUID> \
   --operator-id <OPERATOR_UUID>
 
 # Save a single provisioning bundle JSON for later re-encryption / submission
