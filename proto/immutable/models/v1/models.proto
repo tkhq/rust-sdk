@@ -322,6 +322,9 @@ enum TransportEncryptionSuite {
   // The target public key is a hex-encoded uncompressed P-256 public key, and the
   // target message is a JSON-encoded enclave_encrypt ServerTargetMsgV1.
   TRANSPORT_ENCRYPTION_SUITE_ENCLAVE_ENCRYPT_V1 = 1;
+  // Same as TRANSPORT_ENCRYPTION_SUITE_ENCLAVE_ENCRYPT_V1, with a purpose binding of the
+  // request fields appended to the HPKE AAD.
+  TRANSPORT_ENCRYPTION_SUITE_ENCLAVE_ENCRYPT_V2 = 2;
 }
 
 // Type to represent arbitrary key-value pairs evaluated in the policy engine.

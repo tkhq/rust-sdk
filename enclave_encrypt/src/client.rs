@@ -301,22 +301,13 @@ impl ImportClient {
     /// Unlike wallet and private key imports, secrets ingress is scoped to the
     /// organization rather than to the user who initiated it.
     ///
+    /// The ciphertext is bound to the secret's `name` and `static_properties` with
+    /// [`purpose_binding::import_secrets`]. The `IMPORT_SECRETS` activity must send the same
+    /// `name` and the same `static_properties` in the same order, with
+    /// `TRANSPORT_ENCRYPTION_SUITE_ENCLAVE_ENCRYPT_V2`.
+    ///
     /// Returns a string containing the JSON-encoded value, ready-to-use in an `IMPORT_SECRETS` activity
     pub fn encrypt_secret_bundle<S: AsRef<str>, T: AsRef<str>, U: AsRef<str>>(
-        &mut self,
-        secret: S,
-        import_bundle: T,
-        organization_id: U,
-    ) -> Result<String, EnclaveEncryptError> {
-        self.encrypt_wallet_with_bundle(secret, import_bundle, organization_id, "")
-    }
-
-    /// Encrypts a secret like [`Self::encrypt_secret_bundle`], and binds the ciphertext to the
-    /// secret's `name` and `static_properties` with [`purpose_binding::import_secrets`].
-    ///
-    /// The `IMPORT_SECRETS` activity must send the same `name` and the same `static_properties`
-    /// in the same order, with `TRANSPORT_ENCRYPTION_SUITE_ENCLAVE_ENCRYPT_V2`.
-    pub fn encrypt_bound_secret_bundle<S: AsRef<str>, T: AsRef<str>, U: AsRef<str>>(
         &mut self,
         secret: S,
         import_bundle: T,
@@ -1043,7 +1034,7 @@ mod test {
     }
 
     #[test]
-    fn import_bound_secret_round_trips_with_its_binding() {
+    fn import_secret_round_trips_with_its_binding() {
         let properties = [("kind", "credit-card"), ("dual-agent-consensus", "true")];
         let secret = "4111111111111111";
         let enclave = EnclaveEncryptServer::from_enclave_auth_key(
@@ -1053,7 +1044,7 @@ mod test {
         );
         let bundle = serde_json::to_string(&enclave.publish_target().unwrap()).unwrap();
         let encrypted = ImportClient::new(&test_quorum_public_key())
-            .encrypt_bound_secret_bundle(secret, bundle, "org-id", Some("card"), &properties)
+            .encrypt_secret_bundle(secret, bundle, "org-id", Some("card"), &properties)
             .unwrap();
         let msg: ClientSendMsg = serde_json::from_str(&encrypted).unwrap();
 

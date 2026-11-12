@@ -557,6 +557,10 @@ pub enum TransportEncryptionSuite {
     /// target message is a JSON-encoded enclave_encrypt ServerTargetMsgV1.
     #[serde(rename = "TRANSPORT_ENCRYPTION_SUITE_ENCLAVE_ENCRYPT_V1")]
     EnclaveEncryptV1 = 1,
+    /// Same as TRANSPORT_ENCRYPTION_SUITE_ENCLAVE_ENCRYPT_V1, with a purpose binding of the
+    /// request fields appended to the HPKE AAD.
+    #[serde(rename = "TRANSPORT_ENCRYPTION_SUITE_ENCLAVE_ENCRYPT_V2")]
+    EnclaveEncryptV2 = 2,
 }
 impl TransportEncryptionSuite {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -567,6 +571,7 @@ impl TransportEncryptionSuite {
         match self {
             Self::Unspecified => "TRANSPORT_ENCRYPTION_SUITE_UNSPECIFIED",
             Self::EnclaveEncryptV1 => "TRANSPORT_ENCRYPTION_SUITE_ENCLAVE_ENCRYPT_V1",
+            Self::EnclaveEncryptV2 => "TRANSPORT_ENCRYPTION_SUITE_ENCLAVE_ENCRYPT_V2",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -575,6 +580,9 @@ impl TransportEncryptionSuite {
             "TRANSPORT_ENCRYPTION_SUITE_UNSPECIFIED" => Some(Self::Unspecified),
             "TRANSPORT_ENCRYPTION_SUITE_ENCLAVE_ENCRYPT_V1" => {
                 Some(Self::EnclaveEncryptV1)
+            }
+            "TRANSPORT_ENCRYPTION_SUITE_ENCLAVE_ENCRYPT_V2" => {
+                Some(Self::EnclaveEncryptV2)
             }
             _ => None,
         }
