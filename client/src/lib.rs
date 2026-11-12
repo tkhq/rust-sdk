@@ -495,6 +495,7 @@ impl<S: Stamp> TurnkeyClient<S> {
         static_properties: BTreeMap<String, String>,
         signer_quorum_public_key: &QuorumPublicKey,
     ) -> Result<ActivityResult<String>, TurnkeyClientError> {
+        let encryption_suite = TransportEncryptionSuite::EnclaveEncryptV2;
         // `init_import_secrets` is marked INTERNAL in the proto and has no
         // generated client method; submit it directly through `process_activity`.
         let init_activity = self
@@ -504,7 +505,7 @@ impl<S: Stamp> TurnkeyClient<S> {
                     timestamp_ms: self.current_timestamp().to_string(),
                     organization_id: organization_id.clone(),
                     parameters: Some(InitImportSecretsIntent {
-                        encryption_suite: TransportEncryptionSuite::EnclaveEncryptV1,
+                        encryption_suite,
                         num_secrets: 1,
                     }),
                 },
@@ -529,20 +530,23 @@ impl<S: Stamp> TurnkeyClient<S> {
             "init import target message",
         )?;
 
-        // `encrypt_secret_bundle` verifies the quorum signature over the target
-        // and encrypts to it.
         let target_data = target_data(&target)?;
+        let static_properties: Vec<KeyValue> = static_properties
+            .into_iter()
+            .map(|(key, value)| KeyValue { key, value })
+            .collect();
+        let bound_properties: Vec<(&str, &str)> = static_properties
+            .iter()
+            .map(|kv| (kv.key.as_str(), kv.value.as_str()))
+            .collect();
         let secret_payload = ImportClient::new(signer_quorum_public_key).encrypt_secret_bundle(
             &plaintext,
             &target,
             &organization_id,
+            name.as_deref(),
+            &bound_properties,
         )?;
         let target_public_key = hex::encode(*target_data.target_public);
-
-        let static_properties = static_properties
-            .into_iter()
-            .map(|(key, value)| KeyValue { key, value })
-            .collect();
 
         let batch = self
             .import_secrets(
@@ -553,7 +557,7 @@ impl<S: Stamp> TurnkeyClient<S> {
                         name,
                         secret_payload,
                         target_public_key,
-                        encryption_suite: TransportEncryptionSuite::EnclaveEncryptV1,
+                        encryption_suite,
                         static_properties,
                     }],
                 },
@@ -1353,12 +1357,20 @@ mod test {
                 hex::encode(*target_data(&target).unwrap().target_public)
             );
 
-            // The enclave can decrypt what we sent it.
             let payload = secret["secretPayload"].as_str().unwrap();
+            let binding = turnkey_enclave_encrypt::purpose_binding::import_secrets(
+                Some("my-secret"),
+                &[("environment", "production")],
+            )
+            .unwrap();
             assert_eq!(
-                enclave
+                secret["encryptionSuite"],
+                "TRANSPORT_ENCRYPTION_SUITE_ENCLAVE_ENCRYPT_V2"
+            );
+            assert_eq!(
+                *enclave
                     .into_recv()
-                    .decrypt(&serde_json::from_str(payload).unwrap())
+                    .decrypt_with_purpose_binding(&serde_json::from_str(payload).unwrap(), &binding)
                     .unwrap(),
                 b"super secret",
             );
