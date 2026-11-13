@@ -230,25 +230,25 @@ pub struct GetPolicyResponse {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
-pub struct GetVelocityControlRequest {
+pub struct GetUsageControlRequest {
     pub organization_id: ::prost::alloc::string::String,
-    pub velocity_control_id: ::prost::alloc::string::String,
+    pub usage_control_id: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
-pub struct GetVelocityControlResponse {
+pub struct GetUsageControlResponse {
     #[serde(default)]
-    pub velocity_control: ::core::option::Option<
-        super::super::super::super::external::data::v1::VelocityControl,
+    pub usage_control: ::core::option::Option<
+        super::super::super::super::external::data::v1::UsageControl,
     >,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
-pub struct ListVelocityControlsRequest {
+pub struct ListUsageControlsRequest {
     pub organization_id: ::prost::alloc::string::String,
     #[serde(default)]
     pub pagination_options: ::core::option::Option<
@@ -259,10 +259,10 @@ pub struct ListVelocityControlsRequest {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
-pub struct ListVelocityControlsResponse {
+pub struct ListUsageControlsResponse {
     #[serde(default)]
-    pub velocity_controls: ::prost::alloc::vec::Vec<
-        super::super::super::super::external::data::v1::VelocityControl,
+    pub usage_controls: ::prost::alloc::vec::Vec<
+        super::super::super::super::external::data::v1::UsageControl,
     >,
     #[serde(default)]
     pub page_info: ::core::option::Option<
@@ -456,12 +456,47 @@ pub struct GetSendTransactionStatusRequest {
     pub send_transaction_status_id: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
+#[serde_with::serde_as]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct EthTransactionFee {
+    #[serde(default)]
+    #[serde_as(as = "Option<serde_with::DisplayFromStr>")]
+    pub gas_used: ::core::option::Option<u64>,
+    #[serde(default)]
+    pub effective_gas_price: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub total_cost_usd: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+#[serde_with::serde_as]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SolanaTransactionFee {
+    #[serde(default)]
+    #[serde_as(as = "Option<serde_with::DisplayFromStr>")]
+    pub fee_lamports: ::core::option::Option<u64>,
+    #[serde(default)]
+    #[serde_as(as = "Option<serde_with::DisplayFromStr>")]
+    pub sponsored_rent_lamports: ::core::option::Option<u64>,
+    #[serde(default)]
+    pub total_cost_usd: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub fee_cost_usd: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub rent_cost_usd: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct EthSendTransactionStatus {
     #[serde(default)]
     pub tx_hash: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub fee: ::core::option::Option<EthTransactionFee>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -470,6 +505,8 @@ pub struct EthSendTransactionStatus {
 pub struct SolanaSendTransactionStatus {
     #[serde(default)]
     pub signature: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub fee: ::core::option::Option<SolanaTransactionFee>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -505,7 +542,7 @@ pub mod get_send_transaction_status_response {
 pub struct GetFiatOffRampQuotesRequest {
     pub organization_id: ::prost::alloc::string::String,
     pub crypto_amount: ::prost::alloc::string::String,
-    pub fiat_currency_code: super::super::super::super::immutable::common::v1::FiatOnRampCurrency,
+    pub fiat_currency_code: super::super::super::super::immutable::common::v1::FiatRampCurrency,
     pub caip19: ::prost::alloc::string::String,
     #[serde(default)]
     pub country_code: ::core::option::Option<::prost::alloc::string::String>,
@@ -528,18 +565,18 @@ pub struct GetFiatOffRampQuotesResponse {
 #[derive(Clone, PartialEq)]
 pub struct FiatOffRampQuote {
     pub quote_id: ::prost::alloc::string::String,
-    pub provider: super::super::super::super::immutable::common::v1::FiatOnRampProvider,
+    pub provider: super::super::super::super::immutable::common::v1::FiatRampProvider,
     #[serde(default)]
     pub service_provider: ::core::option::Option<::prost::alloc::string::String>,
     #[serde(default)]
-    pub fiat_amount: ::core::option::Option<FiatOnRampAmount>,
-    pub fiat_currency_code: super::super::super::super::immutable::common::v1::FiatOnRampCurrency,
+    pub fiat_amount: ::core::option::Option<FiatRampAmount>,
+    pub fiat_currency_code: super::super::super::super::immutable::common::v1::FiatRampCurrency,
     #[serde(default)]
-    pub crypto_amount: ::core::option::Option<FiatOnRampAmount>,
+    pub crypto_amount: ::core::option::Option<FiatRampAmount>,
     pub caip19: ::prost::alloc::string::String,
-    pub payment_method: super::super::super::super::immutable::common::v1::FiatOnRampPaymentMethod,
+    pub payment_method: super::super::super::super::immutable::common::v1::FiatRampPaymentMethod,
     #[serde(default)]
-    pub total_fee: ::core::option::Option<FiatOnRampAmount>,
+    pub total_fee: ::core::option::Option<FiatRampAmount>,
     #[serde(default)]
     pub expires_at: ::core::option::Option<::prost::alloc::string::String>,
 }
@@ -868,7 +905,7 @@ pub struct ListFiatOnRampCredentialsResponse {
 pub struct GetFiatOnRampQuotesRequest {
     pub organization_id: ::prost::alloc::string::String,
     pub fiat_amount: ::prost::alloc::string::String,
-    pub fiat_currency_code: super::super::super::super::immutable::common::v1::FiatOnRampCurrency,
+    pub fiat_currency_code: super::super::super::super::immutable::common::v1::FiatRampCurrency,
     pub caip19: ::prost::alloc::string::String,
     #[serde(default)]
     pub country_code: ::core::option::Option<::prost::alloc::string::String>,
@@ -891,27 +928,27 @@ pub struct GetFiatOnRampQuotesResponse {
 #[derive(Clone, PartialEq)]
 pub struct FiatOnRampQuote {
     pub quote_id: ::prost::alloc::string::String,
-    pub onramp_provider: super::super::super::super::immutable::common::v1::FiatOnRampProvider,
+    pub provider: super::super::super::super::immutable::common::v1::FiatRampProvider,
     #[serde(default)]
     pub service_provider: ::core::option::Option<::prost::alloc::string::String>,
     #[serde(default)]
-    pub fiat_amount: ::core::option::Option<FiatOnRampAmount>,
-    pub fiat_currency_code: super::super::super::super::immutable::common::v1::FiatOnRampCurrency,
+    pub fiat_amount: ::core::option::Option<FiatRampAmount>,
+    pub fiat_currency_code: super::super::super::super::immutable::common::v1::FiatRampCurrency,
     #[serde(default)]
-    pub crypto_amount: ::core::option::Option<FiatOnRampAmount>,
+    pub crypto_amount: ::core::option::Option<FiatRampAmount>,
     pub caip19: ::prost::alloc::string::String,
-    pub payment_method: super::super::super::super::immutable::common::v1::FiatOnRampPaymentMethod,
+    pub payment_method: super::super::super::super::immutable::common::v1::FiatRampPaymentMethod,
     #[serde(default)]
-    pub total_fee: ::core::option::Option<FiatOnRampAmount>,
+    pub total_fee: ::core::option::Option<FiatRampAmount>,
     #[serde(default)]
     pub expires_at: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
-/// FiatOnRampAmount is an atomic amount plus its decimal display.
+/// Atomic amount plus its decimal display.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
-pub struct FiatOnRampAmount {
+pub struct FiatRampAmount {
     pub amount: ::prost::alloc::string::String,
     #[serde(default)]
     pub decimals: i32,
@@ -956,6 +993,10 @@ pub struct GetIndicativeSwapQuoteResponse {
     #[serde(default)]
     pub estimated_fixed_rate_adjustment_usd: ::core::option::Option<
         ::prost::alloc::string::String,
+    >,
+    #[serde(default)]
+    pub estimated_charges: ::core::option::Option<
+        super::super::super::super::immutable::activity::v1::SwapCharges,
     >,
 }
 #[derive(Debug)]
@@ -1012,6 +1053,10 @@ pub struct GetSwapStatusResponse {
     pub error: ::core::option::Option<SwapError>,
     #[serde(default)]
     pub destination_address: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub charges: ::core::option::Option<
+        super::super::super::super::immutable::activity::v1::SwapCharges,
+    >,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]

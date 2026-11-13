@@ -192,6 +192,18 @@
       "intentType": "CreateFiatOffRampSessionIntent",
       "resultType": "CreateFiatOffRampSessionResult"
     },
+    "ACTIVITY_TYPE_CREATE_EXTERNAL_SIGNER_V1": {
+      "intentType": "CreateExternalSignerIntentV1",
+      "resultType": "CreateExternalSignerResultV1"
+    },
+    "ACTIVITY_TYPE_DELETE_EXTERNAL_SIGNER_V1": {
+      "intentType": "DeleteExternalSignerIntentV1",
+      "resultType": "DeleteExternalSignerResultV1"
+    },
+    "ACTIVITY_TYPE_MINT_JWT": {
+      "intentType": "MintJwtIntent",
+      "resultType": "MintJwtResult"
+    },
     "ACTIVITY_TYPE_INIT_IMPORT_WALLET": {
       "intentType": "InitImportWalletIntent",
       "resultType": "InitImportWalletResult"
@@ -328,6 +340,10 @@
       "intentType": "CreateFiatOnRampCredentialIntent",
       "resultType": "CreateFiatOnRampCredentialResult"
     },
+    "ACTIVITY_TYPE_CREATE_FIAT_RAMP_CREDENTIAL": {
+      "intentType": "CreateFiatRampCredentialIntent",
+      "resultType": "CreateFiatRampCredentialResult"
+    },
     "ACTIVITY_TYPE_CREATE_FIAT_ON_RAMP_SESSION": {
       "intentType": "CreateFiatOnRampSessionIntent",
       "resultType": "CreateFiatOnRampSessionResult"
@@ -339,6 +355,10 @@
     "ACTIVITY_TYPE_UPDATE_FIAT_ON_RAMP_CREDENTIAL": {
       "intentType": "UpdateFiatOnRampCredentialIntent",
       "resultType": "UpdateFiatOnRampCredentialResult"
+    },
+    "ACTIVITY_TYPE_UPDATE_FIAT_RAMP_CREDENTIAL": {
+      "intentType": "UpdateFiatRampCredentialIntent",
+      "resultType": "UpdateFiatRampCredentialResult"
     },
     "ACTIVITY_TYPE_ETH_SEND_TRANSACTION": {
       "intentType": "EthSendTransactionIntent",
@@ -406,8 +426,7 @@
     },
     "ACTIVITY_TYPE_EXECUTE_SWAP_V4": {
       "intentType": "ExecuteSwapIntentV4",
-      "resultType": "ExecuteSwapResult",
-      "internal": true
+      "resultType": "ExecuteSwapResult"
     },
     "ACTIVITY_TYPE_UPSERT_SWAP_CONFIG": {
       "intentType": "UpsertSwapConfigIntent",
@@ -682,6 +701,14 @@
       "resultType": "DisableAuthProxyResult",
       "internal": true
     },
+    "ACTIVITY_TYPE_ENABLE_SMS_FOR_COUNTRIES": {
+      "intentType": "EnableSmsForCountriesIntent",
+      "resultType": "EnableSmsForCountriesResult"
+    },
+    "ACTIVITY_TYPE_DISABLE_SMS_FOR_COUNTRIES": {
+      "intentType": "DisableSmsForCountriesIntent",
+      "resultType": "DisableSmsForCountriesResult"
+    },
     "ACTIVITY_TYPE_UPDATE_AUTH_PROXY_CONFIG": {
       "intentType": "UpdateAuthProxyConfigIntent",
       "resultType": "UpdateAuthProxyConfigResult",
@@ -708,13 +735,13 @@
       "intentType": "CreateSessionProfileIntent",
       "resultType": "CreateSessionProfileResult"
     },
-    "ACTIVITY_TYPE_CREATE_VELOCITY_CONTROL": {
-      "intentType": "CreateVelocityControlIntent",
-      "resultType": "CreateVelocityControlResult"
+    "ACTIVITY_TYPE_CREATE_USAGE_CONTROL": {
+      "intentType": "CreateUsageControlIntent",
+      "resultType": "CreateUsageControlResult"
     },
-    "ACTIVITY_TYPE_DELETE_VELOCITY_CONTROLS": {
-      "intentType": "DeleteVelocityControlsIntent",
-      "resultType": "DeleteVelocityControlsResult"
+    "ACTIVITY_TYPE_DELETE_USAGE_CONTROLS": {
+      "intentType": "DeleteUsageControlsIntent",
+      "resultType": "DeleteUsageControlsResult"
     },
     "ACTIVITY_TYPE_UPDATE_PAYMENT_METHOD": {
       "intentType": "UpdatePaymentMethodIntent",

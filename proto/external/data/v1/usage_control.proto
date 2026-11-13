@@ -1,0 +1,216 @@
+syntax = "proto3";
+
+package external.data.v1;
+
+import "external/data/v1/common.proto";
+import "vendor/google/api/field_behavior.proto";
+import "vendor/protoc-gen-openapiv2/options/annotations.proto";
+
+option go_package = "github.com/tkhq/mono/src/go/gen/pkg/external/data/v1";
+
+// A Usage Control aggregates data and compares the result to a threshold. Policies use the boolean result.
+message UsageControl {
+  // Unique identifier for the Usage Control.
+  string usage_control_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for the Usage Control."}
+  ];
+  // Identifier of the Organization that owns the Usage Control.
+  string organization_id = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Identifier of the Organization that owns the Usage Control."}
+  ];
+  // Human-readable name for the Usage Control.
+  string name = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Human-readable name for the Usage Control."}
+  ];
+  // Data source for the Usage Control.
+  UsageControlDataSource data_source = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Data source for the Usage Control."}
+  ];
+  UsageControlBudget budget = 5 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Describes the budget for the Usage Control - the limit, aggregation function and the window."}
+  ];
+  // Scope of the usage control. Defines the boundaries within which the Usage Control operates.
+  optional UsageControlScope applies_to = 9 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Scope of the usage control. Defines the boundaries within which the Usage Control operates."}
+  ];
+  // Time when the Usage Control was created.
+  Timestamp created_at = 6 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Time when the Usage Control was created."}
+  ];
+  // Time when the Usage Control was last updated.
+  Timestamp updated_at = 7 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Time when the Usage Control was last updated."}
+  ];
+  // Identifier for the Usage Control. Policies reference it as `controls.<identifier>`. It must be unique within the Organization.
+  string identifier = 8 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Identifier for the Usage Control. Policies reference it as `controls.<identifier>`. It must be unique within the Organization."}
+  ];
+}
+
+// Data source for a Usage Control. Set exactly one definition.
+message UsageControlDataSource {
+  oneof definition {
+    // Uses transfers of the listed on-chain assets as input data.
+    UsageControlDataSourceChainAssetTransfer chain_asset_transfer = 1 [
+      (google.api.field_behavior) = OPTIONAL,
+      (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Uses transfers of the listed on-chain assets as input data."}
+    ];
+    // Uses executed Turnkey activities as input data.
+    UsageControlDataSourceActivityExecution activity_execution = 2 [
+      (google.api.field_behavior) = OPTIONAL,
+      (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Uses executed Turnkey activities as input data."}
+    ];
+  }
+}
+
+// Uses transfers of the listed on-chain assets as input data.
+message UsageControlDataSourceChainAssetTransfer {
+  // Assets whose transfers are included in the data source.
+  repeated UsageControlDataSourceChainAssetTransferDefinition definition = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Assets whose transfers are included in the data source."}
+  ];
+}
+
+// A chain asset that provides transfer data.
+message UsageControlDataSourceChainAssetTransferDefinition {
+  // CAIP-19 identifier for the asset.
+  string caip19 = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "CAIP-19 identifier for the asset."}
+  ];
+  // Integer between 0 and 32 (inclusive) that specifies the number of decimal places for the asset.
+  uint32 decimals = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Integer between 0 and 32 (inclusive) that specifies the number of decimal places for the asset."
+      minimum: 0
+      maximum: 32
+    }
+  ];
+}
+
+// Uses executed Turnkey activities as input data.
+message UsageControlDataSourceActivityExecution {}
+
+// Defines how the control aggregates data and compares the result to a limit.
+// The expression has the form `<method>(<scoped data>) <= <limit>`.
+message UsageControlBudget {
+  // Method that aggregates matching data points.
+  UsageControlAggregationMethod method = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Method that aggregates matching data points."}
+  ];
+  // Non-negative base-10 decimal string with at most 46 integer digits and 32 fractional digits.
+  string limit = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Non-negative base-10 decimal string with at most 46 integer digits and 32 fractional digits."}
+  ];
+  // Time window for the aggregation.
+  UsageControlAggregationWindow window = 4 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Time window for the aggregation."}
+  ];
+}
+
+// Method used to aggregate control data.
+enum UsageControlAggregationMethod {
+  // The aggregation method is not specified.
+  USAGE_CONTROL_AGGREGATION_METHOD_UNSPECIFIED = 0;
+  // Sums matching values.
+  USAGE_CONTROL_AGGREGATION_METHOD_SUM = 1;
+  // Counts matching data points.
+  USAGE_CONTROL_AGGREGATION_METHOD_COUNT = 2;
+}
+
+// Time window for aggregation. Set exactly one definition.
+message UsageControlAggregationWindow {
+  oneof definition {
+    // Uses a rolling time window.
+    UsageControlAggregationWindowRolling rolling = 1 [
+      (google.api.field_behavior) = OPTIONAL,
+      (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Uses a rolling time window."}
+    ];
+    // Uses all matching data without a time limit.
+    UsageControlAggregationWindowInfinite infinite = 2 [
+      (google.api.field_behavior) = OPTIONAL,
+      (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Uses all matching data without a time limit."}
+    ];
+  }
+}
+
+// A rolling time window.
+message UsageControlAggregationWindowRolling {
+  // Duration of the rolling window, in seconds.
+  uint32 duration = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Duration of the rolling window, in seconds."}
+  ];
+}
+
+// An aggregation window without a time limit.
+message UsageControlAggregationWindowInfinite {}
+
+// Scope of the usage control. Defines the boundaries within which the Usage Control operates.
+message UsageControlScope {
+  optional UsageControlScopeUser user = 1 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Limits the scope of the usage control to particular Users."}
+  ];
+
+  optional UsageControlScopeWallet wallet = 2 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Limits the scope of the usage control to particular Wallets."}
+  ];
+
+  optional UsageControlScopeWalletAccount wallet_account = 3 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Limits the scope of the usage control to particular Wallet Accounts."}
+  ];
+
+  optional UsageControlScopeActivity activity = 4 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Limits the scope of the usage control to particular Activity Types."}
+  ];
+}
+
+// Applies the usage control to particular Users.
+message UsageControlScopeUser {
+  repeated string ids = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "List of User IDs for which the control will capture the usage. If empty, the control will apply to all Users."}
+  ];
+}
+
+// Applies the usage control to particular Wallets.
+message UsageControlScopeWallet {
+  repeated string ids = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "List of Wallet IDs for which the control will capture the usage. If empty, the control will apply to all Wallets."}
+  ];
+}
+
+// Applies the usage control to particular Wallet Accounts.
+message UsageControlScopeWalletAccount {
+  repeated string addresses = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "List of Wallet Account addresses for which the control will capture the usage. If empty, the control will apply to all Wallet Accounts."}
+  ];
+}
+
+// Applies the usage control to particular Activity Types.
+message UsageControlScopeActivity {
+  repeated string types = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "List of Activity Types for which the control will capture the usage. If empty, the control will apply to all supported Activity Types."}
+  ];
+}

@@ -289,21 +289,13 @@ pub struct Oauth2Credential {
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
 pub struct FiatOnRampCredential {
-    pub fiat_onramp_credential_id: ::prost::alloc::string::String,
+    pub credential_id: ::prost::alloc::string::String,
     pub organization_id: ::prost::alloc::string::String,
-    pub onramp_provider: super::super::super::immutable::common::v1::FiatOnRampProvider,
-    /// @inject_tag: validate:"omitempty"
-    #[serde(default)]
-    pub project_id: ::core::option::Option<::prost::alloc::string::String>,
+    pub provider: super::super::super::immutable::common::v1::FiatRampProvider,
     /// @inject_tag: validate:"required"
-    pub publishable_api_key: ::prost::alloc::string::String,
+    pub api_key: ::prost::alloc::string::String,
     /// @inject_tag: validate:"required"
-    pub encrypted_secret_api_key: ::prost::alloc::string::String,
-    /// @inject_tag: validate:"omitempty"
-    #[serde(default)]
-    pub encrypted_private_api_key: ::core::option::Option<
-        ::prost::alloc::string::String,
-    >,
+    pub encrypted_secret: ::prost::alloc::string::String,
     /// @inject_tag: validate:"omitempty"
     #[serde(default)]
     pub sandbox_mode: bool,
@@ -434,6 +426,11 @@ pub struct BootProof {
     pub created_at: ::core::option::Option<Timestamp>,
     #[serde(default)]
     pub qos_manifest_version: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub quorum_key_attestation_signature_hex: ::core::option::Option<
+        ::prost::alloc::string::String,
+    >,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -452,6 +449,9 @@ pub struct AppProof {
 pub struct AppProofPayload {
     pub r#type: AppProofType,
     pub timestamp_ms: ::prost::alloc::string::String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub request_context: ::core::option::Option<AppProofRequestContext>,
     #[serde(default)]
     pub proof_payload: ::core::option::Option<app_proof_payload::ProofPayload>,
 }
@@ -465,7 +465,34 @@ pub mod app_proof_payload {
         AddressDerivationProof(super::AddressDerivationProofPayload),
         #[serde(rename = "PROOF_PAYLOAD_POLICY_OUTCOME_PROOF")]
         PolicyOutcomeProof(super::PolicyOutcomeProofPayload),
+        #[serde(rename = "PROOF_PAYLOAD_TVC_QUORUM_KEY_CREATE_PROOF")]
+        TvcQuorumKeyCreateProof(super::TvcQuorumKeyCreateProofPayload),
     }
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct AppProofRequestContext {
+    #[serde(default)]
+    pub version: u32,
+    #[serde(default)]
+    pub verified_signature_digests: ::prost::alloc::vec::Vec<
+        ::prost::alloc::string::String,
+    >,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct TvcQuorumKeyCreateProofPayload {
+    pub organization_id: ::prost::alloc::string::String,
+    pub quorum_key_id: ::prost::alloc::string::String,
+    pub quorum_public_key: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub threshold: u32,
+    #[serde(default)]
+    pub operator_encrypt_keys: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -532,6 +559,8 @@ pub enum AppProofType {
     AddressDerivation = 1,
     #[serde(rename = "APP_PROOF_TYPE_POLICY_OUTCOME")]
     PolicyOutcome = 2,
+    #[serde(rename = "APP_PROOF_TYPE_TVC_QUORUM_KEY_CREATE")]
+    TvcQuorumKeyCreate = 3,
 }
 impl AppProofType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -543,6 +572,7 @@ impl AppProofType {
             Self::Unspecified => "APP_PROOF_TYPE_UNSPECIFIED",
             Self::AddressDerivation => "APP_PROOF_TYPE_ADDRESS_DERIVATION",
             Self::PolicyOutcome => "APP_PROOF_TYPE_POLICY_OUTCOME",
+            Self::TvcQuorumKeyCreate => "APP_PROOF_TYPE_TVC_QUORUM_KEY_CREATE",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -551,58 +581,61 @@ impl AppProofType {
             "APP_PROOF_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
             "APP_PROOF_TYPE_ADDRESS_DERIVATION" => Some(Self::AddressDerivation),
             "APP_PROOF_TYPE_POLICY_OUTCOME" => Some(Self::PolicyOutcome),
+            "APP_PROOF_TYPE_TVC_QUORUM_KEY_CREATE" => Some(Self::TvcQuorumKeyCreate),
             _ => None,
         }
     }
 }
 #[derive(Debug)]
-/// A Velocity Control aggregates data and compares the result to a threshold. Policies use the boolean result.
+/// A Usage Control aggregates data and compares the result to a threshold. Policies use the boolean result.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
-pub struct VelocityControl {
-    /// Unique identifier for the Velocity Control.
-    pub velocity_control_id: ::prost::alloc::string::String,
-    /// Identifier of the Organization that owns the Velocity Control.
+pub struct UsageControl {
+    /// Unique identifier for the Usage Control.
+    pub usage_control_id: ::prost::alloc::string::String,
+    /// Identifier of the Organization that owns the Usage Control.
     pub organization_id: ::prost::alloc::string::String,
-    /// Human-readable name for the Velocity Control.
+    /// Human-readable name for the Usage Control.
     pub name: ::prost::alloc::string::String,
-    /// Data source for the Velocity Control.
+    /// Data source for the Usage Control.
     #[serde(default)]
-    pub data_source: ::core::option::Option<VelocityControlDataSource>,
-    /// Aggregation expression that the Velocity Control evaluates.
+    pub data_source: ::core::option::Option<UsageControlDataSource>,
     #[serde(default)]
-    pub aggregation: ::core::option::Option<VelocityControlAggregation>,
-    /// Time when the Velocity Control was created.
+    pub budget: ::core::option::Option<UsageControlBudget>,
+    /// Scope of the usage control. Defines the boundaries within which the Usage Control operates.
+    #[serde(default)]
+    pub applies_to: ::core::option::Option<UsageControlScope>,
+    /// Time when the Usage Control was created.
     #[serde(default)]
     pub created_at: ::core::option::Option<Timestamp>,
-    /// Time when the Velocity Control was last updated.
+    /// Time when the Usage Control was last updated.
     #[serde(default)]
     pub updated_at: ::core::option::Option<Timestamp>,
-    /// Identifier for the Velocity Control. Policies reference it as `controls.<identifier>`. It must be unique within the Organization.
+    /// Identifier for the Usage Control. Policies reference it as `controls.<identifier>`. It must be unique within the Organization.
     pub identifier: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
-/// Data source for a Velocity Control. Set exactly one definition.
+/// Data source for a Usage Control. Set exactly one definition.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
-pub struct VelocityControlDataSource {
+pub struct UsageControlDataSource {
     #[serde(default)]
-    pub definition: ::core::option::Option<velocity_control_data_source::Definition>,
+    pub definition: ::core::option::Option<usage_control_data_source::Definition>,
 }
-/// Nested message and enum types in `VelocityControlDataSource`.
-pub mod velocity_control_data_source {
+/// Nested message and enum types in `UsageControlDataSource`.
+pub mod usage_control_data_source {
     #[derive(::serde::Serialize, ::serde::Deserialize)]
     #[derive(Clone, PartialEq)]
     #[derive(Debug)]
     pub enum Definition {
         /// Uses transfers of the listed on-chain assets as input data.
         #[serde(rename = "DEFINITION_CHAIN_ASSET_TRANSFER")]
-        ChainAssetTransfer(super::VelocityControlDataSourceChainAssetTransfer),
+        ChainAssetTransfer(super::UsageControlDataSourceChainAssetTransfer),
         /// Uses executed Turnkey activities as input data.
         #[serde(rename = "DEFINITION_ACTIVITY_EXECUTION")]
-        ActivityExecution(super::VelocityControlDataSourceActivityExecution),
+        ActivityExecution(super::UsageControlDataSourceActivityExecution),
     }
 }
 #[derive(Debug)]
@@ -610,27 +643,19 @@ pub mod velocity_control_data_source {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
-pub struct VelocityControlDataSourceChainAssetTransfer {
+pub struct UsageControlDataSourceChainAssetTransfer {
     /// Assets whose transfers are included in the data source.
     #[serde(default)]
     pub definition: ::prost::alloc::vec::Vec<
-        VelocityControlDataSourceChainAssetTransferDefinition,
+        UsageControlDataSourceChainAssetTransferDefinition,
     >,
-    /// Filters asset transfers by activity type.
-    #[serde(default)]
-    pub filter: ::core::option::Option<
-        VelocityControlDataSourceChainAssetTransferFilter,
-    >,
-    /// Selects when to measure an asset transfer.
-    #[serde(default)]
-    pub phase: ::core::option::Option<VelocityControlDataSourcePhase>,
 }
 #[derive(Debug)]
 /// A chain asset that provides transfer data.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
-pub struct VelocityControlDataSourceChainAssetTransferDefinition {
+pub struct UsageControlDataSourceChainAssetTransferDefinition {
     /// CAIP-19 identifier for the asset.
     pub caip19: ::prost::alloc::string::String,
     /// Integer between 0 and 32 (inclusive) that specifies the number of decimal places for the asset.
@@ -638,124 +663,47 @@ pub struct VelocityControlDataSourceChainAssetTransferDefinition {
     pub decimals: u32,
 }
 #[derive(Debug)]
-/// Filters chain asset transfers by activity type.
-#[derive(::serde::Serialize, ::serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[derive(Clone, PartialEq)]
-pub struct VelocityControlDataSourceChainAssetTransferFilter {
-    /// Activity types whose asset transfers are included.
-    #[serde(default)]
-    pub activity: ::prost::alloc::vec::Vec<VelocityControlDataSourceFilterActivity>,
-}
-#[derive(Debug)]
 /// Uses executed Turnkey activities as input data.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[derive(Clone, PartialEq)]
-pub struct VelocityControlDataSourceActivityExecution {
-    /// Filters activity executions by type.
-    #[serde(default)]
-    pub filter: ::core::option::Option<VelocityControlDataSourceActivityExecutionFilter>,
-}
-#[derive(Debug)]
-/// Filters activity executions by type.
-#[derive(::serde::Serialize, ::serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[derive(Clone, PartialEq)]
-pub struct VelocityControlDataSourceActivityExecutionFilter {
-    /// Activity types whose executions are included.
-    #[serde(default)]
-    pub activity: ::prost::alloc::vec::Vec<VelocityControlDataSourceFilterActivity>,
-}
-#[derive(Debug)]
-/// An activity type filter.
-#[derive(::serde::Serialize, ::serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[derive(Clone, PartialEq)]
-pub struct VelocityControlDataSourceFilterActivity {
-    /// Name of an activity type to include, such as `ACTIVITY_TYPE_SOL_SEND_TRANSACTION`.
-    pub activity_type: ::prost::alloc::string::String,
-}
-#[derive(Debug)]
-/// Selects when to measure an asset transfer. Set exactly one definition.
-#[derive(::serde::Serialize, ::serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
 #[derive(Clone, Copy, PartialEq)]
-pub struct VelocityControlDataSourcePhase {
-    #[serde(default)]
-    pub definition: ::core::option::Option<
-        velocity_control_data_source_phase::Definition,
-    >,
-}
-/// Nested message and enum types in `VelocityControlDataSourcePhase`.
-pub mod velocity_control_data_source_phase {
-    #[derive(::serde::Serialize, ::serde::Deserialize)]
-    #[derive(Clone, Copy, PartialEq)]
-    #[derive(Debug)]
-    pub enum Definition {
-        /// Measures the transfer when Turnkey signs the transaction and returns it to the user.
-        #[serde(rename = "DEFINITION_SIGNATURE")]
-        Signature(super::VelocityControlDataSourcePhaseSignature),
-        /// Reserved for future use. Measures the transfer after the transaction lands on chain.
-        #[serde(rename = "DEFINITION_SUBMISSION")]
-        Submission(super::VelocityControlDataSourcePhaseSubmission),
-    }
-}
+pub struct UsageControlDataSourceActivityExecution {}
 #[derive(Debug)]
-/// Measures a transfer when Turnkey signs the transaction.
-#[derive(::serde::Serialize, ::serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[derive(Clone, Copy, PartialEq)]
-pub struct VelocityControlDataSourcePhaseSignature {}
-#[derive(Debug)]
-/// Reserved for future measurement after a transaction lands on chain.
-#[derive(::serde::Serialize, ::serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[derive(Clone, Copy, PartialEq)]
-pub struct VelocityControlDataSourcePhaseSubmission {}
-#[derive(Debug)]
-/// Defines how the control aggregates data and compares the result to a threshold.
-/// The expression has the form `<method>(<scoped data>) <operator> <threshold>`.
+/// Defines how the control aggregates data and compares the result to a limit.
+/// The expression has the form `<method>(<scoped data>) <= <limit>`.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
-pub struct VelocityControlAggregation {
+pub struct UsageControlBudget {
     /// Method that aggregates matching data points.
-    pub method: VelocityControlAggregationMethod,
-    /// Comparison between the aggregate and the threshold.
-    pub operator: VelocityControlAggregationOperator,
+    pub method: UsageControlAggregationMethod,
     /// Non-negative base-10 decimal string with at most 46 integer digits and 32 fractional digits.
-    pub threshold: ::prost::alloc::string::String,
+    pub limit: ::prost::alloc::string::String,
     /// Time window for the aggregation.
     #[serde(default)]
-    pub window: ::core::option::Option<VelocityControlAggregationWindow>,
-    /// Scope that partitions matching data before aggregation.
-    #[serde(default)]
-    pub group_by: ::core::option::Option<VelocityControlAggregationGroupBy>,
+    pub window: ::core::option::Option<UsageControlAggregationWindow>,
 }
 #[derive(Debug)]
 /// Time window for aggregation. Set exactly one definition.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, Copy, PartialEq)]
-pub struct VelocityControlAggregationWindow {
+pub struct UsageControlAggregationWindow {
     #[serde(default)]
-    pub definition: ::core::option::Option<
-        velocity_control_aggregation_window::Definition,
-    >,
+    pub definition: ::core::option::Option<usage_control_aggregation_window::Definition>,
 }
-/// Nested message and enum types in `VelocityControlAggregationWindow`.
-pub mod velocity_control_aggregation_window {
+/// Nested message and enum types in `UsageControlAggregationWindow`.
+pub mod usage_control_aggregation_window {
     #[derive(::serde::Serialize, ::serde::Deserialize)]
     #[derive(Clone, Copy, PartialEq)]
     #[derive(Debug)]
     pub enum Definition {
         /// Uses a rolling time window.
         #[serde(rename = "DEFINITION_ROLLING")]
-        Rolling(super::VelocityControlAggregationWindowRolling),
+        Rolling(super::UsageControlAggregationWindowRolling),
         /// Uses all matching data without a time limit.
         #[serde(rename = "DEFINITION_INFINITE")]
-        Infinite(super::VelocityControlAggregationWindowInfinite),
+        Infinite(super::UsageControlAggregationWindowInfinite),
     }
 }
 #[derive(Debug)]
@@ -763,7 +711,7 @@ pub mod velocity_control_aggregation_window {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, Copy, PartialEq)]
-pub struct VelocityControlAggregationWindowRolling {
+pub struct UsageControlAggregationWindowRolling {
     /// Duration of the rolling window, in seconds.
     #[serde(default)]
     pub duration: u32,
@@ -773,148 +721,90 @@ pub struct VelocityControlAggregationWindowRolling {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, Copy, PartialEq)]
-pub struct VelocityControlAggregationWindowInfinite {}
+pub struct UsageControlAggregationWindowInfinite {}
 #[derive(Debug)]
-/// Scope that partitions matching data before aggregation. Set exactly one definition.
+/// Scope of the usage control. Defines the boundaries within which the Usage Control operates.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[derive(Clone, Copy, PartialEq)]
-pub struct VelocityControlAggregationGroupBy {
+#[derive(Clone, PartialEq)]
+pub struct UsageControlScope {
     #[serde(default)]
-    pub definition: ::core::option::Option<
-        velocity_control_aggregation_group_by::Definition,
-    >,
-}
-/// Nested message and enum types in `VelocityControlAggregationGroupBy`.
-pub mod velocity_control_aggregation_group_by {
-    #[derive(::serde::Serialize, ::serde::Deserialize)]
-    #[derive(Clone, Copy, PartialEq)]
-    #[derive(Debug)]
-    pub enum Definition {
-        /// Uses one shared bucket for the Organization.
-        #[serde(rename = "DEFINITION_ORGANIZATION")]
-        Organization(super::VelocityControlAggregationGroupByOrganization),
-        /// Uses one bucket for each User.
-        #[serde(rename = "DEFINITION_USER")]
-        User(super::VelocityControlAggregationGroupByUser),
-        /// Uses one bucket for each Wallet.
-        #[serde(rename = "DEFINITION_WALLET")]
-        Wallet(super::VelocityControlAggregationGroupByWallet),
-    }
+    pub user: ::core::option::Option<UsageControlScopeUser>,
+    #[serde(default)]
+    pub wallet: ::core::option::Option<UsageControlScopeWallet>,
+    #[serde(default)]
+    pub wallet_account: ::core::option::Option<UsageControlScopeWalletAccount>,
+    #[serde(default)]
+    pub activity: ::core::option::Option<UsageControlScopeActivity>,
 }
 #[derive(Debug)]
-/// Uses one shared bucket for the Organization.
+/// Applies the usage control to particular Users.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[derive(Clone, Copy, PartialEq)]
-pub struct VelocityControlAggregationGroupByOrganization {}
+#[derive(Clone, PartialEq)]
+pub struct UsageControlScopeUser {
+    #[serde(default)]
+    pub ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
 #[derive(Debug)]
-/// Uses one bucket for each User.
+/// Applies the usage control to particular Wallets.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[derive(Clone, Copy, PartialEq)]
-pub struct VelocityControlAggregationGroupByUser {}
+#[derive(Clone, PartialEq)]
+pub struct UsageControlScopeWallet {
+    #[serde(default)]
+    pub ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
 #[derive(Debug)]
-/// Uses one bucket for each Wallet.
+/// Applies the usage control to particular Wallet Accounts.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[derive(Clone, Copy, PartialEq)]
-pub struct VelocityControlAggregationGroupByWallet {}
+#[derive(Clone, PartialEq)]
+pub struct UsageControlScopeWalletAccount {
+    #[serde(default)]
+    pub addresses: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[derive(Debug)]
+/// Applies the usage control to particular Activity Types.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct UsageControlScopeActivity {
+    #[serde(default)]
+    pub types: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
 /// Method used to aggregate control data.
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum VelocityControlAggregationMethod {
+pub enum UsageControlAggregationMethod {
     /// The aggregation method is not specified.
-    #[serde(rename = "VELOCITY_CONTROL_AGGREGATION_METHOD_UNSPECIFIED")]
+    #[serde(rename = "USAGE_CONTROL_AGGREGATION_METHOD_UNSPECIFIED")]
     Unspecified = 0,
     /// Sums matching values.
-    #[serde(rename = "VELOCITY_CONTROL_AGGREGATION_METHOD_SUM")]
+    #[serde(rename = "USAGE_CONTROL_AGGREGATION_METHOD_SUM")]
     Sum = 1,
     /// Counts matching data points.
-    #[serde(rename = "VELOCITY_CONTROL_AGGREGATION_METHOD_COUNT")]
+    #[serde(rename = "USAGE_CONTROL_AGGREGATION_METHOD_COUNT")]
     Count = 2,
 }
-impl VelocityControlAggregationMethod {
+impl UsageControlAggregationMethod {
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
     /// The values are not transformed in any way and thus are considered stable
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            Self::Unspecified => "VELOCITY_CONTROL_AGGREGATION_METHOD_UNSPECIFIED",
-            Self::Sum => "VELOCITY_CONTROL_AGGREGATION_METHOD_SUM",
-            Self::Count => "VELOCITY_CONTROL_AGGREGATION_METHOD_COUNT",
+            Self::Unspecified => "USAGE_CONTROL_AGGREGATION_METHOD_UNSPECIFIED",
+            Self::Sum => "USAGE_CONTROL_AGGREGATION_METHOD_SUM",
+            Self::Count => "USAGE_CONTROL_AGGREGATION_METHOD_COUNT",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
     pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
         match value {
-            "VELOCITY_CONTROL_AGGREGATION_METHOD_UNSPECIFIED" => Some(Self::Unspecified),
-            "VELOCITY_CONTROL_AGGREGATION_METHOD_SUM" => Some(Self::Sum),
-            "VELOCITY_CONTROL_AGGREGATION_METHOD_COUNT" => Some(Self::Count),
-            _ => None,
-        }
-    }
-}
-/// Comparison used to evaluate aggregated data against a threshold.
-#[derive(::serde::Serialize, ::serde::Deserialize)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum VelocityControlAggregationOperator {
-    /// The comparison is not specified.
-    #[serde(rename = "VELOCITY_CONTROL_AGGREGATION_OPERATOR_UNSPECIFIED")]
-    Unspecified = 0,
-    /// Checks whether the aggregate is less than the threshold.
-    #[serde(rename = "VELOCITY_CONTROL_AGGREGATION_OPERATOR_LESS_THAN")]
-    LessThan = 1,
-    /// Checks whether the aggregate is less than or equal to the threshold.
-    #[serde(rename = "VELOCITY_CONTROL_AGGREGATION_OPERATOR_LESS_THAN_OR_EQUAL")]
-    LessThanOrEqual = 2,
-    /// Checks whether the aggregate equals the threshold.
-    #[serde(rename = "VELOCITY_CONTROL_AGGREGATION_OPERATOR_EQUAL")]
-    Equal = 3,
-    /// Checks whether the aggregate is greater than or equal to the threshold.
-    #[serde(rename = "VELOCITY_CONTROL_AGGREGATION_OPERATOR_GREATER_THAN_OR_EQUAL")]
-    GreaterThanOrEqual = 4,
-    /// Checks whether the aggregate is greater than the threshold.
-    #[serde(rename = "VELOCITY_CONTROL_AGGREGATION_OPERATOR_GREATER_THAN")]
-    GreaterThan = 5,
-}
-impl VelocityControlAggregationOperator {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Self::Unspecified => "VELOCITY_CONTROL_AGGREGATION_OPERATOR_UNSPECIFIED",
-            Self::LessThan => "VELOCITY_CONTROL_AGGREGATION_OPERATOR_LESS_THAN",
-            Self::LessThanOrEqual => {
-                "VELOCITY_CONTROL_AGGREGATION_OPERATOR_LESS_THAN_OR_EQUAL"
-            }
-            Self::Equal => "VELOCITY_CONTROL_AGGREGATION_OPERATOR_EQUAL",
-            Self::GreaterThanOrEqual => {
-                "VELOCITY_CONTROL_AGGREGATION_OPERATOR_GREATER_THAN_OR_EQUAL"
-            }
-            Self::GreaterThan => "VELOCITY_CONTROL_AGGREGATION_OPERATOR_GREATER_THAN",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "VELOCITY_CONTROL_AGGREGATION_OPERATOR_UNSPECIFIED" => {
-                Some(Self::Unspecified)
-            }
-            "VELOCITY_CONTROL_AGGREGATION_OPERATOR_LESS_THAN" => Some(Self::LessThan),
-            "VELOCITY_CONTROL_AGGREGATION_OPERATOR_LESS_THAN_OR_EQUAL" => {
-                Some(Self::LessThanOrEqual)
-            }
-            "VELOCITY_CONTROL_AGGREGATION_OPERATOR_EQUAL" => Some(Self::Equal),
-            "VELOCITY_CONTROL_AGGREGATION_OPERATOR_GREATER_THAN_OR_EQUAL" => {
-                Some(Self::GreaterThanOrEqual)
-            }
-            "VELOCITY_CONTROL_AGGREGATION_OPERATOR_GREATER_THAN" => {
-                Some(Self::GreaterThan)
-            }
+            "USAGE_CONTROL_AGGREGATION_METHOD_UNSPECIFIED" => Some(Self::Unspecified),
+            "USAGE_CONTROL_AGGREGATION_METHOD_SUM" => Some(Self::Sum),
+            "USAGE_CONTROL_AGGREGATION_METHOD_COUNT" => Some(Self::Count),
             _ => None,
         }
     }
@@ -952,6 +842,7 @@ pub struct EarnVault {
     pub force_deallocatable_liquidity: ::prost::alloc::string::String,
     #[serde(default)]
     pub force_deallocatable_liquidity_display: ::core::option::Option<EarnValueDisplay>,
+    pub rewards_apy_pct: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 /// EarnVaultExposure is one underlying market a vault allocates into, and the
@@ -1005,6 +896,7 @@ pub struct EarnEnabledVault {
     pub deploy_status: ::prost::alloc::string::String,
     pub deploy_request_id: ::prost::alloc::string::String,
     pub deploy_error: ::prost::alloc::string::String,
+    pub rewards_apy_pct: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
