@@ -1436,6 +1436,44 @@ impl<S: Stamp> TurnkeyClient<S> {
             app_proofs: activity.app_proofs,
         })
     }
+    /// Sign SSH userauth
+    ///
+    /// Sign an SSH public key login request. The enclave verifies the request and the matching session-bind, then exposes the SSH user, service, and verified host key to policies.
+    pub async fn sign_ssh_userauth(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::SignSshUserauthIntent,
+    ) -> Result<ActivityResult<immutable_activity::SignSshUserauthResult>, TurnkeyClientError> {
+        let request = external_activity::SignSshUserauthRequest {
+            r#type: "ACTIVITY_TYPE_SIGN_SSH_USERAUTH".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(&request, "/public/v1/submit/sign_ssh_userauth".to_string())
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::SignSshUserauthResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
     /// Sign raw payload
     ///
     /// Sign a raw payload.

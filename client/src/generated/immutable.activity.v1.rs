@@ -184,6 +184,7 @@ pub mod intent {
         CreateSwapQuoteIntentV2(super::CreateSwapQuoteIntentV2),
         ExecuteSwapIntentV3(super::ExecuteSwapIntentV3),
         DeleteSecretsIntent(super::DeleteSecretsIntent),
+        SignSshUserauthIntent(super::SignSshUserauthIntent),
     }
 }
 #[derive(Debug)]
@@ -575,6 +576,25 @@ pub struct SignRawPayloadIntent {
     /// @inject_tag: validate:"required"
     pub encoding: super::super::common::v1::PayloadEncoding,
     pub hash_function: super::super::common::v1::HashFunction,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SignSshUserauthIntent {
+    /// @inject_tag: validate:"required"
+    pub sign_with: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required,hexadecimal,max=8192"
+    pub userauth_data: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required,hexadecimal,max=8192"
+    pub session_bind: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SignSshUserauthResult {
+    pub signature: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -2813,6 +2833,7 @@ pub mod result {
         DeleteVelocityControlResult(super::DeleteVelocityControlResult),
         UpdatePaymentMethodResult(super::super::billing::UpdatePaymentMethodResult),
         DeleteSecretsResult(super::DeleteSecretsResult),
+        SignSshUserauthResult(super::SignSshUserauthResult),
     }
 }
 #[derive(Debug)]
@@ -5261,6 +5282,8 @@ pub enum ActivityType {
     ExecuteSwapV3 = 168,
     #[serde(rename = "ACTIVITY_TYPE_DELETE_SECRETS")]
     DeleteSecrets = 169,
+    #[serde(rename = "ACTIVITY_TYPE_SIGN_SSH_USERAUTH")]
+    SignSshUserauth = 189,
 }
 impl ActivityType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -5462,6 +5485,7 @@ impl ActivityType {
             Self::CreateSwapQuoteV2 => "ACTIVITY_TYPE_CREATE_SWAP_QUOTE_V2",
             Self::ExecuteSwapV3 => "ACTIVITY_TYPE_EXECUTE_SWAP_V3",
             Self::DeleteSecrets => "ACTIVITY_TYPE_DELETE_SECRETS",
+            Self::SignSshUserauth => "ACTIVITY_TYPE_SIGN_SSH_USERAUTH",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -5696,6 +5720,7 @@ impl ActivityType {
             "ACTIVITY_TYPE_CREATE_SWAP_QUOTE_V2" => Some(Self::CreateSwapQuoteV2),
             "ACTIVITY_TYPE_EXECUTE_SWAP_V3" => Some(Self::ExecuteSwapV3),
             "ACTIVITY_TYPE_DELETE_SECRETS" => Some(Self::DeleteSecrets),
+            "ACTIVITY_TYPE_SIGN_SSH_USERAUTH" => Some(Self::SignSshUserauth),
             _ => None,
         }
     }

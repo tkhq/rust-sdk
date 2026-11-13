@@ -198,6 +198,7 @@ enum ActivityType {
   ACTIVITY_TYPE_CREATE_SWAP_QUOTE_V2 = 167;
   ACTIVITY_TYPE_EXECUTE_SWAP_V3 = 168;
   ACTIVITY_TYPE_DELETE_SECRETS = 169;
+  ACTIVITY_TYPE_SIGN_SSH_USERAUTH = 189;
 }
 
 // The current processing status of an Activity.
@@ -398,6 +399,7 @@ message Intent {
     CreateSwapQuoteIntentV2 create_swap_quote_intent_v2 = 168;
     ExecuteSwapIntentV3 execute_swap_intent_v3 = 169;
     DeleteSecretsIntent delete_secrets_intent = 170;
+    SignSshUserauthIntent sign_ssh_userauth_intent = 190;
   }
   reserved 148;
   reserved "upsert_earn_client_fee_config_intent";
@@ -1062,6 +1064,40 @@ message SignRawPayloadIntent {
       description: "Hash function to apply to payload bytes before signing. This field must be set to HASH_FUNCTION_NOT_APPLICABLE for EdDSA/ed25519 signature requests; configurable payload hashing is not supported by RFC 8032."
       title: ""
     }
+  ];
+}
+
+message SignSshUserauthIntent {
+  // @inject_tag: validate:"required"
+  string sign_with = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Private Key identifier or address of an Ed25519 Private Key."
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"required,hexadecimal,max=8192"
+  string userauth_data = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Hex-encoded bytes the SSH client asked the agent to sign: an RFC 4252 `publickey` or `publickey-hostbound-v00@openssh.com` userauth request. At most 4 KiB decoded."
+      title: ""
+    }
+  ];
+  // @inject_tag: validate:"required,hexadecimal,max=8192"
+  string session_bind = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "Hex-encoded contents of the `session-bind@openssh.com` agent extension for the same SSH session, after the extension name. At most 4 KiB decoded."
+      title: ""
+    }
+  ];
+}
+
+message SignSshUserauthResult {
+  string signature = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Hex-encoded 64-byte Ed25519 signature over `userauth_data`."}
   ];
 }
 
@@ -5345,6 +5381,7 @@ message Result {
     DeleteVelocityControlResult delete_velocity_control_result = 146;
     immutable.activity.billing.UpdatePaymentMethodResult update_payment_method_result = 147;
     DeleteSecretsResult delete_secrets_result = 148;
+    SignSshUserauthResult sign_ssh_userauth_result = 166;
   }
   reserved 127;
   reserved "upsert_earn_client_fee_config_result";

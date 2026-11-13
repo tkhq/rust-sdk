@@ -124,6 +124,10 @@
       "intentType": "SignRawPayloadIntentV2",
       "resultType": "SignRawPayloadResult"
     },
+    "ACTIVITY_TYPE_SIGN_SSH_USERAUTH": {
+      "intentType": "SignSshUserauthIntent",
+      "resultType": "SignSshUserauthResult"
+    },
     "ACTIVITY_TYPE_SIGN_RAW_PAYLOADS": {
       "intentType": "SignRawPayloadsIntent",
       "resultType": "SignRawPayloadsResult"
