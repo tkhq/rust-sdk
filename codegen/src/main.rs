@@ -237,13 +237,25 @@ fn main() {
                         "#
                     )
                 } else if supports_receipt(&fn_name) {
+                    let submission_kind = if fn_name == "create_tvc_operator" {
+                        "CreateTvcOperator"
+                    } else {
+                        "CreateTvcQuorumKey"
+                    };
                     receipt_methods.push_str(&format!(r#"
-                        /// {summary} Returns local submission metadata alongside the result.
-                        pub async fn {fn_name}_with_receipt(&self, organization_id: String, timestamp_ms: u128, params: immutable_activity::{activity_intent}) -> Result<SubmittedActivityResult<immutable_activity::{activity_result}>, TurnkeyClientError> {{
-                            let request = self.{fn_name}_request(organization_id, timestamp_ms, params);
-                            let receipt = self.process_activity_with_receipt(&request, "{route}".to_string()).await?;
-                            let result = Self::{fn_name}_result(receipt.activity().clone()).map_err(|error| receipt.submission_error(error))?;
-                            Ok(SubmittedActivityResult::new(result, receipt))
+                        /// {summary}. Persists local origin evidence before each signed POST.
+                        ///
+                        /// The callback must durably save the checkpoint before succeeding.
+                        /// Pending hints require caller persistence. Returned proofs remain unverified.
+                        pub async fn {fn_name}_with_receipt(&self, organization_id: String, timestamp_ms: u128, params: immutable_activity::{activity_intent}, save: impl AsyncFnMut(&SubmissionCheckpoint) -> Result<(), CheckpointSaveError>) -> Result<SubmissionOutcome<SubmittedActivityResult<immutable_activity::{activity_result}>>, TurnkeyClientError> {{
+                            let request = self.{fn_name}_request(organization_id.clone(), timestamp_ms, params);
+                            match self.process_activity_with_receipt(&request, "{route}".to_string(), organization_id, SubmissionKind::{submission_kind}, save).await? {{
+                                SubmissionOutcome::Completed(receipt) => {{
+                                    let result = Self::{fn_name}_result(receipt.activity().clone()).map_err(|error| receipt.submission_error(error))?;
+                                    Ok(SubmissionOutcome::Completed(SubmittedActivityResult::new(result, receipt)))
+                                }}
+                                SubmissionOutcome::Pending {{ checkpoint, reason }} => Ok(SubmissionOutcome::Pending {{ checkpoint, reason }}),
+                            }}
                         }}
                     "#));
                     format!(

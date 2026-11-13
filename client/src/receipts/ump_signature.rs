@@ -4,7 +4,6 @@
 
 use sha2::{Digest as _, Sha256};
 
-use super::invalid;
 use crate::TurnkeyClientError;
 use crate::generated::immutable::models::v1::SignatureScheme;
 
@@ -28,7 +27,8 @@ pub(super) fn digest(
         message,
         signature,
     };
-    let encoded = borsh::to_vec(&signature).map_err(|_| invalid("signature encoding failed"))?;
+    let encoded = borsh::to_vec(&signature)
+        .map_err(|_| TurnkeyClientError::InvalidReceiptStamp("signature encoding failed"))?;
     Ok(Sha256::digest(encoded).into())
 }
 

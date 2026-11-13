@@ -3,9 +3,10 @@
 use crate::generated::external::activity::v1 as external_activity;
 use crate::generated::immutable::activity::v1 as immutable_activity;
 use crate::generated::services::coordinator::public::v1 as coordinator;
+use crate::receipts::SubmissionKind;
 use crate::{
-    ActivityResult, RandomizedStamp, Stamp, SubmittedActivityResult, TurnkeyClient,
-    TurnkeyClientError,
+    ActivityResult, CheckpointSaveError, RandomizedStamp, Stamp, SubmissionCheckpoint,
+    SubmissionOutcome, SubmittedActivityResult, TurnkeyClient, TurnkeyClientError,
 };
 impl<S: Stamp> TurnkeyClient<S> {
     /// Who am I?
@@ -6094,46 +6095,80 @@ impl<S: Stamp> TurnkeyClient<S> {
     }
 }
 impl<S: RandomizedStamp> TurnkeyClient<S> {
-    /// Create TVC operator Returns local submission metadata alongside the result.
+    /// Create TVC operator. Persists local origin evidence before each signed POST.
+    ///
+    /// The callback must durably save the checkpoint before succeeding.
+    /// Pending hints require caller persistence. Returned proofs remain unverified.
     pub async fn create_tvc_operator_with_receipt(
         &self,
         organization_id: String,
         timestamp_ms: u128,
         params: immutable_activity::CreateTvcOperatorIntent,
+        save: impl AsyncFnMut(&SubmissionCheckpoint) -> Result<(), CheckpointSaveError>,
     ) -> Result<
-        SubmittedActivityResult<immutable_activity::CreateTvcOperatorResult>,
+        SubmissionOutcome<SubmittedActivityResult<immutable_activity::CreateTvcOperatorResult>>,
         TurnkeyClientError,
     > {
-        let request = self.create_tvc_operator_request(organization_id, timestamp_ms, params);
-        let receipt = self
+        let request =
+            self.create_tvc_operator_request(organization_id.clone(), timestamp_ms, params);
+        match self
             .process_activity_with_receipt(
                 &request,
                 "/public/v1/submit/create_tvc_operator".to_string(),
+                organization_id,
+                SubmissionKind::CreateTvcOperator,
+                save,
             )
-            .await?;
-        let result = Self::create_tvc_operator_result(receipt.activity().clone())
-            .map_err(|error| receipt.submission_error(error))?;
-        Ok(SubmittedActivityResult::new(result, receipt))
+            .await?
+        {
+            SubmissionOutcome::Completed(receipt) => {
+                let result = Self::create_tvc_operator_result(receipt.activity().clone())
+                    .map_err(|error| receipt.submission_error(error))?;
+                Ok(SubmissionOutcome::Completed(SubmittedActivityResult::new(
+                    result, receipt,
+                )))
+            }
+            SubmissionOutcome::Pending { checkpoint, reason } => {
+                Ok(SubmissionOutcome::Pending { checkpoint, reason })
+            }
+        }
     }
-    /// Create TVC Quorum Key Returns local submission metadata alongside the result.
+    /// Create TVC Quorum Key. Persists local origin evidence before each signed POST.
+    ///
+    /// The callback must durably save the checkpoint before succeeding.
+    /// Pending hints require caller persistence. Returned proofs remain unverified.
     pub async fn create_tvc_quorum_key_with_receipt(
         &self,
         organization_id: String,
         timestamp_ms: u128,
         params: immutable_activity::CreateTvcQuorumKeyIntent,
+        save: impl AsyncFnMut(&SubmissionCheckpoint) -> Result<(), CheckpointSaveError>,
     ) -> Result<
-        SubmittedActivityResult<immutable_activity::CreateTvcQuorumKeyResult>,
+        SubmissionOutcome<SubmittedActivityResult<immutable_activity::CreateTvcQuorumKeyResult>>,
         TurnkeyClientError,
     > {
-        let request = self.create_tvc_quorum_key_request(organization_id, timestamp_ms, params);
-        let receipt = self
+        let request =
+            self.create_tvc_quorum_key_request(organization_id.clone(), timestamp_ms, params);
+        match self
             .process_activity_with_receipt(
                 &request,
                 "/public/v1/submit/create_tvc_quorum_key".to_string(),
+                organization_id,
+                SubmissionKind::CreateTvcQuorumKey,
+                save,
             )
-            .await?;
-        let result = Self::create_tvc_quorum_key_result(receipt.activity().clone())
-            .map_err(|error| receipt.submission_error(error))?;
-        Ok(SubmittedActivityResult::new(result, receipt))
+            .await?
+        {
+            SubmissionOutcome::Completed(receipt) => {
+                let result = Self::create_tvc_quorum_key_result(receipt.activity().clone())
+                    .map_err(|error| receipt.submission_error(error))?;
+                Ok(SubmissionOutcome::Completed(SubmittedActivityResult::new(
+                    result, receipt,
+                )))
+            }
+            SubmissionOutcome::Pending { checkpoint, reason } => {
+                Ok(SubmissionOutcome::Pending { checkpoint, reason })
+            }
+        }
     }
 }

@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use reqwest::StatusCode;
-use reqwest::header::{CONTENT_TYPE, LOCATION};
+use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue, LOCATION};
 use thiserror::Error;
 
 use generated::Activity;
@@ -21,7 +21,7 @@ use generated::google::rpc::Status;
 use generated::immutable::models::v1::{KeyValue, TransportEncryptionSuite};
 use generated::result::Inner as ActivityResultInner;
 
-use turnkey_api_key_stamper::{RandomizedStamp, Stamp, StamperError};
+use turnkey_api_key_stamper::{RandomizedStamp, Stamp, StampHeader, StamperError};
 use turnkey_enclave_encrypt::errors::EnclaveEncryptError;
 use turnkey_enclave_encrypt::{
     ExportClient, ImportClient, QuorumPublicKey, ServerTargetData, ServerTargetMsgV1,
@@ -79,9 +79,9 @@ pub use turnkey_api_key_stamper::{TurnkeyP256ApiKey, TurnkeySecp256k1ApiKey};
 pub mod generated;
 
 mod receipts;
-use receipts::SubmissionInvocation;
 pub use receipts::{
-    ActivityReceipt, RequestFingerprint, SubmissionFailure, SubmissionFailureCause,
+    ActivityReceipt, CheckpointSaveError, RequestFingerprint, SubmissionCheckpoint,
+    SubmissionFailure, SubmissionFailureCause, SubmissionOutcome, SubmissionPendingReason,
     SubmissionState, SubmittedActivityResult,
 };
 
@@ -157,6 +157,12 @@ pub enum TurnkeyClientError {
     #[error("invalid stamp for a submission receipt: {0}")]
     InvalidReceiptStamp(&'static str),
 
+    #[error("submission checkpoint persistence failed")]
+    CheckpointSaveFailed(#[from] CheckpointSaveError),
+
+    #[error("invalid activity for submission: {0}")]
+    InvalidSubmissionActivity(&'static str),
+
     #[error(transparent)]
     SubmissionFailed(#[from] SubmissionFailure),
 
@@ -171,6 +177,11 @@ pub enum TurnkeyClientError {
 
     #[error("Enclave-encrypt failure while handling a secret: {0}")]
     EnclaveEncrypt(#[from] EnclaveEncryptError),
+}
+
+struct SignedRequest {
+    body: String,
+    stamp: StampHeader,
 }
 
 /// Builder for [`TurnkeyClient<S>`].
@@ -192,11 +203,17 @@ impl<S: Stamp> std::fmt::Debug for TurnkeyClientBuilder<S> {
 
 impl<S: Stamp> TurnkeyClientBuilder<S> {
     pub fn new() -> Self {
+        let headers = HeaderMap::from_iter([(
+            HeaderName::from_static("x-tvc-client-version"),
+            HeaderValue::from_static(env!("CARGO_PKG_VERSION")),
+        )]);
         Self {
             api_key: None,
             base_url: None,
             retry_config: None,
-            reqwest_builder: reqwest::Client::builder().redirect(same_origin_redirect_policy()),
+            reqwest_builder: reqwest::Client::builder()
+                .default_headers(headers)
+                .redirect(same_origin_redirect_policy()),
             timeout: None,
         }
     }
@@ -364,7 +381,7 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// For example, if the latest version for create_sub_organization is "ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V7",
     /// you may want to use `process_activity` to process `ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V6`. Note that this
     /// requires manually setting the correct URL and activity request type.
-    /// The response is an generic Activity. If you're invoking this function manually you'll have to manually look at
+    /// The response is a generic Activity. If you're invoking this function manually you'll have to manually look at
     /// the correct `.activity.result` enum.
     ///
     /// Generated client methods supply the request type and URL, then extract
@@ -385,29 +402,14 @@ impl<S: Stamp> TurnkeyClient<S> {
         request: Request,
         path: String,
     ) -> Result<Activity, TurnkeyClientError> {
-        self.process_activity_with_submission(&request, path, None)
-            .await
-    }
-
-    async fn process_activity_with_submission<Request: Serialize>(
-        &self,
-        request: &Request,
-        path: String,
-        mut submission: Option<&mut SubmissionInvocation>,
-    ) -> Result<Activity, TurnkeyClientError> {
         let mut retry_count = 0;
 
         loop {
-            let response: ActivityResponse = self
-                .process_request_with_submission(request, path.clone(), submission.as_deref_mut())
-                .await?;
+            let response: ActivityResponse = self.process_request(&request, path.clone()).await?;
             let activity = response
                 .activity
                 .ok_or_else(|| TurnkeyClientError::MissingActivity)?;
 
-            if let Some(submission) = submission.as_deref_mut() {
-                submission.observe(&activity);
-            }
             match activity.status {
                 ActivityStatus::Completed => return Ok(activity),
                 ActivityStatus::Pending => {
@@ -463,37 +465,36 @@ impl<S: Stamp> TurnkeyClient<S> {
         Request: Serialize,
         Response: DeserializeOwned,
     {
-        self.process_request_with_submission(request, path, None)
-            .await
+        let signed = self.prepare_request(request)?;
+        let request = self.build_request(&path, signed)?;
+        self.execute_request(request).await
     }
 
-    async fn process_request_with_submission<Request: Serialize, Response: DeserializeOwned>(
+    fn prepare_request<Request: Serialize>(
         &self,
         request: &Request,
-        path: String,
-        submission: Option<&mut SubmissionInvocation>,
+    ) -> Result<SignedRequest, TurnkeyClientError> {
+        let body = serde_json::to_string(request)?;
+        let stamp = self.api_key.stamp(body.as_bytes())?;
+        Ok(SignedRequest { body, stamp })
+    }
+
+    fn build_request(
+        &self,
+        path: &str,
+        signed: SignedRequest,
+    ) -> Result<reqwest::Request, TurnkeyClientError> {
+        let request = self.http.post(format!("{}{}", self.base_url, path));
+        Ok(request
+            .header(signed.stamp.name, signed.stamp.value)
+            .body(signed.body)
+            .build()?)
+    }
+
+    async fn execute_request<Response: DeserializeOwned>(
+        &self,
+        request: reqwest::Request,
     ) -> Result<Response, TurnkeyClientError> {
-        let post_body = serde_json::to_string(request)?;
-        let header = self.api_key.stamp(post_body.as_bytes())?;
-        let fingerprint = if submission.is_some() {
-            Some(RequestFingerprint::from_stamp(&header, &post_body)?)
-        } else {
-            None
-        };
-        let mut request = self.http.post(format!("{}{}", self.base_url, path));
-        if matches!(
-            path.as_str(),
-            "/public/v1/submit/create_tvc_operator" | "/public/v1/submit/create_tvc_quorum_key"
-        ) {
-            request = request.header("X-TVC-CLIENT-VERSION", env!("CARGO_PKG_VERSION"));
-        }
-        let request = request
-            .header(header.name, header.value)
-            .body(post_body)
-            .build()?;
-        if let (Some(submission), Some(fingerprint)) = (submission, fingerprint) {
-            submission.sent.push(fingerprint);
-        }
         let res = self.http.execute(request).await?;
 
         let status = res.status();
