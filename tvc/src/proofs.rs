@@ -49,7 +49,9 @@ fn checks(s: &mut String, checks: &[Check]) {
             ProofCheck::ApplicationSignature => "Ephemeral application signature",
             ProofCheck::ClaimDecode => "Strict signed claim and request-context decoding",
             ProofCheck::ClaimSetAndIntent => "Required claim set and caller intent",
-            ProofCheck::CommonSubmission => "One common actually submitted fingerprint",
+            ProofCheck::CommonSubmission => {
+                "One common fingerprint from the saved creation request"
+            }
             ProofCheck::OutputKeyRoles => "Output key rules",
             ProofCheck::ResultBinding => "Signed claims equal returned result",
             ProofCheck::ShareRoutingShape => "Unsigned share routing label count and shape",
@@ -244,7 +246,7 @@ fn render(report: &ProofReport) -> String {
         }
     }
     for digest in report.sent_fingerprints() {
-        row(&mut s, "Actually submitted fingerprint", digest);
+        row(&mut s, "Saved creation request fingerprint", digest);
     }
     row(
         &mut s,
@@ -339,6 +341,15 @@ mod tests {
     use turnkey_proofs::tvc::{OperatorExpectation, TvcProvenance};
     use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
 
+    fn completed<T>(outcome: turnkey_client::SubmissionOutcome<T>) -> T {
+        match outcome {
+            turnkey_client::SubmissionOutcome::Completed(value) => value,
+            turnkey_client::SubmissionOutcome::Pending { .. } => {
+                panic!("expected completed proof fixture")
+            }
+        }
+    }
+
     async fn proof_report(
         app_proofs: serde_json::Value,
     ) -> (
@@ -372,8 +383,10 @@ mod tests {
                     path: "m/0".into(),
                     operator_name: "private-request-sentinel".into(),
                 },
+                async |_| Ok(()),
             )
             .await
+            .map(completed)
             .unwrap()
             .into_parts()
             .1;

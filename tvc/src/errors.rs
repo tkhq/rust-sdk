@@ -129,6 +129,11 @@ impl Classification {
 /// status; callers still render the complete original chain.
 pub fn classify(error: &anyhow::Error) -> Classification {
     for cause in error.chain() {
+        if let Some(error) =
+            cause.downcast_ref::<crate::pending_creation::CheckpointPersistenceFailure>()
+        {
+            return classify_turnkey_client_error(&error.submission);
+        }
         if cause
             .downcast_ref::<crate::commands::operator::create::MalformedHostedOperatorResponse>()
             .is_some()

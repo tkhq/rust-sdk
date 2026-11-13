@@ -13,6 +13,15 @@ use turnkey_client::{
 };
 use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate, matchers::method};
 
+fn completed<T>(outcome: turnkey_client::SubmissionOutcome<T>) -> T {
+    match outcome {
+        turnkey_client::SubmissionOutcome::Completed(value) => value,
+        turnkey_client::SubmissionOutcome::Pending { .. } => {
+            panic!("expected completed proof fixture")
+        }
+    }
+}
+
 fn point(seed: u8) -> String {
     hex::encode(
         SigningKey::from_slice(&[seed; 32])
@@ -476,8 +485,10 @@ async fn receipt(mode: Mode) -> ActivityReceipt {
                         threshold: 2,
                         operator_encrypt_keys,
                     },
+                    async |_| Ok(()),
                 )
                 .await
+                .map(completed)
                 .unwrap()
                 .into_parts()
                 .1
@@ -493,8 +504,10 @@ async fn receipt(mode: Mode) -> ActivityReceipt {
                         path: "m/0".into(),
                         operator_name: "synthetic-predicate-test".into(),
                     },
+                    async |_| Ok(()),
                 )
                 .await
+                .map(completed)
                 .unwrap()
                 .into_parts()
                 .1
@@ -618,8 +631,10 @@ async fn same_body_receipt(url: String) -> ActivityReceipt {
                 path: "m/0".into(),
                 operator_name: "same-body-with-clock-rollback".into(),
             },
+            async |_| Ok(()),
         )
         .await
+        .map(completed)
         .unwrap()
         .into_parts()
         .1
@@ -671,8 +686,10 @@ async fn mutating_the_separate_result_cannot_substitute_the_receipts_result() {
                 path: "m/0".into(),
                 operator_name: "operator".into(),
             },
+            async |_| Ok(()),
         )
         .await
+        .map(completed)
         .unwrap();
     let (mut separate, receipt) = submitted.into_parts();
     separate.result.encrypt_public_key = point(7);

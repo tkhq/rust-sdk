@@ -4,7 +4,7 @@ use crate::terminal::TerminalText;
 use crate::{
     client::build_client,
     config::turnkey::Config,
-    operator::{OperatorPublicKey, ensure_authenticated_org, hosted_creation_error},
+    operator::{OperatorPublicKey, ensure_authenticated_org},
     outcome::Outcome,
     output::StdCtx,
 };
@@ -134,9 +134,8 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome
 
     let recipients = operator_encrypt_keys.clone();
     let intent = build_create_tvc_quorum_key_intent(threshold, operator_encrypt_keys);
-    let expected_share_count = intent.operator_encrypt_keys.len();
     let mut auth = build_client(&config).await?;
-    let verifier = TvcProvenance::for_api_url(&auth.api_base_url)?;
+    let _ = TvcProvenance::for_api_url(&auth.api_base_url)?;
     if let Some(configured_org_id) = configured_org_id {
         ensure_authenticated_org(&auth.org_id, &configured_org_id)?;
     }
@@ -144,36 +143,16 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome
         .duration_since(UNIX_EPOCH)
         .context("system time before unix epoch")?
         .as_millis();
-
-    let expected = QuorumExpectation::parse(auth.org_id.clone(), u32::from(threshold), recipients)?;
+    let _ = QuorumExpectation::parse(auth.org_id.clone(), u32::from(threshold), recipients)?;
     auth.client = auth.client.with_app_proofs();
-    let result = auth
-        .client
-        .create_tvc_quorum_key_with_receipt(auth.org_id, timestamp_ms, intent)
-        .await
-        .map_err(|error| hosted_creation_error("create hosted TVC quorum key", error))?;
-    let quorum_label = TerminalText(&result.activity_result().result.quorum_key_id).single_line();
-    let (_, receipt) = result.into_parts();
-    let activity_label = TerminalText(&receipt.activity().id).single_line();
-    let (result, report) = verifier
-        .accept_quorum_reported(&auth.client, &expected, receipt)
-        .await
-        .into_parts();
-    crate::proofs::present(ctx.shell(), &result, &report, verbose_proofs);
-    let accepted = result.with_context(|| format!(
-        "remote creation may have succeeded; untrusted activity label {activity_label}, quorum label {quorum_label}; proof acceptance failed; do not retry creation blindly"
-    ))?;
-    let (quorum_key_id, quorum_public_key, share_ids) = accepted.into_parts();
-    let output = validate_result(
-        CreateTvcQuorumKeyResult {
-            quorum_key_id,
-            quorum_public_key,
-            share_ids,
-        },
-        expected_share_count,
-    )?;
-
-    Ok(Outcome::QuorumKeyCreated(output))
+    crate::pending_creation::submit(
+        ctx,
+        auth,
+        crate::pending_creation::Creation::Quorum { intent },
+        timestamp_ms,
+        verbose_proofs,
+    )
+    .await
 }
 
 fn parse_operator_id(value: &str) -> std::result::Result<Uuid, String> {
@@ -262,7 +241,7 @@ fn build_create_tvc_quorum_key_intent(
     }
 }
 
-fn validate_result(
+pub(crate) fn validate_result(
     result: CreateTvcQuorumKeyResult,
     expected_share_count: usize,
 ) -> Result<QuorumKeyCreated> {

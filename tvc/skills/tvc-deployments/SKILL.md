@@ -20,7 +20,7 @@ success. The supported API environments are production, preproduction and
 development, each with its own pinned Signer quorum key.
 
 Human output confirms `Proof verification: passed` after acceptance. Add
-`--verbose-proofs` to either hosted creation command to inspect the checks,
+`--verbose-proofs` to either hosted creation command or `creation resume` to inspect the checks,
 full public keys, manifest/PCR evidence and request/result comparisons, including
 failed and unreached checks. It is unavailable for YubiKey operators and remains
 quiet with `--message-format json`. The report does not establish an independent
@@ -38,6 +38,21 @@ Unsupported API environments fail before submission. After submission, remote
 creation may already have succeeded even when verification fails. Investigate
 before repeating creation; the CLI does not recreate keys to retry verification.
 See [the error reference](references/error-reference.md).
+
+Hosted creation saves a local receipt before sending each signed request.
+If approvals or processing remain, read `reason: creation_pending`, save its
+`operationId`, and arrange approval of the untrusted `activityId` lookup hint.
+After approval, run `tvc creation resume <operationId> --verbose-proofs` using the
+original organization and API environment. If no activity hint was received,
+add `--activity-id <candidate>` from TKMS. The candidate still must authenticate
+against the saved creation request. Resume never submits another creation.
+
+Receipts stay in `~/.config/turnkey/pending-creations/`, including after success.
+They contain the original intent and public request fingerprints, without
+credentials or private keys. Treat them as trusted local state. Every resume
+queries and verifies again. An existing matching operator is left unchanged,
+including its current default selection. See the
+[command reference](references/deploy-lifecycle.md#resume-a-hosted-creation).
 
 ## When to use
 

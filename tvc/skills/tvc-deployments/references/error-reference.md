@@ -32,7 +32,9 @@ Exit codes: `0` success, `1` runtime error, `2` usage error.
 
 ## Handling patterns
 
-- A failed hosted creation may already have succeeded remotely. Investigate before retrying, including after network or proof failures.
+- A failed hosted creation may already have succeeded remotely. Use the saved local operation ID with `tvc creation resume <ID>` after network or proof failures. If no activity hint was received, supply `--activity-id <candidate>`. Do not rerun creation blindly.
+- Hosted creation needing approval returns `creation_pending`, rather than `approval_required`. It has no accepted keys. Collect the required approvals outside this command, then resume.
+- Resume with a different organization or API environment, a busy operation, a malformed saved record, or a conflicting local operator returns `command_error`. Correct the local context or conflict before resuming. Storage failures retain their filesystem cause and operation ID. A failed pre-send save prevents that attempt from being sent.
 
 - **Retryable:** `network_error` (backoff + retry). `api_error` may be transient (5xx) or permanent (4xx-ish), inspect before retrying.
 - **Not retryable without a change:** `usage_error`, `missing_required_input`, `unauthorized`, `not_found`, `invalid_input`, `client_version_too_old` (the change is upgrading the binary).
