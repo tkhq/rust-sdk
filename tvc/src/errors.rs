@@ -293,9 +293,10 @@ fn classify_turnkey_client_error(error: &TurnkeyClientError) -> Classification {
                 Cause::InvalidResponse | Cause::ActivityNotCompleted | Cause::ExceededRetries => {
                     Classification::new(ErrorCode::ApiError, None)
                 }
-                Cause::RandomizedSigningFailed | Cause::StampRejected | Cause::InvalidRequest => {
-                    Classification::new(ErrorCode::CommandError, None)
-                }
+                Cause::RandomizedSigningFailed
+                | Cause::StampRejected
+                | Cause::InvalidRequest
+                | Cause::CheckpointSaveFailed => Classification::new(ErrorCode::CommandError, None),
             }
         }
         TurnkeyClientError::ActivityRequiresApproval(_) => {
@@ -319,6 +320,7 @@ fn classify_turnkey_client_error(error: &TurnkeyClientError) -> Classification {
         | TurnkeyClientError::UnexpectedInnerActivityResult(_)
         | TurnkeyClientError::UnexpectedSingletonCount(_, _)
         | TurnkeyClientError::UnexpectedResultCount(_, _, _)
+        | TurnkeyClientError::InvalidSubmissionActivity(_)
         | TurnkeyClientError::MissingActivity
         | TurnkeyClientError::MissingResult
         | TurnkeyClientError::MissingInnerResult
@@ -332,6 +334,7 @@ fn classify_turnkey_client_error(error: &TurnkeyClientError) -> Classification {
         | TurnkeyClientError::Http(_)
         | TurnkeyClientError::SerdeJsonFailure(_)
         | TurnkeyClientError::InvalidReceiptStamp(_)
+        | TurnkeyClientError::CheckpointSaveFailed(_)
         | TurnkeyClientError::StamperError(_)
         | TurnkeyClientError::EnclaveEncrypt(_) => {
             Classification::new(ErrorCode::CommandError, None)
@@ -528,6 +531,7 @@ mod tests {
             TurnkeyClientError::HeaderFromStrError("invalid MIME type".to_string()),
             TurnkeyClientError::UnexpectedMimeType("text/plain".to_string()),
             TurnkeyClientError::Decode("invalid JSON".to_string(), decode_error),
+            TurnkeyClientError::InvalidSubmissionActivity("activity identity mismatch"),
             TurnkeyClientError::MissingActivity,
             TurnkeyClientError::MissingResult,
             TurnkeyClientError::MissingInnerResult,
@@ -564,6 +568,7 @@ mod tests {
             TurnkeyClientError::BuilderMissingApiKey,
             TurnkeyClientError::SerdeJsonFailure(serialization_error),
             TurnkeyClientError::InvalidReceiptStamp("invalid stamp JSON"),
+            TurnkeyClientError::CheckpointSaveFailed(turnkey_client::CheckpointSaveError),
             TurnkeyClientError::StamperError(turnkey_api_key_stamper::StamperError::HexDecode(
                 "invalid hex".to_string(),
             )),
@@ -579,9 +584,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn receipt_http_failures_keep_safe_classification_and_upgrade_hint() {
+    async fn receipt_failures_keep_safe_classification_and_upgrade_hint() {
         use turnkey_client::{
-            TurnkeyClient, TurnkeyP256ApiKey, generated::CreateTvcOperatorIntent,
+            CheckpointSaveError, TurnkeyClient, TurnkeyP256ApiKey,
+            generated::CreateTvcOperatorIntent,
         };
         use wiremock::{Mock, MockServer, ResponseTemplate, matchers::path};
 
@@ -591,12 +597,13 @@ mod tests {
             .base_url(server.uri())
             .build()
             .unwrap();
-        for (status, code, too_old) in [
-            (401, ErrorCode::Unauthorized, false),
-            (403, ErrorCode::Unauthorized, false),
-            (404, ErrorCode::NotFound, false),
-            (500, ErrorCode::ApiError, false),
-            (400, ErrorCode::ClientVersionTooOld, true),
+        for (status, code, too_old, save_fails) in [
+            (401, ErrorCode::Unauthorized, false, false),
+            (403, ErrorCode::Unauthorized, false, false),
+            (404, ErrorCode::NotFound, false, false),
+            (500, ErrorCode::ApiError, false, false),
+            (400, ErrorCode::ClientVersionTooOld, true, false),
+            (400, ErrorCode::CommandError, false, true),
         ] {
             server.reset().await;
             let body = if too_old {
@@ -619,14 +626,32 @@ mod tests {
                             path: "path".into(),
                             operator_name: "operator".into(),
                         },
+                        async |_| {
+                            if save_fails {
+                                Err(CheckpointSaveError)
+                            } else {
+                                Ok(())
+                            }
+                        },
                     )
                     .await
                     .unwrap_err(),
             );
-            assert_eq!(classify(&error), Classification::new(code, Some(status)));
+            assert_eq!(
+                classify(&error),
+                Classification::new(code, (!save_fails).then_some(status))
+            );
             assert_eq!(hint(&error).is_some(), too_old);
             assert!(!render_error_chain(&error).contains("private request secret"));
-            assert!(render_error_chain(&error).contains("remote creation may have succeeded"));
+            assert!(render_error_chain(&error).contains(if save_fails {
+                "creation was never submitted"
+            } else {
+                "remote creation may have succeeded"
+            }));
+            assert_eq!(
+                server.received_requests().await.unwrap().len(),
+                usize::from(!save_fails)
+            );
         }
     }
 
