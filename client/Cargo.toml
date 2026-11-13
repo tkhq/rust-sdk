@@ -12,6 +12,9 @@ keywords = ["turnkey", "api", "client", "cryptography"]
 categories = ["api-bindings"]
 
 [dependencies]
+base64.workspace = true
+borsh.workspace = true
+sha2.workspace = true
 hex.workspace = true
 mime.workspace = true
 chrono.workspace = true

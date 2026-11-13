@@ -98,7 +98,7 @@ pub enum ErrorCode {
     ClientVersionTooOld,
     /// An activity needs more approvals.
     ApprovalRequired,
-    /// A connect/timeout/DNS failure — the request never reached the server.
+    /// A connect, timeout, or DNS failure. Submission state is reported separately.
     NetworkError,
     /// Fallback for everything else.
     CommandError,
@@ -229,6 +229,14 @@ struct ApiErrorEnvelope {
 /// carrying [`TVC_CLIENT_VERSION_TOO_OLD`]. Shared by [`classify`] and
 /// [`hint`] so they cannot disagree on what counts as one.
 fn client_version_rejection(error: &TurnkeyClientError) -> Option<ApiErrorEnvelope> {
+    if matches!(error, TurnkeyClientError::SubmissionFailed(failure)
+        if matches!(failure.cause(), turnkey_client::SubmissionFailureCause::ClientVersionTooOld(_)))
+    {
+        return Some(ApiErrorEnvelope {
+            _message: String::new(),
+            turnkey_error_code: TVC_CLIENT_VERSION_TOO_OLD.to_string(),
+        });
+    }
     let TurnkeyClientError::UnexpectedHttpStatus(_, body) = error else {
         return None;
     };
@@ -257,14 +265,39 @@ fn classify_turnkey_client_error(error: &TurnkeyClientError) -> Classification {
 
             Classification::new(code, Some(*status))
         }
-        // A connect/timeout/DNS failure means the request never reached the
-        // server — classify as a network error rather than an API error.
         TurnkeyClientError::Http(reqwest_error)
             if reqwest_error.is_connect()
                 || reqwest_error.is_timeout()
                 || reqwest_error.is_request() =>
         {
             Classification::new(ErrorCode::NetworkError, None)
+        }
+        TurnkeyClientError::SubmissionFailed(failure) => {
+            use turnkey_client::SubmissionFailureCause as Cause;
+            match failure.cause() {
+                Cause::Transport => Classification::new(ErrorCode::NetworkError, None),
+                Cause::HttpStatus(status) => {
+                    let code = match StatusCode::from_u16(*status) {
+                        Ok(StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN) => {
+                            ErrorCode::Unauthorized
+                        }
+                        Ok(StatusCode::NOT_FOUND) => ErrorCode::NotFound,
+                        _ => ErrorCode::ApiError,
+                    };
+                    Classification::new(code, Some(*status))
+                }
+                Cause::ClientVersionTooOld(status) => {
+                    Classification::new(ErrorCode::ClientVersionTooOld, Some(*status))
+                }
+                Cause::ApprovalRequired => Classification::new(ErrorCode::ApprovalRequired, None),
+                Cause::InvalidResponse | Cause::ActivityNotCompleted | Cause::ExceededRetries => {
+                    Classification::new(ErrorCode::ApiError, None)
+                }
+                Cause::RandomizedSigningFailed
+                | Cause::StampRejected
+                | Cause::InvalidRequest
+                | Cause::CheckpointSaveFailed => Classification::new(ErrorCode::CommandError, None),
+            }
         }
         TurnkeyClientError::ActivityRequiresApproval(_) => {
             Classification::new(ErrorCode::ApprovalRequired, None)
@@ -287,6 +320,7 @@ fn classify_turnkey_client_error(error: &TurnkeyClientError) -> Classification {
         | TurnkeyClientError::UnexpectedInnerActivityResult(_)
         | TurnkeyClientError::UnexpectedSingletonCount(_, _)
         | TurnkeyClientError::UnexpectedResultCount(_, _, _)
+        | TurnkeyClientError::InvalidSubmissionActivity(_)
         | TurnkeyClientError::MissingActivity
         | TurnkeyClientError::MissingResult
         | TurnkeyClientError::MissingInnerResult
@@ -299,6 +333,8 @@ fn classify_turnkey_client_error(error: &TurnkeyClientError) -> Classification {
         | TurnkeyClientError::ReqwestBuilder(_)
         | TurnkeyClientError::Http(_)
         | TurnkeyClientError::SerdeJsonFailure(_)
+        | TurnkeyClientError::InvalidReceiptStamp(_)
+        | TurnkeyClientError::CheckpointSaveFailed(_)
         | TurnkeyClientError::StamperError(_)
         | TurnkeyClientError::EnclaveEncrypt(_) => {
             Classification::new(ErrorCode::CommandError, None)
@@ -495,6 +531,7 @@ mod tests {
             TurnkeyClientError::HeaderFromStrError("invalid MIME type".to_string()),
             TurnkeyClientError::UnexpectedMimeType("text/plain".to_string()),
             TurnkeyClientError::Decode("invalid JSON".to_string(), decode_error),
+            TurnkeyClientError::InvalidSubmissionActivity("activity identity mismatch"),
             TurnkeyClientError::MissingActivity,
             TurnkeyClientError::MissingResult,
             TurnkeyClientError::MissingInnerResult,
@@ -530,6 +567,8 @@ mod tests {
         let errors = [
             TurnkeyClientError::BuilderMissingApiKey,
             TurnkeyClientError::SerdeJsonFailure(serialization_error),
+            TurnkeyClientError::InvalidReceiptStamp("invalid stamp JSON"),
+            TurnkeyClientError::CheckpointSaveFailed(turnkey_client::CheckpointSaveError),
             TurnkeyClientError::StamperError(turnkey_api_key_stamper::StamperError::HexDecode(
                 "invalid hex".to_string(),
             )),
@@ -540,6 +579,78 @@ mod tests {
             assert_eq!(
                 classify(&error),
                 Classification::new(ErrorCode::CommandError, None)
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn receipt_failures_keep_safe_classification_and_upgrade_hint() {
+        use turnkey_client::{
+            CheckpointSaveError, TurnkeyClient, TurnkeyP256ApiKey,
+            generated::CreateTvcOperatorIntent,
+        };
+        use wiremock::{Mock, MockServer, ResponseTemplate, matchers::path};
+
+        let server = MockServer::start().await;
+        let client = TurnkeyClient::builder()
+            .api_key(TurnkeyP256ApiKey::from_bytes([1; 32], None).unwrap())
+            .base_url(server.uri())
+            .build()
+            .unwrap();
+        for (status, code, too_old, save_fails) in [
+            (401, ErrorCode::Unauthorized, false, false),
+            (403, ErrorCode::Unauthorized, false, false),
+            (404, ErrorCode::NotFound, false, false),
+            (500, ErrorCode::ApiError, false, false),
+            (400, ErrorCode::ClientVersionTooOld, true, false),
+            (400, ErrorCode::CommandError, false, true),
+        ] {
+            server.reset().await;
+            let body = if too_old {
+                TOO_OLD_BODY
+            } else {
+                r#"{"message":"private request secret"}"#
+            };
+            Mock::given(path("/public/v1/submit/create_tvc_operator"))
+                .respond_with(ResponseTemplate::new(status).set_body_raw(body, "application/json"))
+                .mount(&server)
+                .await;
+            let error = client_error(
+                client
+                    .create_tvc_operator_with_receipt(
+                        "org".into(),
+                        100,
+                        CreateTvcOperatorIntent {
+                            wallet_id: None,
+                            wallet_name: Some("wallet".into()),
+                            path: "path".into(),
+                            operator_name: "operator".into(),
+                        },
+                        async |_| {
+                            if save_fails {
+                                Err(CheckpointSaveError)
+                            } else {
+                                Ok(())
+                            }
+                        },
+                    )
+                    .await
+                    .unwrap_err(),
+            );
+            assert_eq!(
+                classify(&error),
+                Classification::new(code, (!save_fails).then_some(status))
+            );
+            assert_eq!(hint(&error).is_some(), too_old);
+            assert!(!render_error_chain(&error).contains("private request secret"));
+            assert!(render_error_chain(&error).contains(if save_fails {
+                "creation was never submitted"
+            } else {
+                "remote creation may have succeeded"
+            }));
+            assert_eq!(
+                server.received_requests().await.unwrap().len(),
+                usize::from(!save_fails)
             );
         }
     }

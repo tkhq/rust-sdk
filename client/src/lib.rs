@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use reqwest::StatusCode;
-use reqwest::header::{CONTENT_TYPE, LOCATION};
+use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue, LOCATION};
 use thiserror::Error;
 
 use generated::Activity;
@@ -21,7 +21,7 @@ use generated::google::rpc::Status;
 use generated::immutable::models::v1::{KeyValue, TransportEncryptionSuite};
 use generated::result::Inner as ActivityResultInner;
 
-use turnkey_api_key_stamper::{Stamp, StampHeader, StamperError};
+use turnkey_api_key_stamper::{RandomizedStamp, Stamp, StampHeader, StamperError};
 use turnkey_enclave_encrypt::errors::EnclaveEncryptError;
 use turnkey_enclave_encrypt::{
     ExportClient, ImportClient, QuorumPublicKey, ServerTargetData, ServerTargetMsgV1,
@@ -77,6 +77,13 @@ pub struct ActivityResult<T> {
 pub use turnkey_api_key_stamper::{TurnkeyP256ApiKey, TurnkeySecp256k1ApiKey};
 
 pub mod generated;
+
+mod receipts;
+pub use receipts::{
+    ActivityReceipt, CheckpointSaveError, RequestFingerprint, SubmissionCheckpoint,
+    SubmissionFailure, SubmissionFailureCause, SubmissionOutcome, SubmissionPendingReason,
+    SubmissionState, SubmittedActivityResult,
+};
 
 pub mod retry;
 pub mod well_known;
@@ -147,6 +154,18 @@ pub enum TurnkeyClientError {
     #[error("Refused to follow redirect (status {0}) to {1}")]
     RefusedRedirect(u16, String),
 
+    #[error("invalid stamp for a submission receipt: {0}")]
+    InvalidReceiptStamp(&'static str),
+
+    #[error("submission checkpoint persistence failed")]
+    CheckpointSaveFailed(#[from] CheckpointSaveError),
+
+    #[error("invalid activity for submission: {0}")]
+    InvalidSubmissionActivity(&'static str),
+
+    #[error(transparent)]
+    SubmissionFailed(#[from] SubmissionFailure),
+
     #[error("Stamper error")]
     StamperError(#[from] StamperError),
 
@@ -158,6 +177,11 @@ pub enum TurnkeyClientError {
 
     #[error("Enclave-encrypt failure while handling a secret: {0}")]
     EnclaveEncrypt(#[from] EnclaveEncryptError),
+}
+
+struct SignedRequest {
+    body: String,
+    stamp: StampHeader,
 }
 
 /// Builder for [`TurnkeyClient<S>`].
@@ -179,11 +203,17 @@ impl<S: Stamp> std::fmt::Debug for TurnkeyClientBuilder<S> {
 
 impl<S: Stamp> TurnkeyClientBuilder<S> {
     pub fn new() -> Self {
+        let headers = HeaderMap::from_iter([(
+            HeaderName::from_static("x-tvc-client-version"),
+            HeaderValue::from_static(env!("CARGO_PKG_VERSION")),
+        )]);
         Self {
             api_key: None,
             base_url: None,
             retry_config: None,
-            reqwest_builder: reqwest::Client::builder().redirect(same_origin_redirect_policy()),
+            reqwest_builder: reqwest::Client::builder()
+                .default_headers(headers)
+                .redirect(same_origin_redirect_policy()),
             timeout: None,
         }
     }
@@ -340,20 +370,22 @@ impl<S: Stamp> TurnkeyClient<S> {
         self.generate_app_proofs
     }
 
-    /// POSTs an activity and polls until the status is "COMPLETE"
+    /// Submits an activity and resubmits it while its status is `Pending`.
     ///
-    /// `process_activity` accepts a  arbitrary `Request` and `path` to POST to the Turnkey API.
-    /// It encapsulates the polling logic and is generally meant to be called by other
-    /// activity-specific client functions (e.g. `create_sub_organization`).
+    /// Accepts an arbitrary serializable request and endpoint path. Retries stop
+    /// at the configured retry limit. Returns the activity without a local
+    /// submission receipt; receipt-bearing creation methods retain fingerprints
+    /// for subsequent proof verification.
     ///
     /// Given the Turnkey API is backwards-compatible, this function can be used to submit old versions of activities.
     /// For example, if the latest version for create_sub_organization is "ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V7",
     /// you may want to use `process_activity` to process `ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V6`. Note that this
     /// requires manually setting the correct URL and activity request type.
-    /// The response is an generic Activity. If you're invoking this function manually you'll have to manually look at
+    /// The response is a generic Activity. If you're invoking this function manually you'll have to manually look at
     /// the correct `.activity.result` enum.
     ///
-    /// This function is used by our generated client methods and sets the right request type, URL, and deserializes into the proper result type as well.
+    /// Generated client methods supply the request type and URL, then extract
+    /// the typed result from the returned activity.
     /// Unless you have good reasons, prefer the type-safe client methods such as `sign_raw_payload`.
     ///
     /// # Returns
@@ -422,6 +454,8 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// * POSTing the POST body and the associated stamp to the Turnkey API
     ///
     /// This function is generic and can handle POSTing queries or activities.
+    /// It does not retry based on activity status or return a local submission
+    /// receipt. Use an activity method when Pending retries are needed.
     pub async fn process_request<Request, Response>(
         &self,
         request: &Request,
@@ -431,16 +465,37 @@ impl<S: Stamp> TurnkeyClient<S> {
         Request: Serialize,
         Response: DeserializeOwned,
     {
-        let url = format!("{}{}", self.base_url, path);
-        let post_body = serde_json::to_string(&request)?;
-        let StampHeader { name, value } = self.api_key.stamp(post_body.as_bytes())?;
-        let res = self
-            .http
-            .post(url)
-            .header(name, value)
-            .body(post_body)
-            .send()
-            .await?;
+        let signed = self.prepare_request(request)?;
+        let request = self.build_request(&path, signed)?;
+        self.execute_request(request).await
+    }
+
+    fn prepare_request<Request: Serialize>(
+        &self,
+        request: &Request,
+    ) -> Result<SignedRequest, TurnkeyClientError> {
+        let body = serde_json::to_string(request)?;
+        let stamp = self.api_key.stamp(body.as_bytes())?;
+        Ok(SignedRequest { body, stamp })
+    }
+
+    fn build_request(
+        &self,
+        path: &str,
+        signed: SignedRequest,
+    ) -> Result<reqwest::Request, TurnkeyClientError> {
+        let request = self.http.post(format!("{}{}", self.base_url, path));
+        Ok(request
+            .header(signed.stamp.name, signed.stamp.value)
+            .body(signed.body)
+            .build()?)
+    }
+
+    async fn execute_request<Response: DeserializeOwned>(
+        &self,
+        request: reqwest::Request,
+    ) -> Result<Response, TurnkeyClientError> {
+        let res = self.http.execute(request).await?;
 
         let status = res.status();
         if status.is_redirection() {
