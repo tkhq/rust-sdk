@@ -301,7 +301,10 @@ pub enum DeployConfigValidationError {
     )]
     PullSecretPlaceholder { placeholder: String },
     #[error(
-        "instance_size_cpu and instance_size_ram need to be empty or one of\n\tinstanceSizeCPU: 2, instanceSizeRam: 1\n\tinstanceSizeCPU: 6, instanceSizeRam: 24\n\tinstanceSizeCPU: 14, instanceSizeRam: 48"
+        r#"instanceSizeCpus and instanceSizeRam must both be omitted or be one of
+	instanceSizeCpus: 2,  instanceSizeRam: 1   (small, default)
+	instanceSizeCpus: 6,  instanceSizeRam: 24  (medium)
+	instanceSizeCpus: 14, instanceSizeRam: 48  (large)"#
     )]
     InvalidInstanceSize,
 }
@@ -596,5 +599,55 @@ mod tests {
         assert!(msg.contains("placeholder"), "{msg}");
         assert!(!msg.contains("not a valid UUID"), "{msg}");
         assert!(!errors.has_non_placeholder_error());
+    }
+
+    #[test]
+    fn validate_accepts_each_supported_instance_size() {
+        for (cpus, ram) in [
+            (None, None),
+            (Some(2), Some(1)),
+            (Some(6), Some(24)),
+            (Some(14), Some(48)),
+        ] {
+            let mut config = valid_config();
+            config.instance_size_cpus = cpus;
+            config.instance_size_ram = ram;
+            assert!(config.validate().is_ok(), "should accept {cpus:?}/{ram:?}");
+        }
+    }
+
+    /// The message must name the keys the parser actually accepts (the
+    /// `camelCase` serde names), so a user who pastes a listed pair into
+    /// `deploy.json` passes validation instead of adding ignored fields.
+    #[test]
+    fn validate_rejects_unsupported_instance_size_naming_real_config_keys() {
+        let mut config = valid_config();
+        config.instance_size_cpus = Some(4);
+        config.instance_size_ram = Some(8);
+        let errors = config.validate().unwrap_err();
+        assert!(matches!(
+            errors.0.as_slice(),
+            [DeployConfigValidationError::InvalidInstanceSize]
+        ));
+        assert!(errors.has_non_placeholder_error());
+        assert_eq!(
+            errors.to_string(),
+            r#"instanceSizeCpus and instanceSizeRam must both be omitted or be one of
+	instanceSizeCpus: 2,  instanceSizeRam: 1   (small, default)
+	instanceSizeCpus: 6,  instanceSizeRam: 24  (medium)
+	instanceSizeCpus: 14, instanceSizeRam: 48  (large)"#
+        );
+    }
+
+    /// Half-specified sizes are rejected too: both keys or neither.
+    #[test]
+    fn validate_rejects_instance_size_with_only_one_key() {
+        let mut config = valid_config();
+        config.instance_size_cpus = Some(2);
+        let errors = config.validate().unwrap_err();
+        assert!(matches!(
+            errors.0.as_slice(),
+            [DeployConfigValidationError::InvalidInstanceSize]
+        ));
     }
 }
