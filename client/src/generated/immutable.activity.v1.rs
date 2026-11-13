@@ -199,6 +199,7 @@ pub mod intent {
         ExecuteSwapIntentV4(super::ExecuteSwapIntentV4),
         CreateWalletAuthenticatorsIntent(super::CreateWalletAuthenticatorsIntent),
         DeleteWalletAuthenticatorsIntent(super::DeleteWalletAuthenticatorsIntent),
+        SignSshUserauthIntent(super::SignSshUserauthIntent),
     }
 }
 #[derive(Debug)]
@@ -596,6 +597,25 @@ pub struct SignRawPayloadIntent {
     /// @inject_tag: validate:"required"
     pub encoding: super::super::common::v1::PayloadEncoding,
     pub hash_function: super::super::common::v1::HashFunction,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SignSshUserauthIntent {
+    /// @inject_tag: validate:"required"
+    pub sign_with: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required,hexadecimal,max=8192"
+    pub userauth_data: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required,hexadecimal,max=8192"
+    pub session_bind: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct SignSshUserauthResult {
+    pub signature: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -3024,6 +3044,7 @@ pub mod result {
         CreateFiatOffRampSessionResult(super::CreateFiatOffRampSessionResult),
         CreateWalletAuthenticatorsResult(super::CreateWalletAuthenticatorsResult),
         DeleteWalletAuthenticatorsResult(super::DeleteWalletAuthenticatorsResult),
+        SignSshUserauthResult(super::SignSshUserauthResult),
     }
 }
 #[derive(Debug)]
@@ -5716,6 +5737,8 @@ pub enum ActivityType {
     CreateWalletAuthenticators = 182,
     #[serde(rename = "ACTIVITY_TYPE_DELETE_WALLET_AUTHENTICATORS")]
     DeleteWalletAuthenticators = 183,
+    #[serde(rename = "ACTIVITY_TYPE_SIGN_SSH_USERAUTH")]
+    SignSshUserauth = 189,
 }
 impl ActivityType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -5940,6 +5963,7 @@ impl ActivityType {
             Self::DeleteWalletAuthenticators => {
                 "ACTIVITY_TYPE_DELETE_WALLET_AUTHENTICATORS"
             }
+            Self::SignSshUserauth => "ACTIVITY_TYPE_SIGN_SSH_USERAUTH",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -6203,6 +6227,7 @@ impl ActivityType {
             "ACTIVITY_TYPE_DELETE_WALLET_AUTHENTICATORS" => {
                 Some(Self::DeleteWalletAuthenticators)
             }
+            "ACTIVITY_TYPE_SIGN_SSH_USERAUTH" => Some(Self::SignSshUserauth),
             _ => None,
         }
     }

@@ -1087,6 +1087,18 @@ service PublicApiService {
     };
   }
 
+  rpc SignSshUserauth(external.activity.v1.SignSshUserauthRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/sign_ssh_userauth"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Sign an SSH public key login request. The enclave verifies the request and the matching session-bind, then exposes the SSH user, service, and verified host key to policies."
+      summary: "Sign SSH userauth"
+      tags: "Signing"
+    };
+  }
+
   rpc SignRawPayload(external.activity.v1.SignRawPayloadRequest) returns (ActivityResponse) {
     option (google.api.http) = {
       post: "/public/v1/submit/sign_raw_payload"
