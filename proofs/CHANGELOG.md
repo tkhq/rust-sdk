@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- Async request-bound TVC acceptance verifies the independent Signer quorum
+  endorsement, AWS boot evidence, QOS manifest and live ephemeral-key bindings,
+  and exact signed operator or quorum claims against submission receipts.
+  Production, preproduction and development roots are selected from the local API URL.
+- Boot proofs carry an optional quorum-key attestation endorsement. Strong TVC
+  acceptance requires it and uses the signed document's issuance time for
+  historical certificate validation. Generic `verify` remains compatible.
+
 ## [0.17.2](https://github.com/tkhq/rust-sdk/compare/turnkey_proofs-v0.17.1...turnkey_proofs-v0.17.2) - 2026-11-09
 
 ### Other

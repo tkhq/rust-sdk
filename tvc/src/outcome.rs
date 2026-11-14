@@ -32,6 +32,7 @@ use std::fmt::{self, Display, Formatter};
 pub enum Outcome {
     LoggedIn(login::LoggedIn),
     OperatorCreated(operator::create::OperatorCreated),
+    CreationPending(crate::pending_creation::CreationPending),
     YubikeyOperatorAdded(operator::create::YubikeyOperatorAdded),
     ProfileDeleted(login::ProfileDeleted),
     ManifestApprovalPosted(ApprovalPosted),
@@ -75,6 +76,7 @@ impl Display for Outcome {
         match self {
             Outcome::LoggedIn(msg) => msg.fmt(f),
             Outcome::OperatorCreated(msg) => msg.fmt(f),
+            Outcome::CreationPending(msg) => msg.fmt(f),
             Outcome::YubikeyOperatorAdded(msg) => msg.fmt(f),
             Outcome::ProfileDeleted(msg) => msg.fmt(f),
             Outcome::ManifestApprovalPosted(msg) => msg.fmt(f),

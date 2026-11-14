@@ -1,9 +1,10 @@
 //! Create a hosted quorum key from operator encryption public keys.
 
+use crate::terminal::TerminalText;
 use crate::{
     client::build_client,
     config::turnkey::Config,
-    operator::{OperatorPublicKey, ensure_authenticated_org, hosted_activity_error},
+    operator::{OperatorPublicKey, ensure_authenticated_org},
     outcome::Outcome,
     output::StdCtx,
 };
@@ -17,10 +18,9 @@ use std::{
 };
 use tracing::instrument;
 use turnkey_client::generated::{CreateTvcQuorumKeyIntent, CreateTvcQuorumKeyResult};
+use turnkey_proofs::tvc::{QuorumExpectation, TvcProvenance};
 use uuid::Uuid;
 
-// `qos_crypto::shamir::shares_generate` supports at most 255 shares. Hosted
-// quorum generation keeps the operator key count strictly below that bound.
 const MAX_OPERATOR_ENCRYPT_KEY_COUNT_EXCLUSIVE: usize = 255;
 
 fn threshold_parser() -> RangedU64ValueParser<u8> {
@@ -65,6 +65,10 @@ pub struct Args {
         env = "TVC_OPERATOR_IDS"
     )]
     operator_ids: Vec<Uuid>,
+
+    /// Expand human output with the checks and public proof evidence.
+    #[arg(long)]
+    verbose_proofs: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -80,9 +84,13 @@ impl Display for QuorumKeyCreated {
         write!(
             f,
             "Quorum Key ID: {}\nQuorum Public Key: {}\nShare IDs: {}",
-            self.quorum_key_id,
+            TerminalText(&self.quorum_key_id).single_line(),
             self.quorum_public_key,
-            self.share_ids.join(", ")
+            self.share_ids
+                .iter()
+                .map(|id| TerminalText(id).single_line())
+                .collect::<Vec<_>>()
+                .join(", ")
         )
     }
 }
@@ -103,11 +111,12 @@ impl OperatorSource {
 
 /// Run the hosted quorum-key creation command.
 #[instrument(skip_all)]
-pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome> {
+pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome> {
     let Args {
         threshold,
         operator_encrypt_keys,
         operator_ids,
+        verbose_proofs,
     } = args;
     // The required, mutually exclusive Clap group guarantees exactly one
     // source is non-empty.
@@ -123,9 +132,10 @@ pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcom
         resolve_operator_encrypt_keys(&config, operator_source)?;
     let operator_encrypt_keys = normalize_operator_encrypt_keys(operator_encrypt_keys)?;
 
+    let recipients = operator_encrypt_keys.clone();
     let intent = build_create_tvc_quorum_key_intent(threshold, operator_encrypt_keys);
-    let expected_share_count = intent.operator_encrypt_keys.len();
-    let auth = build_client(&config).await?;
+    let mut auth = build_client(&config).await?;
+    let _ = TvcProvenance::for_api_url(&auth.api_base_url)?;
     if let Some(configured_org_id) = configured_org_id {
         ensure_authenticated_org(&auth.org_id, &configured_org_id)?;
     }
@@ -133,15 +143,16 @@ pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcom
         .duration_since(UNIX_EPOCH)
         .context("system time before unix epoch")?
         .as_millis();
-
-    let result = auth
-        .client
-        .create_tvc_quorum_key(auth.org_id, timestamp_ms, intent)
-        .await
-        .map_err(|error| hosted_activity_error("create hosted TVC quorum key", error))?;
-    let output = validate_result(result.result, expected_share_count)?;
-
-    Ok(Outcome::QuorumKeyCreated(output))
+    let _ = QuorumExpectation::parse(auth.org_id.clone(), u32::from(threshold), recipients)?;
+    auth.client = auth.client.with_app_proofs();
+    crate::pending_creation::submit(
+        ctx,
+        auth,
+        crate::pending_creation::Creation::Quorum { intent },
+        timestamp_ms,
+        verbose_proofs,
+    )
+    .await
 }
 
 fn parse_operator_id(value: &str) -> std::result::Result<Uuid, String> {
@@ -230,7 +241,7 @@ fn build_create_tvc_quorum_key_intent(
     }
 }
 
-fn validate_result(
+pub(crate) fn validate_result(
     result: CreateTvcQuorumKeyResult,
     expected_share_count: usize,
 ) -> Result<QuorumKeyCreated> {

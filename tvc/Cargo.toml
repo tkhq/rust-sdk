@@ -22,6 +22,7 @@ qos_nsm = { workspace = true }
 qos_p256 = { workspace = true }
 turnkey_api_key_stamper = { workspace = true }
 turnkey_client = { workspace = true }
+turnkey_proofs = { workspace = true }
 turnkey_enclave_encrypt = { workspace = true }
 
 anyhow = { workspace = true }

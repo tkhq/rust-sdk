@@ -2,6 +2,21 @@
 
 CLI for [Turnkey Verifiable Cloud](https://turnkey.com) - see [this guide](https://docs.turnkey.com/getting-started/verifiable-cloud-quickstart) for example usage.
 
+Hosted operator and quorum creation verify request-bound signed output under the
+independently pinned Signer quorum key before accepting keys. Supported API
+environments are production, preproduction and development. Missing or invalid boot and app
+evidence rejects creation output without saving keys. See the
+[embedded CLI skill](skills/tvc-deployments/SKILL.md) for usage and recovery guidance.
+
+Hosted creation saves its original request receipt under
+`~/.config/turnkey/pending-creations/`. If approval is needed, the command returns
+`creation_pending` with a local `operationId`. After approval, run
+`tvc creation resume <operationId> --verbose-proofs` with the same organization
+and API environment. If the original response was lost, add
+`--activity-id <candidate>`. Resume queries and verifies the original creation
+without submitting another one. Completed receipts remain available and are
+verified again on every resume.
+
 ## Installation
 
 ```bash
@@ -12,7 +27,7 @@ cargo install tvc
 
 For **local use**, run `tvc login` once and the CLI will read `~/.config/turnkey/` thereafter.
 
-For **programmatic use** (GitHub Actions, etc.), set these three env vars to authenticate directly without touching disk:
+For **programmatic use** (GitHub Actions, etc.), set these three env vars to authenticate without credential files:
 
 | Env | Source |
 |---|---|

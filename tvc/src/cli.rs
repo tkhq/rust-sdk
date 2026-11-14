@@ -232,9 +232,7 @@ impl Commands {
 
         let config = if !path.exists() {
             debug!(config_path = %path.display(), "tvc config not found; using defaults");
-            let config = Config::default();
-            config.save().await?;
-            config
+            Config::default()
         } else {
             let content = tokio::fs::read_to_string(&path)
                 .await
@@ -315,7 +313,12 @@ impl Commands {
             },
             Commands::Login(args) => commands::login::run(ctx, args, config).await,
             Commands::Operator { command } => match command {
-                OperatorCommands::Create(args) => args.run(ctx, config).await.map(Into::into),
+                OperatorCommands::Create(args) => args.run(ctx, config).await,
+            },
+            Commands::Creation { command } => match command {
+                CreationCommands::Resume(args) => {
+                    commands::creation::resume(ctx, args, config).await
+                }
             },
             Commands::Profile { command } => match command {
                 ProfileCommands::Delete(delete_args) => {
@@ -338,6 +341,11 @@ impl Commands {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
+    /// Recover a saved hosted creation.
+    Creation {
+        #[command(subcommand)]
+        command: CreationCommands,
+    },
     /// Authenticate with Turnkey.
     Login(commands::login::Args),
     /// Manage TVC operators.
@@ -382,6 +390,9 @@ enum Commands {
 impl Commands {
     fn name(&self) -> &'static str {
         match self {
+            Commands::Creation {
+                command: CreationCommands::Resume(_),
+            } => "creation resume",
             Commands::Login(_) => "login",
             Commands::Operator { command } => match command {
                 OperatorCommands::Create(_) => "operator create",
@@ -404,6 +415,12 @@ enum OperatorCommands {
     /// Create a hosted or YubiKey operator and save it to the active
     /// organization.
     Create(commands::operator::create::Args),
+}
+
+#[derive(Debug, Subcommand)]
+enum CreationCommands {
+    /// Query and verify a saved creation without submitting a new one.
+    Resume(commands::creation::ResumeArgs),
 }
 
 #[derive(Debug, Subcommand)]
@@ -555,6 +572,43 @@ impl YubikeyCommands {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parses_creation_resume_with_candidate_and_proof_output() {
+        let cli = Cli::try_parse_from([
+            "tvc",
+            "creation",
+            "resume",
+            "11111111-1111-4111-8111-111111111111",
+            "--activity-id",
+            "candidate",
+            "--verbose-proofs",
+        ])
+        .unwrap();
+        assert_eq!(cli.command.name(), "creation resume");
+        assert!(matches!(
+            cli.command,
+            Commands::Creation {
+                command: CreationCommands::Resume(_)
+            }
+        ));
+    }
+
+    #[test]
+    fn creation_resume_requires_a_local_uuid() {
+        assert_eq!(
+            Cli::try_parse_from(["tvc", "creation", "resume", "../../untrusted"])
+                .unwrap_err()
+                .kind(),
+            ErrorKind::ValueValidation
+        );
+        assert_eq!(
+            Cli::try_parse_from(["tvc", "creation", "resume"])
+                .unwrap_err()
+                .kind(),
+            ErrorKind::MissingRequiredArgument
+        );
+    }
 
     fn argv(tokens: &[&str]) -> Vec<OsString> {
         tokens.iter().map(OsString::from).collect()

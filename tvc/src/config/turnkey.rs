@@ -605,18 +605,17 @@ impl Config {
         self.save_to_path(&path).await
     }
 
-    async fn save_to_path(&self, path: &Path) -> Result<()> {
+    pub(crate) async fn save_to_path(&self, path: &Path) -> Result<()> {
         // Ensure parent directory exists
         if let Some(parent) = path.parent() {
-            tokio::fs::create_dir_all(parent).await.with_context(|| {
+            crate::util::owner_only_dir(parent).with_context(|| {
                 format!("failed to create config directory: {}", parent.display())
             })?;
         }
 
         let content = disk::to_toml(self)?;
 
-        tokio::fs::write(&path, content)
-            .await
+        crate::util::atomic_write_owner_only(path, content.as_bytes())
             .with_context(|| format!("failed to write config file: {}", path.display()))?;
 
         debug!(config_path = %path.display(), "saved tvc config");

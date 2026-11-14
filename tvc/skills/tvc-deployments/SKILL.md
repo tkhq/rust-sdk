@@ -12,6 +12,48 @@ metadata:
 
 > **This skill drives the `tvc` CLI, not the HTTP API.** Everything here runs `tvc <command> --message-format json` and reads NDJSON from stdout. Auth uses `TVC_*` env vars, not the `TURNKEY_API_*` set the HTTP-API skills use. Do not mix the two.
 
+## Hosted creation verification
+
+Hosted `operator create` and `keys create-quorum-key` request app proofs and
+verify returned keys against the submitted request before saving or returning
+success. The supported API environments are production, preproduction and
+development, each with its own pinned Signer quorum key.
+
+Human output confirms `Proof verification: passed` after acceptance. Add
+`--verbose-proofs` to either hosted creation command or `creation resume` to inspect the checks,
+full public keys, manifest/PCR evidence and request/result comparisons, including
+failed and unreached checks. It is unavailable for YubiKey operators and remains
+quiet with `--message-format json`. The report does not establish an independent
+manifest/PCR allowlist, current attestation freshness or revocation status;
+operator IDs and share IDs remain unsigned routing labels.
+
+Identical verified boot evidence is shown once with references from later
+envelopes; each app proof keeps its own checks and signed claim. The report
+shows the policy-compared PCRs and UTC timestamps alongside their Unix values.
+On verbose success, an underscore separator and blank line precede the unchanged
+short result block.
+
+Missing or invalid proof evidence fails as `proof_verification_failed`.
+Unsupported API environments fail before submission. After submission, remote
+creation may already have succeeded even when verification fails. Investigate
+before repeating creation; the CLI does not recreate keys to retry verification.
+See [the error reference](references/error-reference.md).
+
+Hosted creation saves a local receipt before sending each signed request.
+If approvals or processing remain, read `reason: creation_pending`, save its
+`operationId`, and arrange approval of the untrusted `activityId` lookup hint.
+After approval, run `tvc creation resume <operationId> --verbose-proofs` using the
+original organization and API environment. If no activity hint was received,
+add `--activity-id <candidate>` from TKMS. The candidate still must authenticate
+against the saved creation request. Resume never submits another creation.
+
+Receipts stay in `~/.config/turnkey/pending-creations/`, including after success.
+They contain the original intent and public request fingerprints, without
+credentials or private keys. Treat them as trusted local state. Every resume
+queries and verifies again. An existing matching operator is left unchanged,
+including its current default selection. See the
+[command reference](references/deploy-lifecycle.md#resume-a-hosted-creation).
+
 ## When to use
 
 Driving the `tvc` CLI: shipping a TVC deployment, maintaining an established TVC project, cutting traffic to a new version, checking runtime status, or scripting any of that in CI or an agent loop. First-time human onboarding (org setup, `tvc login`, dashboard key registration) belongs to the [TVC quickstart](https://docs.turnkey.com/features/verifiable-cloud/quickstart). Wallet, signing, and policy work over the HTTP API belongs to the other Turnkey skills.

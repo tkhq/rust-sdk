@@ -87,6 +87,10 @@ pub enum ErrorCode {
     #[allow(dead_code)]
     /// Semantic validation failure in command code.
     InvalidInput,
+    /// Coordinator routing metadata cannot be converted to the required types.
+    MalformedResponse,
+    /// Required evidence could not authenticate the returned TVC output.
+    ProofVerificationFailed,
     /// HTTP 401/403.
     Unauthorized,
     /// HTTP 404, or an OK response with an empty resource.
@@ -125,6 +129,23 @@ impl Classification {
 /// status; callers still render the complete original chain.
 pub fn classify(error: &anyhow::Error) -> Classification {
     for cause in error.chain() {
+        if let Some(error) =
+            cause.downcast_ref::<crate::pending_creation::CheckpointPersistenceFailure>()
+        {
+            return classify_turnkey_client_error(&error.submission);
+        }
+        if cause
+            .downcast_ref::<crate::commands::operator::create::MalformedHostedOperatorResponse>()
+            .is_some()
+        {
+            return Classification::new(ErrorCode::MalformedResponse, None);
+        }
+        if cause
+            .downcast_ref::<turnkey_proofs::tvc::TvcProvenanceError>()
+            .is_some()
+        {
+            return Classification::new(ErrorCode::ProofVerificationFailed, None);
+        }
         if cause.downcast_ref::<MissingResource>().is_some() {
             return Classification::new(ErrorCode::NotFound, None);
         }
@@ -558,6 +579,16 @@ mod tests {
         assert_eq!(
             classify(&error),
             Classification::new(ErrorCode::ApprovalRequired, None)
+        );
+    }
+
+    #[test]
+    fn proof_failure_is_classifiable_through_context() {
+        let error = anyhow::Error::new(turnkey_proofs::tvc::TvcProvenanceError::ReceiptMismatch)
+            .context("proof acceptance failed; no keys were saved");
+        assert_eq!(
+            classify(&error),
+            Classification::new(ErrorCode::ProofVerificationFailed, None)
         );
     }
 

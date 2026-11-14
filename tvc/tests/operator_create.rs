@@ -2,62 +2,8 @@ mod common;
 
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
-use qos_p256::P256Pair;
-use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
 use std::path::Path;
-use std::thread::{self, JoinHandle};
-
-fn spawn_create_operator_server() -> (String, JoinHandle<()>) {
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let address = listener.local_addr().unwrap();
-    let composite = hex::encode(P256Pair::generate().unwrap().public_key().to_bytes());
-    let (encrypt_public_key, sign_public_key) = composite.split_at(composite.len() / 2);
-    let body = format!(
-        r#"{{"activity":{{"id":"activity-1","organizationId":"org-123","status":"ACTIVITY_STATUS_COMPLETED","type":"ACTIVITY_TYPE_CREATE_TVC_OPERATOR","result":{{"createTvcOperatorResult":{{"walletId":"22222222-2222-4222-8222-222222222222","operatorId":"11111111-1111-4111-8111-111111111111","encryptPublicKey":"{encrypt_public_key}","signPublicKey":"{sign_public_key}"}}}},"fingerprint":""}}}}"#
-    );
-    let handle = thread::spawn(move || {
-        let (mut stream, _) = listener.accept().unwrap();
-        let mut reader = BufReader::new(stream.try_clone().unwrap());
-
-        let mut request_line = String::new();
-        reader.read_line(&mut request_line).unwrap();
-        assert_eq!(
-            request_line.split_whitespace().nth(1),
-            Some("/public/v1/submit/create_tvc_operator")
-        );
-
-        let mut content_length = 0;
-
-        loop {
-            let mut header = String::new();
-            reader.read_line(&mut header).unwrap();
-
-            if header == "\r\n" {
-                break;
-            }
-
-            if let Some(value) = header
-                .strip_prefix("content-length:")
-                .or_else(|| header.strip_prefix("Content-Length:"))
-            {
-                content_length = value.trim().parse().unwrap();
-            }
-        }
-
-        let mut request_body = vec![0; content_length];
-        reader.read_exact(&mut request_body).unwrap();
-
-        let response = format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-            body.len()
-        );
-        stream.write_all(response.as_bytes()).unwrap();
-        stream.flush().unwrap();
-    });
-
-    (format!("http://{address}"), handle)
-}
 
 #[test]
 fn operator_create_help_documents_defaults_and_env_inputs() {
@@ -81,7 +27,8 @@ fn operator_create_help_documents_defaults_and_env_inputs() {
         .stdout(predicate::str::contains("m/5527107'/0'/0'"))
         .stdout(predicate::str::contains("TVC_OPERATOR_ACCOUNT_PATH"))
         .stdout(predicate::str::contains("--serial"))
-        .stdout(predicate::str::contains("--default"));
+        .stdout(predicate::str::contains("--default"))
+        .stdout(predicate::str::contains("--verbose-proofs"));
 }
 
 #[test]
@@ -274,36 +221,31 @@ fn a_registered_serial_is_added_non_interactively_without_a_device() {
 }
 
 #[test]
-fn a_failed_hosted_default_save_reports_the_record_and_default_kind() {
+fn hosted_creation_refuses_unknown_environment_before_post_or_recovery_record() {
     let temp = tempfile::TempDir::new().unwrap();
-    let (api_base_url, server) = spawn_create_operator_server();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let api_base_url = format!("http://{}", listener.local_addr().unwrap());
     common::write_profiles_config(temp.path(), &[("default", "org-123")], Some("default"));
     common::write_profile_key_files(temp.path(), "default");
-
-    let config_path = temp.path().join(".config/turnkey/tvc.config.toml");
-    let config = std::fs::read_to_string(&config_path)
+    let path = temp.path().join(".config/turnkey/tvc.config.toml");
+    let config = std::fs::read_to_string(&path)
         .unwrap()
         .replace(common::LOCAL_API_BASE_URL, &api_base_url);
-    std::fs::write(&config_path, config).unwrap();
-    let mut permissions = std::fs::metadata(&config_path).unwrap().permissions();
-    permissions.set_readonly(true);
-    std::fs::set_permissions(&config_path, permissions).unwrap();
-
+    std::fs::write(&path, &config).unwrap();
     cargo_bin_cmd!("tvc")
         .env("HOME", temp.path())
         .args(["operator", "create", "--default"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains(
-            "hosted operator 11111111-1111-4111-8111-111111111111 was created remotely",
-        ))
-        .stderr(predicate::str::contains(r#"[[orgs."default".operators]]"#))
-        .stderr(predicate::str::contains("kind = \"hosted\""))
-        .stderr(predicate::str::contains(
-            "default_operator_kind = \"hosted\"",
-        ));
-
-    server.join().unwrap();
+        .stderr(predicate::str::contains("unsupported API environment"))
+        .stderr(predicate::str::contains("created remotely").not())
+        .stderr(predicate::str::contains("[[orgs.").not());
+    assert_eq!(std::fs::read_to_string(path).unwrap(), config);
+    assert_eq!(
+        listener.accept().unwrap_err().kind(),
+        std::io::ErrorKind::WouldBlock
+    );
 }
 
 #[test]
@@ -329,4 +271,43 @@ fn a_failed_save_reports_the_recovery_record() {
         .stderr(predicate::str::contains(r#"[[orgs."default".operators]]"#))
         .stderr(predicate::str::contains("kind = \"yubikey\""))
         .stderr(predicate::str::contains("default_operator_kind"));
+}
+
+#[test]
+fn verbose_proofs_is_hosted_only_before_credentials_are_loaded() {
+    let home = tempfile::TempDir::new().unwrap();
+    cargo_bin_cmd!("tvc")
+        .env_clear()
+        .env("HOME", home.path())
+        .args([
+            "operator",
+            "create",
+            "--kind",
+            "yubikey",
+            "--verbose-proofs",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--verbose-proofs is only valid with --kind hosted",
+        ))
+        .stderr(predicate::str::contains("No active organization").not());
+}
+
+#[test]
+fn verbose_proofs_parses_for_new_and_existing_wallets() {
+    let home = tempfile::TempDir::new().unwrap();
+    for wallet in [
+        vec![],
+        vec!["--wallet-id", "11111111-1111-4111-8111-111111111111"],
+    ] {
+        cargo_bin_cmd!("tvc")
+            .env_clear()
+            .env("HOME", home.path())
+            .args(["operator", "create", "--verbose-proofs"])
+            .args(wallet)
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("No active organization"));
+    }
 }
