@@ -95,6 +95,10 @@ pub struct Args {
     /// Make the new operator the organization's default operator kind.
     #[arg(long)]
     default: bool,
+
+    /// Expand human output with the checks and public proof evidence.
+    #[arg(long)]
+    verbose_proofs: bool,
 }
 
 /// A parsed `operator create` invocation: kind-specific inputs separated,
@@ -104,6 +108,7 @@ enum CreatePlan {
     Hosted {
         spec: HostedOperatorSpec,
         make_default: bool,
+        verbose_proofs: bool,
     },
     Yubikey {
         name: Option<String>,
@@ -124,6 +129,7 @@ impl TryFrom<Args> for CreatePlan {
             account_path,
             serial,
             default,
+            verbose_proofs,
         } = args;
 
         match kind {
@@ -148,9 +154,14 @@ impl TryFrom<Args> for CreatePlan {
                             .unwrap_or_else(|| DEFAULT_HOSTED_OPERATOR_BASE_PATH.to_string()),
                     },
                     make_default: default,
+                    verbose_proofs,
                 })
             }
             CreateKind::Yubikey => {
+                ensure!(
+                    !verbose_proofs,
+                    "--verbose-proofs is only valid with --kind hosted"
+                );
                 ensure!(
                     wallet_name.is_none() && wallet_id.is_none() && account_path.is_none(),
                     "--wallet-name, --wallet-id, and --account-path are only valid with --kind hosted"
@@ -172,7 +183,11 @@ impl Run for Args {
     #[instrument(skip_all)]
     async fn run(self, ctx: &mut StdCtx, mut config: Config) -> Result<Outcome> {
         match CreatePlan::try_from(self)? {
-            CreatePlan::Hosted { spec, make_default } => {
+            CreatePlan::Hosted {
+                spec,
+                make_default,
+                verbose_proofs,
+            } => {
                 let auth = build_creation_client(&config).await?;
                 let (alias, configured_org_id, configured_api_base_url) = config
                     .active_org_config()
@@ -200,7 +215,7 @@ impl Run for Args {
                 };
                 let creation =
                     PreparedCreation::operator(auth.org_id, intent, alias, make_default)?;
-                pending_creation::submit(ctx, auth, creation, timestamp_ms()?).await
+                pending_creation::submit(ctx, auth, creation, timestamp_ms()?, verbose_proofs).await
             }
             CreatePlan::Yubikey {
                 name,
@@ -666,8 +681,7 @@ mod tests {
         let (config, hosted) = finalization_config();
         config.save_to_path(&path).await.unwrap();
         let mut shell: crate::output::Shell<Vec<u8>, BrokenWriter> = Default::default();
-        let acceptance: Result<(), turnkey_proofs::tvc::Rejected> = Ok(());
-        crate::proofs::present_status(&mut shell, &acceptance);
+        crate::proofs::present_passed_status(&mut shell);
         let created = finalize_at(&path, &hosted, true).await.unwrap();
         assert_eq!(created.operator_id, hosted.operator_id);
         let persisted = Config::from_toml(&std::fs::read_to_string(&path).unwrap()).unwrap();
@@ -796,6 +810,7 @@ mod tests {
             account_path: None,
             serial: None,
             default: false,
+            verbose_proofs: false,
         }
     }
 
@@ -803,7 +818,12 @@ mod tests {
     fn a_hosted_plan_applies_the_hosted_defaults() {
         let plan = CreatePlan::try_from(args(CreateKind::Hosted)).unwrap();
 
-        let CreatePlan::Hosted { spec, make_default } = plan else {
+        let CreatePlan::Hosted {
+            spec,
+            make_default,
+            verbose_proofs,
+        } = plan
+        else {
             panic!("a hosted invocation must produce a hosted plan");
         };
         assert_eq!(
@@ -815,6 +835,7 @@ mod tests {
             }
         );
         assert!(!make_default);
+        assert!(!verbose_proofs);
     }
 
     #[test]

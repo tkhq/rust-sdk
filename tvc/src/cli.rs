@@ -614,6 +614,7 @@ mod tests {
                 operation,
                 "--activity-id",
                 "candidate",
+                "--verbose-proofs",
             ])
             .unwrap();
             assert_eq!(cli.command.name(), name);
@@ -650,38 +651,6 @@ mod tests {
                     "candidate",
                 ])
                 .is_err()
-            );
-        }
-    }
-
-    #[test]
-    fn verbose_proof_presentation_is_not_part_of_core_creation() {
-        for args in [
-            vec!["tvc", "operator", "create", "--verbose-proofs"],
-            vec![
-                "tvc",
-                "keys",
-                "create-quorum-key",
-                "--threshold",
-                "2",
-                "--operator-ids",
-                "11111111-1111-4111-8111-111111111111,22222222-2222-4222-8222-222222222222",
-                "--verbose-proofs",
-            ],
-            vec![
-                "tvc",
-                "operator",
-                "create",
-                "resume",
-                "11111111-1111-4111-8111-111111111111",
-                "--activity-id",
-                "candidate",
-                "--verbose-proofs",
-            ],
-        ] {
-            assert_eq!(
-                Cli::try_parse_from(args).unwrap_err().kind(),
-                ErrorKind::UnknownArgument
             );
         }
     }

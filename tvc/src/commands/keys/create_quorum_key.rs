@@ -64,6 +64,10 @@ pub struct Args {
         env = "TVC_OPERATOR_IDS"
     )]
     operator_ids: Vec<Uuid>,
+
+    /// Expand human output with the checks and public proof evidence.
+    #[arg(long)]
+    verbose_proofs: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -122,6 +126,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome
         threshold,
         operator_encrypt_keys,
         operator_ids,
+        verbose_proofs,
     } = args;
     // Clap requires a threshold for creation and bypasses it for the resume subcommand.
     let threshold = threshold.context("missing --threshold for quorum-key creation")?;
@@ -144,7 +149,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome
         auth.ensure_configured_org(&configured_org_id)?;
     }
     let creation = PreparedCreation::quorum(auth.org_id, u32::from(threshold), recipients)?;
-    pending_creation::submit(ctx, auth, creation, timestamp_ms()?).await
+    pending_creation::submit(ctx, auth, creation, timestamp_ms()?, verbose_proofs).await
 }
 
 fn parse_operator_id(value: &str) -> std::result::Result<Uuid, String> {

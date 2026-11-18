@@ -189,7 +189,11 @@ tvc keys create-quorum-key resume <LOCAL_OPERATION_UUID> --activity-id <ACTIVITY
 ```
 
 Use the IDs printed by the original command. If the activity ID was missing
-from the output, find it in Turnkey and pass it explicitly.
+from the output, find it in Turnkey and pass it explicitly. Add
+`--verbose-proofs` to either command to see the Signer and AWS checks, the
+match to the original request, and the binding to the returned keys. The
+activity ID in the report identifies which activity was queried. Approvals
+still happen outside the resume command.
 
 Pending creation returns `creation_pending` with `operationId`, nullable
 `activityId`, and `status` (`processing`, `consensus_needed`, or
