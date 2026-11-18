@@ -2,10 +2,13 @@
 
 use crate::{
     client::build_client,
+    commands::Run,
     config::turnkey::Config,
-    operator::{OperatorPublicKey, ensure_authenticated_org, hosted_activity_error},
+    operator::{OperatorPublicKey, timestamp_ms},
     outcome::Outcome,
     output::StdCtx,
+    pending_creation::{self, CreationClient, PreparedCreation},
+    terminal::TerminalText,
 };
 use anyhow::{Context, Result, ensure};
 use clap::{ArgAction, ArgGroup, Args as ClapArgs, builder::RangedU64ValueParser};
@@ -13,15 +16,12 @@ use serde::Serialize;
 use std::{
     collections::HashSet,
     fmt::{self, Display, Formatter},
-    time::{SystemTime, UNIX_EPOCH},
 };
 use tracing::instrument;
-use turnkey_client::generated::{CreateTvcQuorumKeyIntent, CreateTvcQuorumKeyResult};
+use turnkey_proofs::tvc::{MAX_QUORUM_RECIPIENTS, P256PublicKey, VerifiedQuorumKey};
 use uuid::Uuid;
 
-// `qos_crypto::shamir::shares_generate` supports at most 255 shares. Hosted
-// quorum generation keeps the operator key count strictly below that bound.
-const MAX_OPERATOR_ENCRYPT_KEY_COUNT_EXCLUSIVE: usize = 255;
+pub mod verify_result;
 
 fn threshold_parser() -> RangedU64ValueParser<u8> {
     RangedU64ValueParser::new().range(2..)
@@ -38,12 +38,14 @@ fn threshold_parser() -> RangedU64ValueParser<u8> {
 ))]
 pub struct Args {
     /// Number of operator shares required to reconstruct the quorum key.
+    // Clap also parses these args for `verify-result`, which takes no threshold.
     #[arg(
         long,
+        required = true,
         env = "TVC_QUORUM_KEY_THRESHOLD",
         value_parser = threshold_parser()
     )]
-    threshold: u8,
+    threshold: Option<u8>,
 
     /// Comma-separated, uncompressed P-256 operator encryption public keys.
     #[arg(
@@ -65,6 +67,10 @@ pub struct Args {
         env = "TVC_OPERATOR_IDS"
     )]
     operator_ids: Vec<Uuid>,
+
+    /// Display the API result without verifying quorum key proofs.
+    #[arg(long, env = "TVC_DANGEROUS_SKIP_VERIFICATION")]
+    dangerous_skip_verification: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -75,14 +81,29 @@ pub struct QuorumKeyCreated {
     share_ids: Vec<String>,
 }
 
+impl From<VerifiedQuorumKey> for QuorumKeyCreated {
+    fn from(verified: VerifiedQuorumKey) -> Self {
+        let (id, public_key, share_ids) = verified.into_parts();
+        Self {
+            quorum_key_id: id.to_string(),
+            quorum_public_key: hex::encode(public_key.as_ref()),
+            share_ids: share_ids.into_iter().map(|id| id.to_string()).collect(),
+        }
+    }
+}
+
 impl Display for QuorumKeyCreated {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "Quorum Key ID: {}\nQuorum Public Key: {}\nShare IDs: {}",
-            self.quorum_key_id,
+            TerminalText(&self.quorum_key_id).single_line(),
             self.quorum_public_key,
-            self.share_ids.join(", ")
+            self.share_ids
+                .iter()
+                .map(|id| TerminalText(id).single_line())
+                .collect::<Vec<_>>()
+                .join(", ")
         )
     }
 }
@@ -101,47 +122,39 @@ impl OperatorSource {
     }
 }
 
-/// Run the hosted quorum-key creation command.
-#[instrument(skip_all)]
-pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome> {
-    let Args {
-        threshold,
-        operator_encrypt_keys,
-        operator_ids,
-    } = args;
-    // The required, mutually exclusive Clap group guarantees exactly one
-    // source is non-empty.
-    let operator_source = if operator_ids.is_empty() {
-        OperatorSource::EncryptKeys(operator_encrypt_keys)
-    } else {
-        OperatorSource::OperatorIds(operator_ids)
-    };
-    validate_operator_count(operator_source.len())?;
-    validate_threshold(threshold, operator_source.len())?;
+impl Run for Args {
+    type Outcome = Outcome;
 
-    let (operator_encrypt_keys, configured_org_id) =
-        resolve_operator_encrypt_keys(&config, operator_source)?;
-    let operator_encrypt_keys = normalize_operator_encrypt_keys(operator_encrypt_keys)?;
+    #[instrument(skip_all)]
+    async fn run(self, ctx: &mut StdCtx, config: Config) -> Result<Outcome> {
+        let Self {
+            threshold,
+            operator_encrypt_keys,
+            operator_ids,
+            dangerous_skip_verification,
+        } = self;
+        let threshold = threshold.context("missing --threshold for quorum-key creation")?;
+        // The required, mutually exclusive Clap group guarantees exactly one
+        // source is non-empty.
+        let operator_source = if operator_ids.is_empty() {
+            OperatorSource::EncryptKeys(operator_encrypt_keys)
+        } else {
+            OperatorSource::OperatorIds(operator_ids)
+        };
+        validate_operator_count(operator_source.len())?;
+        validate_threshold(threshold, operator_source.len())?;
 
-    let intent = build_create_tvc_quorum_key_intent(threshold, operator_encrypt_keys);
-    let expected_share_count = intent.operator_encrypt_keys.len();
-    let auth = build_client(&config).await?;
-    if let Some(configured_org_id) = configured_org_id {
-        ensure_authenticated_org(&auth.org_id, &configured_org_id)?;
+        let (operator_encrypt_keys, configured_org_id) =
+            resolve_operator_encrypt_keys(&config, operator_source)?;
+        let recipients = validate_operator_encrypt_keys(operator_encrypt_keys)?;
+
+        let auth = CreationClient::new(build_client(&config).await?, dangerous_skip_verification)?;
+        if let Some(configured_org_id) = configured_org_id {
+            auth.ensure_configured_org(&configured_org_id)?;
+        }
+        let creation = PreparedCreation::quorum(auth.org_id, u32::from(threshold), recipients)?;
+        pending_creation::submit(ctx, config, auth, creation, timestamp_ms()?).await
     }
-    let timestamp_ms = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .context("system time before unix epoch")?
-        .as_millis();
-
-    let result = auth
-        .client
-        .create_tvc_quorum_key(auth.org_id, timestamp_ms, intent)
-        .await
-        .map_err(|error| hosted_activity_error("create hosted TVC quorum key", error))?;
-    let output = validate_result(result.result, expected_share_count)?;
-
-    Ok(Outcome::QuorumKeyCreated(output))
 }
 
 fn parse_operator_id(value: &str) -> std::result::Result<Uuid, String> {
@@ -192,22 +205,22 @@ fn validate_operator_ids(operator_ids: &[Uuid]) -> Result<()> {
     Ok(())
 }
 
-fn normalize_operator_encrypt_keys(input: Vec<OperatorPublicKey>) -> Result<Vec<String>> {
-    let normalized: Vec<_> = input.into_iter().map(|key| key.to_string()).collect();
+fn validate_operator_encrypt_keys(input: Vec<OperatorPublicKey>) -> Result<Vec<P256PublicKey>> {
+    let keys: Vec<_> = input.into_iter().map(P256PublicKey::from).collect();
     let mut seen = HashSet::new();
-    for (index, key) in normalized.iter().enumerate() {
+    for (index, key) in keys.iter().enumerate() {
         ensure!(
             seen.insert(key),
             "duplicate operator encryption public key at index {index}"
         );
     }
-    Ok(normalized)
+    Ok(keys)
 }
 
 fn validate_operator_count(operator_count: usize) -> Result<()> {
     ensure!(
-        operator_count < MAX_OPERATOR_ENCRYPT_KEY_COUNT_EXCLUSIVE,
-        "operator encryption public key count ({operator_count}) must be less than {MAX_OPERATOR_ENCRYPT_KEY_COUNT_EXCLUSIVE}"
+        operator_count <= MAX_QUORUM_RECIPIENTS,
+        "operator encryption public key count ({operator_count}) cannot exceed {MAX_QUORUM_RECIPIENTS}"
     );
     Ok(())
 }
@@ -218,45 +231,6 @@ fn validate_threshold(threshold: u8, operator_count: usize) -> Result<()> {
         "threshold ({threshold}) cannot exceed operator encryption public key count ({operator_count})"
     );
     Ok(())
-}
-
-fn build_create_tvc_quorum_key_intent(
-    threshold: u8,
-    operator_encrypt_keys: Vec<String>,
-) -> CreateTvcQuorumKeyIntent {
-    CreateTvcQuorumKeyIntent {
-        threshold: u32::from(threshold),
-        operator_encrypt_keys,
-    }
-}
-
-fn validate_result(
-    result: CreateTvcQuorumKeyResult,
-    expected_share_count: usize,
-) -> Result<QuorumKeyCreated> {
-    ensure!(
-        !result.quorum_key_id.trim().is_empty(),
-        "create TVC quorum key response contained an empty quorum key ID"
-    );
-    ensure!(
-        !result.quorum_public_key.trim().is_empty(),
-        "create TVC quorum key response contained an empty quorum public key"
-    );
-    ensure!(
-        result.share_ids.len() == expected_share_count,
-        "create TVC quorum key response returned {} share IDs for {expected_share_count} operator encryption public keys",
-        result.share_ids.len()
-    );
-    ensure!(
-        result.share_ids.iter().all(|id| !id.trim().is_empty()),
-        "create TVC quorum key response contained an empty share ID"
-    );
-
-    Ok(QuorumKeyCreated {
-        quorum_key_id: result.quorum_key_id,
-        quorum_public_key: result.quorum_public_key,
-        share_ids: result.share_ids,
-    })
 }
 
 #[cfg(test)]
@@ -275,14 +249,6 @@ mod tests {
     fn operator_encrypt_key() -> String {
         let public_key = P256Pair::generate().unwrap().public_key().to_bytes();
         hex::encode(&public_key[..65])
-    }
-
-    fn result_with_share_ids(share_ids: &[&str]) -> CreateTvcQuorumKeyResult {
-        CreateTvcQuorumKeyResult {
-            quorum_key_id: "quorum-key-id".to_string(),
-            quorum_public_key: "quorum-public-key".to_string(),
-            share_ids: share_ids.iter().map(|id| (*id).to_string()).collect(),
-        }
     }
 
     fn hosted_operator(name: &str, operator_id: &str, wallet_id: &str) -> (OperatorRecord, String) {
@@ -330,16 +296,19 @@ mod tests {
             format!("  {}  ", first.to_uppercase()).parse().unwrap(),
             second.to_uppercase().parse().unwrap(),
         ];
-        let parsed = normalize_operator_encrypt_keys(keys).unwrap();
+        let parsed = validate_operator_encrypt_keys(keys).unwrap();
 
-        assert_eq!(parsed, vec![first, second]);
+        assert_eq!(
+            parsed.iter().map(ToString::to_string).collect::<Vec<_>>(),
+            vec![first, second]
+        );
     }
 
     #[test]
     fn rejects_duplicate_operator_encrypt_keys_after_normalization() {
         let key = operator_encrypt_key();
         let keys = vec![key.parse().unwrap(), key.to_uppercase().parse().unwrap()];
-        let error = normalize_operator_encrypt_keys(keys)
+        let error = validate_operator_encrypt_keys(keys)
             .unwrap_err()
             .to_string();
 
@@ -369,25 +338,15 @@ mod tests {
     }
 
     #[test]
-    fn validates_operator_count_boundaries() {
-        assert!(validate_operator_count(254).is_ok());
-        assert_eq!(
-            validate_operator_count(255).unwrap_err().to_string(),
-            "operator encryption public key count (255) must be less than 255"
-        );
+    fn accepts_255_quorum_recipients() {
+        assert!(validate_operator_count(255).is_ok());
     }
 
     #[test]
-    fn builds_exact_create_intent() {
-        let operator_encrypt_keys = vec![operator_encrypt_key(), operator_encrypt_key()];
-        let intent = build_create_tvc_quorum_key_intent(2, operator_encrypt_keys.clone());
-
+    fn rejects_256_quorum_recipients() {
         assert_eq!(
-            intent,
-            CreateTvcQuorumKeyIntent {
-                threshold: 2,
-                operator_encrypt_keys,
-            }
+            validate_operator_count(256).unwrap_err().to_string(),
+            "operator encryption public key count (256) cannot exceed 255"
         );
     }
 
@@ -415,7 +374,7 @@ mod tests {
 
         let (keys, _) = resolve_operator_ids(&config, &operator_ids).unwrap();
         assert_eq!(
-            normalize_operator_encrypt_keys(keys)
+            validate_operator_encrypt_keys(keys)
                 .unwrap_err()
                 .to_string(),
             "duplicate operator encryption public key at index 1"
@@ -423,17 +382,12 @@ mod tests {
     }
 
     #[test]
-    fn validates_and_formats_result() {
-        let output = validate_result(result_with_share_ids(&["share-1", "share-2"]), 2).unwrap();
-
-        assert_eq!(
-            output,
-            QuorumKeyCreated {
-                quorum_key_id: "quorum-key-id".to_string(),
-                quorum_public_key: "quorum-public-key".to_string(),
-                share_ids: vec!["share-1".to_string(), "share-2".to_string()],
-            }
-        );
+    fn formats_accepted_quorum_output() {
+        let output = QuorumKeyCreated {
+            quorum_key_id: "quorum-key-id".to_string(),
+            quorum_public_key: "quorum-public-key".to_string(),
+            share_ids: vec!["share-1".to_string(), "share-2".to_string()],
+        };
         assert_eq!(
             output.to_string(),
             "Quorum Key ID: quorum-key-id\nQuorum Public Key: quorum-public-key\nShare IDs: share-1, share-2"

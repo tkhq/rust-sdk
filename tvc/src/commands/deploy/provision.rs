@@ -86,7 +86,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: Config) -> Result<Outcome
 
     let operator = config.resolve_hosted_operator(&operator_id)?;
     let auth = build_client(&config).await?;
-    ensure_authenticated_org(&auth.org_id, operator.organization_id())?;
+    ensure_authenticated_org(auth.org_id.as_str(), operator.organization_id())?;
 
     let deployment = fetch_tvc_deployment(&auth, deploy_id.to_string()).await?;
     let details = fetch_provisioning_details(&auth, &deploy_id).await?;

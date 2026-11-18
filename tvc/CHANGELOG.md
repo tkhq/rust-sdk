@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+
+- **Breaking:** By default, TVC verifies that the Signer produced the returned hosted operator
+  or quorum public keys for your exact creation request before accepting them.
+- Hosted creation and `verify-result` accept `--dangerous-skip-verification`
+  for explicitly unverified results. With just the activity ID and this flag,
+  `verify-result` can recover the API result after a local receipt is lost.
+
 ## [0.18.0](https://github.com/tkhq/rust-sdk/compare/tvc-v0.17.2...tvc-v0.18.0) - 2026-11-11
 
 ### Added

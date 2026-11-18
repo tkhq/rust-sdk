@@ -232,9 +232,7 @@ impl Commands {
 
         let config = if !path.exists() {
             debug!(config_path = %path.display(), "tvc config not found; using defaults");
-            let config = Config::default();
-            config.save().await?;
-            config
+            Config::default()
         } else {
             let content = tokio::fs::read_to_string(&path)
                 .await
@@ -300,9 +298,12 @@ impl Commands {
                     args.run(ctx, config).await.map(Into::into)
                 }
                 KeysCommands::RefreshYubikey(args) => args.run(ctx, config).await.map(Into::into),
-                KeysCommands::CreateQuorumKey(args) => {
-                    commands::keys::create_quorum_key::run(ctx, args, config).await
-                }
+                KeysCommands::CreateQuorumKey { args, command } => match command {
+                    Some(CreateQuorumKeyCommands::VerifyResult(args)) => {
+                        args.run(ctx, config).await
+                    }
+                    None => args.run(ctx, config).await,
+                },
                 KeysCommands::GenerateLocalQuorumKey(args) => {
                     commands::keys::generate_local_quorum_key::run(ctx, args).await
                 }
@@ -315,7 +316,10 @@ impl Commands {
             },
             Commands::Login(args) => commands::login::run(ctx, args, config).await,
             Commands::Operator { command } => match command {
-                OperatorCommands::Create(args) => args.run(ctx, config).await.map(Into::into),
+                OperatorCommands::Create { args, command } => match command {
+                    Some(CreateOperatorCommands::VerifyResult(args)) => args.run(ctx, config).await,
+                    None => args.run(ctx, config).await,
+                },
             },
             Commands::Profile { command } => match command {
                 ProfileCommands::Delete(delete_args) => {
@@ -384,7 +388,12 @@ impl Commands {
         match self {
             Commands::Login(_) => "login",
             Commands::Operator { command } => match command {
-                OperatorCommands::Create(_) => "operator create",
+                OperatorCommands::Create { command, .. } => match command {
+                    Some(CreateOperatorCommands::VerifyResult(_)) => {
+                        "operator create verify-result"
+                    }
+                    None => "operator create",
+                },
             },
             Commands::Profile { command } => match command {
                 ProfileCommands::Delete(_) => "profile delete",
@@ -403,7 +412,19 @@ impl Commands {
 enum OperatorCommands {
     /// Create a hosted or YubiKey operator and save it to the active
     /// organization.
-    Create(commands::operator::create::Args),
+    #[command(args_conflicts_with_subcommands = true, subcommand_negates_reqs = true)]
+    Create {
+        #[command(flatten)]
+        args: commands::operator::create::Args,
+        #[command(subcommand)]
+        command: Option<CreateOperatorCommands>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum CreateOperatorCommands {
+    /// Verify the result of a saved hosted creation.
+    VerifyResult(commands::operator::create::verify_result::Args),
 }
 
 #[derive(Debug, Subcommand)]
@@ -485,13 +506,25 @@ enum KeysCommands {
     /// Refresh the registry's cached operator key for a YubiKey from the device.
     RefreshYubikey(commands::keys::refresh_yubikey::Args),
     /// Create a hosted quorum key encrypted to hosted operator keys.
-    CreateQuorumKey(commands::keys::create_quorum_key::Args),
+    #[command(args_conflicts_with_subcommands = true, subcommand_negates_reqs = true)]
+    CreateQuorumKey {
+        #[command(flatten)]
+        args: commands::keys::create_quorum_key::Args,
+        #[command(subcommand)]
+        command: Option<CreateQuorumKeyCommands>,
+    },
     /// Generate and shamir-split a local quorum key, encrypting each share to an operator key.
     GenerateLocalQuorumKey(commands::keys::generate_local_quorum_key::Args),
     /// Generate a template local quorum key configuration file.
     InitLocalQuorumKey(commands::keys::init_local_quorum_key::Args),
     /// Re-encrypt a local share for enclave provisioning.
     ReEncryptLocalShare(commands::keys::re_encrypt_local_share::Args),
+}
+
+#[derive(Debug, Subcommand)]
+enum CreateQuorumKeyCommands {
+    /// Verify the result of a saved hosted creation.
+    VerifyResult(commands::keys::create_quorum_key::verify_result::Args),
 }
 
 #[derive(Debug, Subcommand)]
@@ -535,7 +568,12 @@ impl KeysCommands {
         match self {
             KeysCommands::BackupOperatorKey(_) => "keys backup-operator-key",
             KeysCommands::RefreshYubikey(_) => "keys refresh-yubikey",
-            KeysCommands::CreateQuorumKey(_) => "keys create-quorum-key",
+            KeysCommands::CreateQuorumKey { command, .. } => match command {
+                Some(CreateQuorumKeyCommands::VerifyResult(_)) => {
+                    "keys create-quorum-key verify-result"
+                }
+                None => "keys create-quorum-key",
+            },
             KeysCommands::GenerateLocalQuorumKey(_) => "keys generate-local-quorum-key",
             KeysCommands::InitLocalQuorumKey(_) => "keys init-local-quorum-key",
             KeysCommands::ReEncryptLocalShare(_) => "keys re-encrypt-local-share",
@@ -555,6 +593,113 @@ impl YubikeyCommands {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const OPERATION_ID: &str = "11111111-1111-4111-8111-111111111111";
+    const VERIFY_RESULT: [&str; 4] = ["verify-result", OPERATION_ID, "--activity-id", "candidate"];
+
+    fn parse_operator_create(args: &[&str]) -> Result<Cli, clap::Error> {
+        Cli::try_parse_from(
+            ["tvc", "operator", "create"]
+                .into_iter()
+                .chain(args.iter().copied()),
+        )
+    }
+
+    fn parse_quorum_key_create(args: &[&str]) -> Result<Cli, clap::Error> {
+        Cli::try_parse_from(
+            ["tvc", "keys", "create-quorum-key"]
+                .into_iter()
+                .chain(args.iter().copied()),
+        )
+    }
+
+    #[test]
+    fn parses_operator_verify_result() {
+        let cli = parse_operator_create(&VERIFY_RESULT).unwrap();
+        assert_eq!(cli.command.name(), "operator create verify-result");
+    }
+
+    #[test]
+    fn parses_quorum_key_verify_result_without_creation_arguments() {
+        let cli = parse_quorum_key_create(&VERIFY_RESULT).unwrap();
+        assert_eq!(cli.command.name(), "keys create-quorum-key verify-result");
+    }
+
+    #[test]
+    fn operator_verify_result_requires_an_activity_id() {
+        let error = parse_operator_create(&["verify-result", OPERATION_ID]).unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::MissingRequiredArgument);
+    }
+
+    #[test]
+    fn quorum_key_verify_result_requires_an_activity_id() {
+        let error = parse_quorum_key_create(&["verify-result", OPERATION_ID]).unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::MissingRequiredArgument);
+    }
+
+    #[test]
+    fn operator_verify_result_rejects_a_path_as_operation_id() {
+        let error = parse_operator_create(&[
+            "verify-result",
+            "../../untrusted",
+            "--activity-id",
+            "candidate",
+        ])
+        .unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::ValueValidation);
+    }
+
+    #[test]
+    fn quorum_key_verify_result_rejects_a_path_as_operation_id() {
+        let error = parse_quorum_key_create(&[
+            "verify-result",
+            "../../untrusted",
+            "--activity-id",
+            "candidate",
+        ])
+        .unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::ValueValidation);
+    }
+
+    #[test]
+    fn operator_verify_result_conflicts_with_create_name() {
+        let args = [&["--name", "test"][..], &VERIFY_RESULT].concat();
+        let error = parse_operator_create(&args).unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::ArgumentConflict);
+    }
+
+    #[test]
+    fn quorum_key_verify_result_conflicts_with_create_threshold() {
+        let args = [&["--threshold", "2"][..], &VERIFY_RESULT].concat();
+        let error = parse_quorum_key_create(&args).unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::ArgumentConflict);
+    }
+
+    #[test]
+    fn operator_create_rejects_verbose_proofs() {
+        let error = parse_operator_create(&["--verbose-proofs"]).unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::UnknownArgument);
+    }
+
+    #[test]
+    fn quorum_key_create_rejects_verbose_proofs() {
+        let error = parse_quorum_key_create(&[
+            "--threshold",
+            "2",
+            "--operator-ids",
+            "11111111-1111-4111-8111-111111111111,22222222-2222-4222-8222-222222222222",
+            "--verbose-proofs",
+        ])
+        .unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::UnknownArgument);
+    }
+
+    #[test]
+    fn operator_verify_result_rejects_verbose_proofs() {
+        let args = [&VERIFY_RESULT[..], &["--verbose-proofs"]].concat();
+        let error = parse_operator_create(&args).unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::UnknownArgument);
+    }
 
     fn argv(tokens: &[&str]) -> Vec<OsString> {
         tokens.iter().map(OsString::from).collect()

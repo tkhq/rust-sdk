@@ -2,6 +2,28 @@
 
 CLI for [Turnkey Verifiable Cloud](https://turnkey.com) - see [this guide](https://docs.turnkey.com/getting-started/verifiable-cloud-quickstart) for example usage.
 
+By default, hosted operator and quorum creation verify request-bound signed output under the
+independently pinned Signer quorum key before accepting keys. Supported API
+environments are production, preproduction and development. Missing or invalid boot and app
+evidence rejects creation output without saving keys. See the
+[embedded CLI skill](skills/tvc-deployments/SKILL.md) for usage and recovery guidance.
+
+Hosted creation saves its original request receipt under
+`~/.config/turnkey/pending-creations/`. If approval is needed, the command returns
+`creation_pending` with a local `operationId` and, when available, an
+`activityId`. After approval, run the `verify-result` command printed by the CLI
+with the same organization and API environment. Supply the required
+`--activity-id`. If the original response was lost, find the activity ID in
+Turnkey. The command verifies the result against the saved receipt before
+accepting keys. Completed receipts remain available for later verification.
+
+For testing with unsigned results, pass `--dangerous-skip-verification` to the
+creation command. It still submits the creation request to Turnkey. If you lose
+a receipt, use `verify-result` with that flag and `--activity-id` to look up
+the existing activity. Omit the local operation ID. On completion, both commands
+show the public keys from the API as unverified. For a hosted operator, the CLI
+leaves the operator out of your local TVC profile.
+
 ## Installation
 
 ```bash
@@ -12,7 +34,7 @@ cargo install tvc
 
 For **local use**, run `tvc login` once and the CLI will read `~/.config/turnkey/` thereafter.
 
-For **programmatic use** (GitHub Actions, etc.), set these three env vars to authenticate directly without touching disk:
+For **programmatic use** (GitHub Actions, etc.), set these three env vars to authenticate without credential files:
 
 | Env | Source |
 |---|---|

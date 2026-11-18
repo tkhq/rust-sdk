@@ -615,7 +615,7 @@ impl Config {
 
         let content = disk::to_toml(self)?;
 
-        tokio::fs::write(&path, content)
+        tokio::fs::write(path, content)
             .await
             .with_context(|| format!("failed to write config file: {}", path.display()))?;
 

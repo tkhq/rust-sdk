@@ -144,6 +144,8 @@ Default guidance for coding-agent runs in this repository.
 - Perform config loading, authentication, and network work only on paths that
   require them. Explicit or offline inputs must not depend on unrelated config
   being present or well-formed.
+- Use the `Config` passed to `Run` and persist changes with `Config::save()` so
+  command code leaves config file I/O to the configuration module.
 - Treat serialized TOML and JSON shapes as compatibility boundaries. Keep
   runtime types distinct from persisted schemas when a migration needs
   different fields, and make migration timing and write-back behavior explicit.
