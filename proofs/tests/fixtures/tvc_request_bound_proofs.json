@@ -1,0 +1,20 @@
+[
+  {
+    "scheme": "SIGNATURE_SCHEME_EPHEMERAL_KEY_P256",
+    "publicKey": "04dc8333ff552b2ffa91d410c10ad0ae36055a9232f176e07f115db460aafbb959057834d367d1724b699b56bd2fd5ca30d3ee755f93c68c24a67e8e60bf37c7dd045417fb43faadacd8471cfbbf3733f4b4ea5602b9d84d3731d581fe7a69b7de42a025e5f63b8580bdb38c76b8ac3c2ae17ed047993c19835eca0491753de52f01",
+    "proofPayload": "{\"type\":\"APP_PROOF_TYPE_ADDRESS_DERIVATION\",\"timestampMs\":\"1793845997611\",\"requestContext\":{\"version\":1,\"verifiedSignatureDigests\":[\"abababababababababababababababababababababababababababababababab\",\"0101010101010101010101010101010101010101010101010101010101010101\",\"abababababababababababababababababababababababababababababababab\"]},\"addressDerivationProof\":{\"organizationId\":\"org-id\",\"walletId\":\"wallet-1\",\"derivationPath\":\"m/5527107'/0'/0'/0\",\"address\":\"047321a51bff7ec73d2153364f9e0fdf1fa6542364ee7b2aac3889dc14337aa11d3794bfa1ee1e0beaa2dd0ecf4716bc7cd4a574507bfb4ec1697a65b7c92e55bd\"}}",
+    "signature": "b754c4c9c4f7f1b3c9319e32855ed5fc28d42ae629efb250281c3da571b529ef74a796e702c94da010b0785647800c34263ad36e687a19813ea7746e15406885"
+  },
+  {
+    "scheme": "SIGNATURE_SCHEME_EPHEMERAL_KEY_P256",
+    "publicKey": "04dc8333ff552b2ffa91d410c10ad0ae36055a9232f176e07f115db460aafbb959057834d367d1724b699b56bd2fd5ca30d3ee755f93c68c24a67e8e60bf37c7dd045417fb43faadacd8471cfbbf3733f4b4ea5602b9d84d3731d581fe7a69b7de42a025e5f63b8580bdb38c76b8ac3c2ae17ed047993c19835eca0491753de52f01",
+    "proofPayload": "{\"type\":\"APP_PROOF_TYPE_ADDRESS_DERIVATION\",\"timestampMs\":\"1793845997615\",\"requestContext\":{\"version\":1,\"verifiedSignatureDigests\":[\"abababababababababababababababababababababababababababababababab\",\"0101010101010101010101010101010101010101010101010101010101010101\",\"abababababababababababababababababababababababababababababababab\"]},\"addressDerivationProof\":{\"organizationId\":\"org-id\",\"walletId\":\"wallet-1\",\"derivationPath\":\"m/5527107'/0'/0'/1\",\"address\":\"0435144562bd427534909577840bdc88f22254eceb38f2ec046b650dc00cccd153f9bc15d93202acae639c68bf5b2d6ba96e43a556e9e4a265dfbb609924e7e654\"}}",
+    "signature": "6dc6a6665a75edb89cb351004a3c04e654e1fa68822f85ef01e50763e98c3b0aa61ed47a94f9e16f489d37e4cf14fcbfc603acfd033f0051e601023fb52708b2"
+  },
+  {
+    "scheme": "SIGNATURE_SCHEME_EPHEMERAL_KEY_P256",
+    "publicKey": "04dc8333ff552b2ffa91d410c10ad0ae36055a9232f176e07f115db460aafbb959057834d367d1724b699b56bd2fd5ca30d3ee755f93c68c24a67e8e60bf37c7dd045417fb43faadacd8471cfbbf3733f4b4ea5602b9d84d3731d581fe7a69b7de42a025e5f63b8580bdb38c76b8ac3c2ae17ed047993c19835eca0491753de52f01",
+    "proofPayload": "{\"type\":\"APP_PROOF_TYPE_TVC_QUORUM_KEY_CREATE\",\"timestampMs\":\"1793845996841\",\"requestContext\":{\"version\":1,\"verifiedSignatureDigests\":[\"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\",\"abababababababababababababababababababababababababababababababab\",\"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"]},\"tvcQuorumKeyCreateProof\":{\"organizationId\":\"org-id\",\"quorumKeyId\":\"1e1c1836-888b-406e-9bb1-14639fd5ffcb\",\"quorumPublicKey\":\"04253219bddd0ef39d1b6ae796d95cebe211411772169cc4d7bf3efa9ba20733a1f02c25408f22a307976a1b1388004b31dcaff013ea66dde77a5eba97ad25cc4b0481b0ae83fd86198f2f3e4f032cd48dbb85b5f58ab048b6ff1f0cc2eb1d9327098fab2ec33bf71e15028d6ebc27be5c8ac76a4e0df048c96696d483c7ad2efbeb\",\"threshold\":2,\"operatorEncryptKeys\":[\"042e0db0b1aeffd479657068b5262bdf4e1873549468f95428503bf25deff08e132506bf5cc3c6db8c3df927d62ade24c6425bee60a553bfe02a64597faf5d5326\",\"04ca5b05936872c2d844fe69d29f25ece9a43ab1af56f9faa8e9453a854257cbd2dbbf38936f22cf58313b8709410cb32f05cd67df2de60bcee12960246d26d07c\",\"047b48338003ae465a730b11868ba1ffd1c91b73db84863536ed9d34b0be4489c6fa5cbf59024430621ac37b13f604c9331f2351192212ad211a420709bd156ff8\"]}}",
+    "signature": "a1c2da2424678b2287e2f503f1622cdf613f8ab09059fdc7d8860d16a5ac0f0124e42bb8f17d1ff2727a7a9c0d297d4e276c5e4021e17cee3404103202b73dbb"
+  }
+]
