@@ -605,7 +605,7 @@ impl Config {
         self.save_to_path(&path).await
     }
 
-    async fn save_to_path(&self, path: &Path) -> Result<()> {
+    pub(crate) async fn save_to_path(&self, path: &Path) -> Result<()> {
         // Ensure parent directory exists
         if let Some(parent) = path.parent() {
             tokio::fs::create_dir_all(parent).await.with_context(|| {
@@ -615,7 +615,7 @@ impl Config {
 
         let content = disk::to_toml(self)?;
 
-        tokio::fs::write(&path, content)
+        tokio::fs::write(path, content)
             .await
             .with_context(|| format!("failed to write config file: {}", path.display()))?;
 

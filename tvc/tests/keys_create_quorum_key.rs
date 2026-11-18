@@ -24,7 +24,8 @@ fn create_quorum_key_help_lists_required_explicit_inputs() {
         .stdout(predicate::str::contains("--operator-encrypt-keys <HEX>"))
         .stdout(predicate::str::contains("TVC_OPERATOR_ENCRYPT_KEYS"))
         .stdout(predicate::str::contains("--operator-ids <UUID>"))
-        .stdout(predicate::str::contains("TVC_OPERATOR_IDS"));
+        .stdout(predicate::str::contains("TVC_OPERATOR_IDS"))
+        .stdout(predicate::str::contains("--verbose-proofs").not());
 }
 
 #[test]

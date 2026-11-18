@@ -20,6 +20,7 @@ pub mod operator;
 pub mod outcome;
 pub mod output;
 pub mod pair;
+pub(crate) mod pending_creation;
 pub mod prompts;
 pub(crate) mod provisioning;
 pub mod pull_secret;
@@ -27,3 +28,5 @@ pub(crate) mod quorum_key_metadata;
 pub(crate) mod terminal;
 pub mod util;
 pub(crate) mod yubikey;
+
+mod proofs;

@@ -4,6 +4,7 @@ use crate::commands::{self, Run};
 use crate::config::turnkey::{CONFIG_DIR, CONFIG_FILE, Config};
 use crate::outcome::Outcome;
 use crate::output::{ColorChoice, Ctx, ErrorMessage, MessageFormat, Shell, StdCtx};
+use crate::pending_creation::CreationKind;
 use crate::terminal::{TerminalText, terminal_json};
 use anyhow::Context;
 use clap::{ArgAction, Parser, Subcommand, builder::BoolishValueParser, error::ErrorKind};
@@ -232,9 +233,7 @@ impl Commands {
 
         let config = if !path.exists() {
             debug!(config_path = %path.display(), "tvc config not found; using defaults");
-            let config = Config::default();
-            config.save().await?;
-            config
+            Config::default()
         } else {
             let content = tokio::fs::read_to_string(&path)
                 .await
@@ -300,9 +299,12 @@ impl Commands {
                     args.run(ctx, config).await.map(Into::into)
                 }
                 KeysCommands::RefreshYubikey(args) => args.run(ctx, config).await.map(Into::into),
-                KeysCommands::CreateQuorumKey(args) => {
-                    commands::keys::create_quorum_key::run(ctx, args, config).await
-                }
+                KeysCommands::CreateQuorumKey { args, command } => match command {
+                    Some(CreationCommands::Resume(resume)) => {
+                        resume.run(ctx, config, CreationKind::QuorumKey).await
+                    }
+                    None => commands::keys::create_quorum_key::run(ctx, args, config).await,
+                },
                 KeysCommands::GenerateLocalQuorumKey(args) => {
                     commands::keys::generate_local_quorum_key::run(ctx, args).await
                 }
@@ -315,7 +317,12 @@ impl Commands {
             },
             Commands::Login(args) => commands::login::run(ctx, args, config).await,
             Commands::Operator { command } => match command {
-                OperatorCommands::Create(args) => args.run(ctx, config).await.map(Into::into),
+                OperatorCommands::Create { args, command } => match command {
+                    Some(CreationCommands::Resume(resume)) => {
+                        resume.run(ctx, config, CreationKind::Operator).await
+                    }
+                    None => args.run(ctx, config).await,
+                },
             },
             Commands::Profile { command } => match command {
                 ProfileCommands::Delete(delete_args) => {
@@ -384,7 +391,10 @@ impl Commands {
         match self {
             Commands::Login(_) => "login",
             Commands::Operator { command } => match command {
-                OperatorCommands::Create(_) => "operator create",
+                OperatorCommands::Create { command, .. } => match command {
+                    Some(CreationCommands::Resume(_)) => "operator create resume",
+                    None => "operator create",
+                },
             },
             Commands::Profile { command } => match command {
                 ProfileCommands::Delete(_) => "profile delete",
@@ -403,7 +413,19 @@ impl Commands {
 enum OperatorCommands {
     /// Create a hosted or YubiKey operator and save it to the active
     /// organization.
-    Create(commands::operator::create::Args),
+    #[command(args_conflicts_with_subcommands = true, subcommand_negates_reqs = true)]
+    Create {
+        #[command(flatten)]
+        args: commands::operator::create::Args,
+        #[command(subcommand)]
+        command: Option<CreationCommands>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum CreationCommands {
+    /// Query and verify a saved creation without submitting a new one.
+    Resume(commands::creation::ResumeArgs),
 }
 
 #[derive(Debug, Subcommand)]
@@ -485,7 +507,13 @@ enum KeysCommands {
     /// Refresh the registry's cached operator key for a YubiKey from the device.
     RefreshYubikey(commands::keys::refresh_yubikey::Args),
     /// Create a hosted quorum key encrypted to hosted operator keys.
-    CreateQuorumKey(commands::keys::create_quorum_key::Args),
+    #[command(args_conflicts_with_subcommands = true, subcommand_negates_reqs = true)]
+    CreateQuorumKey {
+        #[command(flatten)]
+        args: commands::keys::create_quorum_key::Args,
+        #[command(subcommand)]
+        command: Option<CreationCommands>,
+    },
     /// Generate and shamir-split a local quorum key, encrypting each share to an operator key.
     GenerateLocalQuorumKey(commands::keys::generate_local_quorum_key::Args),
     /// Generate a template local quorum key configuration file.
@@ -535,7 +563,10 @@ impl KeysCommands {
         match self {
             KeysCommands::BackupOperatorKey(_) => "keys backup-operator-key",
             KeysCommands::RefreshYubikey(_) => "keys refresh-yubikey",
-            KeysCommands::CreateQuorumKey(_) => "keys create-quorum-key",
+            KeysCommands::CreateQuorumKey { command, .. } => match command {
+                Some(CreationCommands::Resume(_)) => "keys create-quorum-key resume",
+                None => "keys create-quorum-key",
+            },
             KeysCommands::GenerateLocalQuorumKey(_) => "keys generate-local-quorum-key",
             KeysCommands::InitLocalQuorumKey(_) => "keys init-local-quorum-key",
             KeysCommands::ReEncryptLocalShare(_) => "keys re-encrypt-local-share",
@@ -555,6 +586,105 @@ impl YubikeyCommands {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resume_commands_require_both_ids_and_use_no_create_arguments() {
+        let operation = "11111111-1111-4111-8111-111111111111";
+        for (group, create, name, create_flag, create_value) in [
+            (
+                "operator",
+                "create",
+                "operator create resume",
+                "--name",
+                "test",
+            ),
+            (
+                "keys",
+                "create-quorum-key",
+                "keys create-quorum-key resume",
+                "--threshold",
+                "2",
+            ),
+        ] {
+            let cli = Cli::try_parse_from([
+                "tvc",
+                group,
+                create,
+                "resume",
+                operation,
+                "--activity-id",
+                "candidate",
+            ])
+            .unwrap();
+            assert_eq!(cli.command.name(), name);
+            assert_eq!(
+                Cli::try_parse_from(["tvc", group, create, "resume", operation])
+                    .unwrap_err()
+                    .kind(),
+                ErrorKind::MissingRequiredArgument
+            );
+            assert_eq!(
+                Cli::try_parse_from([
+                    "tvc",
+                    group,
+                    create,
+                    "resume",
+                    "../../untrusted",
+                    "--activity-id",
+                    "candidate",
+                ])
+                .unwrap_err()
+                .kind(),
+                ErrorKind::ValueValidation
+            );
+            assert!(
+                Cli::try_parse_from([
+                    "tvc",
+                    group,
+                    create,
+                    create_flag,
+                    create_value,
+                    "resume",
+                    operation,
+                    "--activity-id",
+                    "candidate",
+                ])
+                .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn verbose_proof_presentation_is_not_part_of_core_creation() {
+        for args in [
+            vec!["tvc", "operator", "create", "--verbose-proofs"],
+            vec![
+                "tvc",
+                "keys",
+                "create-quorum-key",
+                "--threshold",
+                "2",
+                "--operator-ids",
+                "11111111-1111-4111-8111-111111111111,22222222-2222-4222-8222-222222222222",
+                "--verbose-proofs",
+            ],
+            vec![
+                "tvc",
+                "operator",
+                "create",
+                "resume",
+                "11111111-1111-4111-8111-111111111111",
+                "--activity-id",
+                "candidate",
+                "--verbose-proofs",
+            ],
+        ] {
+            assert_eq!(
+                Cli::try_parse_from(args).unwrap_err().kind(),
+                ErrorKind::UnknownArgument
+            );
+        }
+    }
 
     fn argv(tokens: &[&str]) -> Vec<OsString> {
         tokens.iter().map(OsString::from).collect()
