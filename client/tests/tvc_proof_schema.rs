@@ -1,21 +1,24 @@
+use serde_json::{Value, json};
 use turnkey_client::generated::external::data::v1::{
     AppProofPayload, AppProofRequestContext, AppProofType, BootProof,
     TvcQuorumKeyCreateProofPayload, app_proof_payload::ProofPayload,
 };
+
 #[test]
-fn absent_legacy_context_is_omitted_and_new_schema_fields_round_trip() {
-    let legacy = AppProofPayload {
-        r#type: AppProofType::AddressDerivation,
-        timestamp_ms: "100".into(),
-        request_context: None,
-        proof_payload: None,
-    };
-    let encoded = serde_json::to_value(&legacy).unwrap();
-    assert!(encoded.get("requestContext").is_none());
-    assert_eq!(
-        serde_json::from_value::<AppProofPayload>(encoded).unwrap(),
-        legacy
-    );
+fn app_proof_context_accepts_missing_and_null_and_round_trips_when_present() {
+    let legacy = json!({
+        "type": "APP_PROOF_TYPE_ADDRESS_DERIVATION",
+        "timestampMs": "100",
+    });
+    let mut explicit_null = legacy.clone();
+    explicit_null["requestContext"] = Value::Null;
+    for input in [legacy, explicit_null] {
+        let payload: AppProofPayload = serde_json::from_value(input).unwrap();
+        assert_eq!(payload.request_context, None);
+        let encoded = serde_json::to_value(&payload).unwrap();
+        assert_eq!(encoded.get("requestContext"), Some(&Value::Null));
+    }
+
     let quorum = AppProofPayload {
         r#type: AppProofType::TvcQuorumKeyCreate,
         timestamp_ms: "100".into(),
@@ -40,21 +43,28 @@ fn absent_legacy_context_is_omitted_and_new_schema_fields_round_trip() {
 }
 
 #[test]
-fn historical_boot_proofs_remain_readable_and_optional_endorsements_round_trip() {
-    let legacy = serde_json::json!({
+fn boot_endorsement_accepts_missing_and_null_and_round_trips_when_present() {
+    let legacy = json!({
         "ephemeralPublicKeyHex":"ephemeral", "awsAttestationDocB64":"AAECAw==",
         "qosManifestB64":"manifest", "qosManifestEnvelopeB64":"envelope",
         "deploymentLabel":"historical", "enclaveApp":"signer", "owner":"turnkey"
     });
-    let mut boot: BootProof = serde_json::from_value(legacy).unwrap();
-    assert_eq!(boot.quorum_key_attestation_signature_hex, None);
-    assert!(
-        serde_json::to_value(&boot)
-            .unwrap()
-            .get("quorumKeyAttestationSignatureHex")
-            .is_none()
-    );
-    boot.quorum_key_attestation_signature_hex = Some("ab".repeat(64));
+    let mut explicit_null = legacy.clone();
+    explicit_null["quorumKeyAttestationSignatureHex"] = Value::Null;
+    for input in [legacy.clone(), explicit_null] {
+        let boot: BootProof = serde_json::from_value(input).unwrap();
+        assert_eq!(boot.quorum_key_attestation_signature_hex, None);
+        let encoded = serde_json::to_value(&boot).unwrap();
+        assert_eq!(
+            encoded.get("quorumKeyAttestationSignatureHex"),
+            Some(&Value::Null)
+        );
+    }
+
+    let boot = BootProof {
+        quorum_key_attestation_signature_hex: Some("ab".repeat(64)),
+        ..serde_json::from_value(legacy).unwrap()
+    };
     let serialized = serde_json::to_value(&boot).unwrap();
     assert_eq!(
         serialized["quorumKeyAttestationSignatureHex"],

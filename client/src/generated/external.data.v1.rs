@@ -426,7 +426,6 @@ pub struct BootProof {
     pub created_at: ::core::option::Option<Timestamp>,
     #[serde(default)]
     pub qos_manifest_version: ::core::option::Option<::prost::alloc::string::String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub quorum_key_attestation_signature_hex: ::core::option::Option<
         ::prost::alloc::string::String,
@@ -449,7 +448,6 @@ pub struct AppProof {
 pub struct AppProofPayload {
     pub r#type: AppProofType,
     pub timestamp_ms: ::prost::alloc::string::String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub request_context: ::core::option::Option<AppProofRequestContext>,
     #[serde(default)]
