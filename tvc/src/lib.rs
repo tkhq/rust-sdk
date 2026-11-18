@@ -22,6 +22,7 @@ pub mod output;
 pub mod pair;
 pub(crate) mod pending_creation;
 pub mod prompts;
+pub(crate) mod proofs;
 pub(crate) mod provisioning;
 pub mod pull_secret;
 pub(crate) mod quorum_key_metadata;

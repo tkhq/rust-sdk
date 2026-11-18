@@ -676,29 +676,32 @@ mod tests {
     }
 
     #[test]
-    fn operator_create_rejects_verbose_proofs() {
-        let error = parse_operator_create(&["--verbose-proofs"]).unwrap_err();
-        assert_eq!(error.kind(), ErrorKind::UnknownArgument);
+    fn operator_create_accepts_verbose_proofs() {
+        parse_operator_create(&["--verbose-proofs"]).unwrap();
     }
 
     #[test]
-    fn quorum_key_create_rejects_verbose_proofs() {
-        let error = parse_quorum_key_create(&[
+    fn quorum_key_create_accepts_verbose_proofs() {
+        parse_quorum_key_create(&[
             "--threshold",
             "2",
             "--operator-ids",
             "11111111-1111-4111-8111-111111111111,22222222-2222-4222-8222-222222222222",
             "--verbose-proofs",
         ])
-        .unwrap_err();
-        assert_eq!(error.kind(), ErrorKind::UnknownArgument);
+        .unwrap();
     }
 
     #[test]
-    fn operator_verify_result_rejects_verbose_proofs() {
+    fn operator_verify_result_accepts_verbose_proofs() {
         let args = [&VERIFY_RESULT[..], &["--verbose-proofs"]].concat();
-        let error = parse_operator_create(&args).unwrap_err();
-        assert_eq!(error.kind(), ErrorKind::UnknownArgument);
+        parse_operator_create(&args).unwrap();
+    }
+
+    #[test]
+    fn quorum_key_verify_result_accepts_verbose_proofs() {
+        let args = [&VERIFY_RESULT[..], &["--verbose-proofs"]].concat();
+        parse_quorum_key_create(&args).unwrap();
     }
 
     fn argv(tokens: &[&str]) -> Vec<OsString> {

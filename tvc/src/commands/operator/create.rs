@@ -99,6 +99,10 @@ pub struct Args {
     /// Display the hosted API result without verifying proofs or saving the operator.
     #[arg(long, env = "TVC_DANGEROUS_SKIP_VERIFICATION")]
     dangerous_skip_verification: bool,
+
+    /// Expand human output with the checks and public proof evidence.
+    #[arg(long)]
+    verbose_proofs: bool,
 }
 
 /// A parsed `operator create` invocation: kind-specific inputs separated,
@@ -109,6 +113,7 @@ enum CreatePlan {
         spec: HostedOperatorSpec,
         make_default: bool,
         dangerous_skip_verification: bool,
+        verbose_proofs: bool,
     },
     Yubikey {
         name: Option<String>,
@@ -130,6 +135,7 @@ impl TryFrom<Args> for CreatePlan {
             serial,
             default,
             dangerous_skip_verification,
+            verbose_proofs,
         } = args;
 
         match kind {
@@ -159,12 +165,17 @@ impl TryFrom<Args> for CreatePlan {
                     },
                     make_default: default,
                     dangerous_skip_verification,
+                    verbose_proofs,
                 })
             }
             CreateKind::Yubikey => {
                 ensure!(
                     !dangerous_skip_verification,
                     "--dangerous-skip-verification is only valid with --kind hosted"
+                );
+                ensure!(
+                    !verbose_proofs,
+                    "--verbose-proofs is only valid with --kind hosted"
                 );
                 ensure!(
                     wallet_name.is_none() && wallet_id.is_none() && account_path.is_none(),
@@ -191,6 +202,7 @@ impl Run for Args {
                 spec,
                 make_default,
                 dangerous_skip_verification,
+                verbose_proofs,
             } => {
                 let auth =
                     CreationClient::new(build_client(&config).await?, dangerous_skip_verification)?;
@@ -220,7 +232,15 @@ impl Run for Args {
                 };
                 let creation =
                     PreparedCreation::operator(auth.org_id, intent, alias, make_default)?;
-                pending_creation::submit(ctx, config, auth, creation, timestamp_ms()?).await
+                pending_creation::submit(
+                    ctx,
+                    config,
+                    auth,
+                    creation,
+                    timestamp_ms()?,
+                    verbose_proofs,
+                )
+                .await
             }
             CreatePlan::Yubikey {
                 name,
@@ -790,6 +810,7 @@ mod tests {
             serial: None,
             default: false,
             dangerous_skip_verification: false,
+            verbose_proofs: false,
         }
     }
 
@@ -801,6 +822,7 @@ mod tests {
             spec,
             make_default,
             dangerous_skip_verification,
+            verbose_proofs,
         } = plan
         else {
             panic!("a hosted invocation must produce a hosted plan");
@@ -815,6 +837,7 @@ mod tests {
         );
         assert!(!make_default);
         assert!(!dangerous_skip_verification);
+        assert!(!verbose_proofs);
     }
 
     #[test]
