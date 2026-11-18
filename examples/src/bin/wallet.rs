@@ -32,7 +32,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             organization_id.clone(),
             client.current_timestamp(),
             CreateWalletIntent {
-                wallet_name: "New wallet".to_string(),
+                wallet_name: format!("New wallet {}", client.current_timestamp()),
                 accounts: vec![WalletAccountParams {
                     curve: Curve::Secp256k1,
                     path_format: PathFormat::Bip32,
