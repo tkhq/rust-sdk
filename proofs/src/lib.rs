@@ -499,6 +499,7 @@ mod tests {
             enclave_app: "signer".to_string(),
             owner: "tkhq".to_string(),
             created_at: Some(Timestamp{seconds: "1758057949".to_string(), nanos: "436158000".to_string()}),
+            quorum_key_attestation_signature_hex: None,
             qos_manifest_version: None,
         }
     }
@@ -513,6 +514,7 @@ mod tests {
             enclave_app: "signer".to_string(),
             owner: "tkhq".to_string(),
             created_at: Some(Timestamp{seconds: "1758057841".to_string(), nanos: "448145000".to_string()}),
+            quorum_key_attestation_signature_hex: None,
             qos_manifest_version: None,
         }
     }
