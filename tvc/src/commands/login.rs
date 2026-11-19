@@ -954,7 +954,7 @@ async fn verify_credentials(
     };
 
     let response = client
-        .get_whoami(request)
+        .get_whoami(&request)
         .await
         .context("whoami request failed")?;
 

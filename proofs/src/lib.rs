@@ -463,7 +463,7 @@ pub async fn get_boot_proof_for_app_proof<S: Stamp>(
         organization_id,
         ephemeral_key: app_proof.public_key.clone(),
     };
-    client.get_boot_proof(request).await
+    client.get_boot_proof(&request).await
 }
 
 #[cfg(test)]

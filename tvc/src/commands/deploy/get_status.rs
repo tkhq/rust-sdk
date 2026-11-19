@@ -50,7 +50,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Resul
 
     let app_response = auth
         .client
-        .get_app_status(app_request)
+        .get_app_status(&app_request)
         .await
         .context("failed to fetch app status")?;
 

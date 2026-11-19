@@ -368,12 +368,12 @@ impl<S: Stamp> TurnkeyClient<S> {
     pub async fn process_activity<Request: Serialize>(
         &self,
         request: Request,
-        path: String,
+        path: &str,
     ) -> Result<Activity, TurnkeyClientError> {
         let mut retry_count = 0;
 
         loop {
-            let response: ActivityResponse = self.process_request(&request, path.clone()).await?;
+            let response: ActivityResponse = self.process_request(&request, path).await?;
             let activity = response
                 .activity
                 .ok_or_else(|| TurnkeyClientError::MissingActivity)?;
@@ -425,7 +425,7 @@ impl<S: Stamp> TurnkeyClient<S> {
     pub async fn process_request<Request, Response>(
         &self,
         request: &Request,
-        path: String,
+        path: &str,
     ) -> Result<Response, TurnkeyClientError>
     where
         Request: Serialize,
@@ -509,7 +509,7 @@ impl<S: Stamp> TurnkeyClient<S> {
                         num_secrets: 1,
                     }),
                 },
-                "/public/v1/submit/init_import_secrets".to_string(),
+                "/public/v1/submit/init_import_secrets",
             )
             .await?;
         let init_result = match init_activity
@@ -762,7 +762,7 @@ mod test {
             .await;
 
         let result = client
-            .process_activity(simple_activity_intent(), "/sign_raw_payload".to_string())
+            .process_activity(simple_activity_intent(), "/sign_raw_payload")
             .await;
 
         match result.unwrap_err() {
@@ -786,7 +786,7 @@ mod test {
             .await;
 
         let result = client
-            .process_activity(simple_activity_intent(), "/sign_raw_payload".to_string())
+            .process_activity(simple_activity_intent(), "/sign_raw_payload")
             .await;
 
         match result.unwrap_err() {
@@ -815,7 +815,7 @@ mod test {
             .await;
 
         let result = client
-            .process_activity(simple_activity_intent(), "/sign_raw_payload".to_string())
+            .process_activity(simple_activity_intent(), "/sign_raw_payload")
             .await;
 
         match result.unwrap_err() {
@@ -842,7 +842,7 @@ mod test {
             .await;
 
         let result = client
-            .process_activity(simple_activity_intent(), "/sign_raw_payload".to_string())
+            .process_activity(simple_activity_intent(), "/sign_raw_payload")
             .await;
 
         assert!(matches!(result, Err(TurnkeyClientError::MissingActivity)));
@@ -872,7 +872,7 @@ mod test {
             .await;
 
         let result = client
-            .process_activity(simple_activity_intent(), "/sign_raw_payload".to_string())
+            .process_activity(simple_activity_intent(), "/sign_raw_payload")
             .await;
 
         match result.unwrap_err() {
@@ -910,7 +910,7 @@ mod test {
             .await;
 
         let result = client
-            .process_activity(simple_activity_intent(), "/sign_raw_payload".to_string())
+            .process_activity(simple_activity_intent(), "/sign_raw_payload")
             .await;
 
         match result.unwrap_err() {
@@ -941,7 +941,7 @@ mod test {
             .await;
 
         let result = client
-            .process_activity(simple_activity_intent(), "/sign_raw_payload".to_string())
+            .process_activity(simple_activity_intent(), "/sign_raw_payload")
             .await;
 
         match result.unwrap_err() {
@@ -973,7 +973,7 @@ mod test {
             .await;
 
         let result = client
-            .process_activity(simple_activity_intent(), "/sign_raw_payload".to_string())
+            .process_activity(simple_activity_intent(), "/sign_raw_payload")
             .await;
 
         match result.unwrap_err() {
@@ -999,7 +999,7 @@ mod test {
             .await;
 
         let result = client
-            .process_activity(simple_activity_intent(), "/sign_raw_payload".to_string())
+            .process_activity(simple_activity_intent(), "/sign_raw_payload")
             .await;
 
         let activity = result.unwrap();
@@ -1041,7 +1041,7 @@ mod test {
                 DeleteSubOrganizationIntent {
                     delete_without_export: Some(true),
                 },
-                "/delete_sub_organization".to_string(),
+                "/delete_sub_organization",
             )
             .await;
 
@@ -1130,7 +1130,7 @@ mod test {
             .await;
 
         let res: ActivityResponse = client
-            .process_request(&simple_activity_intent(), "/start".to_string())
+            .process_request(&simple_activity_intent(), "/start")
             .await
             .unwrap();
         assert_eq!(res.activity.unwrap().id, "redirected-activity-id");
@@ -1151,7 +1151,7 @@ mod test {
             .await;
 
         let result: Result<ActivityResponse, TurnkeyClientError> = client
-            .process_request(&simple_activity_intent(), "/sign_raw_payload".to_string())
+            .process_request(&simple_activity_intent(), "/sign_raw_payload")
             .await;
 
         match result.unwrap_err() {
@@ -1177,7 +1177,7 @@ mod test {
             .await;
 
         let result: Result<ActivityResponse, TurnkeyClientError> = client
-            .process_request(&simple_activity_intent(), "/start".to_string())
+            .process_request(&simple_activity_intent(), "/start")
             .await;
 
         match result.unwrap_err() {
@@ -1213,7 +1213,7 @@ mod test {
             .unwrap();
 
         let result: Result<ActivityResponse, TurnkeyClientError> = client
-            .process_request(&simple_activity_intent(), "/sign_raw_payload".to_string())
+            .process_request(&simple_activity_intent(), "/sign_raw_payload")
             .await;
 
         match result.unwrap_err() {
@@ -1250,7 +1250,7 @@ mod test {
             .unwrap();
 
         let res: ActivityResponse = client
-            .process_request(&simple_activity_intent(), "/sign_raw_payload".to_string())
+            .process_request(&simple_activity_intent(), "/sign_raw_payload")
             .await
             .unwrap();
         assert_eq!(res.activity.unwrap().id, "some-activity-id".to_string());
@@ -1491,7 +1491,7 @@ mod test {
                 .await;
 
             let result = client
-                .process_activity(simple_activity_intent(), "/sign_raw_payload".to_string())
+                .process_activity(simple_activity_intent(), "/sign_raw_payload")
                 .await;
 
             assert!(result.is_ok());
@@ -1519,7 +1519,7 @@ mod test {
                 .await;
 
             let result = client
-                .process_activity(simple_activity_intent(), "/sign_raw_payload".to_string())
+                .process_activity(simple_activity_intent(), "/sign_raw_payload")
                 .await;
 
             match result.unwrap_err() {
@@ -1594,7 +1594,7 @@ mod test {
 
             // Send any request body as we just want to validate the X-Stamp header
             let _: ActivityResponse = client
-                .process_request(&simple_activity_intent(), "/sign_raw_payload".to_string())
+                .process_request(&simple_activity_intent(), "/sign_raw_payload")
                 .await
                 .unwrap();
         }
@@ -1614,10 +1614,7 @@ mod test {
                 .await;
 
             let result = client
-                .process_activity(
-                    super::simple_activity_intent(),
-                    "/sign_raw_payload".to_string(),
-                )
+                .process_activity(super::simple_activity_intent(), "/sign_raw_payload")
                 .await;
 
             assert!(result.is_ok());
@@ -1635,10 +1632,7 @@ mod test {
                 .await;
 
             let result = client
-                .process_activity(
-                    super::simple_activity_intent(),
-                    "/sign_raw_payload".to_string(),
-                )
+                .process_activity(super::simple_activity_intent(), "/sign_raw_payload")
                 .await;
 
             match result.unwrap_err() {

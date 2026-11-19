@@ -457,7 +457,7 @@ async fn run_with_resolved_inputs(
         Some(pull_secret) => {
             let identity = auth
                 .client
-                .get_whoami(GetWhoamiRequest {
+                .get_whoami(&GetWhoamiRequest {
                     organization_id: auth.org_id.clone(),
                 })
                 .await
@@ -492,7 +492,7 @@ async fn run_with_resolved_inputs(
 
     let validate_image_response = auth
         .client
-        .validate_tvc_image(validate_image_request)
+        .validate_tvc_image(&validate_image_request)
         .await
         .context("failed to validate TVC image")?;
 
