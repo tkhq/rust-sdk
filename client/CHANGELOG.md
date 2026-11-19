@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.20.0](https://github.com/tkhq/rust-sdk/compare/turnkey_client-v0.19.0...turnkey_client-v0.20.0) - 2026-11-19
+
+### Fixed
+
+- *(client)* use standard JSON for absent proof fields
+
+### Other
+
+- *(client)* sync TKMS protocol definitions for TVC-572
+
 ### Changed
 
 - **Breaking generated Rust API:** import request-bound TVC proof schema from the
