@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.20.0](https://github.com/tkhq/rust-sdk/compare/tvc-v0.19.0...tvc-v0.20.0) - 2026-11-19
+
+### Other
+
+- release v0.20.0
+
 ## [0.18.0](https://github.com/tkhq/rust-sdk/compare/tvc-v0.17.2...tvc-v0.18.0) - 2026-11-11
 
 ### Added
