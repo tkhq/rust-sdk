@@ -290,9 +290,14 @@ fn classify_turnkey_client_error(error: &TurnkeyClientError) -> Classification {
                     Classification::new(ErrorCode::ClientVersionTooOld, Some(*status))
                 }
                 Cause::ApprovalRequired => Classification::new(ErrorCode::ApprovalRequired, None),
-                Cause::InvalidResponse | Cause::ActivityNotCompleted | Cause::ExceededRetries => {
-                    Classification::new(ErrorCode::ApiError, None)
-                }
+                Cause::InvalidResponse
+                | Cause::UnsupportedActivityType
+                | Cause::ActivityIdMismatch
+                | Cause::ActivityOrganizationMismatch
+                | Cause::ActivityTypeMismatch
+                | Cause::ActivityResultMismatch
+                | Cause::ActivityNotCompleted
+                | Cause::ExceededRetries => Classification::new(ErrorCode::ApiError, None),
                 Cause::RandomizedSigningFailed
                 | Cause::StampRejected
                 | Cause::InvalidRequest
@@ -584,75 +589,105 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn receipt_failures_keep_safe_classification_and_upgrade_hint() {
-        use turnkey_client::{
-            CheckpointSaveError, TurnkeyClient, TurnkeyP256ApiKey,
-            generated::CreateTvcOperatorIntent,
-        };
+    async fn receipt_classifies_unauthorized_response() {
+        assert_receipt_http_failure(401, ErrorCode::Unauthorized).await;
+    }
+
+    #[tokio::test]
+    async fn receipt_classifies_forbidden_response() {
+        assert_receipt_http_failure(403, ErrorCode::Unauthorized).await;
+    }
+
+    #[tokio::test]
+    async fn receipt_classifies_not_found_response() {
+        assert_receipt_http_failure(404, ErrorCode::NotFound).await;
+    }
+
+    #[tokio::test]
+    async fn receipt_classifies_server_error() {
+        assert_receipt_http_failure(500, ErrorCode::ApiError).await;
+    }
+
+    #[tokio::test]
+    async fn receipt_classifies_client_version_rejection() {
+        let error =
+            assert_receipt_http_response(400, TOO_OLD_BODY, ErrorCode::ClientVersionTooOld).await;
+        assert!(hint(&error).is_some());
+    }
+
+    #[tokio::test]
+    async fn receipt_classifies_checkpoint_save_failure() {
+        let server = wiremock::MockServer::start().await;
+        let error =
+            create_operator_receipt_error(&server, Err(turnkey_client::CheckpointSaveError)).await;
+
+        assert_eq!(
+            classify(&error),
+            Classification::new(ErrorCode::CommandError, None)
+        );
+        assert!(hint(&error).is_none());
+        assert!(render_error_chain(&error).contains("creation was never submitted"));
+        assert!(server.received_requests().await.unwrap().is_empty());
+    }
+
+    async fn assert_receipt_http_failure(status: u16, code: ErrorCode) {
+        let error =
+            assert_receipt_http_response(status, r#"{"message":"private request secret"}"#, code)
+                .await;
+        assert!(hint(&error).is_none());
+        assert!(!render_error_chain(&error).contains("private request secret"));
+    }
+
+    async fn assert_receipt_http_response(
+        status: u16,
+        body: &'static str,
+        code: ErrorCode,
+    ) -> anyhow::Error {
         use wiremock::{Mock, MockServer, ResponseTemplate, matchers::path};
 
         let server = MockServer::start().await;
+        Mock::given(path("/public/v1/submit/create_tvc_operator"))
+            .respond_with(ResponseTemplate::new(status).set_body_raw(body, "application/json"))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let error = create_operator_receipt_error(&server, Ok(())).await;
+
+        assert_eq!(classify(&error), Classification::new(code, Some(status)));
+        assert!(render_error_chain(&error).contains("remote creation may have succeeded"));
+        error
+    }
+
+    async fn create_operator_receipt_error(
+        server: &wiremock::MockServer,
+        save: Result<(), turnkey_client::CheckpointSaveError>,
+    ) -> anyhow::Error {
+        use turnkey_client::{
+            TurnkeyClient, TurnkeyP256ApiKey, generated::CreateTvcOperatorIntent,
+        };
+        use uuid::Uuid;
+
         let client = TurnkeyClient::builder()
             .api_key(TurnkeyP256ApiKey::from_bytes([1; 32], None).unwrap())
             .base_url(server.uri())
             .build()
             .unwrap();
-        for (status, code, too_old, save_fails) in [
-            (401, ErrorCode::Unauthorized, false, false),
-            (403, ErrorCode::Unauthorized, false, false),
-            (404, ErrorCode::NotFound, false, false),
-            (500, ErrorCode::ApiError, false, false),
-            (400, ErrorCode::ClientVersionTooOld, true, false),
-            (400, ErrorCode::CommandError, false, true),
-        ] {
-            server.reset().await;
-            let body = if too_old {
-                TOO_OLD_BODY
-            } else {
-                r#"{"message":"private request secret"}"#
-            };
-            Mock::given(path("/public/v1/submit/create_tvc_operator"))
-                .respond_with(ResponseTemplate::new(status).set_body_raw(body, "application/json"))
-                .mount(&server)
-                .await;
-            let error = client_error(
-                client
-                    .create_tvc_operator_with_receipt(
-                        "org".into(),
-                        100,
-                        CreateTvcOperatorIntent {
-                            wallet_id: None,
-                            wallet_name: Some("wallet".into()),
-                            path: "path".into(),
-                            operator_name: "operator".into(),
-                        },
-                        async |_| {
-                            if save_fails {
-                                Err(CheckpointSaveError)
-                            } else {
-                                Ok(())
-                            }
-                        },
-                    )
-                    .await
-                    .unwrap_err(),
-            );
-            assert_eq!(
-                classify(&error),
-                Classification::new(code, (!save_fails).then_some(status))
-            );
-            assert_eq!(hint(&error).is_some(), too_old);
-            assert!(!render_error_chain(&error).contains("private request secret"));
-            assert!(render_error_chain(&error).contains(if save_fails {
-                "creation was never submitted"
-            } else {
-                "remote creation may have succeeded"
-            }));
-            assert_eq!(
-                server.received_requests().await.unwrap().len(),
-                usize::from(!save_fails)
-            );
-        }
+        client_error(
+            client
+                .create_tvc_operator_with_receipt(
+                    Uuid::from_u128(1),
+                    100,
+                    CreateTvcOperatorIntent {
+                        wallet_id: None,
+                        wallet_name: Some("wallet".into()),
+                        path: "path".into(),
+                        operator_name: "operator".into(),
+                    },
+                    async |_| save,
+                )
+                .await
+                .unwrap_err(),
+        )
     }
 
     #[test]
