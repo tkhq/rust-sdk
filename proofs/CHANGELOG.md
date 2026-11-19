@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.20.0](https://github.com/tkhq/rust-sdk/compare/turnkey_proofs-v0.19.0...turnkey_proofs-v0.20.0) - 2026-11-19
+
+### Other
+
+- *(client)* sync TKMS protocol definitions for TVC-572
+
 ## [0.17.2](https://github.com/tkhq/rust-sdk/compare/turnkey_proofs-v0.17.1...turnkey_proofs-v0.17.2) - 2026-11-09
 
 ### Other
