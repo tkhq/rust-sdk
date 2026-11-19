@@ -228,26 +228,19 @@ fn main() {
                             }}
                         "#
                     )
-                } else if supports_receipt(&fn_name) {
-                    let submission_kind = if fn_name == "create_tvc_operator" {
-                        "CreateTvcOperator"
-                    } else {
-                        "CreateTvcQuorumKey"
-                    };
+                } else if let Some(submission_kind) = receipt_submission_kind(&fn_name) {
                     receipt_methods.push_str(&format!(r#"
                         /// {summary}. Persists local origin evidence before each signed POST.
                         ///
                         /// The callback must durably save the checkpoint before succeeding.
                         /// Pending hints require caller persistence. Returned proofs remain unverified.
-                        pub async fn {fn_name}_with_receipt(&self, organization_id: String, timestamp_ms: u128, params: immutable_activity::{activity_intent}, save: impl AsyncFnMut(&SubmissionCheckpoint) -> Result<(), CheckpointSaveError>) -> Result<SubmissionOutcome<SubmittedActivityResult<immutable_activity::{activity_result}>>, TurnkeyClientError> {{
-                            let request = self.{fn_name}_request(organization_id.clone(), timestamp_ms, params);
-                            match self.process_activity_with_receipt(&request, "{route}".to_string(), organization_id, SubmissionKind::{submission_kind}, save).await? {{
-                                SubmissionOutcome::Completed(receipt) => {{
-                                    let result = Self::{fn_name}_result(receipt.activity().clone()).map_err(|error| receipt.submission_error(error))?;
-                                    Ok(SubmissionOutcome::Completed(SubmittedActivityResult::new(result, receipt)))
-                                }}
-                                SubmissionOutcome::Pending {{ checkpoint, reason }} => Ok(SubmissionOutcome::Pending {{ checkpoint, reason }}),
-                            }}
+                        pub async fn {fn_name}_with_receipt(&self, organization_id: uuid::Uuid, timestamp_ms: u128, params: immutable_activity::{activity_intent}, save: impl AsyncFnMut(&SubmissionCheckpoint) -> Result<(), CheckpointSaveError>) -> Result<SubmissionOutcome<SubmittedActivityResult<immutable_activity::{activity_result}>>, TurnkeyClientError> {{
+                            let request = self.{fn_name}_request(organization_id.to_string(), timestamp_ms, params);
+                            self.process_activity_with_receipt(&request, "{route}".to_string(), organization_id, SubmissionKind::{submission_kind}, save)
+                                .await?
+                                .try_map_completed(|receipt| {{
+                                    SubmittedActivityResult::from_receipt(receipt, Self::parse_{fn_name}_result)
+                                }})
                         }}
                     "#));
                     format!(
@@ -258,7 +251,8 @@ fn main() {
                         pub async fn {fn_name}(&self, organization_id: String, timestamp_ms: u128, params: immutable_activity::{activity_intent}) -> Result<ActivityResult<immutable_activity::{activity_result}>, TurnkeyClientError> {{
                             let request = self.{fn_name}_request(organization_id, timestamp_ms, params);
                             let activity = self.process_activity(&request, "{route}".to_string()).await?;
-                            Self::{fn_name}_result(activity)
+                            let result = Self::parse_{fn_name}_result(activity.result)?;
+                            Ok(ActivityResult {{ result, activity_id: activity.id, status: activity.status, app_proofs: activity.app_proofs }})
                         }}
 
                         fn {fn_name}_request(&self, organization_id: String, timestamp_ms: u128, params: immutable_activity::{activity_intent}) -> {request_type} {{
@@ -271,13 +265,12 @@ fn main() {
                             }}
                         }}
 
-                        fn {fn_name}_result(activity: external_activity::Activity) -> Result<ActivityResult<immutable_activity::{activity_result}>, TurnkeyClientError> {{
-                            let inner = activity.result.ok_or(TurnkeyClientError::MissingResult)?.inner.ok_or(TurnkeyClientError::MissingInnerResult)?;
-                            let result = match inner {{
-                                immutable_activity::result::Inner::{activity_result}(res) => res,
-                                other => return Err(TurnkeyClientError::UnexpectedInnerActivityResult(serde_json::to_string(&other)?)),
-                            }};
-                            Ok(ActivityResult {{ result, activity_id: activity.id, status: activity.status, app_proofs: activity.app_proofs }})
+                        fn parse_{fn_name}_result(result: Option<immutable_activity::Result>) -> Result<immutable_activity::{activity_result}, TurnkeyClientError> {{
+                            let inner = result.ok_or(TurnkeyClientError::MissingResult)?.inner.ok_or(TurnkeyClientError::MissingInnerResult)?;
+                            match inner {{
+                                immutable_activity::result::Inner::{activity_result}(res) => Ok(res),
+                                other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(serde_json::to_string(&other)?)),
+                            }}
                         }}
                     "#
                     )
@@ -404,8 +397,12 @@ fn main() {
     }
 }
 
-fn supports_receipt(method: &str) -> bool {
-    matches!(method, "create_tvc_operator" | "create_tvc_quorum_key")
+fn receipt_submission_kind(method: &str) -> Option<&'static str> {
+    match method {
+        "create_tvc_operator" => Some("CreateTvcOperator"),
+        "create_tvc_quorum_key" => Some("CreateTvcQuorumKey"),
+        _ => None,
+    }
 }
 
 fn load_activity_version_caps(path: &str) -> ActivityVersionCaps {
@@ -570,31 +567,22 @@ mod tests {
 
     #[test]
     fn receipts_are_generated_only_for_the_two_supported_activities() {
-        assert!(supports_receipt("create_tvc_operator"));
-        assert!(supports_receipt("create_tvc_quorum_key"));
-        for method in [
-            "create_wallet",
-            "sign_raw_payload",
-            "get_activity",
-            "create_tvc_app",
-        ] {
-            assert!(!supports_receipt(method));
-        }
         let generated = include_str!("../../client/src/generated/client.rs");
-        assert_eq!(generated.matches("_with_receipt(").count(), 4);
+        let mut public_receipt_methods: Vec<_> = generated
+            .lines()
+            .filter_map(|line| {
+                let (name, _) = line.trim().strip_prefix("pub async fn ")?.split_once('(')?;
+                name.ends_with("_with_receipt").then_some(name)
+            })
+            .collect();
+        public_receipt_methods.sort_unstable();
         assert_eq!(
-            generated
-                .matches("pub async fn create_tvc_operator_with_receipt(")
-                .count(),
-            1
+            public_receipt_methods,
+            [
+                "create_tvc_operator_with_receipt",
+                "create_tvc_quorum_key_with_receipt"
+            ]
         );
-        assert_eq!(
-            generated
-                .matches("pub async fn create_tvc_quorum_key_with_receipt(")
-                .count(),
-            1
-        );
-        assert!(generated.contains("impl<S: RandomizedStamp> TurnkeyClient<S>"));
     }
 
     #[test]

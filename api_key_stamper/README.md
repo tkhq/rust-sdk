@@ -53,13 +53,16 @@ The stamp produced is a base64-encoded value, ready to be used as a stamp header
 
 ## Randomized request signing
 
-The built-in P-256 and secp256k1 API keys use fresh OS randomness on every
-`stamp()` call. This distinguishes repeated submissions of identical request
-bytes when the SDK matches app proofs to request receipts. Stamping panics if
-the operating system cannot provide randomness.
+If you sign the same request twice with a built-in P-256 or secp256k1 key, each
+signature gives that attempt a different fingerprint. When you create a hosted
+operator or quorum key, you can use the fingerprint to check that the app proof
+matches the specific request you sent.
 
-These keys implement the sealed `RandomizedStamp` marker required by receipt
-APIs. Custom stampers can still implement `Stamp`, but do not acquire this marker.
+Both key types implement `UniqueStamp`, which the SDK requires when you create
+an operator or quorum key with a receipt. A custom stamper can implement it if
+it produces a fresh signature each time and returns a Turnkey `X-Stamp` for
+P-256 or secp256k1. See the [proofs README](../proofs/README.md) for how to verify
+the app proof.
 
 ## Error handling
 
