@@ -64,7 +64,7 @@ impl FetchedProvisioningDetails {
 /// Fetch and parse provisioning details for one deployment.
 pub(crate) async fn fetch_provisioning_details(
     auth: &AuthenticatedClient,
-    deployment_id: &Uuid,
+    deployment_id: Uuid,
 ) -> anyhow::Result<FetchedProvisioningDetails> {
     let request = GetTvcDeploymentProvisioningDetailsRequest {
         organization_id: auth.org_id.clone(),
@@ -84,7 +84,7 @@ pub(crate) async fn fetch_provisioning_details(
         .await
         .context("failed to fetch deployment provisioning details")?;
 
-    provisioning_details_from_response(*deployment_id, response, fetched_at_unix_ms)
+    provisioning_details_from_response(deployment_id, response, fetched_at_unix_ms)
 }
 
 fn provisioning_details_from_response(

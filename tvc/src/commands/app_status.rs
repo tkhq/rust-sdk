@@ -5,10 +5,10 @@ use turnkey_client::generated::external::data::v1::{AppStatus, Timestamp};
 
 /// Normalize API-specific deployment ID prefixes so CLI commands compare bare IDs.
 pub fn sanitize_app_status(mut app_status: AppStatus) -> AppStatus {
-    app_status.targeted_deployment_id = strip_deploy_prefix(&app_status.targeted_deployment_id);
+    strip_deploy_prefix(&mut app_status.targeted_deployment_id);
 
     for deployment in &mut app_status.deployments {
-        deployment.deployment_id = strip_deploy_prefix(&deployment.deployment_id);
+        strip_deploy_prefix(&mut deployment.deployment_id);
     }
 
     app_status
@@ -44,11 +44,11 @@ pub fn format_replica_counts(ready: i32, desired: i32) -> String {
     format!("Healthy / Desired Replicas: {ready}/{desired}")
 }
 
-fn strip_deploy_prefix(deploy_id: &str) -> String {
-    deploy_id
-        .strip_prefix("deploy-")
-        .unwrap_or(deploy_id)
-        .to_string()
+fn strip_deploy_prefix(deploy_id: &mut String) {
+    const PREFIX: &str = "deploy-";
+    if deploy_id.starts_with(PREFIX) {
+        deploy_id.drain(..PREFIX.len());
+    }
 }
 
 #[cfg(test)]

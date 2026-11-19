@@ -94,7 +94,7 @@ async fn execute(ctx: &mut StdCtx, args: Args, config: &turnkey::Config) -> Resu
             let deployment = fetch_tvc_deployment(&auth, deploy_id).await?;
             DeployConfig::try_from(deployment)?
         }
-        None => DeployConfig::template(saved_app_id.as_deref()),
+        None => DeployConfig::template(saved_app_id),
     };
 
     // Optionally walk prompts to fill any remaining placeholders (e.g. the
@@ -102,7 +102,7 @@ async fn execute(ctx: &mut StdCtx, args: Args, config: &turnkey::Config) -> Resu
     // In `--from-deployment` mode the app ID is already set, so the saved-app-id
     // default is only consulted for a blank template.
     if is_interactive {
-        deploy_config.fill_interactively(ctx, saved_app_id.as_deref())?;
+        deploy_config.fill_interactively(ctx, saved_app_id)?;
     }
 
     let needs_pull_secret = deploy_config.pull_secret_is_placeholder();
