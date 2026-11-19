@@ -1,6 +1,6 @@
 //! Turnkey Client to interact with the Turnkey API
 //! See <https://docs.turnkey.com>
-use crate::{ActivityResult, TurnkeyClient, TurnkeyClientError, Stamp, RandomizedStamp, SubmittedActivityResult, SubmissionCheckpoint, CheckpointSaveError, SubmissionOutcome};
+use crate::{ActivityResult, TurnkeyClient, TurnkeyClientError, Stamp, UniqueStamp, SubmittedActivityResult, SubmissionCheckpoint, CheckpointSaveError, SubmissionOutcome};
 use crate::receipts::SubmissionKind;
 use crate::generated::services::coordinator::public::v1 as coordinator;
 use crate::generated::external::activity::v1 as external_activity;
@@ -14,6 +14,6 @@ impl<S: Stamp> TurnkeyClient<S> {
 // <GENERATED_METHODS_PLACEHOLDER>
 }
 
-impl<S: RandomizedStamp> TurnkeyClient<S> {
+impl<S: UniqueStamp> TurnkeyClient<S> {
 // <RECEIPT_METHODS_PLACEHOLDER>
 }

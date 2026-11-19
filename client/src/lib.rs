@@ -21,7 +21,7 @@ use generated::google::rpc::Status;
 use generated::immutable::models::v1::{KeyValue, TransportEncryptionSuite};
 use generated::result::Inner as ActivityResultInner;
 
-use turnkey_api_key_stamper::{RandomizedStamp, Stamp, StampHeader, StamperError};
+use turnkey_api_key_stamper::{Stamp, StampHeader, StamperError, UniqueStamp};
 use turnkey_enclave_encrypt::errors::EnclaveEncryptError;
 use turnkey_enclave_encrypt::{
     ExportClient, ImportClient, QuorumPublicKey, ServerTargetData, ServerTargetMsgV1,
@@ -324,6 +324,9 @@ fn same_origin_redirect_policy() -> reqwest::redirect::Policy {
 }
 
 /// Base client. To create a new client, see `TurnkeyClient::<S>::builder`.
+///
+/// Ordinary API methods accept any [`Stamp`] implementation. Creation methods
+/// that return a submission receipt require [`UniqueStamp`].
 pub struct TurnkeyClient<S: Stamp> {
     http: reqwest::Client,
     base_url: String,

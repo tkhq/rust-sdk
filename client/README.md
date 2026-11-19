@@ -52,11 +52,13 @@ turnkey_client = { version = "0.0.2", features = ["reqwest_native_tls", "reqwest
 
 The built-in P-256 and secp256k1 keys support
 `create_tvc_operator_with_receipt` and `create_tvc_quorum_key_with_receipt`.
-Both require an async callback from `&SubmissionCheckpoint` to
-`Result<(), CheckpointSaveError>`. Durably persist the checkpoint before returning
+Both accept a `uuid::Uuid` as the organization ID and require an async callback
+from `&SubmissionCheckpoint` to `Result<(), CheckpointSaveError>`.
+Durably persist the checkpoint before returning
 `Ok(())`. A failed save forbids that POST. The SDK owns no storage paths.
-Custom stampers continue to use ordinary methods. Built-in keys use fresh OS
-randomness for every stamp, including ordinary methods.
+Receipt methods also accept custom stampers that implement
+[`UniqueStamp`](../api_key_stamper/README.md#randomized-request-signing).
+Ordinary methods accept any stamper that implements `Stamp`.
 
 `SubmissionOutcome::Completed` contains the typed result and an unverified receipt.
 `Pending { checkpoint, reason }` retains origin evidence for processing, consensus,
