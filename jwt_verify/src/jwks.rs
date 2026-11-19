@@ -93,9 +93,12 @@ struct JwkSet {
 #[derive(Deserialize)]
 struct Jwk {
     kty: String,
-    crv: String,
-    x: String,
-    y: String,
+    #[serde(default)]
+    crv: Option<String>,
+    #[serde(default)]
+    x: Option<String>,
+    #[serde(default)]
+    y: Option<String>,
     #[serde(default, deserialize_with = "reject_null")]
     kid: Option<String>,
     #[serde(default, deserialize_with = "reject_null")]
@@ -130,34 +133,36 @@ pub struct PinnedKeySet {
 }
 
 impl PinnedKeySet {
-    /// Parse a JWK Set of public ES256 keys. A `kid`, when present, must equal
-    /// the RFC 7638 thumbprint.
+    /// Parse a JWK Set and keep its public ES256 keys. A `kid`, when present,
+    /// must equal the RFC 7638 thumbprint.
+    ///
+    /// Keys that cannot verify ES256 are skipped: keys that are not EC P-256,
+    /// and keys whose `alg` or `use`, when present, is not `ES256` or `sig`.
+    /// A published set can hold keys for other algorithms, such as Ed25519.
     ///
     /// # Errors
     ///
-    /// Returns an error when the set is empty or malformed, or a key is not a
-    /// valid public ES256 key.
+    /// Returns an error when the set is malformed, holds a private key, holds
+    /// an ES256 key that is not valid, or holds no ES256 key.
     pub fn from_jwks_json(bytes: &[u8]) -> Result<Self, JwksError> {
         let set: JwkSet =
             serde_json::from_slice(bytes).map_err(|e| JwksError(format!("parse: {e}")))?;
-        if set.keys.is_empty() {
-            return Err(JwksError("no keys".into()));
-        }
         let mut keys = Vec::new();
         for jwk in set.keys {
             if jwk.d.is_some() {
                 return Err(JwksError("the set contains a private key".into()));
             }
-            if jwk.kty != "EC" || jwk.crv != P256_CRV {
-                return Err(JwksError("only EC P-256 keys are accepted".into()));
+            let usable = jwk.kty == "EC"
+                && jwk.crv.as_deref() == Some(P256_CRV)
+                && jwk.alg.as_deref().is_none_or(|a| a == crate::ES256)
+                && jwk.use_.as_deref().is_none_or(|u| u == SIG_USE);
+            if !usable {
+                continue;
             }
-            if jwk.alg.as_deref().is_some_and(|a| a != crate::ES256) {
-                return Err(JwksError("alg must be ES256 when present".into()));
-            }
-            if jwk.use_.as_deref().is_some_and(|u| u != SIG_USE) {
-                return Err(JwksError("use must be sig when present".into()));
-            }
-            let key = VerificationKey::from_p256_xy(&jwk.x, &jwk.y)?;
+            let (Some(x), Some(y)) = (jwk.x.as_deref(), jwk.y.as_deref()) else {
+                return Err(JwksError("an EC P-256 key must have x and y".into()));
+            };
+            let key = VerificationKey::from_p256_xy(x, y)?;
             if jwk.kid.as_deref().is_some_and(|k| k != key.kid()) {
                 return Err(JwksError(format!(
                     "kid is not the RFC 7638 thumbprint ({})",
@@ -165,6 +170,9 @@ impl PinnedKeySet {
                 )));
             }
             keys.push(key);
+        }
+        if keys.is_empty() {
+            return Err(JwksError("no ES256 P-256 keys".into()));
         }
         Ok(Self { keys })
     }
@@ -211,6 +219,74 @@ mod tests {
         assert!(
             set.get("oKIywvGUpTVTyxMQ3bwIIeQUudfr_CkLMjCE19ECD-U")
                 .is_some()
+        );
+    }
+
+    const ED25519: &str = r#"{"kty":"OKP","crv":"Ed25519","alg":"EdDSA","use":"sig","kid":"pneWnVqBCWkm79oOEiTEb_3Lnqm0ILZc9Zlp1O4yt-k","x":"y3jVSTRq4omp2NSablWha0ixpvVuW-4GkWTEK9cUguI"}"#;
+    const KID: &str = "oKIywvGUpTVTyxMQ3bwIIeQUudfr_CkLMjCE19ECD-U";
+
+    fn kids(set: &PinnedKeySet) -> Vec<&str> {
+        set.keys.iter().map(VerificationKey::kid).collect()
+    }
+
+    #[test]
+    fn keeps_only_es256_keys_from_a_mixed_set() {
+        let mixed = format!(
+            r#"{{"keys":[{ED25519},{{"kty":"EC","crv":"P-256","alg":"ES256","use":"sig","x":"{X}","y":"{Y}"}},{{"kty":"RSA","n":"AQAB","e":"AQAB"}}]}}"#
+        );
+        let set = PinnedKeySet::from_jwks_json(mixed.as_bytes()).unwrap();
+        assert_eq!(kids(&set), vec![KID]);
+    }
+
+    #[test]
+    fn skips_p256_keys_for_other_algorithms_or_uses() {
+        for other in [r#""alg":"ECDH-ES""#, r#""use":"enc""#] {
+            let set =
+                format!(r#"{{"keys":[{{"kty":"EC","crv":"P-256",{other},"x":"{X}","y":"{Y}"}}]}}"#);
+            assert_eq!(
+                PinnedKeySet::from_jwks_json(set.as_bytes()).err(),
+                Some(JwksError("no ES256 P-256 keys".into())),
+                "{other}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_a_set_with_no_es256_key() {
+        for set in [
+            format!(r#"{{"keys":[{ED25519}]}}"#),
+            r#"{"keys":[]}"#.to_owned(),
+        ] {
+            assert_eq!(
+                PinnedKeySet::from_jwks_json(set.as_bytes()).err(),
+                Some(JwksError("no ES256 P-256 keys".into())),
+                "{set}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_private_or_malformed_keys_beside_skipped_ones() {
+        let private_ed25519 = ED25519.replace(r#""x":"#, r#""d":"AA","x":"#);
+        let set = format!(
+            r#"{{"keys":[{private_ed25519},{{"kty":"EC","crv":"P-256","x":"{X}","y":"{Y}"}}]}}"#
+        );
+        assert_eq!(
+            PinnedKeySet::from_jwks_json(set.as_bytes()).err(),
+            Some(JwksError("the set contains a private key".into()))
+        );
+
+        let set = format!(r#"{{"keys":[{ED25519},{{"kty":"EC","crv":"P-256","x":"{X}"}}]}}"#);
+        assert_eq!(
+            PinnedKeySet::from_jwks_json(set.as_bytes()).err(),
+            Some(JwksError("an EC P-256 key must have x and y".into()))
+        );
+
+        let set =
+            format!(r#"{{"keys":[{ED25519},{{"kty":"EC","crv":"P-256","x":"{X}","y":"AA"}}]}}"#);
+        assert_eq!(
+            PinnedKeySet::from_jwks_json(set.as_bytes()).err(),
+            Some(JwksError("x and y must be 32-byte base64url".into()))
         );
     }
 
