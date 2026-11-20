@@ -29,6 +29,12 @@ tvc app create --config-file app.json --message-format json
 
 `enableEgress` in `app.json` controls whether the app may open outbound network connections. The scaffold writes `"enableEgress": true`, and a file without the key also means `true`; set it to `false` for an app that should not reach the network. There is no flag or env var for it, and `app create` is the only command that sends it, so decide it in the file before creating the app. `app list` and `app status` report the value back as `egressEnabled`.
 
+### Static egress IPs
+
+`enableStaticEgressIps` in `app.json` enables static IPs for outbound connections. The scaffold writes `"enableStaticEgressIps": false`; omitting the key also means `false`. Pass `--enable-static-egress-ips` (env `TVC_ENABLE_STATIC_EGRESS_IPS=true`) on `app create` to enable it regardless of the file value. Omitting the flag preserves the file value; the flag cannot disable it.
+
+Static egress IPs require `enableEgress: true` and are fixed at app creation. `app create` reports the choice as `enableStaticEgressIps`; `app list` reports it as `staticEgressIpsEnabled`.
+
 ### Wiring the operator into `app.json`
 
 The scaffold prefills `manifestSetParams.newOperators[0].publicKey` with your profile's saved default operator when the profile resolves exactly one; otherwise it drops a `<FILL_IN_OPERATOR_PUBLIC_KEY>` sentinel. Branch on which you got:

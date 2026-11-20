@@ -1759,6 +1759,18 @@ service PublicApiService {
     };
   }
 
+  rpc InitOauth2Authenticate(external.activity.v1.InitOauth2AuthenticateRequest) returns (ActivityResponse) {
+    option (google.api.http) = {
+      post: "/public/v1/submit/init_oauth2_authenticate"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      description: "Create an encryption target for confidential OAuth 2.0 authentication inputs."
+      summary: "Initialize OAuth 2.0 authentication"
+      tags: "User Auth"
+    };
+  }
+
   rpc Oauth2Authenticate(external.activity.v1.Oauth2AuthenticateRequest) returns (ActivityResponse) {
     option (google.api.http) = {
       post: "/public/v1/submit/oauth2_authenticate"

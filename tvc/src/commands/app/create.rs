@@ -2,6 +2,7 @@
 
 use crate::{
     client::build_client,
+    commands::display::yes_no,
     config::{
         app::{AppConfig, AppConfigValidationErrors, OperatorSetParams, Region},
         turnkey,
@@ -58,6 +59,11 @@ struct Overrides {
     /// cannot be changed after app creation.
     #[arg(long, value_enum, value_name = "REGION", env = "TVC_APP_REGION")]
     region: Option<Region>,
+
+    /// Use static egress IPs for this app. Requires `enableEgress: true` in
+    /// the config file; cannot be changed after app creation.
+    #[arg(long, env = "TVC_ENABLE_STATIC_EGRESS_IPS")]
+    enable_static_egress_ips: bool,
 }
 
 #[instrument(skip_all)]
@@ -260,6 +266,7 @@ async fn run_with_app_config(
 
     let name = app_config.name.clone();
     let region = app_config.region;
+    let enable_static_egress_ips = app_config.enable_static_egress_ips;
     let intent = build_create_tvc_app_intent(app_config);
 
     let timestamp_ms = SystemTime::now()
@@ -284,6 +291,7 @@ async fn run_with_app_config(
         app_id,
         name,
         region,
+        enable_static_egress_ips,
         manifest_set_id: result.result.manifest_set_id,
         manifest_set_operator_ids: operator_ids,
         config_path: args.config_file.display().to_string(),
@@ -296,6 +304,7 @@ pub struct AppCreated {
     app_id: String,
     name: String,
     region: Region,
+    enable_static_egress_ips: bool,
     manifest_set_id: String,
     manifest_set_operator_ids: Vec<String>,
     config_path: String,
@@ -311,8 +320,13 @@ App created successfully!
 App ID: {}
 Name: {}
 Region: {}
+Static Egress IPs: {}
 Manifest Set ID: {}"#,
-            self.app_id, self.name, self.region, self.manifest_set_id
+            self.app_id,
+            self.name,
+            self.region,
+            yes_no(self.enable_static_egress_ips),
+            self.manifest_set_id
         )?;
 
         if !self.manifest_set_operator_ids.is_empty() {
@@ -349,6 +363,7 @@ fn build_create_tvc_app_intent(app_config: AppConfig) -> CreateTvcAppIntent {
         enable_egress: app_config.enable_egress.into(),
         enable_debug_mode_deployments: app_config.dangerous_enable_debug_mode_deployments.into(),
         region: Some(app_config.region.to_string()),
+        enable_static_egress_ips: Some(app_config.enable_static_egress_ips),
     }
 }
 
@@ -359,6 +374,9 @@ fn apply_overrides(mut config: AppConfig, overrides: &Overrides) -> AppConfig {
     }
     if let Some(region) = overrides.region {
         config.region = region;
+    }
+    if overrides.enable_static_egress_ips {
+        config.enable_static_egress_ips = true;
     }
     config
 }
@@ -393,6 +411,7 @@ mod tests {
             name: "test-app".to_string(),
             quorum_public_key: KNOWN_QUORUM_KEY.to_string(),
             enable_egress: false,
+            enable_static_egress_ips: false,
             manifest_set_id: None,
             manifest_set_params: Some(OperatorSetParams {
                 name: "manifest-set".to_string(),
@@ -483,28 +502,43 @@ mod tests {
         let overrides = Overrides {
             dangerous_enable_debug_mode_deployments: true,
             region: None,
+            enable_static_egress_ips: false,
         };
 
         let config = apply_overrides(config, &overrides);
         assert!(config.dangerous_enable_debug_mode_deployments);
     }
 
-    /// Omitting the CLI flag must NOT override a config that enables debug-mode
-    /// deployments: the flag is opt-in only and can never turn it off, so a
-    /// `true` config survives an absent flag.
+    /// Absent override flags preserve configured values, including opt-in
+    /// booleans that are already enabled in the config file.
     #[test]
     fn absent_flags_preserve_config_values() {
         let mut config = valid_config();
         config.dangerous_enable_debug_mode_deployments = true;
         config.region = Region::ApSoutheast1;
+        config.enable_static_egress_ips = true;
         let overrides = Overrides {
             dangerous_enable_debug_mode_deployments: false,
             region: None,
+            enable_static_egress_ips: false,
         };
 
         let config = apply_overrides(config, &overrides);
         assert!(config.dangerous_enable_debug_mode_deployments);
         assert_eq!(config.region, Region::ApSoutheast1);
+        assert!(config.enable_static_egress_ips);
+    }
+
+    #[test]
+    fn build_intent_forwards_static_egress_ips_from_config() {
+        for enabled in [false, true] {
+            let mut config = valid_config();
+            config.enable_egress = true;
+            config.enable_static_egress_ips = enabled;
+
+            let intent = build_create_tvc_app_intent(config);
+            assert_eq!(intent.enable_static_egress_ips, Some(enabled));
+        }
     }
 
     #[test]
@@ -542,13 +576,14 @@ mod tests {
     }
 
     #[test]
-    fn region_flag_defaults_to_none_when_absent() {
+    fn absent_flags_do_not_enable_overrides() {
         let args =
             TestCli::try_parse_from(["tvc-app-create", "--config-file", "/tmp/test-app.json"])
                 .unwrap()
                 .args;
 
         assert_eq!(args.overrides.region, None);
+        assert!(!args.overrides.enable_static_egress_ips);
     }
 
     /// Exercises every override flag via clap parsing so flag renames or
@@ -564,6 +599,7 @@ mod tests {
             "--dangerous-enable-debug-mode-deployments",
             "--region",
             "ap-southeast-1",
+            "--enable-static-egress-ips",
         ])
         .unwrap()
         .args;
@@ -577,10 +613,15 @@ mod tests {
             baseline.dangerous_enable_debug_mode_deployments
         );
         assert_ne!(resolved.region, baseline.region);
+        assert_ne!(
+            resolved.enable_static_egress_ips,
+            baseline.enable_static_egress_ips
+        );
 
         // ... to the value passed on the CLI.
         assert!(resolved.dangerous_enable_debug_mode_deployments);
         assert_eq!(resolved.region, Region::ApSoutheast1);
+        assert!(resolved.enable_static_egress_ips);
 
         // config_file isn't an override; verify clap captured the path.
         assert_eq!(args.config_file, PathBuf::from(config_path));

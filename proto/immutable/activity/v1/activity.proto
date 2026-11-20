@@ -219,6 +219,8 @@ enum ActivityType {
   ACTIVITY_TYPE_MINT_JWT = 188;
   ACTIVITY_TYPE_ADD_NOTIFICATION_DOMAINS = 189;
   ACTIVITY_TYPE_DELETE_NOTIFICATION_DOMAINS = 190;
+  ACTIVITY_TYPE_INIT_OAUTH2_AUTHENTICATE = 191;
+  ACTIVITY_TYPE_OAUTH2_AUTHENTICATE_V2 = 192;
 }
 
 // The current processing status of an Activity.
@@ -439,6 +441,8 @@ message Intent {
     MintJwtIntent mint_jwt_intent = 189;
     AddNotificationDomainsIntent add_notification_domains_intent = 190;
     DeleteNotificationDomainsIntent delete_notification_domains_intent = 191;
+    InitOauth2AuthenticateIntent init_oauth2_authenticate_intent = 192;
+    Oauth2AuthenticateIntentV2 oauth2_authenticate_intent_v2 = 193;
   }
   reserved 148, 173;
   reserved "upsert_earn_client_fee_config_intent";
@@ -1778,6 +1782,14 @@ message SolSendTransactionIntentV2 {
       title: ""
     }
   ];
+
+  optional string external_signer_pubkey = 6 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The public key of the external signer to use for signing this transaction. Only needed for external signer requests."
+      title: ""
+    }
+  ];
 }
 
 message EthSendTransactionIntent {
@@ -2032,6 +2044,14 @@ message EthSendTransactionIntentV2 {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
       description: "Ordered list of calls to execute. Must contain between 1 and 50 entries. A single entry with sponsor=false uses EIP-1559; multiple entries use EIP-7702 batch execution via Gas Station."
+      title: ""
+    }
+  ];
+
+  optional string external_signer_pubkey = 11 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      description: "The public key of the external signer to use for signing this transaction. Only needed for external signer requests."
       title: ""
     }
   ];
@@ -5075,7 +5095,40 @@ message DeleteOauth2CredentialIntent {
   ];
 }
 
+message InitOauth2AuthenticateIntent {
+  // @inject_tag: validate:"required,uuid"
+  string oauth2_credential_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The OAuth 2.0 credential whose authentication inputs will be encrypted to the target."}
+  ];
+  // @inject_tag: validate:"required"
+  immutable.models.v1.TransportEncryptionSuite encryption_suite = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The transport encryption suite for the OAuth 2.0 authentication target."}
+  ];
+}
+
+message Oauth2AuthenticateIntentV2 {
+  // @inject_tag: validate:"required,uuid"
+  string oauth2_credential_id = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The OAuth 2.0 credential selected by the client and repeated inside the encrypted payload."}
+  ];
+  // @inject_tag: validate:"required"
+  string encrypted_message = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Encryption suite specific ciphertext of a JSON object containing organization_id, oauth2_credential_id, client_id, provider, auth_code, code_verifier, redirect_uri, nonce, and optional bearer_token_target_public_key. For enclave encrypt v1 this is a JSON-encoded ClientSendMsg encrypted to target_public_key."}
+  ];
+  // @inject_tag: validate:"required"
+  string target_public_key = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Targeted transport encryption public key, from the enclave target message returned by InitOauth2Authenticate."}
+  ];
+}
+
+// Deprecated: use InitOauth2AuthenticateIntent and Oauth2AuthenticateIntentV2.
 message Oauth2AuthenticateIntent {
+  option deprecated = true;
   // @inject_tag: validate:"required"
   string oauth2_credential_id = 1 [
     (google.api.field_behavior) = REQUIRED,
@@ -5333,6 +5386,10 @@ message CreateTvcAppIntent {
   optional string region = 9 [
     (google.api.field_behavior) = OPTIONAL,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "AWS region in which to place this TVC application. Allowed values: us-east-1, ap-southeast-1. Default if not provided: us-east-1."}
+  ];
+  optional bool enable_static_egress_ips = 10 [
+    (google.api.field_behavior) = OPTIONAL,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Enables static egress IPs for this TVC app. Requires enableEgress to be true. Set at app creation. Default if not provided: false."}
   ];
 }
 
@@ -5788,6 +5845,7 @@ message Result {
     MintJwtResult mint_jwt_result = 165;
     AddNotificationDomainsResult add_notification_domains_result = 166;
     DeleteNotificationDomainsResult delete_notification_domains_result = 167;
+    InitOauth2AuthenticateResult init_oauth2_authenticate_result = 168;
   }
   reserved 127;
   reserved "upsert_earn_client_fee_config_result";
@@ -6799,6 +6857,14 @@ message DeleteOauth2CredentialResult {
   string oauth2_credential_id = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier of the OAuth 2.0 credential that was deleted"}
+  ];
+}
+
+message InitOauth2AuthenticateResult {
+  // @inject_tag: validate:"required"
+  string enclave_target_message = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "The TLS Fetcher-signed encryption target for OAuth 2.0 authentication inputs."}
   ];
 }
 
@@ -7920,7 +7986,7 @@ message AddNotificationDomainsIntent {
   repeated string domains = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      description: "Bare domains to allow in notification links, such as example.com. Between 1 and 50. Includes subdomains."
+      description: "Bare domains to allow in notification links, such as example.com. Between 1 and 50."
       title: ""
     }
   ];

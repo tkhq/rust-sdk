@@ -1051,6 +1051,8 @@ pub struct TvcApp {
     #[serde(default)]
     pub enable_debug_mode_deployments: bool,
     pub region: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub enable_static_egress_ips: bool,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
