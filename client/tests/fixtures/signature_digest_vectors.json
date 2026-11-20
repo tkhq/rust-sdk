@@ -1,0 +1,58 @@
+[
+  {
+    "name": "p256",
+    "scheme": 1,
+    "publicKey": "02abababababababababababababababababababababababababababababababab",
+    "message": "{\"organizationId\":\"org-α\",\"note\":\"snowman ☃ \\\"quoted\\\"\\n\"}",
+    "signature": "30440220cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd0220efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+    "digest": "7b26342e968d1f4bd1a3936a7eac10156dab27b19f3c92e9e3e3deda8995af67"
+  },
+  {
+    "name": "p256-scheme",
+    "scheme": 4,
+    "publicKey": "02abababababababababababababababababababababababababababababababab",
+    "message": "{\"organizationId\":\"org-α\",\"note\":\"snowman ☃ \\\"quoted\\\"\\n\"}",
+    "signature": "30440220cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd0220efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+    "digest": "a40ecd86ba230ad79bdd6680ffbd8923f62af2fc3123fb0728743727204da7a5"
+  },
+  {
+    "name": "p256-publicKey",
+    "scheme": 1,
+    "publicKey": "02ABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB",
+    "message": "{\"organizationId\":\"org-α\",\"note\":\"snowman ☃ \\\"quoted\\\"\\n\"}",
+    "signature": "30440220cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd0220efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+    "digest": "7e4929ddf5190e34e098c4de40e68dbcda1d095404a937eca95425b87b387a40"
+  },
+  {
+    "name": "p256-message",
+    "scheme": 1,
+    "publicKey": "02abababababababababababababababababababababababababababababababab",
+    "message": "{\"organizationId\":\"org-α\",\"note\":\"snowman ☃ \\\"quoted\\\"\\n\"} ",
+    "signature": "30440220cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd0220efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+    "digest": "f80b905aaf1e7727f6fda312d6681cd2d4b5d08b88d96ad99013360b318f7642"
+  },
+  {
+    "name": "p256-signature",
+    "scheme": 1,
+    "publicKey": "02abababababababababababababababababababababababababababababababab",
+    "message": "{\"organizationId\":\"org-α\",\"note\":\"snowman ☃ \\\"quoted\\\"\\n\"}",
+    "signature": "30440220CDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCD0220EFEFEFEFEFEFEFEFEFEFEFEFEFEFEFEFEFEFEFEFEFEFEFEFEFEFEFEFEFEFEFEF",
+    "digest": "cc2c817b4945d5cca39ea8a4297a34c5072e448094561c394942e9a5a1a0e7a8"
+  },
+  {
+    "name": "captured-0",
+    "scheme": 1,
+    "publicKey": "026ff03b949241ce1dadd43519e6960e0a85b41a69a05c328103aa2bce1594ca16",
+    "message": "{\"text\":\"é🔑\\\"\\\\\\n\",\"timestampMs\":\"100\"}",
+    "signature": "3046022100d2a568832878322340a428f67e5a36cc7d7aaf8d09e8a4d4511c474e0098d564022100e6d4885fdadd727279cad3bc9383858e9b892f8b5c54639b2df3d43b349b2e5d",
+    "digest": "75dbe6136f17dfe8867de557e4b7874b9739cfc355e824824858b923f074cd5b"
+  },
+  {
+    "name": "captured-2",
+    "scheme": 4,
+    "publicKey": "031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f",
+    "message": "{\"text\":\"é🔑\\\"\\\\\\n\",\"timestampMs\":\"100\"}",
+    "signature": "3045022100f8ef12d4fbd1e61fe81967f54688f12fc8c35b48aa2a41c4ed24219c259125000220701fd6450d9bf3a5699daf4ffdecac71711c8e20b105c4c8c098faf79cb0fd7c",
+    "digest": "291bab2c62aa6a977ca6dabc8c3df31b683e9f4a30fe865dd8efba1bfcbbbb4c"
+  }
+]

@@ -3,7 +3,11 @@
 use crate::generated::external::activity::v1 as external_activity;
 use crate::generated::immutable::activity::v1 as immutable_activity;
 use crate::generated::services::coordinator::public::v1 as coordinator;
-use crate::{ActivityResult, Stamp, TurnkeyClient, TurnkeyClientError};
+use crate::receipts::SubmissionKind;
+use crate::{
+    ActivityResult, CheckpointSaveError, Stamp, SubmissionCheckpoint, SubmissionOutcome,
+    SubmittedActivityResult, TurnkeyClient, TurnkeyClientError, UniqueStamp,
+};
 impl<S: Stamp> TurnkeyClient<S> {
     /// Who am I?
     ///
@@ -4638,38 +4642,48 @@ impl<S: Stamp> TurnkeyClient<S> {
         params: immutable_activity::CreateTvcOperatorIntent,
     ) -> Result<ActivityResult<immutable_activity::CreateTvcOperatorResult>, TurnkeyClientError>
     {
-        let request = external_activity::CreateTvcOperatorRequest {
-            r#type: "ACTIVITY_TYPE_CREATE_TVC_OPERATOR".to_string(),
-            timestamp_ms: timestamp_ms.to_string(),
-            parameters: Some(params),
-            organization_id,
-            generate_app_proofs: self.generate_app_proofs(),
-        };
-        let activity: external_activity::Activity = self
+        let request = self.create_tvc_operator_request(organization_id, timestamp_ms, params);
+        let activity = self
             .process_activity(
                 &request,
                 "/public/v1/submit/create_tvc_operator".to_string(),
             )
             .await?;
-        let inner = activity
-            .result
-            .ok_or_else(|| TurnkeyClientError::MissingResult)?
-            .inner
-            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
-        let result = match inner {
-            immutable_activity::result::Inner::CreateTvcOperatorResult(res) => res,
-            other => {
-                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
-                    serde_json::to_string(&other)?,
-                ));
-            }
-        };
+        let result = Self::parse_create_tvc_operator_result(activity.result)?;
         Ok(ActivityResult {
             result,
             activity_id: activity.id,
             status: activity.status,
             app_proofs: activity.app_proofs,
         })
+    }
+    fn create_tvc_operator_request(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::CreateTvcOperatorIntent,
+    ) -> external_activity::CreateTvcOperatorRequest {
+        external_activity::CreateTvcOperatorRequest {
+            r#type: "ACTIVITY_TYPE_CREATE_TVC_OPERATOR".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        }
+    }
+    fn parse_create_tvc_operator_result(
+        result: Option<immutable_activity::Result>,
+    ) -> Result<immutable_activity::CreateTvcOperatorResult, TurnkeyClientError> {
+        let inner = result
+            .ok_or(TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or(TurnkeyClientError::MissingInnerResult)?;
+        match inner {
+            immutable_activity::result::Inner::CreateTvcOperatorResult(res) => Ok(res),
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
+        }
     }
     /// Delete a TVC app and all of its deployments
     ///
@@ -5100,38 +5114,48 @@ impl<S: Stamp> TurnkeyClient<S> {
         params: immutable_activity::CreateTvcQuorumKeyIntent,
     ) -> Result<ActivityResult<immutable_activity::CreateTvcQuorumKeyResult>, TurnkeyClientError>
     {
-        let request = external_activity::CreateTvcQuorumKeyRequest {
-            r#type: "ACTIVITY_TYPE_CREATE_TVC_QUORUM_KEY".to_string(),
-            timestamp_ms: timestamp_ms.to_string(),
-            parameters: Some(params),
-            organization_id,
-            generate_app_proofs: self.generate_app_proofs(),
-        };
-        let activity: external_activity::Activity = self
+        let request = self.create_tvc_quorum_key_request(organization_id, timestamp_ms, params);
+        let activity = self
             .process_activity(
                 &request,
                 "/public/v1/submit/create_tvc_quorum_key".to_string(),
             )
             .await?;
-        let inner = activity
-            .result
-            .ok_or_else(|| TurnkeyClientError::MissingResult)?
-            .inner
-            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
-        let result = match inner {
-            immutable_activity::result::Inner::CreateTvcQuorumKeyResult(res) => res,
-            other => {
-                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
-                    serde_json::to_string(&other)?,
-                ));
-            }
-        };
+        let result = Self::parse_create_tvc_quorum_key_result(activity.result)?;
         Ok(ActivityResult {
             result,
             activity_id: activity.id,
             status: activity.status,
             app_proofs: activity.app_proofs,
         })
+    }
+    fn create_tvc_quorum_key_request(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::CreateTvcQuorumKeyIntent,
+    ) -> external_activity::CreateTvcQuorumKeyRequest {
+        external_activity::CreateTvcQuorumKeyRequest {
+            r#type: "ACTIVITY_TYPE_CREATE_TVC_QUORUM_KEY".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        }
+    }
+    fn parse_create_tvc_quorum_key_result(
+        result: Option<immutable_activity::Result>,
+    ) -> Result<immutable_activity::CreateTvcQuorumKeyResult, TurnkeyClientError> {
+        let inner = result
+            .ok_or(TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or(TurnkeyClientError::MissingInnerResult)?;
+        match inner {
+            immutable_activity::result::Inner::CreateTvcQuorumKeyResult(res) => Ok(res),
+            other => Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                serde_json::to_string(&other)?,
+            )),
+        }
     }
     /// Re-encrypt TVC Quorum Key share
     ///
@@ -6059,6 +6083,64 @@ impl<S: Stamp> TurnkeyClient<S> {
             activity_id: activity.id,
             status: activity.status,
             app_proofs: activity.app_proofs,
+        })
+    }
+}
+impl<S: UniqueStamp> TurnkeyClient<S> {
+    /// Create TVC operator. Persists local origin evidence before each signed POST.
+    ///
+    /// The callback must durably save the checkpoint before succeeding.
+    /// Pending hints require caller persistence. Returned proofs remain unverified.
+    pub async fn create_tvc_operator_with_receipt(
+        &self,
+        organization_id: uuid::Uuid,
+        timestamp_ms: u128,
+        params: immutable_activity::CreateTvcOperatorIntent,
+        save: impl AsyncFnMut(&SubmissionCheckpoint) -> Result<(), CheckpointSaveError>,
+    ) -> Result<
+        SubmissionOutcome<SubmittedActivityResult<immutable_activity::CreateTvcOperatorResult>>,
+        TurnkeyClientError,
+    > {
+        let request =
+            self.create_tvc_operator_request(organization_id.to_string(), timestamp_ms, params);
+        self.process_activity_with_receipt(
+            &request,
+            "/public/v1/submit/create_tvc_operator".to_string(),
+            organization_id,
+            SubmissionKind::CreateTvcOperator,
+            save,
+        )
+        .await?
+        .try_map_completed(|receipt| {
+            SubmittedActivityResult::from_receipt(receipt, Self::parse_create_tvc_operator_result)
+        })
+    }
+    /// Create TVC Quorum Key. Persists local origin evidence before each signed POST.
+    ///
+    /// The callback must durably save the checkpoint before succeeding.
+    /// Pending hints require caller persistence. Returned proofs remain unverified.
+    pub async fn create_tvc_quorum_key_with_receipt(
+        &self,
+        organization_id: uuid::Uuid,
+        timestamp_ms: u128,
+        params: immutable_activity::CreateTvcQuorumKeyIntent,
+        save: impl AsyncFnMut(&SubmissionCheckpoint) -> Result<(), CheckpointSaveError>,
+    ) -> Result<
+        SubmissionOutcome<SubmittedActivityResult<immutable_activity::CreateTvcQuorumKeyResult>>,
+        TurnkeyClientError,
+    > {
+        let request =
+            self.create_tvc_quorum_key_request(organization_id.to_string(), timestamp_ms, params);
+        self.process_activity_with_receipt(
+            &request,
+            "/public/v1/submit/create_tvc_quorum_key".to_string(),
+            organization_id,
+            SubmissionKind::CreateTvcQuorumKey,
+            save,
+        )
+        .await?
+        .try_map_completed(|receipt| {
+            SubmittedActivityResult::from_receipt(receipt, Self::parse_create_tvc_quorum_key_result)
         })
     }
 }
