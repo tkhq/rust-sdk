@@ -171,7 +171,7 @@ fn resolve_operator_ids(
 
     let keys = operator_ids
         .iter()
-        .map(|id| {
+        .map(|&id| {
             config
                 .resolve_hosted_operator_encrypt_key(id)
                 .map(OperatorPublicKey::from)

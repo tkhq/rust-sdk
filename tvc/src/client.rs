@@ -60,7 +60,7 @@ pub async fn build_client(config: &Config) -> Result<AuthenticatedClient> {
             }
         };
 
-    build_authed_client(&org_id, &api_base_url, &api_key_public, &api_key_private)
+    build_authed_client(org_id, api_base_url, &api_key_public, &api_key_private)
 }
 
 #[instrument(skip_all)]
@@ -91,7 +91,7 @@ pub async fn fetch_tvc_deployment(
 ) -> Result<TvcDeployment> {
     let request = GetTvcDeploymentRequest {
         organization_id: auth.org_id.clone(),
-        deployment_id: deployment_id.clone(),
+        deployment_id,
     };
 
     let response = match auth.client.get_tvc_deployment(&request).await {
@@ -99,21 +99,23 @@ pub async fn fetch_tvc_deployment(
         Err(source @ TurnkeyClientError::UnexpectedHttpStatus(404, _)) => {
             return Err(NotFoundInOrganization::new(
                 "deployment",
-                deployment_id,
+                request.deployment_id,
                 auth.org_id.clone(),
                 source,
             )
             .into());
         }
         Err(error) => {
-            return Err(anyhow::Error::new(error)
-                .context(format!("failed to fetch deployment {deployment_id}")));
+            return Err(anyhow::Error::new(error).context(format!(
+                "failed to fetch deployment {}",
+                request.deployment_id
+            )));
         }
     };
 
     response
         .tvc_deployment
-        .ok_or_else(|| MissingResource::new("deployment", deployment_id).into())
+        .ok_or_else(|| MissingResource::new("deployment", request.deployment_id).into())
 }
 
 #[instrument(skip_all)]
@@ -129,15 +131,19 @@ async fn load_credentials_from_config(config: &Config) -> Result<(String, String
         "resolved active organization config"
     );
 
-    let api_key = StoredApiKey::load(org_config)
+    let StoredApiKey {
+        public_key,
+        private_key,
+        curve: _,
+    } = StoredApiKey::load(org_config)
         .await?
         .ok_or_else(|| anyhow!("No API key found for org '{alias}'. Run `tvc login` first."))?;
 
     Ok((
         org_config.id.clone(),
         org_config.api_base_url.clone(),
-        api_key.public_key.clone(),
-        api_key.private_key.clone(),
+        public_key,
+        private_key,
     ))
 }
 
@@ -172,8 +178,8 @@ pub(crate) fn build_turnkey_client(
 
 #[instrument(skip_all)]
 fn build_authed_client(
-    org_id: &str,
-    api_base_url: &str,
+    org_id: String,
+    api_base_url: String,
     api_key_public: &str,
     api_key_private: &str,
 ) -> Result<AuthenticatedClient> {
@@ -182,14 +188,14 @@ fn build_authed_client(
         .context("failed to load API key")?;
 
     debug!(%api_base_url, "building Turnkey API client");
-    let client = build_turnkey_client(stamper, api_base_url)?;
+    let client = build_turnkey_client(stamper, &api_base_url)?;
 
     debug!("authenticated Turnkey client ready");
 
     Ok(AuthenticatedClient {
         client,
-        org_id: org_id.to_string(),
-        api_base_url: api_base_url.to_string(),
+        org_id,
+        api_base_url,
     })
 }
 

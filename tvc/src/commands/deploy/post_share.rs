@@ -34,10 +34,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Resul
     let re_encrypted_share: ReEncryptedShareOutput =
         read_json_file(&args.re_encrypted_share, "re-encrypted share output").await?;
 
-    let intent = build_post_tvc_quorum_key_share_intent(
-        &re_encrypted_share,
-        &args.share_operator_id.to_string(),
-    );
+    let intent = build_post_tvc_quorum_key_share_intent(re_encrypted_share, args.share_operator_id);
 
     let auth = crate::client::build_client(&config).await?;
     let timestamp_ms = SystemTime::now()
@@ -69,16 +66,23 @@ impl Display for QuorumKeySharePosted {
 }
 
 fn build_post_tvc_quorum_key_share_intent(
-    re_encrypted_share: &ReEncryptedShareOutput,
-    share_operator_id: &str,
+    re_encrypted_share: ReEncryptedShareOutput,
+    share_operator_id: Uuid,
 ) -> PostTvcQuorumKeyShareIntent {
+    let ReEncryptedShareOutput {
+        deployment_id,
+        ephemeral_public_key_hex,
+        re_encrypted_share,
+        share_approval,
+    } = re_encrypted_share;
+
     PostTvcQuorumKeyShareIntent {
-        deployment_id: re_encrypted_share.deployment_id.clone(),
-        ephemeral_public_key_hex: re_encrypted_share.ephemeral_public_key_hex.clone(),
+        deployment_id,
+        ephemeral_public_key_hex,
         share_approval_bundle: Some(QuorumKeyShareApprovalBundle {
             operator_id: share_operator_id.to_string(),
-            re_encrypted_share_hex: re_encrypted_share.re_encrypted_share.clone(),
-            signature: hex::encode(&re_encrypted_share.share_approval.signature),
+            re_encrypted_share_hex: re_encrypted_share,
+            signature: hex::encode(&share_approval.signature),
         }),
     }
 }
@@ -90,6 +94,7 @@ mod tests {
     use qos_core::protocol::services::boot::{Approval, QuorumMember};
     use serde_json::json;
     use turnkey_client::generated::QuorumKeyShareApprovalBundle;
+    use uuid::Uuid;
 
     fn sample_re_encrypted_share(deployment_id: &str) -> ReEncryptedShareOutput {
         ReEncryptedShareOutput {
@@ -109,14 +114,15 @@ mod tests {
     #[test]
     fn builds_expected_intent_shape() {
         let output = sample_re_encrypted_share("deploy-from-file");
-        let intent = build_post_tvc_quorum_key_share_intent(&output, "share-operator-id");
+        let share_operator_id = Uuid::from_u128(1);
+        let intent = build_post_tvc_quorum_key_share_intent(output, share_operator_id);
 
         assert_eq!(intent.deployment_id, "deploy-from-file");
         assert_eq!(intent.ephemeral_public_key_hex, "04abcd");
         assert_eq!(
             intent.share_approval_bundle,
             Some(QuorumKeyShareApprovalBundle {
-                operator_id: "share-operator-id".to_string(),
+                operator_id: share_operator_id.to_string(),
                 re_encrypted_share_hex: "010203".to_string(),
                 signature: "deadbeef".to_string(),
             })

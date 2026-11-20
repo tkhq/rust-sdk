@@ -44,7 +44,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Resul
     let deployment = fetch_tvc_deployment(&auth, deployment_id.clone()).await?;
 
     let app_request = GetAppStatusRequest {
-        organization_id: org_id.clone(),
+        organization_id: org_id,
         app_id: deployment.app_id.clone(),
     };
 

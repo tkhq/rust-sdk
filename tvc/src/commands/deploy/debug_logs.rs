@@ -197,8 +197,8 @@ async fn query_debug_logs(
         (request, None)
     };
 
-    let response = fetch_debug_logs(client, current_request).await?;
-    let line_count = log_printer.print_response(ctx, &response)?;
+    let response = fetch_debug_logs(client, &current_request.into()).await?;
+    let line_count = log_printer.print_response(ctx, response)?;
 
     // In poll mode the loop below runs until killed (or errors), so the
     // terminal outcome is only reachable in non-poll mode.
@@ -212,10 +212,11 @@ async fn query_debug_logs(
     shell_eprintln!(ctx, "Connected; polling for debug logs...")?;
 
     let poll_interval = Duration::from_secs(poll_request.poll_interval_seconds as u64);
+    let poll_request = GetTvcDeploymentDebugLogsRequest::from(poll_request);
     loop {
         tokio::time::sleep(poll_interval).await;
-        let response = fetch_debug_logs(client, poll_request.clone()).await?;
-        log_printer.print_response(ctx, &response)?;
+        let response = fetch_debug_logs(client, &poll_request).await?;
+        log_printer.print_response(ctx, response)?;
     }
 }
 
@@ -234,20 +235,13 @@ pub(crate) struct DebugLogLine {
 }
 
 impl Display for DebugLogLine {
-    /// Rebuild the API line and defer to [`format_log_line`] so human output
-    /// stays byte-identical to the pre-outcome rendering.
+    /// Defer to [`format_log_line`] so human output stays byte-identical to
+    /// the pre-outcome rendering.
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let line = LogLine {
-            content: self.content.clone(),
-            ts: self.ts.as_ref().map(|ts| Timestamp {
-                seconds: ts.seconds.clone(),
-                nanos: ts.nanos.clone(),
-            }),
-        };
-
         f.write_str(&format_log_line(
             &self.replica,
-            &line,
+            &self.content,
+            self.ts.as_ref(),
             self.include_platform_timestamp,
         ))
     }
@@ -273,10 +267,10 @@ impl Display for DebugLogsFetched {
 
 async fn fetch_debug_logs(
     client: &turnkey_client::TurnkeyClient<TurnkeyP256ApiKey>,
-    request: DebugLogQueryRequest,
+    request: &GetTvcDeploymentDebugLogsRequest,
 ) -> anyhow::Result<GetTvcDeploymentDebugLogsResponse> {
     client
-        .get_tvc_deployment_debug_logs(&request.into())
+        .get_tvc_deployment_debug_logs(request)
         .await
         .context("failed to fetch debug logs")
 }
@@ -385,20 +379,20 @@ impl DebugLogPrinter {
     fn print_response<W: Write, W2: Write>(
         &mut self,
         ctx: &mut Ctx<W, W2>,
-        response: &GetTvcDeploymentDebugLogsResponse,
+        response: GetTvcDeploymentDebugLogsResponse,
     ) -> anyhow::Result<usize> {
         let mut printed = 0;
-        for entry in &response.entries {
-            let Some(line) = entry.line.as_ref() else {
+        for entry in response.entries {
+            let Some(line) = entry.line else {
                 continue;
             };
-            let replica = entry.replica_label.as_str();
 
-            if self.should_print_line(replica, line) {
+            if self.should_print_line(&entry.replica_label, &line) {
+                let LogLine { content, ts } = line;
                 ctx.shell().emit(&DebugLogLine {
-                    replica: replica.to_string(),
-                    content: line.content.clone(),
-                    ts: line.ts.clone().map(Into::into),
+                    replica: entry.replica_label,
+                    content,
+                    ts: ts.map(Into::into),
                     include_platform_timestamp: self.include_platform_timestamp,
                 })?;
                 printed += 1;
@@ -408,18 +402,23 @@ impl DebugLogPrinter {
     }
 }
 
-fn format_log_line(replica: &str, line: &LogLine, include_platform_timestamp: bool) -> String {
+fn format_log_line(
+    replica: &str,
+    content: &str,
+    ts: Option<&TimestampPayload>,
+    include_platform_timestamp: bool,
+) -> String {
     if !include_platform_timestamp {
-        return format!("{replica} {}", line.content);
+        return format!("{replica} {content}");
     }
 
-    match line.ts.as_ref().and_then(format_timestamp) {
-        Some(ts) => format!("{ts} {replica} {}", line.content),
-        None => format!("{replica} {}", line.content),
+    match ts.and_then(format_timestamp) {
+        Some(ts) => format!("{ts} {replica} {content}"),
+        None => format!("{replica} {content}"),
     }
 }
 
-fn format_timestamp(timestamp: &Timestamp) -> Option<String> {
+fn format_timestamp(timestamp: &TimestampPayload) -> Option<String> {
     let seconds = timestamp.seconds.parse::<i64>().ok()?;
     let nanos = timestamp.nanos.parse::<u32>().ok()?;
 
@@ -441,6 +440,13 @@ mod tests {
 
     fn timestamp(seconds: &str, nanos: &str) -> Timestamp {
         Timestamp {
+            seconds: seconds.to_string(),
+            nanos: nanos.to_string(),
+        }
+    }
+
+    fn timestamp_payload(seconds: &str, nanos: &str) -> TimestampPayload {
+        TimestampPayload {
             seconds: seconds.to_string(),
             nanos: nanos.to_string(),
         }
@@ -521,40 +527,38 @@ mod tests {
 
     #[test]
     fn format_log_line_omits_platform_timestamp_by_default() {
-        let line = log_line("hello", Some(timestamp("1710000000", "123456789")));
+        let ts = timestamp_payload("1710000000", "123456789");
 
         assert_eq!(
-            format_log_line("replica 1/3", &line, false),
+            format_log_line("replica 1/3", "hello", Some(&ts), false),
             "replica 1/3 hello"
         );
     }
 
     #[test]
     fn format_log_line_includes_platform_timestamp_when_requested() {
-        let line = log_line("hello", Some(timestamp("1710000000", "123456789")));
+        let ts = timestamp_payload("1710000000", "123456789");
 
         assert_eq!(
-            format_log_line("replica 1/3", &line, true),
+            format_log_line("replica 1/3", "hello", Some(&ts), true),
             "2024-03-09T16:00:00.123456789Z replica 1/3 hello"
         );
     }
 
     #[test]
     fn format_log_line_omits_timestamp_when_missing() {
-        let line = log_line("hello", None);
-
         assert_eq!(
-            format_log_line("replica 1/3", &line, true),
+            format_log_line("replica 1/3", "hello", None, true),
             "replica 1/3 hello"
         );
     }
 
     #[test]
     fn format_log_line_omits_invalid_timestamp() {
-        let line = log_line("hello", Some(timestamp("bad", "123")));
+        let ts = timestamp_payload("bad", "123");
 
         assert_eq!(
-            format_log_line("replica 1/3", &line, true),
+            format_log_line("replica 1/3", "hello", Some(&ts), true),
             "replica 1/3 hello"
         );
     }
@@ -603,7 +607,7 @@ mod tests {
         let mut printer = DebugLogPrinter::new(false, 1000, false);
         let mut ctx = Ctx::new(crate::output::EmptyShell::default(), false);
 
-        printer.print_response(&mut ctx, &response).unwrap();
+        printer.print_response(&mut ctx, response).unwrap();
 
         assert_eq!(printer.deduper.as_ref().unwrap().seen.len(), 1);
     }

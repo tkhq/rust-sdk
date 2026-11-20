@@ -55,8 +55,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     }
 
     let operator_publics = parse_operator_public_keys(&config.operator_public_keys)?;
-    let metadata = generate_and_encrypt_shares(&operator_publics, config.shares, config.threshold)?;
-    let quorum_key_public = metadata.quorum_key_public.clone();
+    let metadata = generate_and_encrypt_shares(operator_publics, config.shares, config.threshold)?;
 
     let metadata_json =
         serde_json::to_vec_pretty(&metadata).context("failed to serialize quorum key metadata")?;
@@ -68,7 +67,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args) -> Result<Outcome> {
     })?;
 
     Ok(Outcome::QuorumKeyGenerated(QuorumKeyGenerated {
-        quorum_key_public,
+        quorum_key_public: metadata.quorum_key_public,
         threshold: config.threshold,
         metadata_path: args.quorum_key_metadata_out.display().to_string(),
     }))
@@ -110,7 +109,7 @@ fn parse_operator_public_keys(operator_public_keys: &[String]) -> Result<Vec<Ope
 }
 
 fn generate_and_encrypt_shares(
-    operator_publics: &[OperatorPublicKey],
+    operator_publics: Vec<OperatorPublicKey>,
     shares: u32,
     threshold: u32,
 ) -> Result<QuorumKeyMetadata> {
@@ -134,7 +133,7 @@ fn generate_and_encrypt_shares(
     let plaintext_shares = PlaintextShares(plaintext_shares);
 
     let shares = operator_publics
-        .iter()
+        .into_iter()
         .zip(plaintext_shares.0.iter())
         .map(|(operator_public, share)| {
             let encrypted_share = operator_public
@@ -143,7 +142,7 @@ fn generate_and_encrypt_shares(
                 .map_err(|e| anyhow::anyhow!("failed to encrypt quorum key share: {e:?}"))?;
 
             Ok(EncryptedShareMetadata {
-                operator_public_key: operator_public.normalized.clone(),
+                operator_public_key: operator_public.normalized,
                 share: hex::encode(encrypted_share),
             })
         })
@@ -185,7 +184,7 @@ mod tests {
     #[test]
     fn generate_and_encrypt_shares_rejects_key_count_mismatch() {
         let operator_publics = parse_operator_public_keys(&[operator_key()]).unwrap();
-        let err = generate_and_encrypt_shares(&operator_publics, 2, 2)
+        let err = generate_and_encrypt_shares(operator_publics, 2, 2)
             .unwrap_err()
             .to_string();
 
@@ -201,7 +200,7 @@ mod tests {
             .collect::<Vec<_>>();
         let operator_publics = parse_operator_public_keys(&operator_public_keys).unwrap();
 
-        let metadata = generate_and_encrypt_shares(&operator_publics, 3, 2).unwrap();
+        let metadata = generate_and_encrypt_shares(operator_publics, 3, 2).unwrap();
         let decrypted_shares = metadata
             .shares
             .iter()

@@ -240,7 +240,7 @@ impl Config {
     /// organization, if any, validated for use.
     pub(crate) fn find_hosted_operator(
         &self,
-        operator_id: &Uuid,
+        operator_id: Uuid,
     ) -> Result<Option<ResolvedHostedOperator>> {
         let Some((_, org)) = self.active_org_config() else {
             return Ok(None);
@@ -248,7 +248,7 @@ impl Config {
 
         let mut matches = org
             .hosted_operators()
-            .filter(|(_, hosted)| hosted.operator_id == *operator_id);
+            .filter(|(_, hosted)| hosted.operator_id == operator_id);
 
         match (matches.next(), matches.next()) {
             (None, _) => Ok(None),
@@ -264,7 +264,7 @@ impl Config {
     /// Resolve one validated hosted operator from the active organization.
     pub(crate) fn resolve_hosted_operator(
         &self,
-        operator_id: &Uuid,
+        operator_id: Uuid,
     ) -> Result<ResolvedHostedOperator> {
         let (alias, _) = self
             .active_org_config()
@@ -279,7 +279,7 @@ impl Config {
     /// organization.
     pub(crate) fn resolve_hosted_operator_encrypt_key(
         &self,
-        operator_id: &Uuid,
+        operator_id: Uuid,
     ) -> Result<EncryptPubKey> {
         Ok(self.resolve_hosted_operator(operator_id)?.keys.encrypt)
     }
@@ -429,7 +429,7 @@ mod tests {
         let operator_id = Uuid::parse_str(OPERATOR_ID).unwrap();
 
         let resolved = config
-            .resolve_hosted_operator_encrypt_key(&operator_id)
+            .resolve_hosted_operator_encrypt_key(operator_id)
             .unwrap();
 
         assert_eq!(resolved, expected);
@@ -451,7 +451,7 @@ mod tests {
         let expected_composite = expected.composite_public_key();
         let config = config_with_operators(vec![hosted_operator("hosted", record)]);
 
-        let resolved = config.resolve_hosted_operator(&operator_id).unwrap();
+        let resolved = config.resolve_hosted_operator(operator_id).unwrap();
 
         assert_eq!(resolved, expected);
         assert_eq!(resolved.composite_public_key(), expected_composite);
@@ -463,7 +463,7 @@ mod tests {
         let no_active = Config::default();
         assert_eq!(
             no_active
-                .resolve_hosted_operator_encrypt_key(&operator_id)
+                .resolve_hosted_operator_encrypt_key(operator_id)
                 .unwrap_err()
                 .to_string(),
             "No active organization. Run `tvc login` first."
@@ -480,7 +480,7 @@ mod tests {
         let config = config_with_operators(vec![local]);
         assert_eq!(
             config
-                .resolve_hosted_operator_encrypt_key(&operator_id)
+                .resolve_hosted_operator_encrypt_key(operator_id)
                 .unwrap_err()
                 .to_string(),
             "hosted operator ID '11111111-1111-4111-8111-111111111111' was not found in org 'active'"
@@ -493,7 +493,7 @@ mod tests {
         cross_org.orgs.insert("inactive".to_string(), inactive_org);
         assert_eq!(
             cross_org
-                .resolve_hosted_operator_encrypt_key(&operator_id)
+                .resolve_hosted_operator_encrypt_key(operator_id)
                 .unwrap_err()
                 .to_string(),
             "hosted operator ID '11111111-1111-4111-8111-111111111111' was not found in org 'active'"
@@ -510,7 +510,7 @@ mod tests {
         ]);
         assert_eq!(
             duplicate
-                .resolve_hosted_operator_encrypt_key(&operator_id)
+                .resolve_hosted_operator_encrypt_key(operator_id)
                 .unwrap_err()
                 .to_string(),
             "multiple hosted operators have ID 11111111-1111-4111-8111-111111111111"
@@ -520,7 +520,7 @@ mod tests {
         malformed.encrypt_public_key = "not-hex".to_string();
         let malformed = config_with_operators(vec![hosted_operator("hosted", malformed)]);
         let error = malformed
-            .resolve_hosted_operator_encrypt_key(&operator_id)
+            .resolve_hosted_operator_encrypt_key(operator_id)
             .unwrap_err();
         assert_eq!(
             error.downcast_ref::<OperatorPublicKeyParseError>(),
@@ -607,7 +607,7 @@ mod tests {
             ..Config::default()
         };
 
-        assert!(config.find_hosted_operator(&operator_id).unwrap().is_none());
+        assert!(config.find_hosted_operator(operator_id).unwrap().is_none());
     }
 
     #[test]

@@ -217,7 +217,7 @@ async fn build_inputs_interactive(
         .map(|deploy_config| (deploy_config, true))
         .unwrap_or_else(|| (flag_only_template(), false));
 
-    apply_overrides(&mut deploy_config, &overrides);
+    apply_overrides(&mut deploy_config, overrides);
 
     let mut config_updated = false;
     loop {
@@ -229,7 +229,7 @@ async fn build_inputs_interactive(
             _ => {
                 config_updated = true;
                 let saved_app_id = config.get_last_app_id();
-                deploy_config.fill_interactively(ctx, saved_app_id.as_deref())?;
+                deploy_config.fill_interactively(ctx, saved_app_id)?;
             }
         }
     }
@@ -266,7 +266,7 @@ async fn build_inputs_non_interactive(args: Args) -> Result<ResolvedDeployInputs
         _ => flag_only_template(),
     };
 
-    apply_overrides(&mut config, &overrides);
+    apply_overrides(&mut config, overrides);
 
     if let Err(errors) = config.validate() {
         return Err(invalid_deploy_config_error(errors));
@@ -320,24 +320,24 @@ fn flag_only_template() -> DeployConfig {
     template
 }
 
-fn apply_overrides(config: &mut DeployConfig, overrides: &Overrides) {
-    if let Some(v) = &overrides.app_id {
-        config.app_id = v.clone();
+fn apply_overrides(config: &mut DeployConfig, overrides: Overrides) {
+    if let Some(v) = overrides.app_id {
+        config.app_id = v;
     }
-    if let Some(v) = &overrides.qos_version {
-        config.qos_version = v.clone();
+    if let Some(v) = overrides.qos_version {
+        config.qos_version = v;
     }
-    if let Some(v) = &overrides.pivot_image_url {
-        config.pivot_container_image_url = v.clone();
+    if let Some(v) = overrides.pivot_image_url {
+        config.pivot_container_image_url = v;
     }
-    if let Some(v) = &overrides.expected_pivot_digest {
-        config.expected_pivot_digest = v.clone();
+    if let Some(v) = overrides.expected_pivot_digest {
+        config.expected_pivot_digest = v;
     }
-    if let Some(v) = &overrides.pivot_path {
-        config.pivot_path = v.clone();
+    if let Some(v) = overrides.pivot_path {
+        config.pivot_path = v;
     }
     if !overrides.pivot_args.is_empty() {
-        config.pivot_args = overrides.pivot_args.clone();
+        config.pivot_args = overrides.pivot_args;
     }
     // One-way: only ever flips false -> true.
     if overrides.dangerous_deploy_debug_mode {
@@ -395,17 +395,17 @@ fn build_validate_image_request(
 }
 
 fn build_create_intent(
-    deploy_config: &DeployConfig,
+    deploy_config: DeployConfig,
     pivot_container_image_url: String,
     pivot_container_encrypted_pull_secret: Option<String>,
 ) -> CreateTvcDeploymentIntent {
     CreateTvcDeploymentIntent {
-        app_id: deploy_config.app_id.clone(),
-        qos_version: deploy_config.qos_version.clone(),
+        app_id: deploy_config.app_id,
+        qos_version: deploy_config.qos_version,
         pivot_container_image_url,
-        pivot_path: deploy_config.pivot_path.clone(),
-        pivot_args: deploy_config.pivot_args.clone(),
-        expected_pivot_digest: deploy_config.expected_pivot_digest.clone(),
+        pivot_path: deploy_config.pivot_path,
+        pivot_args: deploy_config.pivot_args,
+        expected_pivot_digest: deploy_config.expected_pivot_digest,
         pivot_container_encrypted_pull_secret,
         debug_mode: deploy_config.dangerous_deploy_debug_mode.into(),
         nonce: None,
@@ -432,7 +432,7 @@ async fn run_with_resolved_inputs(
     inputs: ResolvedDeployInputs,
     config: &Config,
 ) -> Result<Outcome> {
-    let deploy_config = inputs.config;
+    let mut deploy_config = inputs.config;
     let pull_secret = inputs
         .pivot_pull_secret
         .as_ref()
@@ -481,13 +481,13 @@ async fn run_with_resolved_inputs(
                 },
             )?)
         }
-        None => deploy_config.pivot_container_encrypted_pull_secret.clone(),
+        None => deploy_config.pivot_container_encrypted_pull_secret.take(),
     };
 
     let validate_image_request = build_validate_image_request(
         &auth.org_id,
         &deploy_config.pivot_container_image_url,
-        pivot_container_encrypted_pull_secret.clone(),
+        pivot_container_encrypted_pull_secret,
     );
 
     let validate_image_response = auth
@@ -508,10 +508,11 @@ async fn run_with_resolved_inputs(
         )?;
     }
 
+    let app_id = deploy_config.app_id.clone();
     let intent = build_create_intent(
-        &deploy_config,
+        deploy_config,
         pinned_image_url.clone(),
-        pivot_container_encrypted_pull_secret,
+        validate_image_request.pivot_container_encrypted_pull_secret,
     );
 
     let timestamp_ms = SystemTime::now()
@@ -527,7 +528,7 @@ async fn run_with_resolved_inputs(
 
     Ok(Outcome::DeploymentCreated(DeploymentCreated {
         deployment_id: result.result.deployment_id,
-        app_id: deploy_config.app_id,
+        app_id,
         pinned_image_url,
         config_path: inputs
             .config_path
@@ -640,7 +641,7 @@ mod tests {
     /// Mirror the non-interactive resolution pipeline (read bytes → parse →
     /// apply overrides → validate) so the existing flag/env/config-file
     /// composition tests still have a single helper to call.
-    fn run_resolve(args: &Args) -> Result<DeployConfig> {
+    fn run_resolve(args: Args) -> Result<DeployConfig> {
         tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -652,7 +653,7 @@ mod tests {
                     })?,
                     None => flag_only_template(),
                 };
-                apply_overrides(&mut config, &args.overrides);
+                apply_overrides(&mut config, args.overrides);
                 if let Err(errors) = config.validate() {
                     return Err(invalid_deploy_config_error(errors));
                 }
@@ -672,7 +673,7 @@ mod tests {
             overrides,
             ..Default::default()
         };
-        let resolved = run_resolve(&args).unwrap();
+        let resolved = run_resolve(args).unwrap();
         assert_eq!(resolved.app_id, FLAG_APP_ID);
         // Untouched fields keep their file values.
         assert_eq!(resolved.qos_version, "file-qos");
@@ -686,7 +687,7 @@ mod tests {
             config_file: Some(file.path().to_path_buf()),
             ..Default::default()
         };
-        let resolved = run_resolve(&args).unwrap();
+        let resolved = run_resolve(args).unwrap();
         assert_eq!(resolved.app_id, FILE_APP_ID);
         assert_eq!(resolved.qos_version, "file-qos");
         assert_eq!(resolved.health_check_port, 4000);
@@ -694,7 +695,7 @@ mod tests {
 
     #[test]
     fn no_file_uses_flag_only_with_template_defaults() {
-        let resolved = run_resolve(&all_required_flags()).unwrap();
+        let resolved = run_resolve(all_required_flags()).unwrap();
         // Required fields come from flags.
         assert_eq!(resolved.app_id, FLAG_APP_ID);
         assert_eq!(resolved.qos_version, "flag-qos");
@@ -712,7 +713,7 @@ mod tests {
 
     #[test]
     fn no_file_no_required_flags_bails_naming_each_field() {
-        let err = run_resolve(&Default::default()).unwrap_err();
+        let err = run_resolve(Default::default()).unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("app_id"), "{msg}");
         assert!(msg.contains("pivot_container_image_url"), "{msg}");
@@ -732,7 +733,7 @@ mod tests {
             overrides,
             ..Default::default()
         };
-        let resolved = run_resolve(&args).unwrap();
+        let resolved = run_resolve(args).unwrap();
         assert_eq!(resolved.pivot_args, vec!["c"]);
     }
 
@@ -750,7 +751,7 @@ mod tests {
             overrides,
             ..Default::default()
         };
-        let resolved = run_resolve(&args).unwrap();
+        let resolved = run_resolve(args).unwrap();
         assert!(resolved.dangerous_deploy_debug_mode);
     }
 
@@ -771,7 +772,7 @@ mod tests {
             overrides,
             ..Default::default()
         };
-        let resolved = run_resolve(&args).unwrap();
+        let resolved = run_resolve(args).unwrap();
         assert!(resolved.dangerous_deploy_debug_mode);
     }
 
@@ -790,7 +791,7 @@ mod tests {
             ..Default::default()
         };
 
-        let err = run_resolve(&args).unwrap_err().to_string();
+        let err = run_resolve(args).unwrap_err().to_string();
         assert!(
             err.contains("pivotContainerEncryptedPullSecret"),
             "error should name the offending field: {err}"
@@ -807,7 +808,7 @@ mod tests {
     fn build_intent_forwards_debug_mode() {
         let mut cfg = file_config();
         cfg.dangerous_deploy_debug_mode = true;
-        let intent = build_create_intent(&cfg, "image-url".to_string(), None);
+        let intent = build_create_intent(cfg, "image-url".to_string(), None);
         assert_eq!(intent.debug_mode, Some(true));
     }
 
@@ -818,7 +819,7 @@ mod tests {
     fn build_intent_forwards_replicas_from_config() {
         let mut cfg = file_config();
         cfg.replicas = Some(2);
-        let intent = build_create_intent(&cfg, "image-url".to_string(), None);
+        let intent = build_create_intent(cfg, "image-url".to_string(), None);
         assert_eq!(intent.replicas, Some(2));
     }
 
@@ -828,7 +829,7 @@ mod tests {
     fn build_intent_omits_replicas_when_config_absent() {
         let mut cfg = file_config();
         cfg.replicas = None;
-        let intent = build_create_intent(&cfg, "image-url".to_string(), None);
+        let intent = build_create_intent(cfg, "image-url".to_string(), None);
         assert_eq!(intent.replicas, None);
     }
 
@@ -843,7 +844,7 @@ mod tests {
             config_file: Some(file.path().to_path_buf()),
             ..Default::default()
         };
-        let resolved = run_resolve(&args).unwrap();
+        let resolved = run_resolve(args).unwrap();
         assert_eq!(resolved.replicas, Some(2));
     }
 
@@ -863,7 +864,7 @@ mod tests {
             overrides,
             ..Default::default()
         };
-        let resolved = run_resolve(&args).unwrap();
+        let resolved = run_resolve(args).unwrap();
         assert_eq!(resolved.replicas, Some(5));
     }
 
@@ -883,7 +884,7 @@ mod tests {
             overrides,
             ..Default::default()
         };
-        let resolved = run_resolve(&args).unwrap();
+        let resolved = run_resolve(args).unwrap();
         assert_eq!(resolved.replicas, Some(3));
     }
 
@@ -981,7 +982,7 @@ mod tests {
 
         let template = flag_only_template();
         let mut resolved = flag_only_template();
-        apply_overrides(&mut resolved, &args.overrides);
+        apply_overrides(&mut resolved, args.overrides);
 
         // Each override moved off its template default ...
         assert_ne!(resolved.app_id, template.app_id);
@@ -1033,7 +1034,7 @@ mod tests {
             ..all_required_flags()
         };
 
-        let resolved = run_resolve(&args).unwrap();
+        let resolved = run_resolve(args).unwrap();
         assert_eq!(resolved.app_id, FLAG_APP_ID);
         assert_eq!(resolved.qos_version, "flag-qos");
         assert_eq!(resolved.pivot_container_image_url, "flag-image");
