@@ -276,17 +276,18 @@ impl DeployConfig {
     }
 }
 
+/// Supported enclave instance sizes as `(cpus, ram in Gi)`: small, medium, large.
+const INSTANCE_SIZES: [(u32, u32); 3] = [(2, 1), (6, 24), (14, 48)];
+
 fn valid_instance_size(cpus: Option<u32>, ram: Option<u32>) -> bool {
     match (cpus, ram) {
-        (None, None) => true,         // defaults
-        (Some(2), Some(1)) => true,   // small
-        (Some(6), Some(24)) => true,  // medium
-        (Some(14), Some(48)) => true, // large
-        (_, _) => false,
+        (None, None) => true, // backend default
+        (Some(cpus), Some(ram)) => INSTANCE_SIZES.contains(&(cpus, ram)),
+        (Some(_), None) | (None, Some(_)) => false,
     }
 }
 
-#[derive(Debug, Clone, Error)]
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum DeployConfigValidationError {
     #[error("{field} contains placeholder value {placeholder}")]
     Placeholder {
@@ -301,10 +302,9 @@ pub enum DeployConfigValidationError {
     )]
     PullSecretPlaceholder { placeholder: String },
     #[error(
-        r#"instanceSizeCpus and instanceSizeRam must both be omitted or be one of
-	instanceSizeCpus: 2,  instanceSizeRam: 1   (small, default)
-	instanceSizeCpus: 6,  instanceSizeRam: 24  (medium)
-	instanceSizeCpus: 14, instanceSizeRam: 48  (large)"#
+        "instanceSizeCpus and instanceSizeRam must both be omitted or match a supported size \
+         (instanceSizeCpus/instanceSizeRam): {}",
+        INSTANCE_SIZES.map(|(cpus, ram)| format!("{cpus}/{ram}")).join(", ")
     )]
     InvalidInstanceSize,
 }
@@ -602,52 +602,75 @@ mod tests {
     }
 
     #[test]
-    fn validate_accepts_each_supported_instance_size() {
-        for (cpus, ram) in [
-            (None, None),
-            (Some(2), Some(1)),
-            (Some(6), Some(24)),
-            (Some(14), Some(48)),
-        ] {
-            let mut config = valid_config();
-            config.instance_size_cpus = cpus;
-            config.instance_size_ram = ram;
-            assert!(config.validate().is_ok(), "should accept {cpus:?}/{ram:?}");
-        }
+    fn validate_accepts_omitted_instance_size() {
+        let mut config = valid_config();
+        config.instance_size_cpus = None;
+        config.instance_size_ram = None;
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn validate_accepts_supported_instance_size() {
+        let [(cpus, ram), ..] = INSTANCE_SIZES;
+        let mut config = valid_config();
+        config.instance_size_cpus = Some(cpus);
+        config.instance_size_ram = Some(ram);
+        assert!(config.validate().is_ok());
+    }
+
+    /// The pair is derived from the supported set, so it stays outside the set
+    /// when sizes are added or changed.
+    #[test]
+    fn validate_rejects_instance_size_outside_supported_set() {
+        let max_cpus = INSTANCE_SIZES.iter().map(|(cpus, _)| *cpus).max().unwrap();
+        let max_ram = INSTANCE_SIZES.iter().map(|(_, ram)| *ram).max().unwrap();
+        let mut config = valid_config();
+        config.instance_size_cpus = Some(max_cpus + 1);
+        config.instance_size_ram = Some(max_ram + 1);
+        let errors = config.validate().unwrap_err();
+        assert_eq!(errors.0, [DeployConfigValidationError::InvalidInstanceSize]);
+        assert!(errors.has_non_placeholder_error());
+    }
+
+    /// CPUs and RAM that each belong to a supported size are still rejected
+    /// when they come from different sizes.
+    #[test]
+    fn validate_rejects_instance_size_mixing_supported_sizes() {
+        let [(cpus, _), (_, ram), _] = INSTANCE_SIZES;
+        let mut config = valid_config();
+        config.instance_size_cpus = Some(cpus);
+        config.instance_size_ram = Some(ram);
+        let errors = config.validate().unwrap_err();
+        assert_eq!(errors.0, [DeployConfigValidationError::InvalidInstanceSize]);
+    }
+
+    /// Both keys or neither: half of a supported size is rejected.
+    #[test]
+    fn validate_rejects_supported_instance_size_cpus_without_ram() {
+        let [(cpus, _), ..] = INSTANCE_SIZES;
+        let mut config = valid_config();
+        config.instance_size_cpus = Some(cpus);
+        config.instance_size_ram = None;
+        let errors = config.validate().unwrap_err();
+        assert_eq!(errors.0, [DeployConfigValidationError::InvalidInstanceSize]);
+    }
+
+    #[test]
+    fn validate_rejects_supported_instance_size_ram_without_cpus() {
+        let [(_, ram), ..] = INSTANCE_SIZES;
+        let mut config = valid_config();
+        config.instance_size_cpus = None;
+        config.instance_size_ram = Some(ram);
+        let errors = config.validate().unwrap_err();
+        assert_eq!(errors.0, [DeployConfigValidationError::InvalidInstanceSize]);
     }
 
     /// The message must name the keys the parser actually accepts (the
-    /// `camelCase` serde names), so a user who pastes a listed pair into
-    /// `deploy.json` passes validation instead of adding ignored fields.
+    /// `camelCase` serde names), not the Rust field names.
     #[test]
-    fn validate_rejects_unsupported_instance_size_naming_real_config_keys() {
-        let mut config = valid_config();
-        config.instance_size_cpus = Some(4);
-        config.instance_size_ram = Some(8);
-        let errors = config.validate().unwrap_err();
-        assert!(matches!(
-            errors.0.as_slice(),
-            [DeployConfigValidationError::InvalidInstanceSize]
-        ));
-        assert!(errors.has_non_placeholder_error());
-        assert_eq!(
-            errors.to_string(),
-            r#"instanceSizeCpus and instanceSizeRam must both be omitted or be one of
-	instanceSizeCpus: 2,  instanceSizeRam: 1   (small, default)
-	instanceSizeCpus: 6,  instanceSizeRam: 24  (medium)
-	instanceSizeCpus: 14, instanceSizeRam: 48  (large)"#
-        );
-    }
-
-    /// Half-specified sizes are rejected too: both keys or neither.
-    #[test]
-    fn validate_rejects_instance_size_with_only_one_key() {
-        let mut config = valid_config();
-        config.instance_size_cpus = Some(2);
-        let errors = config.validate().unwrap_err();
-        assert!(matches!(
-            errors.0.as_slice(),
-            [DeployConfigValidationError::InvalidInstanceSize]
-        ));
+    fn invalid_instance_size_message_names_real_config_keys() {
+        let msg = DeployConfigValidationError::InvalidInstanceSize.to_string();
+        assert!(msg.contains("instanceSizeCpus"), "{msg}");
+        assert!(msg.contains("instanceSizeRam"), "{msg}");
     }
 }
