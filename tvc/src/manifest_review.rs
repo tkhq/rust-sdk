@@ -15,7 +15,7 @@ use qos_core::protocol::services::boot::VersionedManifestEnvelope;
 use std::ops::Deref;
 
 /// Flags choosing how the share holder reviews the manifest.
-#[derive(Debug, ClapArgs)]
+#[derive(Clone, Copy, Debug, ClapArgs)]
 pub(crate) struct ManifestReviewArgs {
     /// DANGEROUS: skip interactive prompts for approving each aspect of the manifest
     /// before the share is re-encrypted to it.

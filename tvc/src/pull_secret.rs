@@ -44,6 +44,7 @@ fn encryption_public_key_for_api_base_url(api_base_url: &str) -> Result<&'static
 }
 
 /// Ownership and acceptance deadline for an encrypted pull secret.
+#[derive(Clone, Copy)]
 pub struct PullSecretMeta {
     pub user_id: Uuid,
     pub organization_id: Uuid,

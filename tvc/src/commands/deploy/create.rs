@@ -224,7 +224,7 @@ async fn build_inputs_interactive(
         match deploy_config.validate() {
             Ok(()) => break,
             Err(errors) if errors.has_non_placeholder_error() => {
-                return Err(invalid_deploy_config_error(errors));
+                return Err(invalid_deploy_config_error(&errors));
             }
             _ => {
                 config_updated = true;
@@ -269,7 +269,7 @@ async fn build_inputs_non_interactive(args: Args) -> Result<ResolvedDeployInputs
     apply_overrides(&mut config, overrides);
 
     if let Err(errors) = config.validate() {
-        return Err(invalid_deploy_config_error(errors));
+        return Err(invalid_deploy_config_error(&errors));
     }
 
     Ok(ResolvedDeployInputs {
@@ -355,7 +355,7 @@ fn apply_overrides(config: &mut DeployConfig, overrides: Overrides) {
     }
 }
 
-fn invalid_deploy_config_error(errors: DeployConfigValidationErrors) -> anyhow::Error {
+fn invalid_deploy_config_error(errors: &DeployConfigValidationErrors) -> anyhow::Error {
     anyhow!("invalid deploy config: {}", errors)
 }
 
@@ -655,7 +655,7 @@ mod tests {
                 };
                 apply_overrides(&mut config, args.overrides);
                 if let Err(errors) = config.validate() {
-                    return Err(invalid_deploy_config_error(errors));
+                    return Err(invalid_deploy_config_error(&errors));
                 }
                 anyhow::Ok(config)
             })

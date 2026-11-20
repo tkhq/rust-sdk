@@ -13,6 +13,9 @@ categories = ["command-line-utilities", "cryptography"]
 
 [lints.clippy]
 mod_module_files = "deny"
+needless_pass_by_value = "deny"
+trivially_copy_pass_by_ref = "deny"
+implicit_clone = "deny"
 
 [dependencies]
 qos_client = { workspace = true }

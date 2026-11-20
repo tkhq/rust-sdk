@@ -193,7 +193,7 @@ async fn build_app_config_interactive(
         match app_config.validate() {
             Ok(()) => break,
             Err(errors) if errors.has_non_placeholder_error() => {
-                return Err(invalid_app_config_error(&args.config_file, errors));
+                return Err(invalid_app_config_error(&args.config_file, &errors));
             }
             _ => {
                 changed = true;
@@ -215,7 +215,7 @@ async fn build_app_config_non_interactive(args: &Args) -> Result<AppConfig> {
     let config = parse_app_config(&bytes, &args.config_file)?;
 
     if let Err(errors) = config.validate() {
-        return Err(invalid_app_config_error(&args.config_file, errors));
+        return Err(invalid_app_config_error(&args.config_file, &errors));
     }
 
     Ok(config)
@@ -232,7 +232,7 @@ fn parse_app_config(content: &str, path: &Path) -> Result<AppConfig> {
         .with_context(|| format!("failed to parse config file: {}", path.display()))
 }
 
-fn invalid_app_config_error(path: &Path, errors: AppConfigValidationErrors) -> anyhow::Error {
+fn invalid_app_config_error(path: &Path, errors: &AppConfigValidationErrors) -> anyhow::Error {
     anyhow!("invalid config file: {}: {}", path.display(), errors)
 }
 
