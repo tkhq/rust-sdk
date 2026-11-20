@@ -316,8 +316,16 @@
       "intentType": "DeleteOauth2CredentialIntent",
       "resultType": "DeleteOauth2CredentialResult"
     },
+    "ACTIVITY_TYPE_INIT_OAUTH2_AUTHENTICATE": {
+      "intentType": "InitOauth2AuthenticateIntent",
+      "resultType": "InitOauth2AuthenticateResult"
+    },
     "ACTIVITY_TYPE_OAUTH2_AUTHENTICATE": {
       "intentType": "Oauth2AuthenticateIntent",
+      "resultType": "Oauth2AuthenticateResult"
+    },
+    "ACTIVITY_TYPE_OAUTH2_AUTHENTICATE_V2": {
+      "intentType": "Oauth2AuthenticateIntentV2",
       "resultType": "Oauth2AuthenticateResult"
     },
     "ACTIVITY_TYPE_DELETE_WALLET_ACCOUNTS": {

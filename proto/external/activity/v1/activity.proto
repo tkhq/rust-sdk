@@ -1929,11 +1929,11 @@ message PolicyEvaluation {
   external.data.v1.Timestamp created_at = 6 [(google.api.field_behavior) = REQUIRED];
 }
 
-message Oauth2AuthenticateRequest {
+message InitOauth2AuthenticateRequest {
   string type = 1 [
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
-      enum: ["ACTIVITY_TYPE_OAUTH2_AUTHENTICATE"]
+      enum: ["ACTIVITY_TYPE_INIT_OAUTH2_AUTHENTICATE"]
     }
   ];
   string timestamp_ms = 2 [
@@ -1944,7 +1944,26 @@ message Oauth2AuthenticateRequest {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
   ];
-  immutable.activity.v1.Oauth2AuthenticateIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  immutable.activity.v1.InitOauth2AuthenticateIntent parameters = 4 [(google.api.field_behavior) = REQUIRED];
+  optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
+}
+
+message Oauth2AuthenticateRequest {
+  string type = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
+      enum: ["ACTIVITY_TYPE_OAUTH2_AUTHENTICATE_V2"]
+    }
+  ];
+  string timestamp_ms = 2 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Timestamp (in milliseconds) of the request, used to verify liveness of user requests."}
+  ];
+  string organization_id = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Unique identifier for a given Organization."}
+  ];
+  immutable.activity.v1.Oauth2AuthenticateIntentV2 parameters = 4 [(google.api.field_behavior) = REQUIRED];
   optional bool generate_app_proofs = 5 [(google.api.field_behavior) = OPTIONAL];
 }
 

@@ -460,6 +460,13 @@ pub enum SignatureScheme {
     /// and the signature is an ECDSA-P256-SHA256 signature over those bytes.
     #[serde(rename = "SIGNATURE_SCHEME_TK_QUORUM_P256_SIGNING_KEY")]
     TkQuorumP256SigningKey = 8,
+    /// ECDSA-P256-SHA256 with ASN.1 DER signatures, hex-encoded in Signature.signature.
+    /// Signature.message is hex of the exact blob bytes; public_key is hex SEC1.
+    /// The signed input is a per-type domain prefix followed by the blob bytes.
+    /// The verifier supplies the expected prefix. A new blob type gets a new prefix, not a new scheme.
+    /// First blob type: external signer key records use "TURNKEY_EXTERNAL_SIGNER_KEY_RECORD_V1\n".
+    #[serde(rename = "SIGNATURE_SCHEME_TK_SIGNED_BLOB_P256")]
+    TkSignedBlobP256 = 9,
 }
 impl SignatureScheme {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -477,6 +484,7 @@ impl SignatureScheme {
             Self::TkApiSecp256k1Eip191 => "SIGNATURE_SCHEME_TK_API_SECP256K1_EIP191",
             Self::TkAttestedP256 => "SIGNATURE_SCHEME_TK_ATTESTED_P256",
             Self::TkQuorumP256SigningKey => "SIGNATURE_SCHEME_TK_QUORUM_P256_SIGNING_KEY",
+            Self::TkSignedBlobP256 => "SIGNATURE_SCHEME_TK_SIGNED_BLOB_P256",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -495,6 +503,7 @@ impl SignatureScheme {
             "SIGNATURE_SCHEME_TK_QUORUM_P256_SIGNING_KEY" => {
                 Some(Self::TkQuorumP256SigningKey)
             }
+            "SIGNATURE_SCHEME_TK_SIGNED_BLOB_P256" => Some(Self::TkSignedBlobP256),
             _ => None,
         }
     }
