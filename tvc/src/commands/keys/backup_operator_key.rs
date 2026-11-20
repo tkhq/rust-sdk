@@ -112,7 +112,7 @@ impl Run for Args {
                 .ok_or_else(|| anyhow!("operation cancelled by user: backup"))?,
         };
 
-        back_up(alias.to_string(), source.clone(), destination).await
+        back_up(alias.clone(), source.clone(), destination).await
     }
 }
 

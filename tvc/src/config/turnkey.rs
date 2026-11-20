@@ -403,6 +403,7 @@ pub enum SelectHostedOperatorError {
 }
 
 /// The operator backend a newly added organization starts with.
+#[derive(Clone, Copy)]
 pub enum NewOrgOperator {
     /// A local key file at the alias's default path, generated on first
     /// login.

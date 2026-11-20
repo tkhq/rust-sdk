@@ -95,7 +95,7 @@ impl Cli {
     pub async fn run() -> ExitCode {
         let args = match Cli::try_parse() {
             Ok(args) => args,
-            Err(error) => return handle_parse_error(error),
+            Err(error) => return handle_parse_error(&error),
         };
         debug!(
             command = args.command.name(),
@@ -158,12 +158,12 @@ const USAGE_ERROR_EXIT_CODE: i32 = 2;
 /// clap's own text (never JSON). Real parse failures emit a single
 /// `command_error`/`usage_error` NDJSON line on stdout when JSON was requested,
 /// otherwise terminal-safe text on clap's chosen stream.
-fn handle_parse_error(error: clap::Error) -> ExitCode {
+fn handle_parse_error(error: &clap::Error) -> ExitCode {
     match error.kind() {
         // Help/version output must never be JSON.
         ErrorKind::DisplayHelp
         | ErrorKind::DisplayVersion
-        | ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand => print_parse_error(&error),
+        | ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand => print_parse_error(error),
         _ => {
             if args_request_json_output(std::env::args_os()) {
                 // StyledStr's Display omits clap's styling. JSON escaping
@@ -179,7 +179,7 @@ fn handle_parse_error(error: clap::Error) -> ExitCode {
                 let _ = writeln!(stdout, "{msg}");
                 std::process::exit(USAGE_ERROR_EXIT_CODE)
             } else {
-                print_parse_error(&error)
+                print_parse_error(error)
             }
         }
     }

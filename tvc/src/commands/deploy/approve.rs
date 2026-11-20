@@ -1451,8 +1451,8 @@ mod tests {
             .expect("fixture manifest should be valid JSON")
     }
 
-    fn manifest_from_value(value: serde_json::Value) -> VersionedManifest {
-        VersionedManifest::try_from_slice_compat(&serde_json::to_vec(&value).unwrap())
+    fn manifest_from_value(value: &serde_json::Value) -> VersionedManifest {
+        VersionedManifest::try_from_slice_compat(&serde_json::to_vec(value).unwrap())
             .expect("mutated fixture manifest should parse")
     }
 
@@ -1461,7 +1461,7 @@ mod tests {
         let pivot = value["pivot"].as_object_mut().unwrap();
         pivot.remove("bridgeConfig");
         pivot.remove("debugMode");
-        let manifest = manifest_from_value(value);
+        let manifest = manifest_from_value(&value);
         assert!(matches!(manifest, VersionedManifest::V0(_)));
         manifest
     }
@@ -1473,7 +1473,7 @@ mod tests {
         if let Some(resolvers) = dns_resolvers {
             value["dns"] = serde_json::json!({ "resolvers": resolvers });
         }
-        let manifest = manifest_from_value(value);
+        let manifest = manifest_from_value(&value);
         assert!(matches!(manifest, VersionedManifest::V2(_)));
         manifest
     }
@@ -1528,7 +1528,7 @@ mod tests {
             { "type": "client", "port": 4001 },
         ]);
         value["pivot"]["debugMode"] = true.into();
-        let rendered = render_pivot(&manifest_from_value(value));
+        let rendered = render_pivot(&manifest_from_value(&value));
         assert!(rendered.contains(
             "Client bridge: requests transparent egress; configured host=api.example.com, port=4000 ignored"
         ));
@@ -1564,7 +1564,7 @@ mod tests {
     fn render_pivot_empty_bridge_config_is_explicit() {
         let mut value = fixture_json();
         value["pivot"]["bridgeConfig"] = serde_json::json!([]);
-        let rendered = render_pivot(&manifest_from_value(value));
+        let rendered = render_pivot(&manifest_from_value(&value));
         assert!(rendered.contains("Bridge Config: (none)"));
     }
 
