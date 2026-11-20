@@ -22,6 +22,7 @@ qos_nsm = { workspace = true }
 qos_p256 = { workspace = true }
 turnkey_api_key_stamper = { workspace = true }
 turnkey_client = { workspace = true }
+turnkey_proofs = { workspace = true }
 turnkey_enclave_encrypt = { workspace = true }
 
 anyhow = { workspace = true }
@@ -40,6 +41,7 @@ reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true, features = ["raw_value"] }
 serde_with = { workspace = true }
+tempfile = { workspace = true }
 thiserror = { workspace = true }
 toml = { workspace = true }
 tokio = { workspace = true, features = ["fs", "io-util", "rt"] }
@@ -59,5 +61,4 @@ predicates = { workspace = true }
 qos_nsm = { workspace = true, features = ["mock"] }
 rexpect = { workspace = true }
 strum = { workspace = true }
-tempfile = { workspace = true }
 wiremock = { workspace = true }

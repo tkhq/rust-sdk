@@ -10,6 +10,7 @@ use crate::{config::turnkey::Config, outcome, output::StdCtx};
 pub mod app;
 pub mod app_status;
 pub mod confirmation;
+pub mod creation;
 pub mod deploy;
 pub mod display;
 pub mod keys;

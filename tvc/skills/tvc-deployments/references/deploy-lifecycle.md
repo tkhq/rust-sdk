@@ -181,6 +181,25 @@ The hosted path above lets Turnkey hold the operator quorum key. For the self-pr
 
 `quorum_key_metadata` and share files contain sensitive material, keep them out of source control.
 
+## Resume a hosted creation
+
+```bash
+tvc operator create resume <LOCAL_OPERATION_UUID> --activity-id <ACTIVITY_ID>
+tvc keys create-quorum-key resume <LOCAL_OPERATION_UUID> --activity-id <ACTIVITY_ID>
+```
+
+Use the IDs printed by the original command. If the activity ID was missing
+from the output, find it in Turnkey and pass it explicitly.
+
+Pending creation returns `creation_pending` with `operationId`, nullable
+`activityId`, and `status` (`processing`, `consensus_needed`, or
+`authenticators_needed`). No keys have been accepted. Use the same organization
+and API environment as the original submission. Approval happens outside this
+command. On completion, resume returns `operator_created` or
+`quorum_key_created` only after proof acceptance against the saved request.
+A rejected or failed activity returns an error. A candidate activity ID is an
+untrusted lookup hint and does not replace the saved request fingerprints.
+
 ## Quick reference: outcome reasons you will see
 
-`operator_created`, `app_config_created`, `app_created`, `deployment_config_created`, `deployment_created`, `manifest_approval_posted` (carries nullable `quorumReached`) / `manifest_approval_generated` / `manifest_approval_dry_run` / `manifest_approval_already_posted`, `live_deployment_set`, `deployment_runtime_status`, `deployment_status`, `app_status`, `apps_listed`, `debug_logs_fetched` (+ streamed `debug_log_line`), `deployment_deleted`, `deployment_restored`, `app_deleted`, `version`.
+`operator_created`, `creation_pending`, `quorum_key_created`, `app_config_created`, `app_created`, `deployment_config_created`, `deployment_created`, `manifest_approval_posted` (carries nullable `quorumReached`) / `manifest_approval_generated` / `manifest_approval_dry_run` / `manifest_approval_already_posted`, `live_deployment_set`, `deployment_runtime_status`, `deployment_status`, `app_status`, `apps_listed`, `debug_logs_fetched` (+ streamed `debug_log_line`), `deployment_deleted`, `deployment_restored`, `app_deleted`, `version`.

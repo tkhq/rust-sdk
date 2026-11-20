@@ -33,6 +33,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 use thiserror::Error;
+use turnkey_proofs::tvc::P256PublicKey;
 use uuid::Uuid;
 
 /// A validated, uncompressed P-256 operator public key.
@@ -83,6 +84,12 @@ impl FromStr for OperatorPublicKey {
 impl Display for OperatorPublicKey {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         formatter.write_str(&hex::encode(self.0.to_encoded_point(false).as_bytes()))
+    }
+}
+
+impl From<OperatorPublicKey> for P256PublicKey {
+    fn from(key: OperatorPublicKey) -> Self {
+        key.0.into()
     }
 }
 

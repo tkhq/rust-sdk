@@ -3,7 +3,7 @@
 
 use super::{OperatorPublicKey, timestamp_ms};
 use crate::client::AuthenticatedClient;
-use crate::config::turnkey::{Config, HostedOperatorRecord, OperatorRecord, OperatorRecordKind};
+use crate::config::turnkey::{Config, HostedOperatorRecord};
 use crate::pair::{Signer, SignerFuture};
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use p256::elliptic_curve::sec1::ToEncodedPoint;
@@ -12,7 +12,7 @@ use std::str::FromStr;
 use turnkey_client::{
     TurnkeyClientError,
     generated::{
-        CreateTvcOperatorResult, SignRawPayloadIntentV2, SignRawPayloadResult,
+        SignRawPayloadIntentV2, SignRawPayloadResult,
         immutable::common::v1::{HashFunction, PayloadEncoding},
     },
 };
@@ -108,53 +108,6 @@ impl OperatorKeyPair {
         composite.extend_from_slice(self.encrypt.deref().0.to_encoded_point(false).as_bytes());
         composite.extend_from_slice(self.sign.deref().0.to_encoded_point(false).as_bytes());
         composite
-    }
-}
-
-/// The context of a create-operator request coupled with its API result,
-/// ready to parse into a registry-ready record.
-pub(crate) struct CreateOperatorRequestResult {
-    pub(crate) name: String,
-    pub(crate) path: String,
-    pub(crate) result: CreateTvcOperatorResult,
-}
-
-impl TryFrom<CreateOperatorRequestResult> for OperatorRecord {
-    type Error = anyhow::Error;
-
-    fn try_from(result: CreateOperatorRequestResult) -> Result<Self> {
-        let CreateOperatorRequestResult { name, path, result } = result;
-
-        let CreateTvcOperatorResult {
-            wallet_id,
-            operator_id,
-            encrypt_public_key,
-            sign_public_key,
-        } = result;
-
-        let wallet_id =
-            Uuid::parse_str(&wallet_id).map_err(|_| anyhow!("created wallet ID must be a UUID"))?;
-        let operator_id = Uuid::parse_str(&operator_id)
-            .map_err(|_| anyhow!("created operator ID must be a UUID"))?;
-        let encrypt_public_key = encrypt_public_key
-            .parse()
-            .context("create operator key parsing error")?;
-        let sign_public_key = sign_public_key
-            .parse()
-            .context("create operator key parsing error")?;
-        let keys = OperatorKeyPair::try_new(encrypt_public_key, sign_public_key)?;
-
-        Ok(Self {
-            name,
-            kind: OperatorRecordKind::Hosted(HostedOperatorRecord {
-                operator_id,
-                wallet_id,
-                path,
-                encrypt_public_key: keys.encrypt.to_string(),
-                sign_public_key: keys.sign.to_string(),
-                extra: toml::Table::new(),
-            }),
-        })
     }
 }
 
@@ -368,7 +321,8 @@ pub(crate) fn hosted_activity_error(operation: &str, error: TurnkeyClientError) 
 mod tests {
     use super::*;
     use crate::config::turnkey::{
-        LocalOperatorRecord, OperatorKind, OrgConfig, SelectHostedOperatorError,
+        LocalOperatorRecord, OperatorKind, OperatorRecord, OperatorRecordKind, OrgConfig,
+        SelectHostedOperatorError,
     };
     use crate::operator::OperatorPublicKeyParseError;
     use qos_p256::P256Pair;
@@ -608,59 +562,6 @@ mod tests {
         };
 
         assert!(config.find_hosted_operator(&operator_id).unwrap().is_none());
-    }
-
-    #[test]
-    fn validates_and_normalizes_creation_result() {
-        let (encrypt_public_key, sign_public_key) = public_keys();
-        let result = CreateTvcOperatorResult {
-            wallet_id: WALLET_ID.to_uppercase(),
-            operator_id: OPERATOR_ID.to_uppercase(),
-            encrypt_public_key: encrypt_public_key.to_uppercase(),
-            sign_public_key: sign_public_key.to_uppercase(),
-        };
-
-        let result = CreateOperatorRequestResult {
-            name: "operator".into(),
-            path: DEFAULT_HOSTED_OPERATOR_BASE_PATH.into(),
-            result,
-        };
-
-        let record = OperatorRecord::try_from(result).unwrap();
-
-        assert_eq!(
-            record,
-            OperatorRecord {
-                name: "operator".to_string(),
-                kind: OperatorRecordKind::Hosted(HostedOperatorRecord {
-                    operator_id: Uuid::parse_str(OPERATOR_ID).unwrap(),
-                    wallet_id: Uuid::parse_str(WALLET_ID).unwrap(),
-                    path: DEFAULT_HOSTED_OPERATOR_BASE_PATH.to_string(),
-                    encrypt_public_key,
-                    sign_public_key,
-                    extra: toml::Table::new(),
-                }),
-            }
-        );
-    }
-
-    #[test]
-    fn rejects_malformed_operator_id_from_creation_result() {
-        let (encrypt_public_key, sign_public_key) = public_keys();
-        let name = "operator".into();
-        let path = DEFAULT_HOSTED_OPERATOR_BASE_PATH.into();
-
-        let result = CreateTvcOperatorResult {
-            wallet_id: WALLET_ID.to_string(),
-            operator_id: "not-a-uuid".to_string(),
-            encrypt_public_key,
-            sign_public_key,
-        };
-
-        let result = CreateOperatorRequestResult { name, path, result };
-        let error = OperatorRecord::try_from(result).unwrap_err();
-
-        assert_eq!(error.to_string(), "created operator ID must be a UUID");
     }
 
     #[test]

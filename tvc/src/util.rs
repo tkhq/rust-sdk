@@ -2,7 +2,7 @@
 
 use anyhow::Context;
 use serde::de::DeserializeOwned;
-use std::path::Path;
+use std::{fs, os::unix::fs::PermissionsExt, path::Path};
 
 /// Read a file to string with contextual error information.
 ///
@@ -39,9 +39,7 @@ pub(crate) async fn write_owner_only_file(
     path: &Path,
     contents: impl AsRef<[u8]>,
 ) -> std::io::Result<()> {
-    use std::os::unix::fs::PermissionsExt as _;
     use tokio::io::AsyncWriteExt as _;
-
     let mut file = tokio::fs::OpenOptions::new()
         .write(true)
         .create(true)
@@ -49,7 +47,7 @@ pub(crate) async fn write_owner_only_file(
         .mode(0o600)
         .open(path)
         .await?;
-    file.set_permissions(std::fs::Permissions::from_mode(0o600))
+    file.set_permissions(fs::Permissions::from_mode(0o600))
         .await?;
     file.write_all(contents.as_ref()).await?;
     file.flush().await
