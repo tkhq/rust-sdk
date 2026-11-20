@@ -276,7 +276,7 @@ async fn fetch_debug_logs(
     request: DebugLogQueryRequest,
 ) -> anyhow::Result<GetTvcDeploymentDebugLogsResponse> {
     client
-        .get_tvc_deployment_debug_logs(request.into())
+        .get_tvc_deployment_debug_logs(&request.into())
         .await
         .context("failed to fetch debug logs")
 }

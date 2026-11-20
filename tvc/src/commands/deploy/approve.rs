@@ -205,7 +205,7 @@ impl Run for Args {
                     let auth = build_client(&config).await?;
                     let organization_operators = auth
                         .client
-                        .get_tvc_operators(GetTvcOperatorsRequest {
+                        .get_tvc_operators(&GetTvcOperatorsRequest {
                             organization_id: auth.org_id.clone(),
                         })
                         .await
@@ -1113,7 +1113,7 @@ async fn post_approval_to_api(
                 deployment_id: deploy_id.to_string(),
             };
 
-            match auth.client.get_tvc_deployment(request).await {
+            match auth.client.get_tvc_deployment(&request).await {
                 Ok(response) => match response.tvc_deployment {
                     Some(deployment) => {
                         let approvals = deployment

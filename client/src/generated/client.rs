@@ -10,9 +10,9 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Get basic information about your current API or WebAuthn user and their organization. Affords sub-organization lookups via parent organization for WebAuthn or API key users.
     pub async fn get_whoami(
         &self,
-        request: coordinator::GetWhoamiRequest,
+        request: &coordinator::GetWhoamiRequest,
     ) -> Result<coordinator::GetWhoamiResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/whoami".to_string())
+        self.process_request(request, "/public/v1/query/whoami")
             .await
     }
     /// Get sub-organizations
@@ -20,9 +20,9 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Get all suborg IDs (verified and unverified) associated with a given parent organization ID and an optional filter.
     pub async fn get_sub_org_ids(
         &self,
-        request: coordinator::GetSubOrgIdsRequest,
+        request: &coordinator::GetSubOrgIdsRequest,
     ) -> Result<coordinator::GetSubOrgIdsResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/list_suborgs".to_string())
+        self.process_request(request, "/public/v1/query/list_suborgs")
             .await
     }
     /// Get verified sub-organizations
@@ -30,22 +30,19 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Get all verified suborg IDs associated with a given parent organization ID and an optional filter.
     pub async fn get_verified_sub_org_ids(
         &self,
-        request: coordinator::GetVerifiedSubOrgIdsRequest,
+        request: &coordinator::GetVerifiedSubOrgIdsRequest,
     ) -> Result<coordinator::GetVerifiedSubOrgIdsResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/list_verified_suborgs".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/list_verified_suborgs")
+            .await
     }
     /// Get activity
     ///
     /// Get details about an activity.
     pub async fn get_activity(
         &self,
-        request: coordinator::GetActivityRequest,
+        request: &coordinator::GetActivityRequest,
     ) -> Result<coordinator::ActivityResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/get_activity".to_string())
+        self.process_request(request, "/public/v1/query/get_activity")
             .await
     }
     /// List activities
@@ -53,9 +50,9 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// List all activities within an organization.
     pub async fn get_activities(
         &self,
-        request: coordinator::GetActivitiesRequest,
+        request: &coordinator::GetActivitiesRequest,
     ) -> Result<coordinator::GetActivitiesResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/list_activities".to_string())
+        self.process_request(request, "/public/v1/query/list_activities")
             .await
     }
     /// Approve activity
@@ -74,7 +71,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             organization_id,
             generate_app_proofs: self.generate_app_proofs(),
         };
-        self.process_activity(&request, "/public/v1/submit/approve_activity".to_string())
+        self.process_activity(&request, "/public/v1/submit/approve_activity")
             .await
     }
     /// Reject activity
@@ -93,7 +90,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             organization_id,
             generate_app_proofs: self.generate_app_proofs(),
         };
-        self.process_activity(&request, "/public/v1/submit/reject_activity".to_string())
+        self.process_activity(&request, "/public/v1/submit/reject_activity")
             .await
     }
     /// Get user
@@ -101,9 +98,9 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Get details about a user.
     pub async fn get_user(
         &self,
-        request: coordinator::GetUserRequest,
+        request: &coordinator::GetUserRequest,
     ) -> Result<coordinator::GetUserResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/get_user".to_string())
+        self.process_request(request, "/public/v1/query/get_user")
             .await
     }
     /// List users
@@ -111,9 +108,9 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// List all users within an organization.
     pub async fn get_users(
         &self,
-        request: coordinator::GetUsersRequest,
+        request: &coordinator::GetUsersRequest,
     ) -> Result<coordinator::GetUsersResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/list_users".to_string())
+        self.process_request(request, "/public/v1/query/list_users")
             .await
     }
     /// Delete users
@@ -133,7 +130,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/delete_users".to_string())
+            .process_activity(&request, "/public/v1/submit/delete_users")
             .await?;
         let inner = activity
             .result
@@ -172,7 +169,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/create_policy".to_string())
+            .process_activity(&request, "/public/v1/submit/create_policy")
             .await?;
         let inner = activity
             .result
@@ -211,7 +208,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/create_policies".to_string())
+            .process_activity(&request, "/public/v1/submit/create_policies")
             .await?;
         let inner = activity
             .result
@@ -250,7 +247,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/update_policy".to_string())
+            .process_activity(&request, "/public/v1/submit/update_policy")
             .await?;
         let inner = activity
             .result
@@ -289,7 +286,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/delete_policy".to_string())
+            .process_activity(&request, "/public/v1/submit/delete_policy")
             .await?;
         let inner = activity
             .result
@@ -328,7 +325,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/delete_policies".to_string())
+            .process_activity(&request, "/public/v1/submit/delete_policies")
             .await?;
         let inner = activity
             .result
@@ -355,9 +352,9 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// List all policies within an organization.
     pub async fn get_policies(
         &self,
-        request: coordinator::GetPoliciesRequest,
+        request: &coordinator::GetPoliciesRequest,
     ) -> Result<coordinator::GetPoliciesResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/list_policies".to_string())
+        self.process_request(request, "/public/v1/query/list_policies")
             .await
     }
     /// Get policy
@@ -365,9 +362,9 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Get details about a policy.
     pub async fn get_policy(
         &self,
-        request: coordinator::GetPolicyRequest,
+        request: &coordinator::GetPolicyRequest,
     ) -> Result<coordinator::GetPolicyResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/get_policy".to_string())
+        self.process_request(request, "/public/v1/query/get_policy")
             .await
     }
     /// Get active policies
@@ -375,9 +372,9 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// For each policy in an organization, report whether it is currently active based on the enclave's trusted timestamp and the policy's time window (if any). Policies without a time field are always active.
     pub async fn get_active_policies(
         &self,
-        request: coordinator::GetActivePoliciesRequest,
+        request: &coordinator::GetActivePoliciesRequest,
     ) -> Result<coordinator::GetActivePoliciesResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/get_active_policies".to_string())
+        self.process_request(request, "/public/v1/query/get_active_policies")
             .await
     }
     /// Create read only session
@@ -398,10 +395,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/create_read_only_session".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/create_read_only_session")
             .await?;
         let inner = activity
             .result
@@ -443,10 +437,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/create_read_write_session".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/create_read_write_session")
             .await?;
         let inner = activity
             .result
@@ -485,7 +476,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/oauth_login".to_string())
+            .process_activity(&request, "/public/v1/submit/oauth_login")
             .await?;
         let inner = activity
             .result
@@ -524,7 +515,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/stamp_login".to_string())
+            .process_activity(&request, "/public/v1/submit/stamp_login")
             .await?;
         let inner = activity
             .result
@@ -563,7 +554,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/otp_login".to_string())
+            .process_activity(&request, "/public/v1/submit/otp_login")
             .await?;
         let inner = activity
             .result
@@ -603,10 +594,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/create_private_keys".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/create_private_keys")
             .await?;
         let inner = activity
             .result
@@ -633,9 +621,9 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Get details about a private key.
     pub async fn get_private_key(
         &self,
-        request: coordinator::GetPrivateKeyRequest,
+        request: &coordinator::GetPrivateKeyRequest,
     ) -> Result<coordinator::GetPrivateKeyResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/get_private_key".to_string())
+        self.process_request(request, "/public/v1/query/get_private_key")
             .await
     }
     /// List private keys
@@ -643,9 +631,9 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// List all private keys within an organization.
     pub async fn get_private_keys(
         &self,
-        request: coordinator::GetPrivateKeysRequest,
+        request: &coordinator::GetPrivateKeysRequest,
     ) -> Result<coordinator::GetPrivateKeysResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/list_private_keys".to_string())
+        self.process_request(request, "/public/v1/query/list_private_keys")
             .await
     }
     /// Create API keys
@@ -665,7 +653,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/create_api_keys".to_string())
+            .process_activity(&request, "/public/v1/submit/create_api_keys")
             .await?;
         let inner = activity
             .result
@@ -704,7 +692,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/delete_api_keys".to_string())
+            .process_activity(&request, "/public/v1/submit/delete_api_keys")
             .await?;
         let inner = activity
             .result
@@ -731,9 +719,9 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Get details about Oauth providers for a user.
     pub async fn get_oauth_providers(
         &self,
-        request: coordinator::GetOauthProvidersRequest,
+        request: &coordinator::GetOauthProvidersRequest,
     ) -> Result<coordinator::GetOauthProvidersResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/get_oauth_providers".to_string())
+        self.process_request(request, "/public/v1/query/get_oauth_providers")
             .await
     }
     /// Get API keys
@@ -741,9 +729,9 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Get details about API keys for a user.
     pub async fn get_api_keys(
         &self,
-        request: coordinator::GetApiKeysRequest,
+        request: &coordinator::GetApiKeysRequest,
     ) -> Result<coordinator::GetApiKeysResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/get_api_keys".to_string())
+        self.process_request(request, "/public/v1/query/get_api_keys")
             .await
     }
     /// List Fiat Off Ramp quotes
@@ -751,13 +739,10 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Quote enabled fiat off-ramp providers for a sell. Returns one quote per payment method the provider can offer for this route. Providers and methods that cannot serve the route are omitted.
     pub async fn get_fiat_off_ramp_quotes(
         &self,
-        request: coordinator::GetFiatOffRampQuotesRequest,
+        request: &coordinator::GetFiatOffRampQuotesRequest,
     ) -> Result<coordinator::GetFiatOffRampQuotesResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/list_fiat_off_ramp_quotes".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/list_fiat_off_ramp_quotes")
+            .await
     }
     /// Create Fiat Off Ramp Session
     ///
@@ -779,10 +764,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/create_fiat_off_ramp_session".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/create_fiat_off_ramp_session")
             .await?;
         let inner = activity
             .result
@@ -809,35 +791,29 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Get the status of an on ramp transaction.
     pub async fn get_on_ramp_transaction_status(
         &self,
-        request: coordinator::GetOnRampTransactionStatusRequest,
+        request: &coordinator::GetOnRampTransactionStatusRequest,
     ) -> Result<coordinator::GetOnRampTransactionStatusResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/get_onramp_transaction_status".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/get_onramp_transaction_status")
+            .await
     }
     /// Get send transaction status
     ///
     /// Get the status of a send transaction request.
     pub async fn get_send_transaction_status(
         &self,
-        request: coordinator::GetSendTransactionStatusRequest,
+        request: &coordinator::GetSendTransactionStatusRequest,
     ) -> Result<coordinator::GetSendTransactionStatusResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/get_send_transaction_status".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/get_send_transaction_status")
+            .await
     }
     /// Get API key
     ///
     /// Get details about an API key.
     pub async fn get_api_key(
         &self,
-        request: coordinator::GetApiKeyRequest,
+        request: &coordinator::GetApiKeyRequest,
     ) -> Result<coordinator::GetApiKeyResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/get_api_key".to_string())
+        self.process_request(request, "/public/v1/query/get_api_key")
             .await
     }
     /// Create authenticators
@@ -858,10 +834,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/create_authenticators".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/create_authenticators")
             .await?;
         let inner = activity
             .result
@@ -901,10 +874,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/delete_authenticators".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/delete_authenticators")
             .await?;
         let inner = activity
             .result
@@ -946,10 +916,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/create_wallet_authenticators".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/create_wallet_authenticators")
             .await?;
         let inner = activity
             .result
@@ -991,10 +958,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/delete_wallet_authenticators".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/delete_wallet_authenticators")
             .await?;
         let inner = activity
             .result
@@ -1021,22 +985,19 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Get wallet authenticators for a user.
     pub async fn get_wallet_authenticators(
         &self,
-        request: coordinator::GetWalletAuthenticatorsRequest,
+        request: &coordinator::GetWalletAuthenticatorsRequest,
     ) -> Result<coordinator::GetWalletAuthenticatorsResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/get_wallet_authenticators".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/get_wallet_authenticators")
+            .await
     }
     /// Get authenticators
     ///
     /// Get details about authenticators for a user.
     pub async fn get_authenticators(
         &self,
-        request: coordinator::GetAuthenticatorsRequest,
+        request: &coordinator::GetAuthenticatorsRequest,
     ) -> Result<coordinator::GetAuthenticatorsResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/get_authenticators".to_string())
+        self.process_request(request, "/public/v1/query/get_authenticators")
             .await
     }
     /// Get authenticator
@@ -1044,9 +1005,9 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Get details about an authenticator.
     pub async fn get_authenticator(
         &self,
-        request: coordinator::GetAuthenticatorRequest,
+        request: &coordinator::GetAuthenticatorRequest,
     ) -> Result<coordinator::GetAuthenticatorResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/get_authenticator".to_string())
+        self.process_request(request, "/public/v1/query/get_authenticator")
             .await
     }
     /// Create invitations
@@ -1067,7 +1028,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/create_invitations".to_string())
+            .process_activity(&request, "/public/v1/submit/create_invitations")
             .await?;
         let inner = activity
             .result
@@ -1107,7 +1068,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/delete_invitation".to_string())
+            .process_activity(&request, "/public/v1/submit/delete_invitation")
             .await?;
         let inner = activity
             .result
@@ -1146,7 +1107,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/create_users".to_string())
+            .process_activity(&request, "/public/v1/submit/create_users")
             .await?;
         let inner = activity
             .result
@@ -1185,7 +1146,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/update_user".to_string())
+            .process_activity(&request, "/public/v1/submit/update_user")
             .await?;
         let inner = activity
             .result
@@ -1224,7 +1185,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/update_user_name".to_string())
+            .process_activity(&request, "/public/v1/submit/update_user_name")
             .await?;
         let inner = activity
             .result
@@ -1263,7 +1224,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/update_user_email".to_string())
+            .process_activity(&request, "/public/v1/submit/update_user_email")
             .await?;
         let inner = activity
             .result
@@ -1303,10 +1264,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/update_user_phone_number".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/update_user_phone_number")
             .await?;
         let inner = activity
             .result
@@ -1345,7 +1303,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/create_user_tag".to_string())
+            .process_activity(&request, "/public/v1/submit/create_user_tag")
             .await?;
         let inner = activity
             .result
@@ -1385,10 +1343,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/create_private_key_tag".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/create_private_key_tag")
             .await?;
         let inner = activity
             .result
@@ -1427,7 +1382,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/update_user_tag".to_string())
+            .process_activity(&request, "/public/v1/submit/update_user_tag")
             .await?;
         let inner = activity
             .result
@@ -1454,9 +1409,9 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// List all user tags within an organization.
     pub async fn list_user_tags(
         &self,
-        request: coordinator::ListUserTagsRequest,
+        request: &coordinator::ListUserTagsRequest,
     ) -> Result<coordinator::ListUserTagsResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/list_user_tags".to_string())
+        self.process_request(request, "/public/v1/query/list_user_tags")
             .await
     }
     /// Delete user tags
@@ -1476,7 +1431,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/delete_user_tags".to_string())
+            .process_activity(&request, "/public/v1/submit/delete_user_tags")
             .await?;
         let inner = activity
             .result
@@ -1516,10 +1471,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/update_private_key_tag".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/update_private_key_tag")
             .await?;
         let inner = activity
             .result
@@ -1546,13 +1498,10 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// List all private key tags within an organization.
     pub async fn list_private_key_tags(
         &self,
-        request: coordinator::ListPrivateKeyTagsRequest,
+        request: &coordinator::ListPrivateKeyTagsRequest,
     ) -> Result<coordinator::ListPrivateKeyTagsResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/list_private_key_tags".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/list_private_key_tags")
+            .await
     }
     /// Delete private key tags
     ///
@@ -1572,10 +1521,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/delete_private_key_tags".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/delete_private_key_tags")
             .await?;
         let inner = activity
             .result
@@ -1614,7 +1560,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/sign_raw_payload".to_string())
+            .process_activity(&request, "/public/v1/submit/sign_raw_payload")
             .await?;
         let inner = activity
             .result
@@ -1653,7 +1599,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/sign_raw_payloads".to_string())
+            .process_activity(&request, "/public/v1/submit/sign_raw_payloads")
             .await?;
         let inner = activity
             .result
@@ -1692,7 +1638,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/sign_transaction".to_string())
+            .process_activity(&request, "/public/v1/submit/sign_transaction")
             .await?;
         let inner = activity
             .result
@@ -1736,7 +1682,7 @@ impl<S: Stamp> TurnkeyClient<S> {
         let activity: external_activity::Activity = self
             .process_activity(
                 &request,
-                "/public/v1/submit/create_smart_contract_interface".to_string(),
+                "/public/v1/submit/create_smart_contract_interface",
             )
             .await?;
         let inner = activity
@@ -1781,7 +1727,7 @@ impl<S: Stamp> TurnkeyClient<S> {
         let activity: external_activity::Activity = self
             .process_activity(
                 &request,
-                "/public/v1/submit/delete_smart_contract_interface".to_string(),
+                "/public/v1/submit/delete_smart_contract_interface",
             )
             .await?;
         let inner = activity
@@ -1809,26 +1755,20 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// List all smart contract interfaces within an organization.
     pub async fn get_smart_contract_interfaces(
         &self,
-        request: coordinator::GetSmartContractInterfacesRequest,
+        request: &coordinator::GetSmartContractInterfacesRequest,
     ) -> Result<coordinator::GetSmartContractInterfacesResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/list_smart_contract_interfaces".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/list_smart_contract_interfaces")
+            .await
     }
     /// Get smart contract interface
     ///
     /// Get details about a smart contract interface.
     pub async fn get_smart_contract_interface(
         &self,
-        request: coordinator::GetSmartContractInterfaceRequest,
+        request: &coordinator::GetSmartContractInterfaceRequest,
     ) -> Result<coordinator::GetSmartContractInterfaceResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/get_smart_contract_interface".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/get_smart_contract_interface")
+            .await
     }
     /// Update root quorum
     ///
@@ -1848,7 +1788,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/update_root_quorum".to_string())
+            .process_activity(&request, "/public/v1/submit/update_root_quorum")
             .await?;
         let inner = activity
             .result
@@ -1887,7 +1827,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/create_wallet".to_string())
+            .process_activity(&request, "/public/v1/submit/create_wallet")
             .await?;
         let inner = activity
             .result
@@ -1914,9 +1854,9 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// List all wallets within an organization.
     pub async fn get_wallets(
         &self,
-        request: coordinator::GetWalletsRequest,
+        request: &coordinator::GetWalletsRequest,
     ) -> Result<coordinator::GetWalletsResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/list_wallets".to_string())
+        self.process_request(request, "/public/v1/query/list_wallets")
             .await
     }
     /// Get wallet
@@ -1924,9 +1864,9 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Get details about a wallet.
     pub async fn get_wallet(
         &self,
-        request: coordinator::GetWalletRequest,
+        request: &coordinator::GetWalletRequest,
     ) -> Result<coordinator::GetWalletResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/get_wallet".to_string())
+        self.process_request(request, "/public/v1/query/get_wallet")
             .await
     }
     /// Create wallet accounts
@@ -1947,10 +1887,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/create_wallet_accounts".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/create_wallet_accounts")
             .await?;
         let inner = activity
             .result
@@ -1977,22 +1914,19 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// List all accounts within a wallet.
     pub async fn get_wallet_accounts(
         &self,
-        request: coordinator::GetWalletAccountsRequest,
+        request: &coordinator::GetWalletAccountsRequest,
     ) -> Result<coordinator::GetWalletAccountsResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/list_wallet_accounts".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/list_wallet_accounts")
+            .await
     }
     /// Get wallet account
     ///
     /// Get a single wallet account.
     pub async fn get_wallet_account(
         &self,
-        request: coordinator::GetWalletAccountRequest,
+        request: &coordinator::GetWalletAccountRequest,
     ) -> Result<coordinator::GetWalletAccountResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/get_wallet_account".to_string())
+        self.process_request(request, "/public/v1/query/get_wallet_account")
             .await
     }
     /// Create sub-organization
@@ -2013,10 +1947,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/create_sub_organization".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/create_sub_organization")
             .await?;
         let inner = activity
             .result
@@ -2056,10 +1987,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/update_organization_name".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/update_organization_name")
             .await?;
         let inner = activity
             .result
@@ -2099,10 +2027,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/init_user_email_recovery".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/init_user_email_recovery")
             .await?;
         let inner = activity
             .result
@@ -2141,7 +2066,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/recover_user".to_string())
+            .process_activity(&request, "/public/v1/submit/recover_user")
             .await?;
         let inner = activity
             .result
@@ -2181,10 +2106,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/set_organization_feature".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/set_organization_feature")
             .await?;
         let inner = activity
             .result
@@ -2226,10 +2148,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/remove_organization_feature".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/remove_organization_feature")
             .await?;
         let inner = activity
             .result
@@ -2269,7 +2188,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/export_private_key".to_string())
+            .process_activity(&request, "/public/v1/submit/export_private_key")
             .await?;
         let inner = activity
             .result
@@ -2308,7 +2227,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/export_wallet".to_string())
+            .process_activity(&request, "/public/v1/submit/export_wallet")
             .await?;
         let inner = activity
             .result
@@ -2347,7 +2266,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/email_auth".to_string())
+            .process_activity(&request, "/public/v1/submit/email_auth")
             .await?;
         let inner = activity
             .result
@@ -2387,10 +2306,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/export_wallet_account".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/export_wallet_account")
             .await?;
         let inner = activity
             .result
@@ -2429,7 +2345,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/init_fiat_on_ramp".to_string())
+            .process_activity(&request, "/public/v1/submit/init_fiat_on_ramp")
             .await?;
         let inner = activity
             .result
@@ -2469,10 +2385,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/create_fiat_on_ramp_session".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/create_fiat_on_ramp_session")
             .await?;
         let inner = activity
             .result
@@ -2512,7 +2425,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/init_import_wallet".to_string())
+            .process_activity(&request, "/public/v1/submit/init_import_wallet")
             .await?;
         let inner = activity
             .result
@@ -2551,7 +2464,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/import_wallet".to_string())
+            .process_activity(&request, "/public/v1/submit/import_wallet")
             .await?;
         let inner = activity
             .result
@@ -2591,10 +2504,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/init_import_private_key".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/init_import_private_key")
             .await?;
         let inner = activity
             .result
@@ -2634,7 +2544,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/import_private_key".to_string())
+            .process_activity(&request, "/public/v1/submit/import_private_key")
             .await?;
         let inner = activity
             .result
@@ -2673,7 +2583,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/oauth".to_string())
+            .process_activity(&request, "/public/v1/submit/oauth")
             .await?;
         let inner = activity
             .result
@@ -2712,7 +2622,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/init_otp".to_string())
+            .process_activity(&request, "/public/v1/submit/init_otp")
             .await?;
         let inner = activity
             .result
@@ -2754,10 +2664,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/verify_wallet_authenticator".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/verify_wallet_authenticator")
             .await?;
         let inner = activity
             .result
@@ -2796,7 +2703,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/verify_otp".to_string())
+            .process_activity(&request, "/public/v1/submit/verify_otp")
             .await?;
         let inner = activity
             .result
@@ -2835,7 +2742,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/init_otp_auth".to_string())
+            .process_activity(&request, "/public/v1/submit/init_otp_auth")
             .await?;
         let inner = activity
             .result
@@ -2874,7 +2781,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/otp_auth".to_string())
+            .process_activity(&request, "/public/v1/submit/otp_auth")
             .await?;
         let inner = activity
             .result
@@ -2914,10 +2821,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/create_oauth_providers".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/create_oauth_providers")
             .await?;
         let inner = activity
             .result
@@ -2957,10 +2861,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/delete_oauth_providers".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/delete_oauth_providers")
             .await?;
         let inner = activity
             .result
@@ -2987,13 +2888,10 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Get quorum settings and features for an organization.
     pub async fn get_organization_configs(
         &self,
-        request: coordinator::GetOrganizationConfigsRequest,
+        request: &coordinator::GetOrganizationConfigsRequest,
     ) -> Result<coordinator::GetOrganizationConfigsResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/get_organization_configs".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/get_organization_configs")
+            .await
     }
     /// Delete private keys
     ///
@@ -3013,10 +2911,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/delete_private_keys".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/delete_private_keys")
             .await?;
         let inner = activity
             .result
@@ -3055,7 +2950,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/update_wallet".to_string())
+            .process_activity(&request, "/public/v1/submit/update_wallet")
             .await?;
         let inner = activity
             .result
@@ -3094,7 +2989,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/delete_wallets".to_string())
+            .process_activity(&request, "/public/v1/submit/delete_wallets")
             .await?;
         let inner = activity
             .result
@@ -3134,10 +3029,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/delete_sub_organization".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/delete_sub_organization")
             .await?;
         let inner = activity
             .result
@@ -3164,13 +3056,10 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Get the policy evaluations for an activity.
     pub async fn get_policy_evaluations(
         &self,
-        request: coordinator::GetPolicyEvaluationsRequest,
+        request: &coordinator::GetPolicyEvaluationsRequest,
     ) -> Result<coordinator::GetPolicyEvaluationsResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/get_policy_evaluations".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/get_policy_evaluations")
+            .await
     }
     /// Create an OAuth 2.0 credential
     ///
@@ -3190,10 +3079,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/create_oauth2_credential".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/create_oauth2_credential")
             .await?;
         let inner = activity
             .result
@@ -3233,10 +3119,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/update_oauth2_credential".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/update_oauth2_credential")
             .await?;
         let inner = activity
             .result
@@ -3276,10 +3159,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/delete_oauth2_credential".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/delete_oauth2_credential")
             .await?;
         let inner = activity
             .result
@@ -3319,10 +3199,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/create_webhook_endpoint".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/create_webhook_endpoint")
             .await?;
         let inner = activity
             .result
@@ -3362,10 +3239,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/update_webhook_endpoint".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/update_webhook_endpoint")
             .await?;
         let inner = activity
             .result
@@ -3405,10 +3279,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/delete_webhook_endpoint".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/delete_webhook_endpoint")
             .await?;
         let inner = activity
             .result
@@ -3435,9 +3306,9 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Get the Boot Proof for a given ephemeral key.
     pub async fn get_boot_proof(
         &self,
-        request: coordinator::GetBootProofRequest,
+        request: &coordinator::GetBootProofRequest,
     ) -> Result<coordinator::BootProofResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/get_boot_proof".to_string())
+        self.process_request(request, "/public/v1/query/get_boot_proof")
             .await
     }
     /// Get the latest Boot Proof for an app
@@ -3445,22 +3316,19 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Get the latest Boot Proof for a given enclave app name.
     pub async fn get_latest_boot_proof(
         &self,
-        request: coordinator::GetLatestBootProofRequest,
+        request: &coordinator::GetLatestBootProofRequest,
     ) -> Result<coordinator::BootProofResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/get_latest_boot_proof".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/get_latest_boot_proof")
+            .await
     }
     /// List App Proofs for an activity
     ///
     /// List the App Proofs for the given activity.
     pub async fn get_app_proofs(
         &self,
-        request: coordinator::GetAppProofsRequest,
+        request: &coordinator::GetAppProofsRequest,
     ) -> Result<coordinator::GetAppProofsResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/list_app_proofs".to_string())
+        self.process_request(request, "/public/v1/query/list_app_proofs")
             .await
     }
     /// List OAuth 2.0 credentials
@@ -3468,39 +3336,30 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// List all OAuth 2.0 credentials within an organization.
     pub async fn list_oauth2_credentials(
         &self,
-        request: coordinator::ListOauth2CredentialsRequest,
+        request: &coordinator::ListOauth2CredentialsRequest,
     ) -> Result<coordinator::ListOauth2CredentialsResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/list_oauth2_credentials".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/list_oauth2_credentials")
+            .await
     }
     /// List webhook endpoints
     ///
     /// List webhook endpoints within an organization.
     pub async fn list_webhook_endpoints(
         &self,
-        request: coordinator::ListWebhookEndpointsRequest,
+        request: &coordinator::ListWebhookEndpointsRequest,
     ) -> Result<coordinator::ListWebhookEndpointsResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/list_webhook_endpoints".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/list_webhook_endpoints")
+            .await
     }
     /// Get OAuth 2.0 credential
     ///
     /// Get details about an OAuth 2.0 credential.
     pub async fn get_oauth2_credential(
         &self,
-        request: coordinator::GetOauth2CredentialRequest,
+        request: &coordinator::GetOauth2CredentialRequest,
     ) -> Result<coordinator::GetOauth2CredentialResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/get_oauth2_credential".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/get_oauth2_credential")
+            .await
     }
     /// OAuth 2.0 authentication
     ///
@@ -3520,10 +3379,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/oauth2_authenticate".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/oauth2_authenticate")
             .await?;
         let inner = activity
             .result
@@ -3563,10 +3419,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/delete_wallet_accounts".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/delete_wallet_accounts")
             .await?;
         let inner = activity
             .result
@@ -3608,10 +3461,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/create_fiat_on_ramp_credential".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/create_fiat_on_ramp_credential")
             .await?;
         let inner = activity
             .result
@@ -3653,10 +3503,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/update_fiat_on_ramp_credential".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/update_fiat_on_ramp_credential")
             .await?;
         let inner = activity
             .result
@@ -3698,10 +3545,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/create_fiat_ramp_credential".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/create_fiat_ramp_credential")
             .await?;
         let inner = activity
             .result
@@ -3743,10 +3587,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/update_fiat_ramp_credential".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/update_fiat_ramp_credential")
             .await?;
         let inner = activity
             .result
@@ -3788,10 +3629,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/delete_fiat_on_ramp_credential".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/delete_fiat_on_ramp_credential")
             .await?;
         let inner = activity
             .result
@@ -3818,26 +3656,20 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// List all fiat on ramp provider credentials within an organization.
     pub async fn list_fiat_on_ramp_credentials(
         &self,
-        request: coordinator::ListFiatOnRampCredentialsRequest,
+        request: &coordinator::ListFiatOnRampCredentialsRequest,
     ) -> Result<coordinator::ListFiatOnRampCredentialsResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/list_fiat_on_ramp_credentials".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/list_fiat_on_ramp_credentials")
+            .await
     }
     /// List Fiat On Ramp quotes
     ///
     /// Quote enabled fiat on-ramp providers for a buy. Returns one quote per payment method the provider can offer for this route. Providers and methods that cannot serve the route are omitted.
     pub async fn get_fiat_on_ramp_quotes(
         &self,
-        request: coordinator::GetFiatOnRampQuotesRequest,
+        request: &coordinator::GetFiatOnRampQuotesRequest,
     ) -> Result<coordinator::GetFiatOnRampQuotesResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/list_fiat_on_ramp_quotes".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/list_fiat_on_ramp_quotes")
+            .await
     }
     /// Broadcast EVM transaction
     ///
@@ -3867,10 +3699,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/eth_send_transaction".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/eth_send_transaction")
             .await?;
         let inner = activity
             .result
@@ -3910,10 +3739,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/sol_send_transaction".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/sol_send_transaction")
             .await?;
         let inner = activity
             .result
@@ -3953,10 +3779,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/earn_deploy_wrapper".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/earn_deploy_wrapper")
             .await?;
         let inner = activity
             .result
@@ -3995,7 +3818,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/earn_deposit".to_string())
+            .process_activity(&request, "/public/v1/submit/earn_deposit")
             .await?;
         let inner = activity
             .result
@@ -4034,7 +3857,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/earn_withdraw".to_string())
+            .process_activity(&request, "/public/v1/submit/earn_withdraw")
             .await?;
         let inner = activity
             .result
@@ -4074,10 +3897,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/earn_set_wrapper_state".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/earn_set_wrapper_state")
             .await?;
         let inner = activity
             .result
@@ -4116,7 +3936,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/claim_earn_fees".to_string())
+            .process_activity(&request, "/public/v1/submit/claim_earn_fees")
             .await?;
         let inner = activity
             .result
@@ -4156,7 +3976,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/earn_claim_rewards".to_string())
+            .process_activity(&request, "/public/v1/submit/earn_claim_rewards")
             .await?;
         let inner = activity
             .result
@@ -4183,9 +4003,9 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Get the catalog of all wrappable yield vaults across supported chains, enriched with live TVL and APY. Annotates which vaults the organization has already enabled.
     pub async fn list_earn_vaults(
         &self,
-        request: coordinator::ListEarnVaultsRequest,
+        request: &coordinator::ListEarnVaultsRequest,
     ) -> Result<coordinator::ListEarnVaultsResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/list_earn_vaults".to_string())
+        self.process_request(request, "/public/v1/query/list_earn_vaults")
             .await
     }
     /// Get Earn enabled vaults
@@ -4193,22 +4013,19 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Get the organization's deployed wrappers with on-chain total deposited and live APY. The management view, distinct from per-wallet positions.
     pub async fn list_earn_enabled_vaults(
         &self,
-        request: coordinator::ListEarnEnabledVaultsRequest,
+        request: &coordinator::ListEarnEnabledVaultsRequest,
     ) -> Result<coordinator::ListEarnEnabledVaultsResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/list_earn_enabled_vaults".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/list_earn_enabled_vaults")
+            .await
     }
     /// Get Earn positions
     ///
     /// Get the active Earn positions for a specific wallet, including current value, cost basis, yield, and projected fees.
     pub async fn list_earn_positions(
         &self,
-        request: coordinator::ListEarnPositionsRequest,
+        request: &coordinator::ListEarnPositionsRequest,
     ) -> Result<coordinator::ListEarnPositionsResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/list_earn_positions".to_string())
+        self.process_request(request, "/public/v1/query/list_earn_positions")
             .await
     }
     /// List Earn rewards
@@ -4216,9 +4033,9 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// List the protocol rewards (e.g. MORPHO and third-party campaign tokens, distributed off-chain via Merkl) attributed to a wallet: claimable, lifetime claimed, and pending amounts per reward token.
     pub async fn list_earn_rewards(
         &self,
-        request: coordinator::ListEarnRewardsRequest,
+        request: &coordinator::ListEarnRewardsRequest,
     ) -> Result<coordinator::ListEarnRewardsResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/list_earn_rewards".to_string())
+        self.process_request(request, "/public/v1/query/list_earn_rewards")
             .await
     }
     /// Get Earn withdraw status
@@ -4226,65 +4043,50 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Poll the status of a withdrawal by its withdraw_request_id.
     pub async fn get_earn_withdraw_status(
         &self,
-        request: coordinator::GetEarnWithdrawStatusRequest,
+        request: &coordinator::GetEarnWithdrawStatusRequest,
     ) -> Result<coordinator::GetEarnWithdrawStatusResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/get_earn_withdraw_status".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/get_earn_withdraw_status")
+            .await
     }
     /// Get Earn deposit status
     ///
     /// Poll the status of a deposit by its deposit_request_id (for the async/sponsored deposit path).
     pub async fn get_earn_deposit_status(
         &self,
-        request: coordinator::GetEarnDepositStatusRequest,
+        request: &coordinator::GetEarnDepositStatusRequest,
     ) -> Result<coordinator::GetEarnDepositStatusResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/get_earn_deposit_status".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/get_earn_deposit_status")
+            .await
     }
     /// Get Earn claim fees status
     ///
     /// Poll the status of a fee claim by its claim_request_id.
     pub async fn get_claim_earn_fees_status(
         &self,
-        request: coordinator::GetClaimEarnFeesStatusRequest,
+        request: &coordinator::GetClaimEarnFeesStatusRequest,
     ) -> Result<coordinator::GetClaimEarnFeesStatusResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/get_claim_earn_fees_status".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/get_claim_earn_fees_status")
+            .await
     }
     /// Get Earn claim rewards status
     ///
     /// Poll the status of a rewards claim by its claim_request_id.
     pub async fn get_earn_claim_rewards_status(
         &self,
-        request: coordinator::GetEarnClaimRewardsStatusRequest,
+        request: &coordinator::GetEarnClaimRewardsStatusRequest,
     ) -> Result<coordinator::GetEarnClaimRewardsStatusResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/get_earn_claim_rewards_status".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/get_earn_claim_rewards_status")
+            .await
     }
     /// Get Earn deploy status
     ///
     /// Poll the status of a wrapper deployment by its deploy_request_id.
     pub async fn get_earn_deploy_status(
         &self,
-        request: coordinator::GetEarnDeployStatusRequest,
+        request: &coordinator::GetEarnDeployStatusRequest,
     ) -> Result<coordinator::GetEarnDeployStatusResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/get_earn_deploy_status".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/get_earn_deploy_status")
+            .await
     }
     /// Create Swap quote
     ///
@@ -4304,7 +4106,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/create_swap_quote".to_string())
+            .process_activity(&request, "/public/v1/submit/create_swap_quote")
             .await?;
         let inner = activity
             .result
@@ -4331,9 +4133,9 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Poll the status of a swap by its swap_request_id. Covers same-chain and cross-chain swaps.
     pub async fn get_swap_status(
         &self,
-        request: coordinator::GetSwapStatusRequest,
+        request: &coordinator::GetSwapStatusRequest,
     ) -> Result<coordinator::GetSwapStatusResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/get_swap_status".to_string())
+        self.process_request(request, "/public/v1/query/get_swap_status")
             .await
     }
     /// Get indicative swap quote
@@ -4341,13 +4143,10 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Preview the provider's current price for a swap without creating an activity. The quote is not binding and has no quote ID: a market swap executed later fetches its own quote, so its price can differ.
     pub async fn get_indicative_swap_quote(
         &self,
-        request: coordinator::GetIndicativeSwapQuoteRequest,
+        request: &coordinator::GetIndicativeSwapQuoteRequest,
     ) -> Result<coordinator::GetIndicativeSwapQuoteResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/get_indicative_swap_quote".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/get_indicative_swap_quote")
+            .await
     }
     /// Execute Swap
     ///
@@ -4366,7 +4165,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/execute_swap".to_string())
+            .process_activity(&request, "/public/v1/submit/execute_swap")
             .await?;
         let inner = activity
             .result
@@ -4405,7 +4204,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/claim_swap_fees".to_string())
+            .process_activity(&request, "/public/v1/submit/claim_swap_fees")
             .await?;
         let inner = activity
             .result
@@ -4445,7 +4244,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/upsert_swap_config".to_string())
+            .process_activity(&request, "/public/v1/submit/upsert_swap_config")
             .await?;
         let inner = activity
             .result
@@ -4488,7 +4287,7 @@ impl<S: Stamp> TurnkeyClient<S> {
         let activity: external_activity::Activity = self
             .process_activity(
                 &request,
-                "/public/v1/submit/upsert_swap_fee_sponsorship_limit_config".to_string(),
+                "/public/v1/submit/upsert_swap_fee_sponsorship_limit_config",
             )
             .await?;
         let inner = activity
@@ -4534,7 +4333,7 @@ impl<S: Stamp> TurnkeyClient<S> {
         let activity: external_activity::Activity = self
             .process_activity(
                 &request,
-                "/public/v1/submit/upsert_swap_fixed_rate_limit_config".to_string(),
+                "/public/v1/submit/upsert_swap_fixed_rate_limit_config",
             )
             .await?;
         let inner = activity
@@ -4562,22 +4361,19 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Read each swap sponsorship feature's spending window and settled spending in the current rolling window. Parents see aggregate spending; children see their own spending. Pending swaps are not reserved.
     pub async fn get_swap_sponsorship_usage(
         &self,
-        request: coordinator::GetSwapSponsorshipUsageRequest,
+        request: &coordinator::GetSwapSponsorshipUsageRequest,
     ) -> Result<coordinator::GetSwapSponsorshipUsageResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/get_swap_sponsorship_usage".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/get_swap_sponsorship_usage")
+            .await
     }
     /// Get gas usage
     ///
     /// Get gas usage and gas limits for either the parent organization or a sub-organization.
     pub async fn get_gas_usage(
         &self,
-        request: coordinator::GetGasUsageRequest,
+        request: &coordinator::GetGasUsageRequest,
     ) -> Result<coordinator::GetGasUsageResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/get_gas_usage".to_string())
+        self.process_request(request, "/public/v1/query/get_gas_usage")
             .await
     }
     /// Get nonces
@@ -4585,9 +4381,9 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Get nonce values for an address on a given network. Can fetch the standard on-chain nonce and/or the gas station nonce used for sponsored transactions.
     pub async fn get_nonces(
         &self,
-        request: coordinator::GetNoncesRequest,
+        request: &coordinator::GetNoncesRequest,
     ) -> Result<coordinator::GetNoncesResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/get_nonces".to_string())
+        self.process_request(request, "/public/v1/query/get_nonces")
             .await
     }
     /// Create a TVC app
@@ -4606,7 +4402,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             organization_id,
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/create_tvc_app".to_string())
+            .process_activity(&request, "/public/v1/submit/create_tvc_app")
             .await?;
         let inner = activity
             .result
@@ -4646,10 +4442,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/create_tvc_operator".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/create_tvc_operator")
             .await?;
         let inner = activity
             .result
@@ -4691,10 +4484,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/delete_tvc_app_and_deployments".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/delete_tvc_app_and_deployments")
             .await?;
         let inner = activity
             .result
@@ -4721,22 +4511,19 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// List all hosted TVC Quorum Keys within an organization, newest first.
     pub async fn get_tvc_quorum_keys(
         &self,
-        request: coordinator::GetTvcQuorumKeysRequest,
+        request: &coordinator::GetTvcQuorumKeysRequest,
     ) -> Result<coordinator::GetTvcQuorumKeysResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/list_tvc_quorum_keys".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/list_tvc_quorum_keys")
+            .await
     }
     /// List TVC operators
     ///
     /// List all TVC operators within an organization, newest first.
     pub async fn get_tvc_operators(
         &self,
-        request: coordinator::GetTvcOperatorsRequest,
+        request: &coordinator::GetTvcOperatorsRequest,
     ) -> Result<coordinator::GetTvcOperatorsResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/list_tvc_operators".to_string())
+        self.process_request(request, "/public/v1/query/list_tvc_operators")
             .await
     }
     /// List TVC apps
@@ -4744,9 +4531,9 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// List all TVC apps within an organization.
     pub async fn get_tvc_apps(
         &self,
-        request: coordinator::GetTvcAppsRequest,
+        request: &coordinator::GetTvcAppsRequest,
     ) -> Result<coordinator::GetTvcAppsResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/list_tvc_apps".to_string())
+        self.process_request(request, "/public/v1/query/list_tvc_apps")
             .await
     }
     /// Get TVC app
@@ -4754,9 +4541,9 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Get details about a single TVC app.
     pub async fn get_tvc_app(
         &self,
-        request: coordinator::GetTvcAppRequest,
+        request: &coordinator::GetTvcAppRequest,
     ) -> Result<coordinator::GetTvcAppResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/get_tvc_app".to_string())
+        self.process_request(request, "/public/v1/query/get_tvc_app")
             .await
     }
     /// Create a TVC deployment
@@ -4776,10 +4563,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             organization_id,
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/create_tvc_deployment".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/create_tvc_deployment")
             .await?;
         let inner = activity
             .result
@@ -4821,10 +4605,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/set_tvc_app_live_deployment".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/set_tvc_app_live_deployment")
             .await?;
         let inner = activity
             .result
@@ -4864,10 +4645,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/delete_tvc_deployment".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/delete_tvc_deployment")
             .await?;
         let inner = activity
             .result
@@ -4907,10 +4685,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/restore_tvc_deployment".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/restore_tvc_deployment")
             .await?;
         let inner = activity
             .result
@@ -4937,9 +4712,9 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Validate a container image URL and pull secret for TVC deployment.
     pub async fn validate_tvc_image(
         &self,
-        request: coordinator::ValidateTvcImageRequest,
+        request: &coordinator::ValidateTvcImageRequest,
     ) -> Result<coordinator::ValidateTvcImageResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/validate_tvc_image".to_string())
+        self.process_request(request, "/public/v1/query/validate_tvc_image")
             .await
     }
     /// Get TVC QOS versions
@@ -4947,48 +4722,39 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// List QOS versions supported for new TVC deployments and the latest recommended QOS version.
     pub async fn get_tvc_qos_versions(
         &self,
-        request: coordinator::GetTvcQosVersionsRequest,
+        request: &coordinator::GetTvcQosVersionsRequest,
     ) -> Result<coordinator::GetTvcQosVersionsResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/get_tvc_qos_versions".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/get_tvc_qos_versions")
+            .await
     }
     /// Get TVC manifest generation info
     ///
     /// Get default values for creating a QOS manifest. Relevant for client manifest generation.
     pub async fn get_tvc_manifest_generation_info(
         &self,
-        request: coordinator::GetTvcManifestGenerationInfoRequest,
+        request: &coordinator::GetTvcManifestGenerationInfoRequest,
     ) -> Result<coordinator::GetTvcManifestGenerationInfoResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/get_tvc_manifest_generation_info".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/get_tvc_manifest_generation_info")
+            .await
     }
     /// List TVC deployments
     ///
     /// List all deployments for a given TVC app.
     pub async fn get_tvc_app_deployments(
         &self,
-        request: coordinator::GetTvcAppDeploymentsRequest,
+        request: &coordinator::GetTvcAppDeploymentsRequest,
     ) -> Result<coordinator::GetTvcAppDeploymentsResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/list_tvc_app_deployments".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/list_tvc_app_deployments")
+            .await
     }
     /// Get TVC deployment
     ///
     /// Get details about a single TVC deployment.
     pub async fn get_tvc_deployment(
         &self,
-        request: coordinator::GetTvcDeploymentRequest,
+        request: &coordinator::GetTvcDeploymentRequest,
     ) -> Result<coordinator::GetTvcDeploymentResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/get_tvc_deployment".to_string())
+        self.process_request(request, "/public/v1/query/get_tvc_deployment")
             .await
     }
     /// Get TVC deployment's provisioning details
@@ -4996,11 +4762,11 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Get the attestation document and manifest envelope of the provisioning enclave for a TVC deployment.
     pub async fn get_tvc_deployment_provisioning_details(
         &self,
-        request: coordinator::GetTvcDeploymentProvisioningDetailsRequest,
+        request: &coordinator::GetTvcDeploymentProvisioningDetailsRequest,
     ) -> Result<coordinator::GetTvcDeploymentProvisioningDetailsResponse, TurnkeyClientError> {
         self.process_request(
-            &request,
-            "/public/v1/query/get_tvc_deployment_provisioning_details".to_string(),
+            request,
+            "/public/v1/query/get_tvc_deployment_provisioning_details",
         )
         .await
     }
@@ -5023,10 +4789,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             organization_id,
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/create_tvc_manifest_approvals".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/create_tvc_manifest_approvals")
             .await?;
         let inner = activity
             .result
@@ -5065,10 +4828,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             organization_id,
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/post_tvc_quorum_key_share".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/post_tvc_quorum_key_share")
             .await?;
         let inner = activity
             .result
@@ -5108,10 +4868,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/create_tvc_quorum_key".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/create_tvc_quorum_key")
             .await?;
         let inner = activity
             .result
@@ -5155,7 +4912,7 @@ impl<S: Stamp> TurnkeyClient<S> {
         let activity: external_activity::Activity = self
             .process_activity(
                 &request,
-                "/public/v1/submit/re_encrypt_tvc_quorum_key_share".to_string(),
+                "/public/v1/submit/re_encrypt_tvc_quorum_key_share",
             )
             .await?;
         let inner = activity
@@ -5183,9 +4940,9 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Get live runtime status for a TVC app from the cluster.
     pub async fn get_app_status(
         &self,
-        request: coordinator::GetAppStatusRequest,
+        request: &coordinator::GetAppStatusRequest,
     ) -> Result<coordinator::GetAppStatusResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/get_app_status".to_string())
+        self.process_request(request, "/public/v1/query/get_app_status")
             .await
     }
     /// Get TVC deployment debug logs
@@ -5193,39 +4950,30 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Get a bounded window of application logs from a debug-mode TVC deployment. Returned lines are collected from every running replica and sorted by platform timestamp.
     pub async fn get_tvc_deployment_debug_logs(
         &self,
-        request: coordinator::GetTvcDeploymentDebugLogsRequest,
+        request: &coordinator::GetTvcDeploymentDebugLogsRequest,
     ) -> Result<coordinator::GetTvcDeploymentDebugLogsResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/get_tvc_deployment_debug_logs".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/get_tvc_deployment_debug_logs")
+            .await
     }
     /// Get balances
     ///
     /// Get balances of supported assets for an address on the specified network. Only non-zero balances are returned.
     pub async fn get_wallet_address_balances(
         &self,
-        request: coordinator::GetWalletAddressBalancesRequest,
+        request: &coordinator::GetWalletAddressBalancesRequest,
     ) -> Result<coordinator::GetWalletAddressBalancesResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/get_wallet_address_balances".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/get_wallet_address_balances")
+            .await
     }
     /// List supported assets
     ///
     /// List supported assets for the specified network.
     pub async fn list_supported_assets(
         &self,
-        request: coordinator::ListSupportedAssetsRequest,
+        request: &coordinator::ListSupportedAssetsRequest,
     ) -> Result<coordinator::ListSupportedAssetsResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/list_supported_assets".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/list_supported_assets")
+            .await
     }
     /// Set IP Allowlist
     ///
@@ -5244,7 +4992,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/set_ip_allowlist".to_string())
+            .process_activity(&request, "/public/v1/submit/set_ip_allowlist")
             .await?;
         let inner = activity
             .result
@@ -5284,10 +5032,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/remove_ip_allowlist".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/remove_ip_allowlist")
             .await?;
         let inner = activity
             .result
@@ -5326,10 +5071,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             organization_id,
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/init_import_secrets".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/init_import_secrets")
             .await?;
         let inner = activity
             .result
@@ -5367,7 +5109,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             organization_id,
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/import_secrets".to_string())
+            .process_activity(&request, "/public/v1/submit/import_secrets")
             .await?;
         let inner = activity
             .result
@@ -5405,7 +5147,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             organization_id,
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/mint_jwt".to_string())
+            .process_activity(&request, "/public/v1/submit/mint_jwt")
             .await?;
         let inner = activity
             .result
@@ -5443,7 +5185,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             organization_id,
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/delete_secrets".to_string())
+            .process_activity(&request, "/public/v1/submit/delete_secrets")
             .await?;
         let inner = activity
             .result
@@ -5482,10 +5224,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             organization_id,
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/create_external_signer".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/create_external_signer")
             .await?;
         let inner = activity
             .result
@@ -5524,10 +5263,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             organization_id,
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/delete_external_signer".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/delete_external_signer")
             .await?;
         let inner = activity
             .result
@@ -5565,7 +5301,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             organization_id,
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/export_secrets".to_string())
+            .process_activity(&request, "/public/v1/submit/export_secrets")
             .await?;
         let inner = activity
             .result
@@ -5592,9 +5328,9 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// List secret metadata for an organization. The returned metadata, including static properties, is for display only. For efficiency, the enclave does not authenticate it in this view, so do not use it for security-sensitive decisions.
     pub async fn list_secrets(
         &self,
-        request: coordinator::ListSecretsRequest,
+        request: &coordinator::ListSecretsRequest,
     ) -> Result<coordinator::ListSecretsResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/list_secrets".to_string())
+        self.process_request(request, "/public/v1/query/list_secrets")
             .await
     }
     /// Get IP Allowlist
@@ -5602,9 +5338,9 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Get IP allowlist and rules for an organization.
     pub async fn get_ip_allowlist(
         &self,
-        request: coordinator::GetIpAllowlistRequest,
+        request: &coordinator::GetIpAllowlistRequest,
     ) -> Result<coordinator::GetIpAllowlistResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/get_ip_allowlist".to_string())
+        self.process_request(request, "/public/v1/query/get_ip_allowlist")
             .await
     }
     /// Sign Frost Spark
@@ -5623,7 +5359,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             organization_id,
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/spark_sign_frost".to_string())
+            .process_activity(&request, "/public/v1/submit/spark_sign_frost")
             .await?;
         let inner = activity
             .result
@@ -5662,10 +5398,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             organization_id,
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/spark_prepare_transfer".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/spark_prepare_transfer")
             .await?;
         let inner = activity
             .result
@@ -5704,10 +5437,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             organization_id,
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/spark_claim_transfer".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/spark_claim_transfer")
             .await?;
         let inner = activity
             .result
@@ -5750,7 +5480,7 @@ impl<S: Stamp> TurnkeyClient<S> {
         let activity: external_activity::Activity = self
             .process_activity(
                 &request,
-                "/public/v1/submit/spark_prepare_lightning_receive".to_string(),
+                "/public/v1/submit/spark_prepare_lightning_receive",
             )
             .await?;
         let inner = activity
@@ -5789,7 +5519,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             organization_id,
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/create_mfa_policy".to_string())
+            .process_activity(&request, "/public/v1/submit/create_mfa_policy")
             .await?;
         let inner = activity
             .result
@@ -5827,7 +5557,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             organization_id,
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/update_mfa_policy".to_string())
+            .process_activity(&request, "/public/v1/submit/update_mfa_policy")
             .await?;
         let inner = activity
             .result
@@ -5865,7 +5595,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             organization_id,
         };
         let activity: external_activity::Activity = self
-            .process_activity(&request, "/public/v1/submit/delete_mfa_policy".to_string())
+            .process_activity(&request, "/public/v1/submit/delete_mfa_policy")
             .await?;
         let inner = activity
             .result
@@ -5892,9 +5622,9 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Get a single MFA policy for a user.
     pub async fn get_mfa_policy(
         &self,
-        request: coordinator::GetMfaPolicyRequest,
+        request: &coordinator::GetMfaPolicyRequest,
     ) -> Result<coordinator::GetMfaPolicyResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/get_mfa_policy".to_string())
+        self.process_request(request, "/public/v1/query/get_mfa_policy")
             .await
     }
     /// Get MFA policies
@@ -5902,9 +5632,9 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Get all MFA policies for a user.
     pub async fn get_mfa_policies(
         &self,
-        request: coordinator::GetMfaPoliciesRequest,
+        request: &coordinator::GetMfaPoliciesRequest,
     ) -> Result<coordinator::GetMfaPoliciesResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/get_mfa_policies".to_string())
+        self.process_request(request, "/public/v1/query/get_mfa_policies")
             .await
     }
     /// Create session profile
@@ -5924,10 +5654,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             organization_id,
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/create_session_profile".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/create_session_profile")
             .await?;
         let inner = activity
             .result
@@ -5954,9 +5681,9 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Get a single session profile for an organization.
     pub async fn get_session_profile(
         &self,
-        request: coordinator::GetSessionProfileRequest,
+        request: &coordinator::GetSessionProfileRequest,
     ) -> Result<coordinator::GetSessionProfileResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/get_session_profile".to_string())
+        self.process_request(request, "/public/v1/query/get_session_profile")
             .await
     }
     /// Get session profiles
@@ -5964,22 +5691,19 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// Get all session profiles for an organization.
     pub async fn get_session_profiles(
         &self,
-        request: coordinator::GetSessionProfilesRequest,
+        request: &coordinator::GetSessionProfilesRequest,
     ) -> Result<coordinator::GetSessionProfilesResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/get_session_profiles".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/get_session_profiles")
+            .await
     }
     /// Get MFA status
     ///
     /// Get the MFA status of an activity for a specific user or all voting users.
     pub async fn get_mfa_status(
         &self,
-        request: coordinator::GetMfaStatusRequest,
+        request: &coordinator::GetMfaStatusRequest,
     ) -> Result<coordinator::GetMfaStatusResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/get_mfa_status".to_string())
+        self.process_request(request, "/public/v1/query/get_mfa_status")
             .await
     }
     /// List email events
@@ -5987,9 +5711,9 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// List email events for the organization.
     pub async fn list_email_events(
         &self,
-        request: coordinator::ListEmailEventsRequest,
+        request: &coordinator::ListEmailEventsRequest,
     ) -> Result<coordinator::ListEmailEventsResponse, TurnkeyClientError> {
-        self.process_request(&request, "/public/v1/query/list_email_events".to_string())
+        self.process_request(request, "/public/v1/query/list_email_events")
             .await
     }
     /// List Eth transaction history
@@ -5997,26 +5721,20 @@ impl<S: Stamp> TurnkeyClient<S> {
     /// List Ethereum transaction history for a wallet address on the specified network.
     pub async fn list_eth_transaction_history(
         &self,
-        request: coordinator::ListEthTransactionHistoryRequest,
+        request: &coordinator::ListEthTransactionHistoryRequest,
     ) -> Result<coordinator::ListEthTransactionHistoryResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/list_eth_transaction_history".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/list_eth_transaction_history")
+            .await
     }
     /// List Sol transaction history
     ///
     /// List Solana transaction history for a wallet address on the specified network.
     pub async fn list_sol_transaction_history(
         &self,
-        request: coordinator::ListSolTransactionHistoryRequest,
+        request: &coordinator::ListSolTransactionHistoryRequest,
     ) -> Result<coordinator::ListSolTransactionHistoryResponse, TurnkeyClientError> {
-        self.process_request(
-            &request,
-            "/public/v1/query/list_sol_transaction_history".to_string(),
-        )
-        .await
+        self.process_request(request, "/public/v1/query/list_sol_transaction_history")
+            .await
     }
     /// Undelegate an EVM account
     ///
@@ -6036,10 +5754,7 @@ impl<S: Stamp> TurnkeyClient<S> {
             generate_app_proofs: self.generate_app_proofs(),
         };
         let activity: external_activity::Activity = self
-            .process_activity(
-                &request,
-                "/public/v1/submit/eth_undelegate_7702".to_string(),
-            )
+            .process_activity(&request, "/public/v1/submit/eth_undelegate_7702")
             .await?;
         let inner = activity
             .result

@@ -32,7 +32,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Resul
 
     let response = auth
         .client
-        .get_tvc_apps(GetTvcAppsRequest {
+        .get_tvc_apps(&GetTvcAppsRequest {
             organization_id: auth.org_id.clone(),
             is_live: None,
         })
