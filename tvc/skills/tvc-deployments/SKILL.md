@@ -19,10 +19,18 @@ verify returned keys against the submitted request before saving or returning
 success. The supported API environments are production, preproduction and
 development, each with its own pinned Signer quorum key.
 
-Human output confirms `Proof verification: passed` after acceptance. JSON output
-contains the existing command result without proof diagnostics. Acceptance does
-not establish an independent manifest/PCR allowlist, current attestation freshness
-or revocation status. Operator IDs and share IDs remain unsigned routing labels.
+Human output confirms `Proof verification: passed` after acceptance. Add
+`--verbose-proofs` to a hosted creation or resume command to see which Signer
+endorsed the attestation, what verified against the AWS Nitro root, and how the
+signed claims matched the saved request and returned keys. On resume, the
+report includes the local operation ID and the activity ID queried. A pending
+activity still reports its status and resume command. If proof verification
+fails, the report identifies the failed check and shows differing claim values
+when available.
+
+The AWS certificate chain is verified at attestation issuance. Operator IDs
+and share IDs are unsigned routing labels. The flag is for hosted creation
+and resume in human output. JSON emits the command result or error.
 
 Missing or invalid proof evidence fails as `proof_verification_failed`.
 Unsupported API environments fail before submission. After submission, remote

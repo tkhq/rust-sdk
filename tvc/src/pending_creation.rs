@@ -286,13 +286,16 @@ pub(crate) async fn submit(
     auth: CreationClient,
     creation: PreparedCreation,
     timestamp_ms: u128,
+    verbose_proofs: bool,
 ) -> Result<Outcome> {
     let mut bytes = [0; 16];
     OsRng
         .try_fill_bytes(&mut bytes)
         .context("failed to generate local creation UUID")?;
     let operation = Operation::open(uuid::Builder::from_random_bytes(bytes).into_uuid())?;
-    operation.submit(ctx, auth, creation, timestamp_ms).await
+    operation
+        .submit(ctx, auth, creation, timestamp_ms, verbose_proofs)
+        .await
 }
 
 impl Operation {
@@ -302,6 +305,7 @@ impl Operation {
         auth: CreationClient,
         creation: PreparedCreation,
         timestamp_ms: u128,
+        verbose_proofs: bool,
     ) -> Result<Outcome> {
         self.prepare_directory()
             .context("failed to prepare the saved creation directory")?;
@@ -358,15 +362,17 @@ impl Operation {
             kind,
             operation_id: self.id,
             activity_id: None,
+            resumed: false,
         };
+        let (outcome, recovery) = recovery.resolve(result, storage_failure)?;
         creation
             .finish(
                 ctx,
                 verifier,
                 &api_base_url,
-                result,
+                outcome,
                 recovery,
-                storage_failure,
+                verbose_proofs,
             )
             .await
     }
@@ -403,6 +409,7 @@ impl SavedCreation {
         operation: &Operation,
         auth: AuthenticatedClient,
         activity_id: String,
+        verbose_proofs: bool,
     ) -> Result<Outcome> {
         let Self {
             version: _,
@@ -447,9 +454,18 @@ impl SavedCreation {
             kind,
             operation_id: operation.id,
             activity_id: Some(activity_id),
+            resumed: true,
         };
+        let (outcome, recovery) = recovery.resolve(result, None)?;
         creation
-            .finish(ctx, verifier, &api_base_url, result, recovery, None)
+            .finish(
+                ctx,
+                verifier,
+                &api_base_url,
+                outcome,
+                recovery,
+                verbose_proofs,
+            )
             .await
     }
 }
@@ -462,6 +478,44 @@ struct Recovery {
     kind: CreationKind,
     operation_id: Uuid,
     activity_id: Option<String>,
+    #[serde(skip)]
+    resumed: bool,
+}
+
+impl Recovery {
+    fn resumed_activity(&self) -> Option<crate::proofs::ResumedActivity<'_>> {
+        let activity_id = self.activity_id.as_deref()?;
+        self.resumed.then_some(crate::proofs::ResumedActivity {
+            operation_id: self.operation_id,
+            activity_id,
+        })
+    }
+
+    fn resolve(
+        self,
+        result: ReceiptResult,
+        storage_failure: Option<anyhow::Error>,
+    ) -> Result<(SubmissionOutcome<ActivityReceipt>, Self)> {
+        let activity_id = match &result {
+            Ok(SubmissionOutcome::Pending { checkpoint, .. }) => checkpoint.activity_id(),
+            Ok(SubmissionOutcome::Completed(receipt)) => receipt.checkpoint().activity_id(),
+            Err(TurnkeyClientError::SubmissionFailed(failure)) => failure.activity_id(),
+            Err(_) => None,
+        };
+        let recovery = Self {
+            activity_id: self.activity_id.or_else(|| activity_id.map(str::to_owned)),
+            ..self
+        };
+        match result {
+            Ok(outcome) => Ok((outcome, recovery)),
+            Err(source) => Err(CreationFailure {
+                source,
+                storage_failure,
+                recovery,
+            }
+            .into()),
+        }
+    }
 }
 
 impl Display for Recovery {
@@ -548,33 +602,10 @@ impl PreparedCreation {
         ctx: &mut StdCtx,
         verifier: TvcProvenance<TurnkeyP256ApiKey>,
         api_base_url: &str,
-        result: ReceiptResult,
+        outcome: SubmissionOutcome<ActivityReceipt>,
         recovery: Recovery,
-        storage_failure: Option<anyhow::Error>,
+        verbose_proofs: bool,
     ) -> Result<Outcome> {
-        let activity_id = match &result {
-            Ok(SubmissionOutcome::Pending { checkpoint, .. }) => checkpoint.activity_id(),
-            Ok(SubmissionOutcome::Completed(receipt)) => receipt.checkpoint().activity_id(),
-            Err(TurnkeyClientError::SubmissionFailed(failure)) => failure.activity_id(),
-            Err(_) => None,
-        };
-        let recovery = Recovery {
-            activity_id: recovery
-                .activity_id
-                .or_else(|| activity_id.map(str::to_owned)),
-            ..recovery
-        };
-        let outcome = match result {
-            Ok(outcome) => outcome,
-            Err(source) => {
-                return Err(CreationFailure {
-                    source,
-                    storage_failure,
-                    recovery,
-                }
-                .into());
-            }
-        };
         match outcome {
             SubmissionOutcome::Pending { reason, .. } => {
                 Ok(Outcome::CreationPending(CreationPending {
@@ -596,14 +627,15 @@ impl PreparedCreation {
                 } => {
                     let organization_id = receipt.checkpoint().organization_id();
                     let acceptance = verifier.accept_operator(expected, receipt).await;
-                    crate::proofs::present_status(ctx.shell(), &acceptance);
-                    let accepted = acceptance
-                        .context("proof acceptance failed; no keys were saved")
-                        .with_context(|| recovery.to_string())?;
-                    let hosted = accepted
-                        .into_value()
-                        .try_into()
-                        .with_context(|| recovery.to_string())?;
+                    let verified = crate::proofs::present(
+                        ctx.shell(),
+                        acceptance,
+                        verbose_proofs,
+                        recovery.resumed_activity(),
+                    )
+                    .context("proof acceptance failed; no keys were saved")
+                    .with_context(|| recovery.to_string())?;
+                    let hosted = verified.try_into().with_context(|| recovery.to_string())?;
                     save_hosted_operator(
                         &config_file_path()?,
                         &org_alias,
@@ -622,11 +654,15 @@ impl PreparedCreation {
                     expected,
                 } => {
                     let acceptance = verifier.accept_quorum(expected, receipt).await;
-                    crate::proofs::present_status(ctx.shell(), &acceptance);
-                    let accepted = acceptance
-                        .context("proof acceptance failed; no keys were accepted")
-                        .with_context(|| recovery.to_string())?;
-                    Ok(Outcome::QuorumKeyCreated(accepted.into_value().into()))
+                    let verified = crate::proofs::present(
+                        ctx.shell(),
+                        acceptance,
+                        verbose_proofs,
+                        recovery.resumed_activity(),
+                    )
+                    .context("proof acceptance failed; no keys were accepted")
+                    .with_context(|| recovery.to_string())?;
+                    Ok(Outcome::QuorumKeyCreated(verified.into()))
                 }
             },
         }
@@ -664,7 +700,7 @@ impl Display for CreationPending {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::output::{ColorChoice, ErrorMessage, MessageFormat, Shell};
+    use crate::output::{ColorChoice, ErrorMessage, MessageFormat, Shell, TestShell};
     use serde_json::json;
     use std::{io::Read, os::unix::fs::PermissionsExt};
     use turnkey_client::{TurnkeyClient, TurnkeyP256ApiKey};
@@ -931,6 +967,7 @@ mod tests {
                 kind: CreationKind::Operator,
                 operation_id: ID.parse().unwrap(),
                 activity_id: None,
+                resumed: false,
             },
         }
         .into();
@@ -971,6 +1008,7 @@ mod tests {
                     with_provenance(auth(&server)).unwrap(),
                     prepared_creation(quorum),
                     100,
+                    false,
                 )
                 .await
                 .unwrap();
@@ -1005,6 +1043,7 @@ mod tests {
                     &operation,
                     auth(&server),
                     "activity-b".into(),
+                    false,
                 )
                 .await
                 .unwrap();
@@ -1034,6 +1073,7 @@ mod tests {
                 with_provenance(auth(&server)).unwrap(),
                 prepared_creation(false),
                 100,
+                false,
             )
             .await
             .err()
@@ -1075,7 +1115,13 @@ mod tests {
         };
         assert!(
             saved(false)
-                .resume(&mut context(), &operation, wrong_org, "activity-a".into())
+                .resume(
+                    &mut context(),
+                    &operation,
+                    wrong_org,
+                    "activity-a".into(),
+                    false
+                )
                 .await
                 .is_err()
         );
@@ -1089,7 +1135,8 @@ mod tests {
                     &mut context(),
                     &operation,
                     wrong_environment,
-                    "activity-a".into()
+                    "activity-a".into(),
+                    false
                 )
                 .await
                 .is_err()
@@ -1134,6 +1181,7 @@ mod tests {
                     &operation,
                     auth(&server),
                     "activity-a".into(),
+                    false,
                 )
                 .await
                 .err()
@@ -1184,7 +1232,13 @@ mod tests {
                         .load()
                         .await
                         .unwrap()
-                        .resume(&mut context(), &operation, client, "activity-a".into())
+                        .resume(
+                            &mut context(),
+                            &operation,
+                            client,
+                            "activity-a".into(),
+                            false,
+                        )
                         .await
                 } else {
                     operation
@@ -1193,6 +1247,7 @@ mod tests {
                             with_provenance(client).unwrap(),
                             prepared_creation(quorum),
                             100,
+                            false,
                         )
                         .await
                 };
@@ -1252,6 +1307,7 @@ mod tests {
                 &operation,
                 auth(&server),
                 "activity-b".into(),
+                false,
             )
             .await
             .err()
@@ -1275,6 +1331,7 @@ mod tests {
             kind: CreationKind::Operator,
             operation_id: ID.parse().unwrap(),
             activity_id: None,
+            resumed: false,
         };
         assert!(recovery.to_string().contains("--activity-id <candidate>"));
         let recovery = Recovery {
@@ -1286,5 +1343,109 @@ mod tests {
                 .to_string()
                 .ends_with(r#"--activity-id='label'\'' $(example)'"#)
         );
+    }
+    #[tokio::test]
+    async fn verbose_resume_preserves_requests_checkpoint_and_rejection() {
+        for format in [MessageFormat::Human, MessageFormat::Json] {
+            for quorum in [false, true] {
+                let original = serde_json::to_value(saved(quorum)).unwrap();
+                let ephemeral_key = hex::encode(
+                    qos_p256::P256Pair::generate()
+                        .unwrap()
+                        .public_key()
+                        .to_bytes(),
+                );
+                let mut observations = Vec::new();
+                for verbose in [false, true] {
+                    let directory = tempfile::tempdir().unwrap();
+                    let operation = Operation::at(directory.path(), ID.parse().unwrap());
+                    operation.save(&original).unwrap();
+                    let server = MockServer::start().await;
+                    let result = if quorum {
+                        json!({"createTvcQuorumKeyResult": {"quorumKeyId":ID,"quorumPublicKey":"returned-key","shareIds":[]}})
+                    } else {
+                        json!({"createTvcOperatorResult": {"operatorId":ID,"walletId":ID,"encryptPublicKey":"returned-encryption","signPublicKey":"returned-signing"}})
+                    };
+                    Mock::given(method("POST")).and(path("/public/v1/query/get_activity"))
+                    .respond_with(ResponseTemplate::new(200).set_body_json(json!({"activity": {
+                        "id":"activity-a", "organizationId":ORGANIZATION_ID, "status":"ACTIVITY_STATUS_COMPLETED", "fingerprint":"untrusted-lookup-fingerprint",
+                        "type": if quorum {"ACTIVITY_TYPE_CREATE_TVC_QUORUM_KEY"} else {"ACTIVITY_TYPE_CREATE_TVC_OPERATOR"},
+                        "result":result,
+                        "appProofs":[{"scheme":"SIGNATURE_SCHEME_EPHEMERAL_KEY_P256","publicKey":ephemeral_key,
+                            "signature":"00".repeat(64), "proofPayload":json!({"type":if quorum {"APP_PROOF_TYPE_TVC_QUORUM_KEY_CREATE"} else {"APP_PROOF_TYPE_ADDRESS_DERIVATION"}}).to_string()}]
+                    }}))).expect(1).mount(&server).await;
+                    Mock::given(method("POST"))
+                        .and(path("/public/v1/query/get_boot_proof"))
+                        .respond_with(ResponseTemplate::new(503))
+                        .expect(1)
+                        .mount(&server)
+                        .await;
+                    let mut ctx = StdCtx::new(Shell::standard(format, ColorChoice::Never), true);
+                    let error = operation
+                        .load()
+                        .await
+                        .unwrap()
+                        .resume(
+                            &mut ctx,
+                            &operation,
+                            auth(&server),
+                            "activity-a".into(),
+                            verbose,
+                        )
+                        .await
+                        .err()
+                        .unwrap();
+                    let rejected = error
+                        .chain()
+                        .find_map(|cause| cause.downcast_ref::<turnkey_proofs::tvc::Rejected>())
+                        .unwrap_or_else(|| panic!("expected proof rejection, got {error:#}"));
+                    assert_eq!(
+                        rejected.stage(),
+                        turnkey_proofs::tvc::AcceptanceStage {
+                            check: turnkey_proofs::tvc::ProofCheck::BootProofLookup,
+                            envelope_index: Some(0),
+                        }
+                    );
+                    let requests: Vec<_> = server
+                        .received_requests()
+                        .await
+                        .unwrap()
+                        .into_iter()
+                        .map(|request| {
+                            (
+                                request.url.path().to_owned(),
+                                serde_json::from_slice::<serde_json::Value>(&request.body).unwrap(),
+                            )
+                        })
+                        .collect();
+                    assert_eq!(
+                        requests
+                            .iter()
+                            .map(|(path, _)| path.as_str())
+                            .collect::<Vec<_>>(),
+                        [
+                            "/public/v1/query/get_activity",
+                            "/public/v1/query/get_boot_proof"
+                        ]
+                    );
+                    let mut shell = TestShell::with_json_formatter();
+                    shell.emit(&ErrorMessage::from_error(&error)).unwrap();
+                    let saved_bytes = std::fs::read(&operation.path).unwrap();
+                    assert_eq!(
+                        serde_json::from_slice::<serde_json::Value>(&saved_bytes).unwrap(),
+                        original
+                    );
+                    observations.push((
+                        requests,
+                        saved_bytes,
+                        serde_json::to_value(ErrorMessage::from_error(&error)).unwrap(),
+                        shell.into_stdout(),
+                    ));
+                    assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 1);
+                    server.verify().await;
+                }
+                assert_eq!(observations[0], observations[1]);
+            }
+        }
     }
 }

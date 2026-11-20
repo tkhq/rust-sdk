@@ -18,6 +18,9 @@ pub struct ResumeArgs {
     /// Activity ID to look up, as printed by creation or shown in Turnkey.
     #[arg(long, value_parser = NonEmptyStringValueParser::new())]
     activity_id: String,
+    /// Expand human output with the checks and public proof evidence.
+    #[arg(long)]
+    verbose_proofs: bool,
 }
 
 impl ResumeArgs {
@@ -31,6 +34,8 @@ impl ResumeArgs {
         let saved = operation.load().await?;
         saved.check_kind(kind)?;
         let auth = build_client(&config).await?;
-        saved.resume(ctx, &operation, auth, self.activity_id).await
+        saved
+            .resume(ctx, &operation, auth, self.activity_id, self.verbose_proofs)
+            .await
     }
 }

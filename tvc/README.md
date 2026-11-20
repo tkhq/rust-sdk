@@ -15,7 +15,9 @@ Hosted creation saves its original request receipt under
 the same organization and API environment. Both resume commands require
 `--activity-id`. If the original response was lost, find the activity ID in
 Turnkey. Resume verifies the result against the saved receipt before accepting
-keys. Completed receipts remain available for later verification.
+keys. Completed receipts remain available for later verification. Add
+`--verbose-proofs` to either creation or resume command to see the Signer and AWS
+checks and how the signed result matched the original request.
 
 ## Installation
 
