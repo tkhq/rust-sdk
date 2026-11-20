@@ -17,6 +17,10 @@ pub struct AppConfig {
     pub quorum_public_key: String,
     #[serde(default = "default_enable_egress")]
     pub enable_egress: bool,
+    /// Use static IPs for outbound connections. Requires egress to be enabled
+    /// and is fixed at app creation.
+    #[serde(default)]
+    pub enable_static_egress_ips: bool,
     #[serde(default)]
     pub manifest_set_id: Option<String>,
     #[serde(default)]
@@ -107,6 +111,7 @@ impl AppConfig {
             name: "<FILL_IN_APP_NAME>".to_string(),
             quorum_public_key: KNOWN_QUORUM_KEY.to_string(),
             enable_egress: true,
+            enable_static_egress_ips: false,
             manifest_set_id: None,
             manifest_set_params: Some(OperatorSetParams {
                 name: "<FILL_IN_MANIFEST_SET_NAME>".to_string(),
@@ -399,6 +404,34 @@ mod tests {
         let config: AppConfig = serde_json::from_value(valid_config_json()).unwrap();
 
         assert!(config.enable_egress);
+    }
+
+    #[test]
+    fn config_deserializes_enable_static_egress_ips() {
+        let config: AppConfig = serde_json::from_value(valid_config_json()).unwrap();
+        assert!(!config.enable_static_egress_ips);
+
+        for enabled in [false, true] {
+            let mut json = valid_config_json();
+            json["enableStaticEgressIps"] = json!(enabled);
+            let config: AppConfig = serde_json::from_value(json).unwrap();
+
+            assert_eq!(config.enable_static_egress_ips, enabled);
+            assert_eq!(
+                serde_json::to_value(config).unwrap()["enableStaticEgressIps"],
+                json!(enabled)
+            );
+        }
+    }
+
+    #[test]
+    fn config_rejects_non_boolean_enable_static_egress_ips() {
+        let mut json = valid_config_json();
+        json["enableStaticEgressIps"] = json!("true");
+
+        let error = serde_json::from_value::<AppConfig>(json).unwrap_err();
+
+        assert!(error.is_data());
     }
 
     #[test]
