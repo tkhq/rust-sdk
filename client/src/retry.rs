@@ -1,12 +1,13 @@
 //! Turnkey Client to interact with the Turnkey API
 //! See <https://docs.turnkey.com>
-use std::time::Duration;
+use rand::Rng;
+use std::{ops::RangeInclusive, time::Duration};
 
 #[derive(Debug, Clone)]
 pub struct RetryConfig {
-    /// Initial delay before the first retry
+    /// First backoff, before capping and jitter.
     pub initial_delay: Duration,
-    /// Multiplier for `initial_delay`, yielding the next delay
+    /// Scales the backoff after each attempt.
     pub multiplier: f64,
     /// Maximum delay between retries to cap the time between retries.
     pub max_delay: Duration,
@@ -20,7 +21,7 @@ impl Default for RetryConfig {
             initial_delay: Duration::from_millis(500),
             multiplier: 2.0,
             max_delay: Duration::from_secs(5),
-            max_retries: 5,
+            max_retries: 6,
         }
     }
 }
@@ -38,9 +39,26 @@ impl RetryConfig {
         }
     }
 
-    /// Computes the delay to wait after N attempts have been made.
-    /// `attempt_count` starts at 1 because it never makes sense to wait before the first try.
+    /// Returns the delay to wait after `attempt_count` attempts. It starts at 1.
+    ///
+    /// The backoff is `initial_delay * multiplier^(attempt_count - 1)`, capped at `max_delay`.
+    /// The delay is a random value in `[backoff / 2, backoff]` ("equal jitter"), so clients
+    /// do not retry in lockstep and the result never exceeds `max_delay`.
+    /// Extreme attempt counts or multipliers are not supported.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `attempt_count` is 0 or greater than `max_retries`.
     pub fn compute_delay(&self, attempt_count: usize) -> Duration {
+        self.compute_delay_with(attempt_count, |range| rand::thread_rng().gen_range(range))
+    }
+
+    /// Like [`Self::compute_delay`], with the choice from the jitter range made by `pick`.
+    fn compute_delay_with(
+        &self,
+        attempt_count: usize,
+        pick: impl FnOnce(RangeInclusive<Duration>) -> Duration,
+    ) -> Duration {
         if attempt_count == 0 {
             panic!("attempt_count cannot be 0")
         }
@@ -57,13 +75,9 @@ impl RetryConfig {
         // - we should wait "delay*m ( = delay*(m^1)) after the second attempt
         // - we should wait "delay*m*m ( = delay*(m^2)) after the third attempt
         let factor = self.multiplier.powi((attempt_count - 1) as i32);
-        let mut delay = self.initial_delay.mul_f64(factor);
+        let backoff = self.initial_delay.mul_f64(factor).min(self.max_delay);
 
-        if delay > self.max_delay {
-            delay = self.max_delay;
-        }
-
-        delay
+        pick(backoff / 2..=backoff)
     }
 }
 
@@ -85,38 +99,111 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "attempt_count (6) is greater than max_retries (5)")]
+    #[should_panic(expected = "attempt_count (7) is greater than max_retries (6)")]
     fn test_compute_delay_panics_after_max_attempts() {
-        RetryConfig::default().compute_delay(6);
+        RetryConfig::default().compute_delay(7);
     }
 
-    #[test]
-    fn test_default_retry() {
-        let config = RetryConfig::default();
-        assert_eq!(config.compute_delay(1), Duration::from_millis(500));
-        assert_eq!(config.compute_delay(2), Duration::from_millis(1000));
-        assert_eq!(config.compute_delay(3), Duration::from_secs(2));
-        assert_eq!(config.compute_delay(4), Duration::from_secs(4));
-        assert_eq!(config.compute_delay(5), Duration::from_secs(5));
-    }
-
-    #[test]
-    fn test_long_retry_count() {
-        let config = RetryConfig {
-            initial_delay: Duration::from_millis(500),
-            multiplier: 2.0,
+    fn default_config_with_retries(max_retries: usize) -> RetryConfig {
+        RetryConfig {
             max_delay: Duration::from_secs(10),
-            max_retries: 8,
-        };
+            max_retries,
+            ..RetryConfig::default()
+        }
+    }
 
-        // Same as default config, except we allow more retries to see "max_delay" kick in.
-        assert_eq!(config.compute_delay(1), Duration::from_millis(500));
-        assert_eq!(config.compute_delay(2), Duration::from_millis(1000));
-        assert_eq!(config.compute_delay(3), Duration::from_secs(2));
-        assert_eq!(config.compute_delay(4), Duration::from_secs(4));
-        assert_eq!(config.compute_delay(5), Duration::from_secs(8));
-        assert_eq!(config.compute_delay(6), Duration::from_secs(10));
-        assert_eq!(config.compute_delay(7), Duration::from_secs(10));
-        assert_eq!(config.compute_delay(8), Duration::from_secs(10));
+    fn lowest(range: RangeInclusive<Duration>) -> Duration {
+        *range.start()
+    }
+
+    fn highest(range: RangeInclusive<Duration>) -> Duration {
+        *range.end()
+    }
+
+    #[test]
+    fn test_lowest_pick_is_half_the_backoff() {
+        let config = RetryConfig::default();
+        assert_eq!(
+            config.compute_delay_with(1, lowest),
+            Duration::from_millis(250)
+        );
+        assert_eq!(
+            config.compute_delay_with(2, lowest),
+            Duration::from_millis(500)
+        );
+        assert_eq!(config.compute_delay_with(3, lowest), Duration::from_secs(1));
+        assert_eq!(config.compute_delay_with(4, lowest), Duration::from_secs(2));
+    }
+
+    #[test]
+    fn test_highest_pick_is_full_exponential_backoff() {
+        let config = default_config_with_retries(8);
+        assert_eq!(
+            config.compute_delay_with(1, highest),
+            Duration::from_millis(500)
+        );
+        assert_eq!(
+            config.compute_delay_with(2, highest),
+            Duration::from_millis(1000)
+        );
+        assert_eq!(
+            config.compute_delay_with(3, highest),
+            Duration::from_secs(2)
+        );
+        assert_eq!(
+            config.compute_delay_with(4, highest),
+            Duration::from_secs(4)
+        );
+        assert_eq!(
+            config.compute_delay_with(5, highest),
+            Duration::from_secs(8)
+        );
+    }
+
+    #[test]
+    fn test_max_delay_caps_jittered_delay() {
+        let config = default_config_with_retries(8);
+        assert_eq!(
+            config.compute_delay_with(6, highest),
+            Duration::from_secs(10)
+        );
+        assert_eq!(
+            config.compute_delay_with(8, highest),
+            Duration::from_secs(10)
+        );
+        assert_eq!(config.compute_delay_with(8, lowest), Duration::from_secs(5));
+    }
+
+    #[test]
+    fn test_cap_is_exact_when_not_representable_as_f64() {
+        // 2^24 s + 2 ns is not exactly representable as f64 seconds.
+        let max_delay = Duration::new(1 << 24, 2);
+        let config = RetryConfig {
+            initial_delay: Duration::from_secs(1 << 25),
+            multiplier: 1.0,
+            max_delay,
+            max_retries: 1,
+        };
+        assert_eq!(config.compute_delay_with(1, highest), max_delay);
+        assert_eq!(config.compute_delay_with(1, lowest), max_delay / 2);
+    }
+
+    #[test]
+    fn test_default_max_retries() {
+        assert_eq!(RetryConfig::default().max_retries, 6);
+    }
+
+    #[test]
+    fn test_compute_delay_stays_within_bounds() {
+        let config = default_config_with_retries(8);
+        for attempt in 1..=8 {
+            let backoff = config.compute_delay_with(attempt, highest);
+            assert!(backoff <= config.max_delay);
+            for _ in 0..100 {
+                let delay = config.compute_delay(attempt);
+                assert!(delay >= backoff / 2, "{delay:?} below lower bound");
+                assert!(delay <= backoff, "{delay:?} above upper bound");
+            }
+        }
     }
 }

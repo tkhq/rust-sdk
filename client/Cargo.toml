@@ -15,6 +15,7 @@ categories = ["api-bindings"]
 hex.workspace = true
 mime.workspace = true
 chrono.workspace = true
+rand = { workspace = true, features = ["std", "std_rng"] }
 prost.workspace = true
 prost-types.workspace = true
 reqwest.workspace = true
