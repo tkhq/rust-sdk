@@ -1,6 +1,6 @@
 #![doc = include_str!("../README.md")]
 
-use std::num::ParseIntError;
+use std::{num::ParseIntError, str::FromStr};
 
 use aws_nitro_enclaves_cose::{
     CoseSign1,
@@ -331,28 +331,26 @@ pub fn verify_app_proof_signature(app_proof: &AppProof) -> Result<(), AppProofEr
     let verifying_key = P256VerifyingKey::from_sec1_bytes(signing_pub_key_bytes)
         .map_err(|e| AppProofError::InvalidSigningPublicKeyBytes(e.to_string()))?;
 
-    verify_payload_signature(app_proof, &verifying_key)
+    verify_payload_signature(
+        app_proof.proof_payload.as_bytes(),
+        &app_proof.signature,
+        &verifying_key,
+    )
 }
 
-// Keep the existing SHA-256 ECDSA convention while allowing TVC to reuse a parsed key.
 fn verify_payload_signature(
-    app_proof: &AppProof,
+    payload: &[u8],
+    signature_hex: &str,
     verifying_key: &P256VerifyingKey,
 ) -> Result<(), AppProofError> {
-    if app_proof.scheme != SignatureScheme::EphemeralKeyP256 {
-        return Err(AppProofError::InvalidSignatureScheme);
-    }
-    let signature_bytes = hex::decode(&app_proof.signature)
-        .map_err(|e| AppProofError::InvalidSignature(e.to_string()))?;
+    let signature_bytes =
+        hex::decode(signature_hex).map_err(|e| AppProofError::InvalidSignature(e.to_string()))?;
     let signature = p256::ecdsa::Signature::from_slice(&signature_bytes)
         .map_err(|e| AppProofError::InvalidSignature(e.to_string()))?;
 
-    let msg = app_proof.proof_payload.as_bytes();
     verifying_key
-        .verify(msg, &signature)
-        .map_err(|e| AppProofError::FailedSignatureVerification(e.to_string()))?;
-
-    Ok(())
+        .verify(payload, &signature)
+        .map_err(|e| AppProofError::FailedSignatureVerification(e.to_string()))
 }
 
 /// A valid composite ephemeral public key parsed from canonical wire hex.
@@ -370,10 +368,10 @@ pub enum EphemeralPublicKeyError {
     InvalidKey(qos_p256::P256Error),
 }
 
-impl TryFrom<&str> for EphemeralPublicKey {
-    type Error = EphemeralPublicKeyError;
+impl FromStr for EphemeralPublicKey {
+    type Err = EphemeralPublicKeyError;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
         let bytes = hex::decode(value)?;
         if hex::encode(&bytes) != value {
             return Err(EphemeralPublicKeyError::NonCanonicalHex);
@@ -451,7 +449,9 @@ pub fn verify(app_proof: &AppProof, boot_proof: &BootProof) -> Result<(), Verify
     .map_err(|e| VerifyError::InvalidAttestation(e.to_string()))?;
 
     let parsed_boot_proof = ParsedBootProof::parse(boot_proof)?;
-    let app_ephemeral_pub_key = EphemeralPublicKey::try_from(app_proof.public_key.as_str())
+    let app_ephemeral_pub_key = app_proof
+        .public_key
+        .parse::<EphemeralPublicKey>()
         .map_err(|e| AppProofError::InvalidPublicKey(e.to_string()))
         .map_err(|e| VerifyError::InvalidAppProof(e.to_string()))?;
     verify_boot_binding(
@@ -482,10 +482,10 @@ impl ParsedBootProof {
         Ok(Self {
             manifest,
             manifest_envelope,
-            ephemeral_key: EphemeralPublicKey::try_from(
-                boot_proof.ephemeral_public_key_hex.as_str(),
-            )
-            .map_err(|e| VerifyError::InvalidBootProof(e.to_string()))?,
+            ephemeral_key: boot_proof
+                .ephemeral_public_key_hex
+                .parse::<EphemeralPublicKey>()
+                .map_err(|e| VerifyError::InvalidBootProof(e.to_string()))?,
         })
     }
 }
@@ -785,12 +785,12 @@ mod tests {
         );
         assert_eq!(
             details.ephemeral_key,
-            EphemeralPublicKey::try_from(app.public_key.as_str()).unwrap()
+            app.public_key.parse::<EphemeralPublicKey>().unwrap()
         );
         for (index, pcr) in details.pcrs.iter().enumerate() {
             assert_eq!(pcr, &attestation.pcrs[&index].to_vec());
         }
-        let app_key = EphemeralPublicKey::try_from(app.public_key.as_str()).unwrap();
+        let app_key = app.public_key.parse::<EphemeralPublicKey>().unwrap();
         verify_boot_binding(&app_key, parsed, attestation.clone(), None).unwrap();
 
         let quorum_key = QuorumPublicKey::from_bytes(&details.manifest_quorum_key).unwrap();
@@ -817,7 +817,7 @@ mod tests {
     #[test]
     fn test_verify_boot_binding_rejects_missing_or_wrong_manifest_commitment() {
         let (app, boot, attestation) = test_boot_binding_inputs();
-        let app_key = EphemeralPublicKey::try_from(app.public_key.as_str()).unwrap();
+        let app_key = app.public_key.parse::<EphemeralPublicKey>().unwrap();
         let missing = AttestationDoc {
             user_data: None,
             ..attestation.clone()
@@ -849,11 +849,11 @@ mod tests {
     #[test]
     fn test_verify_boot_binding_requires_all_ephemeral_keys_to_match() {
         let (app, boot, attestation) = test_boot_binding_inputs();
-        let app_key = EphemeralPublicKey::try_from(app.public_key.as_str()).unwrap();
+        let app_key = app.public_key.parse::<EphemeralPublicKey>().unwrap();
         let other_key = test_app_proof2().public_key;
         assert!(matches!(
             verify_boot_binding(
-                &EphemeralPublicKey::try_from(other_key.as_str()).unwrap(),
+                &other_key.parse::<EphemeralPublicKey>().unwrap(),
                 ParsedBootProof::parse(&boot).unwrap(),
                 attestation.clone(),
                 None,
@@ -900,7 +900,7 @@ mod tests {
     #[test]
     fn test_verify_boot_binding_rejects_wrong_pcrs() {
         let (app, boot, attestation) = test_boot_binding_inputs();
-        let app_key = EphemeralPublicKey::try_from(app.public_key.as_str()).unwrap();
+        let app_key = app.public_key.parse::<EphemeralPublicKey>().unwrap();
         for index in [0, 1, 2, 3, 17] {
             let mut wrong = attestation.clone();
             wrong.pcrs.insert(index, ByteBuf::from(vec![0; 48]));
@@ -922,18 +922,13 @@ mod tests {
     #[test]
     fn test_ephemeral_public_key_conversion_requires_a_canonical_composite_key() {
         let key = test_app_proof1().public_key;
-        assert_eq!(
-            EphemeralPublicKey::try_from(key.as_str())
-                .unwrap()
-                .to_string(),
-            key
-        );
+        assert_eq!(key.parse::<EphemeralPublicKey>().unwrap().to_string(), key);
         for invalid in [
             key.to_uppercase(),
             format!("{}{}", "00".repeat(65), &key[130..]),
             key[130..].to_owned(),
         ] {
-            assert!(EphemeralPublicKey::try_from(invalid.as_str()).is_err());
+            assert!(invalid.parse::<EphemeralPublicKey>().is_err());
             let app = AppProof {
                 public_key: invalid.clone(),
                 ..test_app_proof1()

@@ -1,6 +1,6 @@
 //! Records what the verifier checked. Only a successful acceptance returns verified keys.
 
-use super::{P256PublicKey, TvcProvenanceError, endorsement::SignerEnvironment};
+use super::{ClaimEvidence, P256PublicKey, TvcProvenanceError, endorsement::SignerEnvironment};
 use crate::EphemeralPublicKey;
 use std::{fmt, sync::Arc};
 use turnkey_client::RequestFingerprint;
@@ -57,26 +57,6 @@ pub struct BootEvidence {
     pub manifest_quorum_key: Vec<u8>,
     pub ephemeral_key: EphemeralPublicKey,
     pub pcrs: [Vec<u8>; 4],
-}
-
-/// Authenticated creation claims with parsed public keys and request fingerprints.
-#[derive(Debug)]
-pub enum ClaimEvidence {
-    Operator {
-        organization: String,
-        wallet: String,
-        path: String,
-        public_key: P256PublicKey,
-        digests: Vec<RequestFingerprint>,
-    },
-    Quorum {
-        organization: String,
-        id: String,
-        public_key: QuorumPublicKey,
-        threshold: u32,
-        recipients: Vec<P256PublicKey>,
-        digests: Vec<RequestFingerprint>,
-    },
 }
 
 /// Raw returned operator operands, retained even when malformed.
@@ -381,28 +361,6 @@ impl Rejected {
     }
     pub fn facts(&self) -> &AcceptanceFacts {
         &self.facts
-    }
-}
-
-impl From<&super::claims::Claim> for ClaimEvidence {
-    fn from(claim: &super::claims::Claim) -> Self {
-        match claim {
-            super::claims::Claim::Operator(claim) => Self::Operator {
-                organization: claim.body.organization_id.clone(),
-                wallet: claim.body.wallet_id.clone(),
-                path: claim.body.derivation_path.clone(),
-                public_key: claim.body.address,
-                digests: claim.context.digests.clone(),
-            },
-            super::claims::Claim::Quorum(claim) => Self::Quorum {
-                organization: claim.body.organization_id.clone(),
-                id: claim.body.quorum_key_id.clone(),
-                public_key: claim.body.quorum_public_key.clone(),
-                threshold: claim.body.threshold,
-                recipients: claim.body.operator_encrypt_keys.clone(),
-                digests: claim.context.digests.clone(),
-            },
-        }
     }
 }
 

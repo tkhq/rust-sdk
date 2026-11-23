@@ -6,31 +6,39 @@
 
 mod claims;
 mod endorsement;
-mod keys;
-pub use keys::*;
 mod facts;
+mod keys;
+
+pub use claims::ClaimEvidence;
 pub use endorsement::ENDORSEMENT_PREFIX;
-pub use facts::*;
+pub use facts::{
+    AcceptanceEvidence, AcceptanceFacts, AcceptanceStage, Accepted, AttestationEvidence,
+    BootEvidence, Check, CheckState, EnvelopeFacts, OperatorResultEvidence, ProofCheck,
+    QuorumResultEvidence, Rejected,
+};
+pub use keys::{
+    BootProofLookupError, OperatorExpectation, P256PublicKey, QuorumExpectation,
+    TvcProvenanceError, VerifiedOperatorKeys, VerifiedOperatorParts, VerifiedQuorumKey,
+};
+
+use endorsement::{ParsedAppProof, VerifiedBoot};
 use facts::{AcceptanceTrace, BootObservation, CheckOutcome, FailedCheck};
-
-use claims::{Claim, Context, OperatorClaim, QuorumClaim};
-
+use std::sync::Arc;
 use turnkey_api_key_stamper::Stamp;
 use turnkey_client::{
     ActivityReceipt, RequestFingerprint, SubmissionCheckpoint, TurnkeyClient,
     generated::{
-        ActivityStatus, ActivityType, CreateTvcOperatorResult, CreateTvcQuorumKeyResult,
+        Activity, ActivityStatus, ActivityType, CreateTvcOperatorResult, CreateTvcQuorumKeyResult,
+        external::data::v1::{AppProof, BootProof},
         immutable::activity::v1::result::Inner as ActivityResult,
     },
 };
-
-use endorsement::{ParsedAppProof, VerifiedBoot};
-use std::sync::Arc;
-use turnkey_client::generated::{
-    Activity,
-    external::data::v1::{AppProof, BootProof},
-};
+use turnkey_enclave_encrypt::QuorumPublicKey;
 use uuid::Uuid;
+
+/// Each recipient gets one Shamir share with a distinct index in GF(256).
+/// Index zero holds the secret, leaving 255 indices for recipients.
+pub const MAX_QUORUM_RECIPIENTS: usize = 255;
 
 /// Unverified response data and its proof envelopes.
 struct RawActivity {
@@ -94,7 +102,8 @@ impl From<Activity> for RawActivity {
     }
 }
 
-/// Opaque capability for the selected independent TVC endorsement policy.
+/// Verifies that the returned hosted operator or quorum public keys were produced
+/// by the trusted Signer for the caller's exact creation request.
 pub struct TvcProvenance<S: Stamp> {
     client: TurnkeyClient<S>,
     endorsement: endorsement::SelectedEndorsement,
@@ -185,22 +194,24 @@ impl<S: Stamp> TvcProvenance<S> {
         trace: &mut AcceptanceTrace,
     ) -> Result<VerifiedOperatorKeys, FailedCheck> {
         let returned = trace.checks.record(response.completed_operator_result())?;
-        let claims = self.claims(&expected.organization, proofs, trace).await?;
+        self.collect_claims(&expected.organization, proofs, trace)
+            .await?;
+        let claims = trace.envelopes.iter().filter_map(EnvelopeFacts::claim);
         let roles = trace
             .checks
             .record(OperatorRoleClaims::from_claims(claims, expected))?;
         let fingerprint = trace.checks.record(match_common_submission(
             checkpoint,
-            &[&roles.encrypt.context, &roles.sign.context],
+            &[roles.encrypt.digests, roles.sign.digests],
         ))?;
         trace.matched_fingerprint = Some(fingerprint);
         trace.checks.record(roles.check_distinct_keys())?;
         trace.checks.record(roles.check_returned_result(returned))?;
         Ok(VerifiedOperatorKeys {
-            wallet: roles.encrypt.body.wallet_id,
+            wallet: roles.encrypt.wallet.to_owned(),
             base_path: expected.base_path.clone(),
-            encrypt_key: roles.encrypt.body.address,
-            signing_key: roles.sign.body.address,
+            encrypt_key: *roles.encrypt.public_key,
+            signing_key: *roles.sign.public_key,
             untrusted_operator_id: returned.operator_id.clone(),
         })
     }
@@ -255,11 +266,13 @@ impl<S: Stamp> TvcProvenance<S> {
         trace: &mut AcceptanceTrace,
     ) -> Result<VerifiedQuorumKey, FailedCheck> {
         let returned = trace.checks.record(response.completed_quorum_result())?;
-        let claims = self.claims(&expected.organization, proofs, trace).await?;
+        self.collect_claims(&expected.organization, proofs, trace)
+            .await?;
+        let claims = trace.envelopes.iter().filter_map(EnvelopeFacts::claim);
         let claim = trace.checks.record(check_quorum_claim(claims, expected))?;
         let fingerprint = trace
             .checks
-            .record(match_common_submission(checkpoint, &[&claim.context]))?;
+            .record(match_common_submission(checkpoint, &[claim.digests]))?;
         trace.matched_fingerprint = Some(fingerprint);
         let id = trace
             .checks
@@ -270,23 +283,22 @@ impl<S: Stamp> TvcProvenance<S> {
         ))?;
         Ok(VerifiedQuorumKey {
             id,
-            public_key: claim.body.quorum_public_key,
+            public_key: claim.public_key.clone(),
             untrusted_share_ids,
         })
     }
 
     /// Authenticates and decodes key claims, skipping policy outcomes.
     /// Reuses verified boot evidence within this call and checks every app signature.
-    async fn claims(
+    async fn collect_claims(
         &self,
         organization: &str,
         proofs: Vec<AppProof>,
         trace: &mut AcceptanceTrace,
-    ) -> Result<Vec<Claim>, FailedCheck> {
+    ) -> Result<(), FailedCheck> {
         trace.checks.record(check_envelope_count(proofs.len()))?;
         // Entries live only for this acceptance's organization and selected endorsement policy.
         let mut boots: Vec<(VerifiedBoot, usize)> = Vec::new();
-        let mut claims = Vec::new();
         for (index, proof) in proofs.into_iter().enumerate() {
             trace.envelopes.push(EnvelopeFacts::new(index));
             let (entry, previous) = trace
@@ -303,8 +315,11 @@ impl<S: Stamp> TvcProvenance<S> {
             let parsed = entry
                 .checks
                 .record(ParsedAppProof::check_ephemeral_key(proof))?;
-            entry.ephemeral_key = Some(parsed.key().clone());
-            let boot = match boots.iter().find(|(boot, _)| boot.key() == parsed.key()) {
+            entry.ephemeral_key = Some(parsed.ephemeral_key().clone());
+            let boot = match boots
+                .iter()
+                .find(|(boot, _)| boot.key() == parsed.ephemeral_key())
+            {
                 Some((boot, source)) => {
                     entry.boot = previous[*source].boot.clone();
                     entry.boot_source_envelope = Some(*source);
@@ -315,7 +330,7 @@ impl<S: Stamp> TvcProvenance<S> {
                     let raw = entry.checks.record(lookup)?;
                     let mut evidence = BootObservation::default();
                     let verified = self.endorsement.authenticate_boot(
-                        parsed.key(),
+                        parsed.ephemeral_key(),
                         raw,
                         &mut entry.checks,
                         &mut evidence,
@@ -328,11 +343,9 @@ impl<S: Stamp> TvcProvenance<S> {
             let authenticated = entry
                 .checks
                 .record(boot.check_application_signature(parsed))?;
-            let claim = entry.checks.record(Claim::decode(authenticated))?;
-            entry.claim = Some(ClaimEvidence::from(&claim));
-            claims.push(claim);
+            entry.claim = Some(entry.checks.record(ClaimEvidence::decode(authenticated))?);
         }
-        Ok(claims)
+        Ok(())
     }
 
     /// Fetches the boot proof for the app proof's ephemeral key in this organization.
@@ -355,35 +368,58 @@ impl<S: Stamp> TvcProvenance<S> {
     }
 }
 
-struct OperatorRoleClaims {
-    encrypt: OperatorClaim,
-    sign: OperatorClaim,
+struct OperatorRole<'a> {
+    wallet: &'a str,
+    public_key: &'a P256PublicKey,
+    digests: &'a [RequestFingerprint],
 }
 
-impl OperatorRoleClaims {
+struct OperatorRoleClaims<'a> {
+    encrypt: OperatorRole<'a>,
+    sign: OperatorRole<'a>,
+}
+
+impl<'a> OperatorRoleClaims<'a> {
     /// Requires one claim for each requested key path. Both must be for the
     /// requested organization and the same wallet, which must match any wallet the caller selected.
-    fn from_claims(claims: Vec<Claim>, expected: &OperatorExpectation) -> CheckOutcome<Self> {
+    fn from_claims(
+        claims: impl Iterator<Item = &'a ClaimEvidence>,
+        expected: &OperatorExpectation,
+    ) -> CheckOutcome<Self> {
         CheckOutcome::run(ProofCheck::ClaimSetAndIntent, || {
             let encrypt_path = format!("{}/0", expected.base_path);
             let sign_path = format!("{}/1", expected.base_path);
             let mut encrypt = None;
             let mut sign = None;
             for claim in claims {
-                let Claim::Operator(claim) = claim else {
+                let ClaimEvidence::Operator {
+                    organization,
+                    wallet,
+                    path,
+                    public_key,
+                    digests,
+                } = claim
+                else {
                     return Err(TvcProvenanceError::ClaimMismatch("unexpected quorum claim"));
                 };
-                if claim.body.organization_id != expected.organization {
+                if organization != &expected.organization {
                     return Err(TvcProvenanceError::ClaimMismatch("operator organization"));
                 }
-                let slot = if claim.body.derivation_path == encrypt_path {
+                let slot = if path == &encrypt_path {
                     &mut encrypt
-                } else if claim.body.derivation_path == sign_path {
+                } else if path == &sign_path {
                     &mut sign
                 } else {
                     return Err(TvcProvenanceError::ClaimMismatch("operator role path"));
                 };
-                if slot.replace(claim).is_some() {
+                if slot
+                    .replace(OperatorRole {
+                        wallet,
+                        public_key,
+                        digests,
+                    })
+                    .is_some()
+                {
                     return Err(TvcProvenanceError::MalformedEvidence(
                         "duplicate operator role claim".into(),
                     ));
@@ -392,11 +428,11 @@ impl OperatorRoleClaims {
             let (encrypt, sign) = encrypt
                 .zip(sign)
                 .ok_or(TvcProvenanceError::ProofUnavailable)?;
-            if encrypt.body.wallet_id != sign.body.wallet_id
+            if encrypt.wallet != sign.wallet
                 || expected
                     .wallet
                     .as_ref()
-                    .is_some_and(|wallet| wallet != &encrypt.body.wallet_id)
+                    .is_some_and(|wallet| wallet != encrypt.wallet)
             {
                 return Err(TvcProvenanceError::ClaimMismatch("operator wallet"));
             }
@@ -407,7 +443,7 @@ impl OperatorRoleClaims {
     /// Requires different public keys for encryption and signing.
     fn check_distinct_keys(&self) -> CheckOutcome<()> {
         CheckOutcome::run(ProofCheck::OutputKeyRoles, || {
-            if self.encrypt.body.address == self.sign.body.address {
+            if self.encrypt.public_key == self.sign.public_key {
                 return Err(TvcProvenanceError::ClaimMismatch(
                     "operator role keys must differ",
                 ));
@@ -419,9 +455,9 @@ impl OperatorRoleClaims {
     /// Checks that the returned wallet and both public keys match the signed claims.
     fn check_returned_result(&self, returned: &CreateTvcOperatorResult) -> CheckOutcome<()> {
         CheckOutcome::run(ProofCheck::ResultBinding, || {
-            if returned.wallet_id != self.encrypt.body.wallet_id
-                || returned.encrypt_public_key != self.encrypt.body.address.to_string()
-                || returned.sign_public_key != self.sign.body.address.to_string()
+            if returned.wallet_id != self.encrypt.wallet
+                || returned.encrypt_public_key != self.encrypt.public_key.to_string()
+                || returned.sign_public_key != self.sign.public_key.to_string()
             {
                 return Err(TvcProvenanceError::ClaimMismatch(
                     "operator result wallet/keys",
@@ -432,34 +468,51 @@ impl OperatorRoleClaims {
     }
 }
 
+struct QuorumOutputClaim<'a> {
+    id: &'a str,
+    public_key: &'a QuorumPublicKey,
+    digests: &'a [RequestFingerprint],
+}
+
 /// Requires one quorum key claim for the requested organization, threshold, and
 /// recipient keys in their original order.
-fn check_quorum_claim(
-    claims: Vec<Claim>,
+fn check_quorum_claim<'a>(
+    mut claims: impl Iterator<Item = &'a ClaimEvidence>,
     expected: &QuorumExpectation,
-) -> CheckOutcome<QuorumClaim> {
+) -> CheckOutcome<QuorumOutputClaim<'a>> {
     CheckOutcome::run(ProofCheck::ClaimSetAndIntent, || {
-        let mut claims = claims.into_iter();
         let first = claims.next().ok_or(TvcProvenanceError::ProofUnavailable)?;
         if claims.next().is_some() {
             return Err(TvcProvenanceError::MalformedEvidence(
                 "duplicate/conflicting quorum claim".into(),
             ));
         }
-        let Claim::Quorum(claim) = first else {
+        let ClaimEvidence::Quorum {
+            organization,
+            threshold,
+            recipients,
+            id,
+            public_key,
+            digests,
+        } = first
+        else {
             return Err(TvcProvenanceError::ClaimMismatch(
                 "unexpected operator claim",
             ));
         };
-        if claim.body.organization_id != expected.organization
-            || claim.body.threshold != expected.threshold
-            || claim.body.operator_encrypt_keys != expected.recipients
+        if organization != &expected.organization
+            || *threshold != expected.threshold
+            || recipients != &expected.recipients
         {
             return Err(TvcProvenanceError::ClaimMismatch(
                 "quorum organization/threshold/ordered recipients",
             ));
         }
-        Ok(claim)
+        Ok(QuorumOutputClaim {
+            id,
+            public_key,
+            digests,
+        })
     })
 }
 
@@ -467,15 +520,17 @@ fn check_quorum_claim(
 /// Returns the signed key ID as a UUID.
 fn check_quorum_result_binding(
     returned: &CreateTvcQuorumKeyResult,
-    claim: &QuorumClaim,
+    claim: &QuorumOutputClaim<'_>,
 ) -> CheckOutcome<Uuid> {
     CheckOutcome::run(ProofCheck::ResultBinding, || {
-        if returned.quorum_key_id != claim.body.quorum_key_id
-            || returned.quorum_public_key != hex::encode(claim.body.quorum_public_key.as_ref())
+        let signed_key = claim.public_key.as_ref();
+        if returned.quorum_key_id != claim.id
+            || returned.quorum_public_key.len() != 2 * signed_key.len()
+            || hex::decode(&returned.quorum_public_key).as_deref() != Ok(signed_key)
         {
             return Err(TvcProvenanceError::ClaimMismatch("quorum result ID/key"));
         }
-        Uuid::parse_str(&claim.body.quorum_key_id).map_err(|_| {
+        Uuid::parse_str(claim.id).map_err(|_| {
             TvcProvenanceError::MalformedEvidence("quorum key ID must be a UUID".into())
         })
     })
@@ -519,16 +574,12 @@ fn check_envelope_count(count: usize) -> CheckOutcome<()> {
 /// Finds one fingerprint that the client sent and every signed claim includes.
 fn match_common_submission(
     checkpoint: &SubmissionCheckpoint,
-    contexts: &[&Context],
+    digest_sets: &[&[RequestFingerprint]],
 ) -> CheckOutcome<RequestFingerprint> {
     CheckOutcome::run(ProofCheck::CommonSubmission, || {
         checkpoint
             .sent_fingerprints()
-            .find(|sent| {
-                contexts
-                    .iter()
-                    .all(|context| context.digests.contains(sent))
-            })
+            .find(|sent| digest_sets.iter().all(|digests| digests.contains(sent)))
             .copied()
             .ok_or(TvcProvenanceError::ReceiptMismatch)
     })
@@ -536,10 +587,18 @@ fn match_common_submission(
 
 #[cfg(test)]
 mod fixture {
-    use super::endorsement::{SelectedEndorsement, SignerEnvironment};
+    use super::{
+        endorsement::{
+            AuthenticatedPayload, ParsedAppProof, SelectedEndorsement, SignerEnvironment,
+        },
+        facts::{BootObservation, CheckTrace},
+    };
     use turnkey_enclave_encrypt::QuorumPublicKey;
 
-    use x509_cert::{Certificate, der::Encode};
+    use x509_cert::{
+        Certificate,
+        der::{Decode, Encode},
+    };
 
     pub(super) fn with_test_roots(
         quorum_key: QuorumPublicKey,
@@ -566,7 +625,40 @@ mod fixture {
     };
     use serde_bytes::ByteBuf;
     use std::collections::BTreeMap;
-    use turnkey_client::generated::external::data::v1::BootProof;
+    use turnkey_client::generated::external::data::v1::{AppProof, BootProof, SignatureScheme};
+
+    pub(super) fn signer() -> SelectedEndorsement {
+        with_test_roots(
+            QuorumPublicKey::from_bytes(quorum_key()).unwrap(),
+            Certificate::from_der(ROOT).unwrap(),
+        )
+    }
+
+    pub(super) fn proof(payload: String) -> AppProof {
+        let signature: Signature = SigningKey::from_slice(&[9; 32])
+            .unwrap()
+            .sign(payload.as_bytes());
+        AppProof {
+            scheme: SignatureScheme::EphemeralKeyP256,
+            public_key: hex::encode(pin()),
+            proof_payload: payload,
+            signature: hex::encode(signature.to_bytes()),
+        }
+    }
+
+    /// Sign fixture bytes and authenticate them using the synthetic boot proof.
+    pub(super) fn authenticate_payload(payload: String) -> AuthenticatedPayload {
+        let parsed = ParsedAppProof::try_from(proof(payload)).unwrap();
+        let verified_boot = signer()
+            .authenticate_boot(
+                parsed.ephemeral_key(),
+                boot(),
+                &mut CheckTrace::default(),
+                &mut BootObservation::default(),
+            )
+            .unwrap();
+        verified_boot.authenticate(parsed).unwrap()
+    }
 
     pub(super) fn point(seed: u8) -> String {
         hex::encode(
@@ -748,12 +840,12 @@ mod tests {
         CheckTrace,
         ProofCheck::*,
     };
-    use fixture::{pin, point};
+    use fixture::{authenticate_payload, pin, point, proof};
     use p256::ecdsa::{Signature, SigningKey, signature::Signer};
     use serde_json::{Value, json};
     use sha2::{Digest, Sha256};
     use std::collections::HashSet;
-    use std::{sync::Mutex, time::Duration};
+    use std::{convert::Infallible, sync::Mutex, time::Duration};
     use turnkey_client::{
         RetryConfig, TurnkeyClient, TurnkeyP256ApiKey,
         generated::{
@@ -780,21 +872,7 @@ mod tests {
     fn verifier(client: TurnkeyClient<TurnkeyP256ApiKey>) -> TvcProvenance<TurnkeyP256ApiKey> {
         TvcProvenance {
             client,
-            endorsement: fixture::with_test_roots(
-                QuorumPublicKey::from_bytes(fixture::quorum_key()).unwrap(),
-                Certificate::from_der(fixture::ROOT).unwrap(),
-            ),
-        }
-    }
-    fn proof(payload: String) -> AppProof {
-        let signature: Signature = SigningKey::from_slice(&[9; 32])
-            .unwrap()
-            .sign(payload.as_bytes());
-        AppProof {
-            scheme: SignatureScheme::EphemeralKeyP256,
-            public_key: hex::encode(pin()),
-            proof_payload: payload,
-            signature: hex::encode(signature.to_bytes()),
+            endorsement: fixture::signer(),
         }
     }
     fn operator_payload(role: usize, digests: Vec<String>) -> Value {
@@ -880,7 +958,8 @@ mod tests {
         assert_eq!(proofs.len(), 3);
         for p in &proofs {
             crate::verify_app_proof_signature(p).unwrap();
-            assert!(claims::decode_wire_for_test(&p.proof_payload).is_ok());
+            // Use the synthetic boot chain to decode the same payload bytes.
+            assert!(ClaimEvidence::try_from(authenticate_payload(p.proof_payload.clone())).is_ok());
         }
         let mut changed = proofs[0].clone();
         changed.proof_payload.push(' ');
@@ -897,14 +976,14 @@ mod tests {
         let boot = verifier
             .endorsement
             .authenticate_boot(
-                parsed.key(),
+                parsed.ephemeral_key(),
                 fixture::boot(),
                 &mut CheckTrace::default(),
                 &mut BootObservation::default(),
             )
             .unwrap();
         let check = |parsed| CheckTrace::default().record(boot.check_application_signature(parsed));
-        assert_eq!(check(parsed).unwrap().into_bytes(), payload);
+        assert_eq!(check(parsed).unwrap().into_inner(), payload);
 
         let reformatted =
             serde_json::to_string(&serde_json::from_str::<Value>(&payload).unwrap()).unwrap();
@@ -950,7 +1029,7 @@ mod tests {
         let check =
             |proof| CheckTrace::default().record(ParsedAppProof::check_ephemeral_key(proof));
         assert_eq!(
-            check(valid.clone()).unwrap().key().to_string(),
+            check(valid.clone()).unwrap().ephemeral_key().to_string(),
             valid.public_key
         );
         for key in [
@@ -970,6 +1049,28 @@ mod tests {
                 })
             ));
         }
+    }
+
+    #[test]
+    fn unsupported_request_context_version_has_a_specific_error() {
+        let mut payload = operator_payload(0, vec!["ab".repeat(32)]);
+        payload["requestContext"]["version"] = json!(2);
+
+        assert!(matches!(
+            ClaimEvidence::try_from(authenticate_payload(payload.to_string())),
+            Err(TvcProvenanceError::UnsupportedContext)
+        ));
+    }
+
+    #[test]
+    fn a_string_request_context_version_is_malformed() {
+        let mut payload = operator_payload(0, vec!["ab".repeat(32)]);
+        payload["requestContext"]["version"] = json!("1");
+
+        assert!(matches!(
+            ClaimEvidence::try_from(authenticate_payload(payload.to_string())),
+            Err(TvcProvenanceError::MalformedEvidence(_))
+        ));
     }
 
     #[test]
@@ -1013,7 +1114,7 @@ mod tests {
             v["timestampMs"] = wrong;
             cases.push(v);
         }
-        for wrong in [json!("1"), json!(1.0), json!(-1), Value::Null, json!(2)] {
+        for wrong in [json!(1.0), json!(-1), Value::Null] {
             let mut v = baseline.clone();
             v["requestContext"]["version"] = wrong;
             cases.push(v);
@@ -1047,7 +1148,7 @@ mod tests {
         cases.push(v);
         for (index, v) in cases.into_iter().enumerate() {
             assert!(
-                claims::decode_wire_for_test(&v.to_string()).is_err(),
+                ClaimEvidence::try_from(authenticate_payload(v.to_string())).is_err(),
                 "accepted mutation {index}: {v}"
             );
         }
@@ -1064,10 +1165,19 @@ mod tests {
             raw.replacen("\"version\":1", "\"version\":1e0", 1),
         ] {
             assert!(
-                claims::decode_wire_for_test(&invalid).is_err(),
+                ClaimEvidence::try_from(authenticate_payload(invalid.clone())).is_err(),
                 "accepted {invalid}"
             );
         }
+    }
+
+    #[test]
+    fn composite_accepts_mixed_case_hex_for_valid_points() {
+        let key = format!("{}{}", point(1).to_ascii_uppercase(), point(2));
+        assert_eq!(
+            claims::composite(&key).unwrap().as_ref(),
+            hex::decode(key).unwrap()
+        );
     }
 
     #[test]
@@ -1081,7 +1191,7 @@ mod tests {
             format!("04{}", "ff".repeat(64)),
             format!("{}00", point(1)),
         ] {
-            assert!(P256PublicKey::parse(&invalid).is_err());
+            assert!(invalid.parse::<P256PublicKey>().is_err());
         }
         for invalid in [
             point(1),
@@ -1108,13 +1218,13 @@ mod tests {
             .collect();
         largest["tvcQuorumKeyCreateProof"]["operatorEncryptKeys"] = json!(recipients);
         largest["tvcQuorumKeyCreateProof"]["threshold"] = json!(255);
-        assert!(claims::decode_wire_for_test(&largest.to_string()).is_ok());
+        assert!(ClaimEvidence::try_from(authenticate_payload(largest.to_string())).is_ok());
         assert!(largest.to_string().len() < 256 * 1024);
         largest["tvcQuorumKeyCreateProof"]["operatorEncryptKeys"]
             .as_array_mut()
             .unwrap()
             .push(json!(point(7)));
-        assert!(claims::decode_wire_for_test(&largest.to_string()).is_err());
+        assert!(ClaimEvidence::try_from(authenticate_payload(largest.to_string())).is_err());
     }
 
     #[derive(Clone, Copy)]
@@ -1244,7 +1354,7 @@ mod tests {
                         threshold: 2,
                         operator_encrypt_keys: vec![point(1), point(2)],
                     },
-                    async |_| Ok(()),
+                    async |_| Ok::<_, Infallible>(()),
                 )
                 .await
                 .map(|outcome| completed(outcome).into_parts().1)
@@ -1259,7 +1369,7 @@ mod tests {
                         path: "m/0".into(),
                         operator_name: "synthetic-predicate-test".into(),
                     },
-                    async |_| Ok(()),
+                    async |_| Ok::<_, Infallible>(()),
                 )
                 .await
                 .map(|outcome| completed(outcome).into_parts().1)
@@ -1406,74 +1516,60 @@ mod tests {
         ));
     }
 
-    fn operator_claim(role: usize) -> OperatorClaim {
-        let payload = operator_payload(role, vec!["ab".repeat(32)]);
-        let Claim::Operator(claim) = claims::decode_wire_for_test(&payload.to_string()).unwrap()
-        else {
-            panic!("operator fixture");
-        };
-        claim
+    fn operator_claim(organization: &str, wallet: &str, role: usize) -> ClaimEvidence {
+        ClaimEvidence::Operator {
+            organization: organization.into(),
+            wallet: wallet.into(),
+            path: format!("m/0/{role}"),
+            public_key: point(role as u8 + 1).parse().unwrap(),
+            digests: vec![],
+        }
     }
 
-    fn quorum_claim() -> QuorumClaim {
-        let payload = quorum_payload(vec!["ab".repeat(32)]);
-        let Claim::Quorum(claim) = claims::decode_wire_for_test(&payload.to_string()).unwrap()
-        else {
-            panic!("quorum fixture");
-        };
-        claim
+    fn operator_claims() -> [ClaimEvidence; 2] {
+        [
+            operator_claim(ORGANIZATION_ID, "wallet-1", 0),
+            operator_claim(ORGANIZATION_ID, "wallet-1", 1),
+        ]
+    }
+
+    fn check_roles<'a>(
+        claims: &'a [ClaimEvidence],
+        expected: &OperatorExpectation,
+    ) -> Result<OperatorRoleClaims<'a>, FailedCheck> {
+        CheckTrace::default().record(OperatorRoleClaims::from_claims(claims.iter(), expected))
     }
 
     #[test]
     fn operator_role_claims_require_one_claim_per_path_in_either_order() {
         let expected = expected();
-        let encryption = || Claim::Operator(operator_claim(0));
-        let signing = || Claim::Operator(operator_claim(1));
-        let check = |claims| {
-            CheckTrace::default().record(OperatorRoleClaims::from_claims(claims, &expected))
-        };
-        let roles = check(vec![signing(), encryption()]).unwrap();
-        assert_eq!(roles.encrypt.body.address.to_string(), point(1));
-        assert_eq!(roles.sign.body.address.to_string(), point(2));
+        let [encrypt, sign] = operator_claims();
+        let claims = [sign, encrypt];
+        let roles = check_roles(&claims, &expected).unwrap();
+        assert_eq!(roles.encrypt.public_key.to_string(), point(1));
+        assert_eq!(roles.sign.public_key.to_string(), point(2));
 
         assert!(matches!(
-            check(vec![encryption(), encryption()]),
+            check_roles(
+                &[
+                    operator_claim(ORGANIZATION_ID, "wallet-1", 0),
+                    operator_claim(ORGANIZATION_ID, "wallet-1", 0)
+                ],
+                &expected
+            ),
             Err(FailedCheck {
                 source: TvcProvenanceError::MalformedEvidence(_),
                 ..
             })
         ));
         assert!(matches!(
-            check(vec![signing()]),
+            check_roles(&claims[..1], &expected),
             Err(FailedCheck {
                 source: TvcProvenanceError::ProofUnavailable,
                 ..
             })
         ));
 
-        let mutate_signing: [fn(&mut claims::OperatorBody); 3] = [
-            |body| body.organization_id = "other-org".into(),
-            |body| body.wallet_id = "other-wallet".into(),
-            |body| body.derivation_path = "m/0/2".into(),
-        ];
-        for mutate in mutate_signing {
-            let mut claim = operator_claim(1);
-            mutate(&mut claim.body);
-            assert!(matches!(
-                check(vec![encryption(), Claim::Operator(claim)]),
-                Err(FailedCheck {
-                    source: TvcProvenanceError::ClaimMismatch(_),
-                    ..
-                })
-            ));
-        }
-        assert!(matches!(
-            check(vec![encryption(), Claim::Quorum(quorum_claim())]),
-            Err(FailedCheck {
-                source: TvcProvenanceError::ClaimMismatch(_),
-                ..
-            })
-        ));
         let other_wallet = OperatorExpectation::parse(
             ORGANIZATION_ID.into(),
             Some("other-wallet".into()),
@@ -1481,10 +1577,7 @@ mod tests {
         )
         .unwrap();
         assert!(matches!(
-            CheckTrace::default().record(OperatorRoleClaims::from_claims(
-                vec![encryption(), signing()],
-                &other_wallet,
-            )),
+            check_roles(&claims, &other_wallet),
             Err(FailedCheck {
                 source: TvcProvenanceError::ClaimMismatch("operator wallet"),
                 ..
@@ -1492,21 +1585,47 @@ mod tests {
         ));
     }
 
+    fn assert_rejected_operator_claim(extra: ClaimEvidence) {
+        let claims = [operator_claim(ORGANIZATION_ID, "wallet-1", 0), extra];
+        assert!(matches!(
+            check_roles(&claims, &expected()),
+            Err(FailedCheck {
+                source: TvcProvenanceError::ClaimMismatch(_),
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn operator_roles_reject_another_organization() {
+        assert_rejected_operator_claim(operator_claim("other-org", "wallet-1", 1));
+    }
+
+    #[test]
+    fn operator_roles_reject_keys_from_different_wallets() {
+        assert_rejected_operator_claim(operator_claim(ORGANIZATION_ID, "other-wallet", 1));
+    }
+
+    #[test]
+    fn operator_roles_reject_an_unrequested_path() {
+        assert_rejected_operator_claim(operator_claim(ORGANIZATION_ID, "wallet-1", 2));
+    }
+
+    #[test]
+    fn operator_roles_reject_a_quorum_claim() {
+        assert_rejected_operator_claim(quorum_claim(ORGANIZATION_ID, 2, [1, 2, 3]));
+    }
+
     #[test]
     fn operator_encryption_and_signing_keys_must_differ() {
-        let roles = OperatorRoleClaims {
-            encrypt: operator_claim(0),
-            sign: operator_claim(1),
-        };
+        let claims = operator_claims();
+        let roles = check_roles(&claims, &expected()).unwrap();
         CheckTrace::default()
             .record(roles.check_distinct_keys())
             .unwrap();
         let reused_key = OperatorRoleClaims {
-            sign: OperatorClaim {
-                body: claims::OperatorBody {
-                    address: roles.encrypt.body.address,
-                    ..roles.sign.body
-                },
+            sign: OperatorRole {
+                public_key: roles.encrypt.public_key,
                 ..roles.sign
             },
             encrypt: roles.encrypt,
@@ -1522,10 +1641,8 @@ mod tests {
 
     #[test]
     fn operator_result_must_match_each_signed_field() {
-        let roles = OperatorRoleClaims {
-            encrypt: operator_claim(0),
-            sign: operator_claim(1),
-        };
+        let claims = operator_claims();
+        let roles = check_roles(&claims, &expected()).unwrap();
         let returned = CreateTvcOperatorResult {
             wallet_id: "wallet-1".into(),
             operator_id: "routing-label".into(),
@@ -1560,81 +1677,108 @@ mod tests {
         }
     }
 
-    #[test]
-    fn quorum_check_requires_exactly_one_claim_matching_the_request() {
-        let expected = QuorumExpectation::parse(
+    fn quorum_claim(organization: &str, threshold: u32, recipients: [u8; 3]) -> ClaimEvidence {
+        ClaimEvidence::Quorum {
+            organization: organization.into(),
+            id: "11111111-1111-4111-8111-111111111111".into(),
+            public_key: claims::composite(&format!("{}{}", point(3), point(4))).unwrap(),
+            threshold,
+            recipients: recipients
+                .into_iter()
+                .map(|key| point(key).parse().unwrap())
+                .collect(),
+            digests: vec![],
+        }
+    }
+
+    fn check_quorum_claims(claims: &[ClaimEvidence]) -> Result<QuorumOutputClaim<'_>, FailedCheck> {
+        let expected = QuorumExpectation::new(
             ORGANIZATION_ID.into(),
             2,
-            vec![point(1), point(2), point(3)],
+            vec![
+                point(1).parse().unwrap(),
+                point(2).parse().unwrap(),
+                point(3).parse().unwrap(),
+            ],
         )
         .unwrap();
-        let claim_with_three_recipients = || {
-            let mut claim = quorum_claim();
-            claim
-                .body
-                .operator_encrypt_keys
-                .push(P256PublicKey::parse(&point(3)).unwrap());
-            claim
-        };
-        let quorum = || Claim::Quorum(claim_with_three_recipients());
-        let check = |claims| CheckTrace::default().record(check_quorum_claim(claims, &expected));
-        assert!(check(vec![quorum()]).is_ok());
+        CheckTrace::default().record(check_quorum_claim(claims.iter(), &expected))
+    }
+
+    #[test]
+    fn quorum_check_requires_exactly_one_claim_matching_the_request() {
+        let quorum = || quorum_claim(ORGANIZATION_ID, 2, [1, 2, 3]);
+        assert!(check_quorum_claims(&[quorum()]).is_ok());
         assert!(matches!(
-            check(vec![]),
+            check_quorum_claims(&[]),
             Err(FailedCheck {
                 source: TvcProvenanceError::ProofUnavailable,
                 ..
             })
         ));
-        let operator = || Claim::Operator(operator_claim(0));
+        let operator = || operator_claim(ORGANIZATION_ID, "wallet-1", 0);
         assert!(matches!(
-            check(vec![operator()]),
+            check_quorum_claims(&[operator()]),
             Err(FailedCheck {
                 source: TvcProvenanceError::ClaimMismatch(_),
                 ..
             })
         ));
         for claims in [
-            vec![quorum(), quorum()],
-            vec![operator(), quorum()],
-            vec![quorum(), operator()],
+            [quorum(), quorum()],
+            [operator(), quorum()],
+            [quorum(), operator()],
         ] {
             assert!(matches!(
-                check(claims),
+                check_quorum_claims(&claims),
                 Err(FailedCheck {
                     source: TvcProvenanceError::MalformedEvidence(_),
                     ..
                 })
             ));
         }
-        let mutate_claim: [fn(&mut claims::QuorumBody); 4] = [
-            |body| body.organization_id = "other-org".into(),
-            |body| body.threshold = 3,
-            |body| body.operator_encrypt_keys.swap(0, 1),
-            |body| body.operator_encrypt_keys[2] = P256PublicKey::parse(&point(4)).unwrap(),
-        ];
-        for mutate in mutate_claim {
-            let mut claim = claim_with_three_recipients();
-            mutate(&mut claim.body);
-            assert!(matches!(
-                check(vec![Claim::Quorum(claim)]),
-                Err(FailedCheck {
-                    source: TvcProvenanceError::ClaimMismatch(_),
-                    ..
-                })
-            ));
-        }
+    }
+
+    fn assert_rejected_quorum_claim(claim: ClaimEvidence) {
+        assert!(matches!(
+            check_quorum_claims(&[claim]),
+            Err(FailedCheck {
+                source: TvcProvenanceError::ClaimMismatch(_),
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn quorum_claim_rejects_another_organization() {
+        assert_rejected_quorum_claim(quorum_claim("other-org", 2, [1, 2, 3]));
+    }
+
+    #[test]
+    fn quorum_claim_rejects_another_threshold() {
+        assert_rejected_quorum_claim(quorum_claim(ORGANIZATION_ID, 3, [1, 2, 3]));
+    }
+
+    #[test]
+    fn quorum_claim_rejects_reordered_recipients() {
+        assert_rejected_quorum_claim(quorum_claim(ORGANIZATION_ID, 2, [2, 1, 3]));
+    }
+
+    #[test]
+    fn quorum_claim_rejects_a_substituted_recipient() {
+        assert_rejected_quorum_claim(quorum_claim(ORGANIZATION_ID, 2, [1, 2, 4]));
     }
 
     #[test]
     fn quorum_result_must_match_the_signed_uuid_and_full_public_key() {
-        let mut claim = quorum_claim();
+        let claims = [quorum_claim(ORGANIZATION_ID, 2, [1, 2, 3])];
+        let claim = check_quorum_claims(&claims).unwrap();
         let returned = CreateTvcQuorumKeyResult {
             quorum_key_id: "11111111-1111-4111-8111-111111111111".into(),
-            quorum_public_key: format!("{}{}", point(3), point(4)),
+            quorum_public_key: format!("{}{}", point(3), point(4)).to_ascii_uppercase(),
             share_ids: vec![],
         };
-        let check = |returned: &CreateTvcQuorumKeyResult, claim: &QuorumClaim| {
+        let check = |returned: &CreateTvcQuorumKeyResult, claim: &QuorumOutputClaim<'_>| {
             CheckTrace::default().record(check_quorum_result_binding(returned, claim))
         };
         assert_eq!(
@@ -1663,7 +1807,10 @@ mod tests {
                 })
             ));
         }
-        claim.body.quorum_key_id = "not-a-uuid".into();
+        let claim = QuorumOutputClaim {
+            id: "not-a-uuid",
+            ..claim
+        };
         let changed = CreateTvcQuorumKeyResult {
             quorum_key_id: "not-a-uuid".into(),
             ..returned
@@ -1722,19 +1869,13 @@ mod tests {
             "fingerprints": [first, second],
         }))
         .unwrap();
-        let encrypt = Context {
-            digests: vec![first, second, unknown],
-        };
-        let sign = Context {
-            digests: vec![second, unknown],
-        };
-        let check = |contexts: &[&Context]| {
+        let encrypt = [first, second, unknown];
+        let sign = [second, unknown];
+        let check = |contexts: &[&[RequestFingerprint]]| {
             CheckTrace::default().record(match_common_submission(&checkpoint, contexts))
         };
         assert_eq!(check(&[&encrypt, &sign]).unwrap(), second);
-        let only_first = Context {
-            digests: vec![first, unknown],
-        };
+        let only_first = [first, unknown];
         assert!(matches!(
             check(&[&only_first, &sign]),
             Err(FailedCheck {
@@ -1775,7 +1916,7 @@ mod tests {
                     path: "m/0".into(),
                     operator_name: "same-body-with-clock-rollback".into(),
                 },
-                async |_| Ok(()),
+                async |_| Ok::<_, Infallible>(()),
             )
             .await
             .map(completed)
@@ -1858,7 +1999,7 @@ mod tests {
         cases.push(value);
         for value in cases {
             assert!(
-                claims::decode_wire_for_test(&value.to_string()).is_err(),
+                ClaimEvidence::try_from(authenticate_payload(value.to_string())).is_err(),
                 "accepted {value}"
             );
         }
@@ -1872,7 +2013,7 @@ mod tests {
                 1,
             ),
         ] {
-            assert!(claims::decode_wire_for_test(&invalid).is_err());
+            assert!(ClaimEvidence::try_from(authenticate_payload(invalid)).is_err());
         }
     }
 
@@ -1973,10 +2114,7 @@ mod tests {
         ) -> Result<Accepted<()>, Rejected> {
             let count = proofs.len();
             let mut trace = AcceptanceTrace::default();
-            let result = self
-                .claims(organization, proofs, &mut trace)
-                .await
-                .map(drop);
+            let result = self.collect_claims(organization, proofs, &mut trace).await;
             AcceptanceFacts::assemble(
                 self.endorsement.environment,
                 self.endorsement.quorum_key.clone(),
@@ -2064,7 +2202,7 @@ mod tests {
                 );
                 assert_eq!(
                     envelope.ephemeral_key(),
-                    Some(&EphemeralPublicKey::try_from(hex::encode(pin()).as_str()).unwrap())
+                    Some(&hex::encode(pin()).parse::<EphemeralPublicKey>().unwrap())
                 );
                 let attestation = envelope.attestation().unwrap();
                 assert_eq!(attestation.issued_at_ms, fixture::ISSUED_AT);
@@ -2089,8 +2227,8 @@ mod tests {
                 };
                 assert!(
                     [
-                        P256PublicKey::parse(&point(1)).unwrap(),
-                        P256PublicKey::parse(&point(2)).unwrap()
+                        point(1).parse::<P256PublicKey>().unwrap(),
+                        point(2).parse::<P256PublicKey>().unwrap()
                     ]
                     .contains(public_key)
                 );
@@ -2101,8 +2239,12 @@ mod tests {
             assert_eq!(states(policy.checks()), [(EnvelopeRouting, Pass)]);
             assert!(policy.claim().is_none());
         }
-        let expected =
-            QuorumExpectation::parse(ORGANIZATION_ID.into(), 2, vec![point(1), point(2)]).unwrap();
+        let expected = QuorumExpectation::new(
+            ORGANIZATION_ID.into(),
+            2,
+            vec![point(1).parse().unwrap(), point(2).parse().unwrap()],
+        )
+        .unwrap();
         let (accepted, facts) = verifier(capture_client(server.uri()))
             .accept_quorum(expected, receipt(Mode::Quorum).await)
             .await
@@ -2145,8 +2287,8 @@ mod tests {
         assert_eq!(
             recipients,
             &vec![
-                P256PublicKey::parse(&point(1)).unwrap(),
-                P256PublicKey::parse(&point(2)).unwrap()
+                point(1).parse::<P256PublicKey>().unwrap(),
+                point(2).parse::<P256PublicKey>().unwrap()
             ]
         );
         let debug = format!("{facts:?}");
@@ -2214,8 +2356,12 @@ mod tests {
             .await
             .unwrap_err();
         let server = boot_server().await;
-        let expected =
-            QuorumExpectation::parse(ORGANIZATION_ID.into(), 2, vec![point(1), point(2)]).unwrap();
+        let expected = QuorumExpectation::new(
+            ORGANIZATION_ID.into(),
+            2,
+            vec![point(1).parse().unwrap(), point(2).parse().unwrap()],
+        )
+        .unwrap();
         let quorum = verifier(capture_client(server.uri()))
             .accept_quorum(expected, receipt(Mode::QuorumSubstitutedKey).await)
             .await
@@ -2306,11 +2452,11 @@ mod tests {
             .into_parts();
         assert_eq!(
             facts.envelopes()[0].ephemeral_key(),
-            Some(&EphemeralPublicKey::try_from(hex::encode(pin()).as_str()).unwrap())
+            Some(&hex::encode(pin()).parse::<EphemeralPublicKey>().unwrap())
         );
         assert_eq!(
             facts.envelopes()[1].ephemeral_key(),
-            Some(&EphemeralPublicKey::try_from(second_key.as_str()).unwrap())
+            Some(&second_key.parse::<EphemeralPublicKey>().unwrap())
         );
         assert!(
             facts
@@ -2388,25 +2534,35 @@ mod tests {
     }
 
     #[test]
-    fn malformed_caller_recipients_are_invalid_expectations() {
+    fn quorum_expectation_rejects_too_many_recipients() {
+        let key = point(1).parse().unwrap();
         assert!(matches!(
-            QuorumExpectation::parse("org-id".into(), 2, vec!["bad key".into(), point(2)]),
-            Err(TvcProvenanceError::InvalidExpectation(_))
+            QuorumExpectation::new(ORGANIZATION_ID.into(), 2, vec![key; 256]),
+            Err(TvcProvenanceError::InvalidExpectation(
+                "require 2 <= threshold <= recipients <= 255"
+            ))
         ));
     }
+
     #[test]
-    fn quorum_expectation_checks_shape_before_parsing_keys() {
-        for (organization, keys) in [
-            ("org-id", vec!["invalid".to_owned(); 256]),
-            ("", vec!["invalid".to_owned(); 2]),
-            ("org-id", vec!["invalid".to_owned()]),
-        ] {
-            assert!(matches!(
-                QuorumExpectation::parse(organization.into(), 2, keys),
-                Err(TvcProvenanceError::InvalidExpectation(
-                    "require 2 <= threshold <= recipients <= 255"
-                ))
-            ));
-        }
+    fn quorum_expectation_rejects_an_empty_organization() {
+        let recipients = vec![point(1).parse().unwrap(), point(2).parse().unwrap()];
+        assert!(matches!(
+            QuorumExpectation::new(String::new(), 2, recipients),
+            Err(TvcProvenanceError::InvalidExpectation(
+                "require 2 <= threshold <= recipients <= 255"
+            ))
+        ));
+    }
+
+    #[test]
+    fn quorum_expectation_rejects_a_threshold_above_the_recipient_count() {
+        let recipients = vec![point(1).parse().unwrap()];
+        assert!(matches!(
+            QuorumExpectation::new(ORGANIZATION_ID.into(), 2, recipients),
+            Err(TvcProvenanceError::InvalidExpectation(
+                "require 2 <= threshold <= recipients <= 255"
+            ))
+        ));
     }
 }
