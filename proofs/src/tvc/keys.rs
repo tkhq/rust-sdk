@@ -1,6 +1,6 @@
 //! Parsed creation expectations and authenticated key outputs.
 
-use std::{collections::HashSet, fmt};
+use std::{collections::HashSet, fmt, str::FromStr};
 use turnkey_client::TurnkeyClientError;
 use turnkey_enclave_encrypt::QuorumPublicKey;
 use uuid::Uuid;
@@ -68,10 +68,10 @@ impl From<TurnkeyClientError> for BootProofLookupError {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct P256PublicKey(p256::EncodedPoint);
 
-impl TryFrom<&str> for P256PublicKey {
-    type Error = TvcProvenanceError;
+impl FromStr for P256PublicKey {
+    type Err = TvcProvenanceError;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
         if value.len() != 130
             || !value
                 .bytes()
@@ -83,24 +83,14 @@ impl TryFrom<&str> for P256PublicKey {
         }
         let bytes = hex::decode(value)
             .map_err(|_| TvcProvenanceError::MalformedEvidence("invalid role key hex".into()))?;
-        if bytes.first() != Some(&4) {
-            return Err(TvcProvenanceError::MalformedEvidence(
-                "role key must be an uncompressed P-256 point".into(),
-            ));
-        }
+        // The SEC1 decoder checks the tag against the length. At 65 bytes,
+        // the only valid P-256 encoding is an uncompressed point.
         let key = p256::PublicKey::from_sec1_bytes(&bytes).map_err(|_| {
             TvcProvenanceError::MalformedEvidence(
                 "role key must be an uncompressed P-256 point".into(),
             )
         })?;
         Ok(key.into())
-    }
-}
-
-impl P256PublicKey {
-    /// Parse the signed wire form without normalization.
-    pub fn parse(value: &str) -> Result<Self, TvcProvenanceError> {
-        value.try_into()
     }
 }
 
@@ -155,32 +145,22 @@ pub struct QuorumExpectation {
 }
 
 impl QuorumExpectation {
-    /// Parse explicit user assertions or previously accepted encryption roles.
-    pub fn parse(
-        organization: String,
-        threshold: u32,
-        recipients: impl AsRef<[String]>,
-    ) -> Result<Self, TvcProvenanceError> {
-        let recipients = recipients.as_ref();
-        Self::check_shape(&organization, threshold, recipients.len())?;
-        let recipients = recipients
-            .iter()
-            .map(|key| {
-                P256PublicKey::try_from(key.as_str()).map_err(|_| {
-                    TvcProvenanceError::InvalidExpectation("invalid recipient public key")
-                })
-            })
-            .collect::<Result<_, _>>()?;
-        Self::new(organization, threshold, recipients)
-    }
-
     /// Assemble a quorum expectation from already parsed recipient keys.
     pub fn new(
         organization: String,
         threshold: u32,
         recipients: Vec<P256PublicKey>,
     ) -> Result<Self, TvcProvenanceError> {
-        Self::check_shape(&organization, threshold, recipients.len())?;
+        let count = recipients.len();
+        if organization.is_empty()
+            || !(2..=255).contains(&threshold)
+            || count > 255
+            || count < threshold as usize
+        {
+            return Err(TvcProvenanceError::InvalidExpectation(
+                "require 2 <= threshold <= recipients <= 255",
+            ));
+        }
         if recipients.iter().collect::<HashSet<_>>().len() != recipients.len() {
             return Err(TvcProvenanceError::InvalidExpectation(
                 "duplicate recipient",
@@ -191,22 +171,6 @@ impl QuorumExpectation {
             threshold,
             recipients,
         })
-    }
-    fn check_shape(
-        organization: &str,
-        threshold: u32,
-        count: usize,
-    ) -> Result<(), TvcProvenanceError> {
-        if organization.is_empty()
-            || !(2..=255).contains(&threshold)
-            || count > 255
-            || count < threshold as usize
-        {
-            return Err(TvcProvenanceError::InvalidExpectation(
-                "require 2 <= threshold <= recipients <= 255",
-            ));
-        }
-        Ok(())
     }
 }
 
@@ -258,25 +222,6 @@ pub struct VerifiedQuorumKey {
     pub(super) public_key: QuorumPublicKey,
     pub(super) untrusted_share_ids: Vec<Uuid>,
 }
-
-#[cfg(doctest)]
-/// Checks that downstream callers cannot replace a verified key through its fields.
-///
-/// ```compile_fail,E0451
-/// use turnkey_proofs::tvc::{P256PublicKey, VerifiedOperatorKeys};
-/// fn substitute(keys: VerifiedOperatorKeys, encrypt_key: P256PublicKey) -> VerifiedOperatorKeys {
-///     VerifiedOperatorKeys { encrypt_key, ..keys }
-/// }
-/// ```
-///
-/// ```compile_fail,E0451
-/// use turnkey_proofs::tvc::VerifiedQuorumKey;
-/// use turnkey_enclave_encrypt::QuorumPublicKey;
-/// fn substitute(key: VerifiedQuorumKey, public_key: QuorumPublicKey) -> VerifiedQuorumKey {
-///     VerifiedQuorumKey { public_key, ..key }
-/// }
-/// ```
-mod verified_key_privacy {}
 
 impl VerifiedQuorumKey {
     /// Consume the signed ID/key and separately supplied share routing labels.

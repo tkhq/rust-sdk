@@ -5,9 +5,9 @@ use super::{
     },
 };
 use crate::{
-    AWS_ROOT_CERT_PEM, EphemeralPublicKey, ParsedBootProof, cert_from_pem,
-    parse_and_verify_der_attestation, unsafe_attestation_doc_from_der, verify_boot_binding,
-    verify_payload_signature,
+    AWS_ROOT_CERT_PEM, EXPECTED_EPHEMERAL_PUBLIC_KEY_LENGTH, EphemeralPublicKey, ParsedBootProof,
+    cert_from_pem, parse_and_verify_der_attestation, unsafe_attestation_doc_from_der,
+    verify_boot_binding, verify_payload_signature,
 };
 use aws_nitro_enclaves_nsm_api::api::AttestationDoc;
 use p256::ecdsa::{Signature, signature::Verifier};
@@ -21,11 +21,12 @@ pub const ENDORSEMENT_PREFIX: &[u8] = b"turnkey.boot-proof.attestation.v1\0";
 /// The chain includes AWS attestation and its endorsement by the pinned Signer quorum key.
 /// Its claims still need to match the original request and returned result.
 pub(super) struct AuthenticatedPayload {
-    bytes: String,
+    payload: String,
 }
+
 impl AuthenticatedPayload {
-    pub(super) fn into_bytes(self) -> String {
-        self.bytes
+    pub(super) fn into_inner(self) -> String {
+        self.payload
     }
 }
 
@@ -37,16 +38,15 @@ pub(super) struct ParsedAppProof {
 impl TryFrom<AppProof> for ParsedAppProof {
     type Error = TvcProvenanceError;
     fn try_from(proof: AppProof) -> Result<Self, Self::Error> {
-        // Keep both length and uncompressed-point checks before allocating decoded bytes.
-        if proof.public_key.len() != 260
-            || !proof.public_key.starts_with("04")
-            || proof.public_key.get(130..132) != Some("04")
-        {
+        // Bound the hex input before decoding. EphemeralPublicKey validates both SEC1 points.
+        if proof.public_key.len() != EXPECTED_EPHEMERAL_PUBLIC_KEY_LENGTH * 2 {
             return Err(TvcProvenanceError::MalformedEvidence(
                 "composite key must contain two uncompressed 65-byte points".into(),
             ));
         }
-        let key = EphemeralPublicKey::try_from(proof.public_key.as_str())
+        let key = proof
+            .public_key
+            .parse::<EphemeralPublicKey>()
             .map_err(|e| TvcProvenanceError::MalformedEvidence(e.to_string()))?;
         Ok(Self { proof, key })
     }
@@ -94,7 +94,7 @@ impl VerifiedBoot {
         verify_payload_signature(&proof, self.key.0.signing_key())
             .map_err(|_| TvcProvenanceError::EndorsementFailure)?;
         Ok(AuthenticatedPayload {
-            bytes: proof.proof_payload,
+            payload: proof.proof_payload,
         })
     }
 }
@@ -111,9 +111,9 @@ pub(super) enum SignerEnvironment {
 impl SignerEnvironment {
     pub(super) fn label(self) -> &'static str {
         match self {
-            Self::Production => "production (https://api.turnkey.com)",
-            Self::Preproduction => "preproduction (https://api.preprod.turnkey.engineering)",
-            Self::Development => "development (https://api.dev.turnkey.engineering)",
+            Self::Production => "production",
+            Self::Preproduction => "preproduction",
+            Self::Development => "development",
             #[cfg(test)]
             Self::Synthetic => "synthetic test policy",
         }
@@ -266,15 +266,11 @@ impl SelectedEndorsement {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tvc::{claims::Claim, fixture};
+    use crate::tvc::{
+        claims::Claim,
+        fixture::{self, signer},
+    };
     use x509_cert::{Certificate, der::Decode};
-
-    fn signer() -> SelectedEndorsement {
-        fixture::with_test_roots(
-            QuorumPublicKey::from_bytes(fixture::quorum_key()).unwrap(),
-            Certificate::from_der(fixture::ROOT).unwrap(),
-        )
-    }
 
     #[test]
     fn document_endorsement_requires_the_pinned_signer_and_exact_document_bytes() {
@@ -373,7 +369,10 @@ mod tests {
             }),
             ..fixture::boot()
         };
-        let key = EphemeralPublicKey::try_from(boot.ephemeral_public_key_hex.as_str()).unwrap();
+        let key = boot
+            .ephemeral_public_key_hex
+            .parse::<EphemeralPublicKey>()
+            .unwrap();
         let mut observed = BootObservation::default();
         assert!(
             signer
@@ -391,7 +390,10 @@ mod tests {
         let signer = signer();
         let manifest = fixture::manifest();
         let boot = fixture::boot();
-        let key = EphemeralPublicKey::try_from(boot.ephemeral_public_key_hex.as_str()).unwrap();
+        let key = boot
+            .ephemeral_public_key_hex
+            .parse::<EphemeralPublicKey>()
+            .unwrap();
         let check = |boot: &BootProof, attestation, evidence: &mut Option<_>| {
             CheckTrace::default().record(signer.check_boot_binding(
                 &key,
@@ -489,8 +491,9 @@ mod tests {
             "../../tests/fixtures/tvc_request_bound_proofs.json"
         ))
         .unwrap();
-        let check =
-            |bytes| CheckTrace::default().record(Claim::decode(AuthenticatedPayload { bytes }));
+        let check = |bytes| {
+            CheckTrace::default().record(Claim::decode(fixture::authenticate_payload(bytes)))
+        };
         assert!(matches!(
             check(proofs[0].proof_payload.clone()),
             Ok(Claim::Operator(_))

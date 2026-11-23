@@ -24,7 +24,10 @@ use crate::{
 };
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use hosted::HostedSigner;
-use p256::{PublicKey, elliptic_curve::sec1::ToEncodedPoint};
+use p256::{
+    PublicKey,
+    elliptic_curve::sec1::{Tag, ToEncodedPoint},
+};
 use qos_core::protocol::services::boot::Approval;
 use std::{
     fmt::{self, Debug, Display, Formatter},
@@ -70,7 +73,8 @@ impl FromStr for OperatorPublicKey {
         }
 
         let bytes = hex::decode(value).map_err(|_| OperatorPublicKeyParseError::InvalidHex)?;
-        if bytes.len() != 65 || bytes.first() != Some(&0x04) {
+        const SEC1_UNCOMPRESSED_POINT_TAG: u8 = Tag::Uncompressed as u8;
+        if bytes.len() != 65 || bytes.first() != Some(&SEC1_UNCOMPRESSED_POINT_TAG) {
             return Err(OperatorPublicKeyParseError::InvalidEncoding);
         }
 
