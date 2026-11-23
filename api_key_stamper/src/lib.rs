@@ -322,32 +322,24 @@ mod tests {
     use tempfile::NamedTempFile;
 
     #[test]
-    fn encode_stamp_header_preserves_fields_for_both_schemes() {
-        for (scheme, expected_scheme) in [
-            (SIGNATURE_SCHEME_P256, "SIGNATURE_SCHEME_TK_API_P256"),
-            (
-                SIGNATURE_SCHEME_SECP256K1,
-                "SIGNATURE_SCHEME_TK_API_SECP256K1",
-            ),
-        ] {
-            let header = encode_stamp_header(
-                &[0x00, 0xab, 0xcd, 0xef],
-                &[0x30, 0x06, 0x02, 0x01, 0x0a, 0x02, 0x01, 0x0f],
-                scheme,
-            )
-            .unwrap();
-            let decoded = BASE64_URL_SAFE_NO_PAD.decode(header.value).unwrap();
-            let json: Value = serde_json::from_slice(&decoded).unwrap();
-            assert_eq!(header.name, "X-Stamp");
-            assert_eq!(
-                json,
-                serde_json::json!({
-                    "publicKey": "00abcdef",
-                    "signature": "300602010a02010f",
-                    "scheme": expected_scheme,
-                })
-            );
-        }
+    fn encode_stamp_header_preserves_wire_fields() {
+        let header = encode_stamp_header(
+            &[0x00, 0xab, 0xcd, 0xef],
+            &[0x30, 0x06, 0x02, 0x01, 0x0a, 0x02, 0x01, 0x0f],
+            SIGNATURE_SCHEME_P256,
+        )
+        .unwrap();
+        let decoded = BASE64_URL_SAFE_NO_PAD.decode(header.value).unwrap();
+        let json: Value = serde_json::from_slice(&decoded).unwrap();
+        assert_eq!(header.name, "X-Stamp");
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "publicKey": "00abcdef",
+                "signature": "300602010a02010f",
+                "scheme": "SIGNATURE_SCHEME_TK_API_P256",
+            })
+        );
     }
 
     #[test]

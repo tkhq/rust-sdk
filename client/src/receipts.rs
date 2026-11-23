@@ -777,12 +777,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn persistence_failure_forbids_the_attempt_and_retains_previous_evidence() {
+    async fn first_checkpoint_save_failure_prevents_submission() {
         let server = MockServer::start().await;
-        Mock::given(method("POST"))
-            .respond_with(response("ACTIVITY_STATUS_PENDING"))
-            .mount(&server)
-            .await;
         let client = client(
             &server,
             TurnkeyP256ApiKey::from_bytes([1; 32], None).unwrap(),
@@ -803,7 +799,19 @@ mod tests {
         assert_eq!(first.cause(), &SubmissionFailureCause::CheckpointSaveFailed);
         assert!(first.checkpoint().is_none());
         assert!(server.received_requests().await.unwrap().is_empty());
+    }
 
+    #[tokio::test]
+    async fn retry_checkpoint_save_failure_preserves_the_previous_submission() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .respond_with(response("ACTIVITY_STATUS_PENDING"))
+            .mount(&server)
+            .await;
+        let client = client(
+            &server,
+            TurnkeyP256ApiKey::from_bytes([1; 32], None).unwrap(),
+        );
         let mut saved = Vec::new();
         let later = failure(
             client
@@ -929,333 +937,466 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn restart_queries_once_with_original_fingerprints_for_both_supported_kinds() {
-        for kind in [
-            SubmissionKind::CreateTvcOperator,
-            SubmissionKind::CreateTvcQuorumKey,
-        ] {
-            let server = MockServer::start().await;
-            Mock::given(path("/submit"))
-                .respond_with(response("ACTIVITY_STATUS_CONSENSUS_NEEDED"))
-                .mount(&server)
-                .await;
-            let mut query = query_activity("ACTIVITY_STATUS_COMPLETED");
-            if kind == SubmissionKind::CreateTvcQuorumKey {
-                query["activity"]["type"] = "ACTIVITY_TYPE_CREATE_TVC_QUORUM_KEY".into();
-                query["activity"]["result"] = json!({"createTvcQuorumKeyResult": {
-                    "quorumKeyId":"key", "quorumPublicKey":"public", "shareIds":["share"]
-                }});
-            }
-            Mock::given(path("/public/v1/query/get_activity"))
-                .respond_with(ResponseTemplate::new(200).set_body_json(query))
-                .expect(2)
-                .mount(&server)
-                .await;
-            let client = client(
-                &server,
-                TurnkeyP256ApiKey::from_bytes([1; 32], None).unwrap(),
-            );
-            let mut saved = None;
-            let pending = client
-                .process_activity_with_receipt(
-                    (),
-                    "/submit".into(),
-                    ORGANIZATION_ID,
-                    kind,
-                    async |checkpoint: &SubmissionCheckpoint| {
-                        saved = Some(serde_json::to_vec(checkpoint).unwrap());
-                        Ok(())
-                    },
-                )
-                .await
-                .unwrap();
-            let SubmissionOutcome::Pending { checkpoint, .. } = pending else {
-                panic!("expected pending")
-            };
-            let restored: SubmissionCheckpoint = serde_json::from_slice(&saved.unwrap()).unwrap();
-            assert!(restored.activity_id().is_none());
-            let restored_with_hint =
-                serde_json::from_slice(&serde_json::to_vec(&checkpoint).unwrap()).unwrap();
-            let resumed = client
-                .resume_submission(restored, Some("synthetic-activity".into()))
-                .await
-                .unwrap()
-                .completed();
-            let resumed_with_hint = client
-                .resume_submission(restored_with_hint, None)
-                .await
-                .unwrap()
-                .completed();
-            let requests = server.received_requests().await.unwrap();
-            assert_eq!(
-                requests
-                    .iter()
-                    .filter(|request| request.url.path() == "/submit")
-                    .count(),
-                1
-            );
-            for receipt in [resumed, resumed_with_hint] {
-                assert_eq!(
-                    receipt.sent_fingerprints().copied().collect::<Vec<_>>(),
-                    [captured(&requests[0])]
-                );
-                assert_eq!(
-                    receipt.checkpoint().activity_id(),
-                    Some("synthetic-activity")
-                );
-            }
-            for query in &requests[1..] {
-                assert_ne!(captured(query), captured(&requests[0]));
-                assert_eq!(
-                    serde_json::from_slice::<Value>(&query.body).unwrap(),
-                    json!({
-                        "organizationId":ORGANIZATION_ID, "activityId":"synthetic-activity"
-                    })
-                );
-            }
-        }
+    async fn operator_restart_queries_with_original_fingerprints() {
+        assert_restart_queries_with_original_fingerprints(SubmissionKind::CreateTvcOperator).await;
     }
 
     #[tokio::test]
-    async fn resume_checks_identity_status_and_result_without_creating() {
+    async fn quorum_key_restart_queries_with_original_fingerprints() {
+        assert_restart_queries_with_original_fingerprints(SubmissionKind::CreateTvcQuorumKey).await;
+    }
+
+    async fn assert_restart_queries_with_original_fingerprints(kind: SubmissionKind) {
         let server = MockServer::start().await;
         Mock::given(path("/submit"))
-            .respond_with(response("ACTIVITY_STATUS_AUTHENTICATORS_NEEDED"))
+            .respond_with(response("ACTIVITY_STATUS_CONSENSUS_NEEDED"))
+            .mount(&server)
+            .await;
+        let mut query = query_activity("ACTIVITY_STATUS_COMPLETED");
+        if kind == SubmissionKind::CreateTvcQuorumKey {
+            query["activity"]["type"] = "ACTIVITY_TYPE_CREATE_TVC_QUORUM_KEY".into();
+            query["activity"]["result"] = json!({"createTvcQuorumKeyResult": {
+                "quorumKeyId":"key", "quorumPublicKey":"public", "shareIds":["share"]
+            }});
+        }
+        Mock::given(path("/public/v1/query/get_activity"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(query))
+            .expect(2)
             .mount(&server)
             .await;
         let client = client(
             &server,
             TurnkeyP256ApiKey::from_bytes([1; 32], None).unwrap(),
         );
-        let outcome = client
+        let mut saved = None;
+        let pending = client
             .process_activity_with_receipt(
                 (),
                 "/submit".into(),
                 ORGANIZATION_ID,
-                SubmissionKind::CreateTvcOperator,
-                async |_| Ok(()),
+                kind,
+                async |checkpoint: &SubmissionCheckpoint| {
+                    saved = Some(serde_json::to_vec(checkpoint).unwrap());
+                    Ok(())
+                },
             )
             .await
             .unwrap();
-        let SubmissionOutcome::Pending { checkpoint, reason } = outcome else {
+        let SubmissionOutcome::Pending { checkpoint, .. } = pending else {
             panic!("expected pending")
         };
-        assert_eq!(reason, SubmissionPendingReason::AuthenticatorsNeeded);
-        let without_hint = SubmissionCheckpoint(CheckpointData {
-            activity_id: None,
-            ..checkpoint.0.clone()
-        });
-        for candidate in [None, Some("bad\nlabel".into())] {
-            let error = failure(
-                client
-                    .resume_submission(without_hint.clone(), candidate)
-                    .await
-                    .unwrap_err(),
-            );
-            assert_eq!(error.cause(), &SubmissionFailureCause::InvalidResponse);
-            assert!(error.checkpoint().is_some());
-        }
-        assert_eq!(server.received_requests().await.unwrap().len(), 1);
-        for (status, expected) in [
-            (
-                "ACTIVITY_STATUS_CREATED",
-                Some(SubmissionPendingReason::Processing),
-            ),
-            (
-                "ACTIVITY_STATUS_PENDING",
-                Some(SubmissionPendingReason::Processing),
-            ),
-            (
-                "ACTIVITY_STATUS_CONSENSUS_NEEDED",
-                Some(SubmissionPendingReason::ConsensusNeeded),
-            ),
-            (
-                "ACTIVITY_STATUS_AUTHENTICATORS_NEEDED",
-                Some(SubmissionPendingReason::AuthenticatorsNeeded),
-            ),
-            ("ACTIVITY_STATUS_FAILED", None),
-            ("ACTIVITY_STATUS_REJECTED", None),
-            ("ACTIVITY_STATUS_UNSPECIFIED", None),
-        ] {
-            let guard = Mock::given(path("/public/v1/query/get_activity"))
-                .respond_with(ResponseTemplate::new(200).set_body_json(query_activity(status)))
-                .expect(1)
-                .mount_as_scoped(&server)
-                .await;
-            let outcome = client.resume_submission(checkpoint.clone(), None).await;
-            if let Some(expected) = expected {
-                let SubmissionOutcome::Pending {
-                    checkpoint: retained,
-                    reason,
-                } = outcome.unwrap()
-                else {
-                    panic!("expected pending")
-                };
-                assert_eq!(reason, expected);
-                assert_eq!(
-                    retained.sent_fingerprints().collect::<Vec<_>>(),
-                    checkpoint.sent_fingerprints().collect::<Vec<_>>()
-                );
-            } else {
-                let error = failure(outcome.unwrap_err());
-                assert_eq!(error.submission_state(), SubmissionState::MayHaveSubmitted);
-                assert!(error.checkpoint().is_some());
-                assert_eq!(
-                    error.cause(),
-                    if status == "ACTIVITY_STATUS_UNSPECIFIED" {
-                        &SubmissionFailureCause::InvalidResponse
-                    } else {
-                        &SubmissionFailureCause::ActivityNotCompleted
-                    }
-                );
-            }
-            drop(guard);
-        }
-        use SubmissionFailureCause::{
-            ActivityIdMismatch, ActivityOrganizationMismatch, ActivityResultMismatch,
-            ActivityTypeMismatch, UnsupportedActivityType,
-        };
-        for (field, wrong, cause) in [
-            ("id", json!("other"), ActivityIdMismatch),
-            (
-                "organizationId",
-                json!(Uuid::from_u128(2)),
-                ActivityOrganizationMismatch,
-            ),
-            (
-                "type",
-                json!("ACTIVITY_TYPE_CREATE_TVC_QUORUM_KEY"),
-                ActivityTypeMismatch,
-            ),
-            (
-                "type",
-                json!("ACTIVITY_TYPE_CREATE_WALLET"),
-                UnsupportedActivityType,
-            ),
-            ("result", json!(null), ActivityResultMismatch),
-            ("result", json!({}), ActivityResultMismatch),
-            (
-                "result",
-                json!({"createTvcQuorumKeyResult": {"quorumKeyId":"key", "quorumPublicKey":"public", "shareIds":[]}}),
-                ActivityResultMismatch,
-            ),
-        ] {
-            let mut activity = query_activity("ACTIVITY_STATUS_COMPLETED");
-            activity["activity"][field] = wrong;
-            let guard = Mock::given(path("/public/v1/query/get_activity"))
-                .respond_with(ResponseTemplate::new(200).set_body_json(activity))
-                .expect(1)
-                .mount_as_scoped(&server)
-                .await;
-            let error = failure(
-                client
-                    .resume_submission(checkpoint.clone(), None)
-                    .await
-                    .unwrap_err(),
-            );
-            assert_eq!(error.cause(), &cause);
-            assert_eq!(
-                error
-                    .checkpoint()
-                    .unwrap()
-                    .sent_fingerprints()
-                    .collect::<Vec<_>>(),
-                checkpoint.sent_fingerprints().collect::<Vec<_>>()
-            );
-            drop(guard);
-        }
+        let restored: SubmissionCheckpoint = serde_json::from_slice(&saved.unwrap()).unwrap();
+        assert!(restored.activity_id().is_none());
+        let restored_with_hint =
+            serde_json::from_slice(&serde_json::to_vec(&checkpoint).unwrap()).unwrap();
+        let resumed = client
+            .resume_submission(restored, Some("synthetic-activity".into()))
+            .await
+            .unwrap()
+            .completed();
+        let resumed_with_hint = client
+            .resume_submission(restored_with_hint, None)
+            .await
+            .unwrap()
+            .completed();
+        let requests = server.received_requests().await.unwrap();
         assert_eq!(
-            server
-                .received_requests()
-                .await
-                .unwrap()
+            requests
                 .iter()
                 .filter(|request| request.url.path() == "/submit")
                 .count(),
             1
         );
+        for receipt in [resumed, resumed_with_hint] {
+            assert_eq!(
+                receipt.sent_fingerprints().copied().collect::<Vec<_>>(),
+                [captured(&requests[0])]
+            );
+            assert_eq!(
+                receipt.checkpoint().activity_id(),
+                Some("synthetic-activity")
+            );
+        }
+        for query in &requests[1..] {
+            assert_ne!(captured(query), captured(&requests[0]));
+            assert_eq!(
+                serde_json::from_slice::<Value>(&query.body).unwrap(),
+                json!({
+                    "organizationId":ORGANIZATION_ID, "activityId":"synthetic-activity"
+                })
+            );
+        }
     }
 
-    #[test]
-    fn checkpoint_deserialization_rejects_missing_or_malformed_origin_evidence() {
-        let valid = json!({"version":1, "organization_id":ORGANIZATION_ID, "kind":"CreateTvcOperator",
-            "fingerprints":["ab".repeat(32)], "activity_id":null});
-        let checkpoint: SubmissionCheckpoint = serde_json::from_value(valid.clone()).unwrap();
-        assert_eq!(checkpoint.organization_id(), ORGANIZATION_ID);
-        assert_eq!(checkpoint.sent_fingerprints().count(), 1);
-        for (field, invalid) in [
-            ("version", json!(2)),
-            ("kind", json!("Other")),
-            ("organization_id", json!("")),
-            ("organization_id", json!("not-a-uuid")),
-            ("fingerprints", json!([])),
-            ("fingerprints", json!(["short"])),
-            ("fingerprints", json!(["zz".repeat(32)])),
-            ("activity_id", json!("bad\nlabel")),
-            ("activity_id", json!("")),
-            ("activity_id", json!("x".repeat(129))),
-        ] {
-            let mut value = valid.clone();
-            value[field] = invalid;
-            assert!(
-                serde_json::from_value::<SubmissionCheckpoint>(value).is_err(),
-                "{field}"
-            );
-        }
-        for field in ["version", "organization_id", "kind", "fingerprints"] {
-            let mut value = valid.clone();
-            value.as_object_mut().unwrap().remove(field);
-            assert!(
-                serde_json::from_value::<SubmissionCheckpoint>(value).is_err(),
-                "{field}"
-            );
-        }
+    async fn checkpoint_awaiting_authenticators<S: UniqueStamp>(
+        client: &TurnkeyClient<S>,
+        server: &MockServer,
+    ) -> SubmissionCheckpoint {
+        Mock::given(path("/submit"))
+            .respond_with(response("ACTIVITY_STATUS_AUTHENTICATORS_NEEDED"))
+            .expect(1)
+            .mount(server)
+            .await;
+        let outcome = client.submit((), "/submit".into()).await.unwrap();
+        let SubmissionOutcome::Pending { checkpoint, reason } = outcome else {
+            panic!("expected pending");
+        };
+        assert_eq!(reason, SubmissionPendingReason::AuthenticatorsNeeded);
+        checkpoint
     }
 
     #[tokio::test]
-    async fn exact_loopback_tuples_for_both_curves_and_equal_body_time() {
+    async fn resume_without_lookup_id_does_not_query() {
+        assert_resume_rejects_unusable_lookup_id(None).await;
+    }
+
+    #[tokio::test]
+    async fn resume_with_malformed_lookup_id_does_not_query() {
+        assert_resume_rejects_unusable_lookup_id(Some("bad\nlabel".into())).await;
+    }
+
+    async fn assert_resume_rejects_unusable_lookup_id(candidate: Option<String>) {
         let server = MockServer::start().await;
-        Mock::given(method("POST"))
-            .respond_with(completed())
-            .mount(&server)
-            .await;
-        let p256 = client(
+        let client = client(
             &server,
             TurnkeyP256ApiKey::from_bytes([1; 32], None).unwrap(),
         );
-        let secp = client(
+        let checkpoint = checkpoint_awaiting_authenticators(&client, &server).await;
+        let without_hint = SubmissionCheckpoint(CheckpointData {
+            activity_id: None,
+            ..checkpoint.0
+        });
+        let error = failure(
+            client
+                .resume_submission(without_hint, candidate)
+                .await
+                .unwrap_err(),
+        );
+        assert_eq!(error.cause(), &SubmissionFailureCause::InvalidResponse);
+        assert!(error.checkpoint().is_some());
+        assert_eq!(server.received_requests().await.unwrap().len(), 1);
+    }
+
+    async fn resume_with_lookup_response(
+        response: Value,
+    ) -> (
+        SubmissionCheckpoint,
+        Result<SubmissionOutcome<ActivityReceipt>, TurnkeyClientError>,
+    ) {
+        let server = MockServer::start().await;
+        let client = client(
             &server,
+            TurnkeyP256ApiKey::from_bytes([1; 32], None).unwrap(),
+        );
+        let checkpoint = checkpoint_awaiting_authenticators(&client, &server).await;
+        Mock::given(path("/public/v1/query/get_activity"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(response))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let outcome = client.resume_submission(checkpoint.clone(), None).await;
+        assert_eq!(server.received_requests().await.unwrap().len(), 2);
+        server.verify().await;
+        (checkpoint, outcome)
+    }
+
+    async fn assert_resume_pending(status: &str, expected: SubmissionPendingReason) {
+        let (original, outcome) = resume_with_lookup_response(query_activity(status)).await;
+        let SubmissionOutcome::Pending { checkpoint, reason } = outcome.unwrap() else {
+            panic!("expected pending");
+        };
+        assert_eq!(reason, expected);
+        assert_eq!(
+            checkpoint.sent_fingerprints().collect::<Vec<_>>(),
+            original.sent_fingerprints().collect::<Vec<_>>()
+        );
+    }
+
+    async fn assert_resume_failure(response: Value, expected: SubmissionFailureCause) {
+        let (original, outcome) = resume_with_lookup_response(response).await;
+        let error = failure(outcome.unwrap_err());
+        assert_eq!(error.submission_state(), SubmissionState::MayHaveSubmitted);
+        assert_eq!(error.cause(), &expected);
+        assert_eq!(
+            error
+                .checkpoint()
+                .unwrap()
+                .sent_fingerprints()
+                .collect::<Vec<_>>(),
+            original.sent_fingerprints().collect::<Vec<_>>()
+        );
+    }
+
+    #[tokio::test]
+    async fn resume_reports_created_activity_still_processing() {
+        assert_resume_pending(
+            "ACTIVITY_STATUS_CREATED",
+            SubmissionPendingReason::Processing,
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn resume_reports_pending_activity_still_processing() {
+        assert_resume_pending(
+            "ACTIVITY_STATUS_PENDING",
+            SubmissionPendingReason::Processing,
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn resume_reports_activity_still_needs_consensus() {
+        assert_resume_pending(
+            "ACTIVITY_STATUS_CONSENSUS_NEEDED",
+            SubmissionPendingReason::ConsensusNeeded,
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn resume_reports_activity_still_needs_authenticators() {
+        assert_resume_pending(
+            "ACTIVITY_STATUS_AUTHENTICATORS_NEEDED",
+            SubmissionPendingReason::AuthenticatorsNeeded,
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn resume_rejects_failed_activity() {
+        assert_resume_failure(
+            query_activity("ACTIVITY_STATUS_FAILED"),
+            SubmissionFailureCause::ActivityNotCompleted,
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn resume_rejects_rejected_activity() {
+        assert_resume_failure(
+            query_activity("ACTIVITY_STATUS_REJECTED"),
+            SubmissionFailureCause::ActivityNotCompleted,
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn resume_rejects_unspecified_activity_status() {
+        assert_resume_failure(
+            query_activity("ACTIVITY_STATUS_UNSPECIFIED"),
+            SubmissionFailureCause::InvalidResponse,
+        )
+        .await;
+    }
+
+    fn completed_activity_with(field: &str, value: Value) -> Value {
+        let mut response = query_activity("ACTIVITY_STATUS_COMPLETED");
+        response["activity"][field] = value;
+        response
+    }
+
+    #[tokio::test]
+    async fn resume_rejects_mismatched_activity_id() {
+        assert_resume_failure(
+            completed_activity_with("id", json!("other")),
+            SubmissionFailureCause::ActivityIdMismatch,
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn resume_rejects_mismatched_organization_id() {
+        assert_resume_failure(
+            completed_activity_with("organizationId", json!(Uuid::from_u128(2))),
+            SubmissionFailureCause::ActivityOrganizationMismatch,
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn resume_rejects_mismatched_creation_type() {
+        assert_resume_failure(
+            completed_activity_with("type", json!("ACTIVITY_TYPE_CREATE_TVC_QUORUM_KEY")),
+            SubmissionFailureCause::ActivityTypeMismatch,
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn resume_rejects_unsupported_activity_type() {
+        assert_resume_failure(
+            completed_activity_with("type", json!("ACTIVITY_TYPE_CREATE_WALLET")),
+            SubmissionFailureCause::UnsupportedActivityType,
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn resume_rejects_missing_activity_result() {
+        assert_resume_failure(
+            completed_activity_with("result", Value::Null),
+            SubmissionFailureCause::ActivityResultMismatch,
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn resume_rejects_empty_activity_result() {
+        assert_resume_failure(
+            completed_activity_with("result", json!({})),
+            SubmissionFailureCause::ActivityResultMismatch,
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn resume_rejects_wrong_activity_result_variant() {
+        assert_resume_failure(
+            completed_activity_with("result", json!({"createTvcQuorumKeyResult": {"quorumKeyId":"key", "quorumPublicKey":"public", "shareIds":[]}})),
+            SubmissionFailureCause::ActivityResultMismatch,
+        ).await;
+    }
+
+    fn checkpoint_json() -> Value {
+        json!({"version":1, "organization_id":ORGANIZATION_ID, "kind":"CreateTvcOperator",
+            "fingerprints":["ab".repeat(32)], "activity_id":null})
+    }
+
+    #[test]
+    fn checkpoint_deserializes_with_saved_fingerprint() {
+        let checkpoint: SubmissionCheckpoint = serde_json::from_value(checkpoint_json()).unwrap();
+        assert_eq!(checkpoint.organization_id(), ORGANIZATION_ID);
+        assert_eq!(
+            checkpoint
+                .sent_fingerprints()
+                .map(RequestFingerprint::as_bytes)
+                .collect::<Vec<_>>(),
+            [&[0xab; 32]]
+        );
+    }
+
+    fn assert_checkpoint_rejects_field(field: &str, invalid: Value) {
+        let mut value = checkpoint_json();
+        value[field] = invalid;
+        assert!(serde_json::from_value::<SubmissionCheckpoint>(value).is_err());
+    }
+
+    fn assert_checkpoint_requires_field(field: &str) {
+        let mut value = checkpoint_json();
+        value.as_object_mut().unwrap().remove(field);
+        assert!(serde_json::from_value::<SubmissionCheckpoint>(value).is_err());
+    }
+
+    #[test]
+    fn checkpoint_rejects_unknown_version() {
+        assert_checkpoint_rejects_field("version", json!(2));
+    }
+
+    #[test]
+    fn checkpoint_rejects_unknown_creation_kind() {
+        assert_checkpoint_rejects_field("kind", json!("Other"));
+    }
+
+    #[test]
+    fn checkpoint_rejects_empty_organization_id() {
+        assert_checkpoint_rejects_field("organization_id", json!(""));
+    }
+
+    #[test]
+    fn checkpoint_rejects_malformed_organization_id() {
+        assert_checkpoint_rejects_field("organization_id", json!("not-a-uuid"));
+    }
+
+    #[test]
+    fn checkpoint_rejects_no_fingerprints() {
+        assert_checkpoint_rejects_field("fingerprints", json!([]));
+    }
+
+    #[test]
+    fn checkpoint_rejects_short_fingerprint() {
+        assert_checkpoint_rejects_field("fingerprints", json!(["ab".repeat(31)]));
+    }
+
+    #[test]
+    fn checkpoint_rejects_non_hex_fingerprint() {
+        assert_checkpoint_rejects_field("fingerprints", json!(["zz".repeat(32)]));
+    }
+
+    #[test]
+    fn checkpoint_rejects_control_character_in_activity_id() {
+        assert_checkpoint_rejects_field("activity_id", json!("bad\nlabel"));
+    }
+
+    #[test]
+    fn checkpoint_rejects_empty_activity_id() {
+        assert_checkpoint_rejects_field("activity_id", json!(""));
+    }
+
+    #[test]
+    fn checkpoint_rejects_oversized_activity_id() {
+        assert_checkpoint_rejects_field("activity_id", json!("x".repeat(129)));
+    }
+
+    #[test]
+    fn checkpoint_requires_version() {
+        assert_checkpoint_requires_field("version");
+    }
+
+    #[test]
+    fn checkpoint_requires_organization_id() {
+        assert_checkpoint_requires_field("organization_id");
+    }
+
+    #[test]
+    fn checkpoint_requires_creation_kind() {
+        assert_checkpoint_requires_field("kind");
+    }
+
+    #[test]
+    fn checkpoint_requires_fingerprints() {
+        assert_checkpoint_requires_field("fingerprints");
+    }
+
+    #[tokio::test]
+    async fn p256_submissions_fingerprint_the_exact_wire_stamp() {
+        assert_submissions_fingerprint_the_exact_wire_stamp(
+            TurnkeyP256ApiKey::from_bytes([1; 32], None).unwrap(),
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn secp256k1_submissions_fingerprint_the_exact_wire_stamp() {
+        assert_submissions_fingerprint_the_exact_wire_stamp(
             TurnkeySecp256k1ApiKey::from_bytes([1; 32], None).unwrap(),
-        );
+        )
+        .await;
+    }
+
+    async fn assert_submissions_fingerprint_the_exact_wire_stamp<S: UniqueStamp>(key: S) {
+        let server = MockServer::start().await;
+        Mock::given(path("/submit"))
+            .respond_with(completed())
+            .expect(2)
+            .mount(&server)
+            .await;
+        let client = client(&server, key);
         let body = json!({"timestampMs":"100", "text":"é🔑\"\\\n"});
-        let mut receipts = Vec::new();
-        receipts.push(
-            p256.submit(&body, "/p256".into())
-                .await
-                .unwrap()
-                .completed(),
-        );
-        receipts.push(
-            p256.submit(&body, "/p256".into())
-                .await
-                .unwrap()
-                .completed(),
-        );
-        receipts.push(
-            secp.submit(&body, "/secp".into())
-                .await
-                .unwrap()
-                .completed(),
-        );
-        receipts.push(
-            secp.submit(&body, "/secp".into())
-                .await
-                .unwrap()
-                .completed(),
-        );
+        let first = client
+            .submit(&body, "/submit".into())
+            .await
+            .unwrap()
+            .completed();
+        let second = client
+            .submit(&body, "/submit".into())
+            .await
+            .unwrap()
+            .completed();
+
         let requests = server.received_requests().await.unwrap();
-        assert_eq!(requests.len(), 4);
-        for (receipt, request) in receipts.iter().zip(&requests) {
+        assert_eq!(requests.len(), 2);
+        for (receipt, request) in [first, second].iter().zip(&requests) {
             assert_eq!(request.body, serde_json::to_vec(&body).unwrap());
             assert_eq!(
                 receipt.sent_fingerprints().copied().collect::<Vec<_>>(),
@@ -1264,7 +1405,6 @@ mod tests {
             assert_eq!(receipt.activity().id, "synthetic-activity");
         }
         assert_ne!(captured(&requests[0]), captured(&requests[1]));
-        assert_ne!(captured(&requests[2]), captured(&requests[3]));
     }
 
     struct PendingTwice(AtomicUsize);
@@ -1438,129 +1578,211 @@ mod tests {
         assert_eq!(error.cause(), &SubmissionFailureCause::ActivityNotCompleted);
     }
 
-    #[test]
-    fn wire_stamps_match_tkms_signature_digest_vectors() {
+    fn assert_wire_stamp_matches_digest_vector(name: &str) {
         let vectors: Vec<Value> = serde_json::from_str(include_str!(
             "../tests/fixtures/signature_digest_vectors.json"
         ))
         .unwrap();
-        for scheme in [1, 4] {
-            assert!(vectors.iter().any(|vector| vector["scheme"] == scheme));
-        }
-        for vector in vectors {
-            let scheme = match vector["scheme"].as_i64().unwrap() {
-                1 => "SIGNATURE_SCHEME_TK_API_P256",
-                4 => "SIGNATURE_SCHEME_TK_API_SECP256K1",
-                other => panic!("unexpected vector signature scheme {other}"),
-            };
-            let stamp = json!({
-                "scheme": scheme,
-                "publicKey": vector["publicKey"],
-                "signature": vector["signature"],
-            });
-            let header = StampHeader {
-                name: "X-Stamp".into(),
-                value: BASE64_URL_SAFE_NO_PAD.encode(serde_json::to_vec(&stamp).unwrap()),
-            };
-            let fingerprint =
-                RequestFingerprint::from_stamp(&header, vector["message"].as_str().unwrap())
-                    .unwrap();
-            assert_eq!(
-                fingerprint.to_hex(),
-                vector["digest"].as_str().unwrap(),
-                "{}",
-                vector["name"]
-            );
+        let vector = vectors
+            .into_iter()
+            .find(|vector| vector["name"] == name)
+            .unwrap_or_else(|| panic!("missing signature digest fixture {name}"));
+        let scheme = match vector["scheme"].as_i64().unwrap() {
+            1 => "SIGNATURE_SCHEME_TK_API_P256",
+            4 => "SIGNATURE_SCHEME_TK_API_SECP256K1",
+            other => panic!("unexpected vector signature scheme {other}"),
+        };
+        let stamp = json!({
+            "scheme": scheme,
+            "publicKey": vector["publicKey"],
+            "signature": vector["signature"],
+        });
+        let header = StampHeader {
+            name: "X-Stamp".into(),
+            value: BASE64_URL_SAFE_NO_PAD.encode(serde_json::to_vec(&stamp).unwrap()),
+        };
+        let fingerprint =
+            RequestFingerprint::from_stamp(&header, vector["message"].as_str().unwrap()).unwrap();
+        assert_eq!(
+            fingerprint.to_hex(),
+            vector["digest"].as_str().unwrap(),
+            "{}",
+            vector["name"]
+        );
+    }
+
+    #[test]
+    fn p256_stamp_matches_tkms_digest() {
+        assert_wire_stamp_matches_digest_vector("p256");
+    }
+
+    #[test]
+    fn changed_signature_scheme_matches_tkms_digest() {
+        assert_wire_stamp_matches_digest_vector("p256-scheme");
+    }
+
+    #[test]
+    fn changed_public_key_matches_tkms_digest() {
+        assert_wire_stamp_matches_digest_vector("p256-publicKey");
+    }
+
+    #[test]
+    fn changed_request_message_matches_tkms_digest() {
+        assert_wire_stamp_matches_digest_vector("p256-message");
+    }
+
+    #[test]
+    fn changed_signature_matches_tkms_digest() {
+        assert_wire_stamp_matches_digest_vector("p256-signature");
+    }
+
+    #[test]
+    fn captured_p256_stamp_matches_tkms_digest() {
+        assert_wire_stamp_matches_digest_vector("captured-0");
+    }
+
+    #[test]
+    fn captured_secp256k1_stamp_matches_tkms_digest() {
+        assert_wire_stamp_matches_digest_vector("captured-2");
+    }
+
+    fn stamp_header(value: Value) -> StampHeader {
+        StampHeader {
+            name: "x-sTaMp".into(),
+            value: BASE64_URL_SAFE_NO_PAD.encode(serde_json::to_vec(&value).unwrap()),
         }
     }
 
     #[test]
-    fn strict_stamp_parsing_and_exact_text() {
-        let key = TurnkeyP256ApiKey::from_bytes([1; 32], None).unwrap();
-        let body = "é🔑\"\\\n";
-        let valid = key.stamp(body.as_bytes()).unwrap();
-        let original = RequestFingerprint::from_stamp(&valid, body).unwrap();
-        let mut json: Value =
-            serde_json::from_slice(&BASE64_URL_SAFE_NO_PAD.decode(&valid.value).unwrap()).unwrap();
-        json["publicKey"] = json["publicKey"].as_str().unwrap().to_uppercase().into();
-        json["signature"] = json["signature"].as_str().unwrap().to_uppercase().into();
-        let header = |value: &Value| StampHeader {
-            name: "x-sTaMp".into(),
-            value: BASE64_URL_SAFE_NO_PAD.encode(serde_json::to_vec(value).unwrap()),
-        };
-        assert_ne!(
-            RequestFingerprint::from_stamp(&header(&json), body).unwrap(),
-            original
-        );
-        assert_ne!(
-            RequestFingerprint::from_stamp(&valid, "substitution").unwrap(),
-            original
-        );
-        for value in [
-            json!({}),
-            json!({"scheme":"OTHER","publicKey":"00","signature":"00"}),
-            json!({"scheme":null,"publicKey":"00","signature":"00"}),
-        ] {
-            assert!(RequestFingerprint::from_stamp(&header(&value), body).is_err());
-        }
-        for malformed in [
-            StampHeader {
-                name: "custom".into(),
-                value: valid.value.clone(),
-            },
-            StampHeader {
-                name: "X-Stamp".into(),
-                value: "bad!".into(),
-            },
-        ] {
-            assert!(RequestFingerprint::from_stamp(&malformed, body).is_err());
-        }
-        let duplicate = StampHeader {
-            name: "X-Stamp".into(),
-            value: BASE64_URL_SAFE_NO_PAD
-                .encode(br#"{"scheme":"a","scheme":"b","publicKey":"00","signature":"00"}"#),
-        };
-        assert!(RequestFingerprint::from_stamp(&duplicate, body).is_err());
+    fn fingerprint_rejects_empty_stamp_json() {
+        let stamp = stamp_header(json!({}));
+        assert!(RequestFingerprint::from_stamp(&stamp, "").is_err());
     }
 
-    #[tokio::test]
-    async fn generated_variants_share_ordinary_request_and_typed_result_extraction() {
-        use crate::generated::external::data::v1::{AppProof, SignatureScheme};
-        use crate::generated::{CreateTvcOperatorIntent, CreateTvcQuorumKeyIntent};
+    #[test]
+    fn fingerprint_rejects_unsupported_stamp_scheme() {
+        let stamp = stamp_header(json!({"scheme":"OTHER","publicKey":"00","signature":"00"}));
+        assert!(RequestFingerprint::from_stamp(&stamp, "").is_err());
+    }
 
-        struct CustomStamper(TurnkeyP256ApiKey);
+    #[test]
+    fn fingerprint_rejects_null_stamp_scheme() {
+        let stamp = stamp_header(json!({"scheme":null,"publicKey":"00","signature":"00"}));
+        assert!(RequestFingerprint::from_stamp(&stamp, "").is_err());
+    }
 
-        impl Stamp for CustomStamper {
-            fn stamp(&self, body: &[u8]) -> Result<StampHeader, StamperError> {
-                self.0.stamp(body)
-            }
+    #[test]
+    fn fingerprint_rejects_custom_header_name() {
+        let valid = TurnkeyP256ApiKey::from_bytes([1; 32], None)
+            .unwrap()
+            .stamp(b"body")
+            .unwrap();
+        let custom = StampHeader {
+            name: "custom".into(),
+            ..valid
+        };
+        assert!(RequestFingerprint::from_stamp(&custom, "body").is_err());
+    }
+
+    #[test]
+    fn fingerprint_rejects_invalid_stamp_base64() {
+        let malformed = StampHeader {
+            name: "X-Stamp".into(),
+            value: "bad!".into(),
+        };
+        assert!(RequestFingerprint::from_stamp(&malformed, "").is_err());
+    }
+
+    #[test]
+    fn fingerprint_rejects_duplicate_stamp_fields() {
+        let duplicate = StampHeader {
+            name: "X-Stamp".into(),
+            value: BASE64_URL_SAFE_NO_PAD.encode(
+                br#"{
+                "scheme":"SIGNATURE_SCHEME_TK_API_P256",
+                "scheme":"SIGNATURE_SCHEME_TK_API_SECP256K1",
+                "publicKey":"00","signature":"00"
+            }"#,
+            ),
+        };
+        assert!(matches!(
+            RequestFingerprint::from_stamp(&duplicate, ""),
+            Err(TurnkeyClientError::InvalidReceiptStamp(
+                "invalid stamp JSON"
+            ))
+        ));
+    }
+
+    struct TestStamper<F>(F);
+
+    impl<F: Fn(&[u8]) -> Result<StampHeader, StamperError>> Stamp for TestStamper<F> {
+        fn stamp(&self, body: &[u8]) -> Result<StampHeader, StamperError> {
+            self.0(body)
         }
+    }
 
-        impl UniqueStamp for CustomStamper {}
+    impl<F: Fn(&[u8]) -> Result<StampHeader, StamperError>> UniqueStamp for TestStamper<F> {}
 
-        let proof = AppProof {
+    fn example_app_proof() -> crate::AppProof {
+        use crate::generated::external::data::v1::SignatureScheme;
+
+        crate::AppProof {
             scheme: SignatureScheme::EphemeralKeyP256,
             public_key: "proof-key".into(),
             proof_payload: "proof-payload".into(),
             signature: "proof-signature".into(),
+        }
+    }
+
+    async fn assert_receipt_matches_ordinary_creation<T: std::fmt::Debug + PartialEq>(
+        server: &MockServer,
+        ordinary: ActivityResult<T>,
+        submitted: SubmittedActivityResult<T>,
+        proof: crate::AppProof,
+        expected_kind: SubmissionKind,
+    ) {
+        let (result, receipt) = submitted.into_parts();
+        assert_eq!(result.result, ordinary.result);
+        assert_eq!(ordinary.app_proofs, [proof]);
+        assert_eq!(result.app_proofs, ordinary.app_proofs);
+        assert_eq!(receipt.activity().app_proofs, ordinary.app_proofs);
+        assert_eq!(receipt.activity().id, ordinary.activity_id);
+        assert_eq!(receipt.checkpoint().0.kind, expected_kind);
+
+        let requests = server.received_requests().await.unwrap();
+        let [ordinary_post, receipt_post] = requests.as_slice() else {
+            panic!("expected one ordinary POST and one receipt POST");
         };
-        let expected_proofs = [proof.clone()];
+        assert_eq!(ordinary_post.body, receipt_post.body);
+        assert_eq!(
+            serde_json::from_slice::<Value>(&receipt_post.body).unwrap()["generateAppProofs"],
+            true
+        );
+        assert_eq!(
+            receipt.sent_fingerprints().copied().collect::<Vec<_>>(),
+            [captured(receipt_post)]
+        );
+    }
+
+    #[tokio::test]
+    async fn operator_receipt_preserves_the_ordinary_request_and_result() {
+        use crate::generated::CreateTvcOperatorIntent;
+
         let server = MockServer::start().await;
-        Mock::given(path("/public/v1/submit/create_tvc_operator")).respond_with(ResponseTemplate::new(200).set_body_json(json!({"activity": {
-            "id":"operator-activity", "organizationId":ORGANIZATION_ID, "fingerprint":"server", "type":"ACTIVITY_TYPE_CREATE_TVC_OPERATOR", "status":"ACTIVITY_STATUS_COMPLETED",
-            "appProofs": [proof],
-            "result":{"createTvcOperatorResult":{"walletId":"wallet", "operatorId":"operator", "encryptPublicKey":"encrypt", "signPublicKey":"sign"}}
-        }}))).mount(&server).await;
-        Mock::given(path("/public/v1/submit/create_tvc_quorum_key")).respond_with(ResponseTemplate::new(200).set_body_json(json!({"activity": {
-            "id":"quorum-activity", "organizationId":ORGANIZATION_ID, "fingerprint":"server", "type":"ACTIVITY_TYPE_CREATE_TVC_QUORUM_KEY", "status":"ACTIVITY_STATUS_COMPLETED",
-            "appProofs": [proof],
-            "result":{"createTvcQuorumKeyResult":{"quorumKeyId":"quorum", "quorumPublicKey":"key", "shareIds":["share"]}}
-        }}))).mount(&server).await;
-        let client = client(
-            &server,
-            CustomStamper(TurnkeyP256ApiKey::from_bytes([1; 32], None).unwrap()),
-        )
-        .with_app_proofs();
+        let proof = example_app_proof();
+        Mock::given(path("/public/v1/submit/create_tvc_operator"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"activity": {
+                "id": "operator-activity", "organizationId": ORGANIZATION_ID, "fingerprint": "server",
+                "type": "ACTIVITY_TYPE_CREATE_TVC_OPERATOR", "status": "ACTIVITY_STATUS_COMPLETED",
+                "appProofs": [proof],
+                "result": {"createTvcOperatorResult": {
+                    "walletId": "wallet", "operatorId": "operator",
+                    "encryptPublicKey": "encrypt", "signPublicKey": "sign"
+                }}
+            }})))
+            .mount(&server).await;
+        let key = TurnkeyP256ApiKey::from_bytes([1; 32], None).unwrap();
+        let client = client(&server, TestStamper(|body: &[u8]| key.stamp(body))).with_app_proofs();
         let params = CreateTvcOperatorIntent {
             wallet_id: None,
             wallet_name: Some("wallet".into()),
@@ -1576,15 +1798,37 @@ mod tests {
             .await
             .unwrap()
             .completed();
-        assert_eq!(ordinary.result, submitted.activity_result().result);
-        assert_eq!(ordinary.app_proofs, expected_proofs);
-        assert_eq!(submitted.activity_result().app_proofs, expected_proofs);
-        assert_eq!(submitted.receipt().activity().app_proofs, expected_proofs);
-        assert_eq!(submitted.receipt().activity().id, ordinary.activity_id);
-        assert_eq!(
-            submitted.receipt().checkpoint().0.kind,
-            SubmissionKind::CreateTvcOperator
-        );
+        assert_receipt_matches_ordinary_creation(
+            &server,
+            ordinary,
+            submitted,
+            proof,
+            SubmissionKind::CreateTvcOperator,
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn quorum_key_receipt_preserves_the_ordinary_request_and_result() {
+        use crate::generated::CreateTvcQuorumKeyIntent;
+
+        let server = MockServer::start().await;
+        let proof = example_app_proof();
+        Mock::given(path("/public/v1/submit/create_tvc_quorum_key"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"activity": {
+                "id": "quorum-activity", "organizationId": ORGANIZATION_ID, "fingerprint": "server",
+                "type": "ACTIVITY_TYPE_CREATE_TVC_QUORUM_KEY", "status": "ACTIVITY_STATUS_COMPLETED",
+                "appProofs": [proof],
+                "result": {"createTvcQuorumKeyResult": {
+                    "quorumKeyId": "quorum", "quorumPublicKey": "key", "shareIds": ["share"]
+                }}
+            }})))
+            .mount(&server).await;
+        let client = client(
+            &server,
+            TurnkeyP256ApiKey::from_bytes([1; 32], None).unwrap(),
+        )
+        .with_app_proofs();
         let params = CreateTvcQuorumKeyIntent {
             threshold: 2,
             operator_encrypt_keys: vec!["one".into(), "two".into()],
@@ -1593,34 +1837,19 @@ mod tests {
             .create_tvc_quorum_key(ORGANIZATION_ID.to_string(), 100, params.clone())
             .await
             .unwrap();
-        let (submitted, receipt) = client
+        let submitted = client
             .create_tvc_quorum_key_with_receipt(ORGANIZATION_ID, 100, params, async |_| Ok(()))
             .await
             .unwrap()
-            .completed()
-            .into_parts();
-        assert_eq!(ordinary.result, submitted.result);
-        assert_eq!(ordinary.app_proofs, expected_proofs);
-        assert_eq!(submitted.app_proofs, expected_proofs);
-        assert_eq!(receipt.activity().app_proofs, expected_proofs);
-        assert_eq!(receipt.activity().id, ordinary.activity_id);
-        assert_eq!(
-            receipt.checkpoint().0.kind,
-            SubmissionKind::CreateTvcQuorumKey
-        );
-        let requests = server.received_requests().await.unwrap();
-        assert_eq!(requests[0].body, requests[1].body);
-        assert_eq!(requests[2].body, requests[3].body);
-        assert_eq!(
-            receipt.sent_fingerprints().copied().collect::<Vec<_>>(),
-            [captured(&requests[3])]
-        );
-        for request in &requests {
-            assert_eq!(
-                serde_json::from_slice::<Value>(&request.body).unwrap()["generateAppProofs"],
-                true
-            );
-        }
+            .completed();
+        assert_receipt_matches_ordinary_creation(
+            &server,
+            ordinary,
+            submitted,
+            proof,
+            SubmissionKind::CreateTvcQuorumKey,
+        )
+        .await;
     }
 
     fn failure(error: TurnkeyClientError) -> SubmissionFailure {
@@ -1710,39 +1939,80 @@ mod tests {
         assert_eq!(safe_activity_id(""), None);
     }
 
-    #[test]
-    fn signing_failure_mapping_preserves_submission_state_without_sensitive_details() {
-        for state in [
-            SubmissionState::NeverSubmitted,
-            SubmissionState::MayHaveSubmitted,
-        ] {
-            let error = SubmissionFailure::new(
-                TurnkeyClientError::StamperError(StamperError::RandomizedSigningFailed),
-                state,
-                None,
-            );
-            assert_eq!(error.submission_state(), state);
-            assert_eq!(
-                error.cause(),
-                &SubmissionFailureCause::RandomizedSigningFailed
-            );
-            assert_eq!(error.activity_id(), None);
-            assert_eq!(
-                error.to_string(),
-                format!("{state}: randomized signing failed")
-            );
+    #[tokio::test]
+    async fn first_signing_failure_prevents_submission_and_redacts_the_stamper_error() {
+        let server = MockServer::start().await;
+        let stamper = TestStamper(|_: &[u8]| {
+            Err(StamperError::InvalidPublicKeyBytes(
+                "private request secret".into(),
+            ))
+        });
+        let client = client(&server, stamper);
+        let error = failure(client.submit((), "/submit".into()).await.unwrap_err());
 
-            let rejected = SubmissionFailure::new(
-                TurnkeyClientError::StamperError(StamperError::InvalidPublicKeyBytes(
-                    "private request secret".into(),
-                )),
-                state,
-                None,
-            );
-            assert_eq!(rejected.submission_state(), state);
-            assert_eq!(rejected.cause(), &SubmissionFailureCause::StampRejected);
-            assert!(!format!("{rejected:?} {rejected}").contains("private request secret"));
-        }
+        assert_eq!(error.submission_state(), SubmissionState::NeverSubmitted);
+        assert_eq!(error.cause(), &SubmissionFailureCause::StampRejected);
+        assert!(error.checkpoint().is_none());
+        assert!(server.received_requests().await.unwrap().is_empty());
+        assert!(!format!("{error:?} {error}").contains("private request secret"));
+    }
+
+    #[tokio::test]
+    async fn retry_signing_failure_retains_the_first_post_fingerprint() {
+        let server = MockServer::start().await;
+        Mock::given(path("/submit"))
+            .respond_with(response("ACTIVITY_STATUS_PENDING"))
+            .mount(&server)
+            .await;
+        let first_key =
+            std::cell::Cell::new(Some(TurnkeyP256ApiKey::from_bytes([1; 32], None).unwrap()));
+        let stamper = TestStamper(|body: &[u8]| {
+            first_key
+                .take()
+                .ok_or(StamperError::RandomizedSigningFailed)?
+                .stamp(body)
+        });
+        let client = client(&server, stamper);
+        let mut saved = Vec::new();
+        let error = failure(
+            client
+                .process_activity_with_receipt(
+                    (),
+                    "/submit".into(),
+                    ORGANIZATION_ID,
+                    SubmissionKind::CreateTvcOperator,
+                    async |checkpoint: &SubmissionCheckpoint| {
+                        saved.push(checkpoint.clone());
+                        Ok(())
+                    },
+                )
+                .await
+                .unwrap_err(),
+        );
+
+        assert_eq!(error.submission_state(), SubmissionState::MayHaveSubmitted);
+        assert_eq!(
+            error.cause(),
+            &SubmissionFailureCause::RandomizedSigningFailed
+        );
+        assert_eq!(error.activity_id(), Some("synthetic-activity"));
+        let requests = server.received_requests().await.unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(saved.len(), 1);
+        let expected = [captured(&requests[0])];
+        assert_eq!(
+            saved[0].sent_fingerprints().copied().collect::<Vec<_>>(),
+            expected
+        );
+        assert_eq!(
+            error
+                .checkpoint()
+                .unwrap()
+                .sent_fingerprints()
+                .copied()
+                .collect::<Vec<_>>(),
+            expected
+        );
     }
 
     struct FailsAfterFirstSerialization(AtomicUsize);

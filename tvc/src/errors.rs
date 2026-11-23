@@ -536,7 +536,6 @@ mod tests {
             TurnkeyClientError::HeaderFromStrError("invalid MIME type".to_string()),
             TurnkeyClientError::UnexpectedMimeType("text/plain".to_string()),
             TurnkeyClientError::Decode("invalid JSON".to_string(), decode_error),
-            TurnkeyClientError::InvalidSubmissionActivity("activity identity mismatch"),
             TurnkeyClientError::MissingActivity,
             TurnkeyClientError::MissingResult,
             TurnkeyClientError::MissingInnerResult,
@@ -556,6 +555,17 @@ mod tests {
     }
 
     #[test]
+    fn invalid_submission_activity_maps_to_api_error() {
+        let error = client_error(TurnkeyClientError::InvalidSubmissionActivity(
+            "activity identity mismatch",
+        ));
+        assert_eq!(
+            classify(&error),
+            Classification::new(ErrorCode::ApiError, None)
+        );
+    }
+
+    #[test]
     fn activity_requires_approval_maps_to_approval_required() {
         let error = client_error(TurnkeyClientError::ActivityRequiresApproval(
             "act-1".to_string(),
@@ -572,8 +582,6 @@ mod tests {
         let errors = [
             TurnkeyClientError::BuilderMissingApiKey,
             TurnkeyClientError::SerdeJsonFailure(serialization_error),
-            TurnkeyClientError::InvalidReceiptStamp("invalid stamp JSON"),
-            TurnkeyClientError::CheckpointSaveFailed(turnkey_client::CheckpointSaveError),
             TurnkeyClientError::StamperError(turnkey_api_key_stamper::StamperError::HexDecode(
                 "invalid hex".to_string(),
             )),
@@ -586,6 +594,28 @@ mod tests {
                 Classification::new(ErrorCode::CommandError, None)
             );
         }
+    }
+
+    #[test]
+    fn invalid_receipt_stamp_maps_to_command_error() {
+        let error = client_error(TurnkeyClientError::InvalidReceiptStamp(
+            "invalid stamp JSON",
+        ));
+        assert_eq!(
+            classify(&error),
+            Classification::new(ErrorCode::CommandError, None)
+        );
+    }
+
+    #[test]
+    fn checkpoint_save_error_maps_to_command_error() {
+        let error = client_error(TurnkeyClientError::CheckpointSaveFailed(
+            turnkey_client::CheckpointSaveError,
+        ));
+        assert_eq!(
+            classify(&error),
+            Classification::new(ErrorCode::CommandError, None)
+        );
     }
 
     #[tokio::test]
