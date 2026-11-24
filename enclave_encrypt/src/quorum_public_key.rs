@@ -1,4 +1,6 @@
 //! Contains the definition and data for Turnkey Quorum key public keys.
+use std::sync::LazyLock;
+
 use p256::ecdsa::VerifyingKey;
 
 use crate::errors::EnclaveEncryptError;
@@ -11,26 +13,41 @@ pub const TURNKEY_PRODUCTION_SIGNER_QUORUM_PUBLIC_KEY: &str = "04ca7c0d624c75de6
 /// We check it in here for convenience, for internal Turnkey employees. Goes without saying: do not use in production code!
 pub const TURNKEY_PREPROD_SIGNER_QUORUM_PUBLIC_KEY: &str = "048e92f6cdcc0b375505980a298d9b79201db1f08b1f135360d2864af1a67186ec0dbeb570d396a456226b0844be93dbc0180abbf7e2e4c9cfde8d5da4e3f8a49004f3422b8afbe425d6ece77b8d2469954715a2ff273ab7ac89f1ed70e0a9325eaa1698b4351fd1b23734e65c0b6a86b62dd49d70b37c94606aac402cbd84353212";
 
+/// Turnkey's development Signer quorum public key. Do not use in production.
+pub const TURNKEY_DEV_SIGNER_QUORUM_PUBLIC_KEY: &str = "046101205064b86e23b9619dad4a887a3cb31ac4cb2cb8256556fdf315c7d42d9cece7bbc7b5ebc70a34b2faa4d1f0dffad0c2706b08f0065e0cb0534140b66564048cf9ed5f579298cc1571823a3222b82d80c529c551f6070fbe712ae1a9e8d1a23b7006e306d27190358dfcd9c44624918a00f23c920a33cb14f5b026eafc865d";
+
+static PRODUCTION_SIGNER_QUORUM_KEY: LazyLock<QuorumPublicKey> = LazyLock::new(|| {
+    QuorumPublicKey::from_string(TURNKEY_PRODUCTION_SIGNER_QUORUM_PUBLIC_KEY)
+        .expect("static public key should be valid")
+});
+
+static PREPROD_SIGNER_QUORUM_KEY: LazyLock<QuorumPublicKey> = LazyLock::new(|| {
+    QuorumPublicKey::from_string(TURNKEY_PREPROD_SIGNER_QUORUM_PUBLIC_KEY)
+        .expect("static public key should be valid")
+});
+
+static DEV_SIGNER_QUORUM_KEY: LazyLock<QuorumPublicKey> = LazyLock::new(|| {
+    QuorumPublicKey::from_string(TURNKEY_DEV_SIGNER_QUORUM_PUBLIC_KEY)
+        .expect("static public key should be valid")
+});
+
 /// Expected Quorum public key length: twice the length of a SEC1 uncompressed public key (65 * 2)
 pub const QUORUM_PUBLIC_KEY_BYTE_LENGTH: usize = 130;
 
 /// Represents a Quorum key public key component.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct QuorumPublicKey {
-    bytes: Vec<u8>,
+    bytes: [u8; QUORUM_PUBLIC_KEY_BYTE_LENGTH],
 }
 
 impl QuorumPublicKey {
     /// Create a new `QuorumPublicKey` from an array of bytes
     pub fn from_bytes<B: AsRef<[u8]>>(b: B) -> Result<Self, EnclaveEncryptError> {
-        if b.as_ref().len() != QUORUM_PUBLIC_KEY_BYTE_LENGTH {
-            return Err(EnclaveEncryptError::IncorrectQuorumPublicKeyBytesLength(
-                b.as_ref().len(),
-            ));
-        }
-        Ok(Self {
-            bytes: b.as_ref().to_vec(),
-        })
+        let b = b.as_ref();
+        let bytes = b
+            .try_into()
+            .map_err(|_| EnclaveEncryptError::IncorrectQuorumPublicKeyBytesLength(b.len()))?;
+        Ok(Self { bytes })
     }
 
     /// Create a new `QuorumPublicKey` from a str
@@ -46,8 +63,7 @@ impl QuorumPublicKey {
     /// Not expected given the public keys are static and valid
     #[must_use]
     pub fn production_signer() -> Self {
-        Self::from_string(TURNKEY_PRODUCTION_SIGNER_QUORUM_PUBLIC_KEY)
-            .expect("static public key should be valid")
+        PRODUCTION_SIGNER_QUORUM_KEY.clone()
     }
 
     /// Quorum Public Key for Turnkey's preprod signer. Do not use in production code. See `production_signer`
@@ -56,8 +72,16 @@ impl QuorumPublicKey {
     /// Not expected given the public keys are static and valid
     #[must_use]
     pub fn preprod_signer() -> Self {
-        Self::from_string(TURNKEY_PREPROD_SIGNER_QUORUM_PUBLIC_KEY)
-            .expect("static public key should be valid")
+        PREPROD_SIGNER_QUORUM_KEY.clone()
+    }
+
+    /// Quorum public key for Turnkey's development Signer. Do not use in production.
+    ///
+    /// # Panics
+    /// Not expected given the public key is static and valid.
+    #[must_use]
+    pub fn dev_signer() -> Self {
+        DEV_SIGNER_QUORUM_KEY.clone()
     }
 
     /// Returns a `VerifyingKey` for this `QuorumPublicKey`
@@ -89,30 +113,42 @@ impl TryFrom<qos_p256::P256Public> for QuorumPublicKey {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use p256::elliptic_curve::sec1::ToEncodedPoint;
 
     #[test]
-    fn from_bytes_and_from_str_valid() {
-        let prod_pub1 = QuorumPublicKey::from_bytes(
-            hex::decode(TURNKEY_PRODUCTION_SIGNER_QUORUM_PUBLIC_KEY).unwrap(),
-        )
-        .unwrap();
-        let prod_pub2 =
-            QuorumPublicKey::from_string(TURNKEY_PRODUCTION_SIGNER_QUORUM_PUBLIC_KEY).unwrap();
-        let prod_pub3 = QuorumPublicKey::production_signer();
-        assert!(prod_pub1.verifying_key().is_ok());
-        assert_eq!(prod_pub1, prod_pub2);
-        assert_eq!(prod_pub2, prod_pub3);
+    fn built_in_signer_keys() {
+        let production = QuorumPublicKey::production_signer();
+        let preprod = QuorumPublicKey::preprod_signer();
+        let dev = QuorumPublicKey::dev_signer();
 
-        let preprod_pub1 = QuorumPublicKey::from_bytes(
-            hex::decode(TURNKEY_PREPROD_SIGNER_QUORUM_PUBLIC_KEY).unwrap(),
-        )
-        .unwrap();
-        let preprod_pub2 =
-            QuorumPublicKey::from_string(TURNKEY_PREPROD_SIGNER_QUORUM_PUBLIC_KEY).unwrap();
-        let preprod_pub3 = QuorumPublicKey::preprod_signer();
-        assert!(preprod_pub1.verifying_key().is_ok());
-        assert_eq!(preprod_pub1, preprod_pub2);
-        assert_eq!(preprod_pub2, preprod_pub3);
+        assert_ne!(production, preprod);
+        assert_ne!(production, dev);
+        assert_ne!(preprod, dev);
+
+        for (key, hex) in [
+            (&production, TURNKEY_PRODUCTION_SIGNER_QUORUM_PUBLIC_KEY),
+            (&preprod, TURNKEY_PREPROD_SIGNER_QUORUM_PUBLIC_KEY),
+            (&dev, TURNKEY_DEV_SIGNER_QUORUM_PUBLIC_KEY),
+        ] {
+            let bytes = hex::decode(hex).unwrap();
+            let (encryption, verifying) = bytes.split_at(65);
+            assert_eq!(*key, QuorumPublicKey::from_bytes(&bytes).unwrap());
+            assert_eq!(*key, QuorumPublicKey::from_string(hex).unwrap());
+            assert_eq!(
+                key.encrypt_public_key()
+                    .unwrap()
+                    .to_encoded_point(false)
+                    .as_bytes(),
+                encryption
+            );
+            assert_eq!(
+                key.verifying_key()
+                    .unwrap()
+                    .to_encoded_point(false)
+                    .as_bytes(),
+                verifying
+            );
+        }
     }
 
     #[test]
