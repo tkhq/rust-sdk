@@ -268,6 +268,7 @@ mod tests {
     use qos_p256::P256Pair;
     use serde_json::Value;
     use std::{collections::BTreeMap, path::PathBuf};
+    use turnkey_client::TurnkeyEnvironment;
 
     const FIRST_OPERATOR_ID: &str = "11111111-1111-4111-8111-111111111111";
     const SECOND_OPERATOR_ID: &str = "22222222-2222-4222-8222-222222222222";
@@ -312,7 +313,7 @@ mod tests {
                 OrgConfig {
                     id: "org-id".to_string(),
                     api_key_path: PathBuf::from("api-key.json"),
-                    api_base_url: "https://api.turnkey.com".to_string(),
+                    api_base_url: TurnkeyEnvironment::Production.api_base_url().to_string(),
                     default_operator_kind: OperatorKind::Local,
                     operators,
                     extra: toml::Table::new(),

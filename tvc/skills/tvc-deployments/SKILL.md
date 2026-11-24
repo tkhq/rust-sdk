@@ -54,7 +54,7 @@ Three env vars, **all three or none**:
 TVC_ORG_ID=            # organization UUID
 TVC_API_KEY_PUBLIC=    # API key public component (hex)
 TVC_API_KEY_PRIVATE=   # API key private component (hex)
-TVC_API_BASE_URL=      # optional, defaults to https://api.turnkey.com
+TVC_API_BASE_URL=      # optional, defaults to the Turnkey production API
 ```
 
 All three set → env auth, which takes precedence over any `tvc login` profile. None → the profile under `~/.config/turnkey/`. Some but not all → error naming the missing one. Empty counts as unset. `tvc login` needs a human; if neither env vars nor a profile exist, stop and ask.

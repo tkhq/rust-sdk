@@ -9,6 +9,7 @@ use std::net::TcpListener;
 use std::thread::{self, JoinHandle};
 use tempfile::TempDir;
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
+use turnkey_client::TurnkeyEnvironment;
 use turnkey_client::generated::{
     GetTvcDeploymentResponse, GetTvcOperatorsResponse,
     external::data::v1::{TvcDeployment, TvcManifest, TvcOperator, TvcOperatorSet},
@@ -199,7 +200,7 @@ fn write_hosted_config(home: &TempDir) {
             OrgConfig {
                 id: "org-test".to_string(),
                 api_key_path: home.path().join("api-key.json"),
-                api_base_url: "https://api.turnkey.com".to_string(),
+                api_base_url: TurnkeyEnvironment::Production.api_base_url().to_string(),
                 default_operator_kind: OperatorKind::Hosted,
                 operators: vec![OperatorRecord {
                     name: "hosted".to_string(),
@@ -781,7 +782,7 @@ fn remembered_operator_ids_are_not_approval_candidates() {
             OrgConfig {
                 id: "org-test".to_string(),
                 api_key_path: temp.path().join("api-key.json"),
-                api_base_url: "https://api.turnkey.com".to_string(),
+                api_base_url: TurnkeyEnvironment::Production.api_base_url().to_string(),
                 default_operator_kind: OperatorKind::Local,
                 operators: Vec::new(),
                 extra: toml::Table::new(),
@@ -828,7 +829,7 @@ fn malformed_registered_local_operator_id_is_reported() {
             OrgConfig {
                 id: "org-test".to_string(),
                 api_key_path: temp.path().join("api-key.json"),
-                api_base_url: "https://api.turnkey.com".to_string(),
+                api_base_url: TurnkeyEnvironment::Production.api_base_url().to_string(),
                 default_operator_kind: OperatorKind::Local,
                 operators: vec![OperatorRecord {
                     name: "local".to_string(),
@@ -882,7 +883,7 @@ fn manifest_membership_controls_signer_resolution_in_mixed_registry() {
             OrgConfig {
                 id: "org-test".to_string(),
                 api_key_path: temp.path().join("api-key.json"),
-                api_base_url: "https://api.turnkey.com".to_string(),
+                api_base_url: TurnkeyEnvironment::Production.api_base_url().to_string(),
                 default_operator_kind: OperatorKind::Local,
                 operators: vec![
                     OperatorRecord {

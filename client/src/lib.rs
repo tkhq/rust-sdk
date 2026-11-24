@@ -78,8 +78,10 @@ pub use turnkey_api_key_stamper::{TurnkeyP256ApiKey, TurnkeySecp256k1ApiKey};
 
 pub mod generated;
 
+mod environment;
 pub mod retry;
 pub mod well_known;
+pub use environment::TurnkeyEnvironment;
 pub use retry::RetryConfig;
 
 const TURNKEY_RUST_SDK_USER_AGENT: &str =
@@ -194,7 +196,7 @@ impl<S: Stamp> TurnkeyClientBuilder<S> {
         self
     }
 
-    /// Sets the base URL for the Turnkey client. Default: `https://api.turnkey.com`
+    /// Sets the API base URL. Defaults to the [production environment](TurnkeyEnvironment::Production).
     pub fn base_url(mut self, base_url: impl Into<String>) -> Self {
         self.base_url = Some(base_url.into());
         self
@@ -242,7 +244,7 @@ impl<S: Stamp> TurnkeyClientBuilder<S> {
                 .ok_or(TurnkeyClientError::BuilderMissingApiKey)?,
             base_url: self
                 .base_url
-                .unwrap_or("https://api.turnkey.com".to_string()),
+                .unwrap_or_else(|| TurnkeyEnvironment::Production.api_base_url().to_string()),
             http: self
                 .reqwest_builder
                 .build()

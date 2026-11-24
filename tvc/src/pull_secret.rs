@@ -1,11 +1,9 @@
-use crate::config::turnkey::{
-    API_BASE_URL_DEV, API_BASE_URL_LOCAL, API_BASE_URL_PREPROD, API_BASE_URL_PROD,
-};
 use anyhow::{Context, Result, anyhow};
 use chrono::{DateTime, SecondsFormat, Utc};
 use p256::elliptic_curve::sec1::ToEncodedPoint;
 use serde::Serialize;
 use serde_json::value::RawValue;
+use turnkey_client::TurnkeyEnvironment;
 use turnkey_enclave_encrypt::{P256Public, server::EnclaveEncryptServer};
 use uuid::Uuid;
 use zeroize::Zeroizing;
@@ -21,26 +19,24 @@ const PROD_PULL_SECRET_ENCRYPTION_PUBLIC_KEY: &str =
 
 /// Resolve the pull secret encryption key from the active org API URL
 fn encryption_public_key_for_api_base_url(api_base_url: &str) -> Result<&'static str> {
-    // `tvc` already requires login/active org, so api_base_url is the environment source of truth
-    let key = match api_base_url {
-        API_BASE_URL_LOCAL => LOCALHOST_PULL_SECRET_ENCRYPTION_PUBLIC_KEY,
-        API_BASE_URL_DEV => DEV_PREPROD_PULL_SECRET_ENCRYPTION_PUBLIC_KEY,
-        API_BASE_URL_PREPROD => APP_PREPROD_PULL_SECRET_ENCRYPTION_PUBLIC_KEY,
-        API_BASE_URL_PROD => PROD_PULL_SECRET_ENCRYPTION_PUBLIC_KEY,
-        _ => {
-            anyhow::bail!(
-                "unsupported API base URL for pivot pull secret encryption key inference: '{}'. \
-                 expected one of: '{}', '{}', '{}', '{}'",
-                api_base_url,
-                API_BASE_URL_LOCAL,
-                API_BASE_URL_DEV,
-                API_BASE_URL_PREPROD,
-                API_BASE_URL_PROD
-            );
-        }
+    let Some(environment) = TurnkeyEnvironment::from_api_base_url(api_base_url) else {
+        anyhow::bail!(
+            "unsupported API base URL for pivot pull secret encryption key inference: '{}'. \
+             expected one of: '{}', '{}', '{}', '{}'",
+            api_base_url,
+            TurnkeyEnvironment::Local.api_base_url(),
+            TurnkeyEnvironment::Development.api_base_url(),
+            TurnkeyEnvironment::Preproduction.api_base_url(),
+            TurnkeyEnvironment::Production.api_base_url()
+        );
     };
 
-    Ok(key)
+    Ok(match environment {
+        TurnkeyEnvironment::Local => LOCALHOST_PULL_SECRET_ENCRYPTION_PUBLIC_KEY,
+        TurnkeyEnvironment::Development => DEV_PREPROD_PULL_SECRET_ENCRYPTION_PUBLIC_KEY,
+        TurnkeyEnvironment::Preproduction => APP_PREPROD_PULL_SECRET_ENCRYPTION_PUBLIC_KEY,
+        TurnkeyEnvironment::Production => PROD_PULL_SECRET_ENCRYPTION_PUBLIC_KEY,
+    })
 }
 
 /// Ownership and acceptance deadline for an encrypted pull secret.
@@ -129,7 +125,7 @@ mod tests {
         // Encrypt using the LOCALHOST public key
         let encrypted = encrypt_pivot_pull_secret(
             serde_json::from_str(fake_pull_secret).unwrap(),
-            API_BASE_URL_LOCAL,
+            TurnkeyEnvironment::Local.api_base_url(),
             PullSecretMeta {
                 user_id: Uuid::from_u128(1),
                 organization_id: Uuid::from_u128(2),
@@ -179,7 +175,7 @@ mod tests {
         let error = encrypt_pivot_pull_secret(
             serde_json::from_str(r#"{"auths":{"ghcr.io":{"username":"user","password":"pass"}}}"#)
                 .unwrap(),
-            API_BASE_URL_LOCAL,
+            TurnkeyEnvironment::Local.api_base_url(),
             PullSecretMeta {
                 user_id: Uuid::from_u128(1),
                 organization_id: Uuid::from_u128(2),

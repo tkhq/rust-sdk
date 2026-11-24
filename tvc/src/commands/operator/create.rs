@@ -521,6 +521,7 @@ mod tests {
     use crate::yubikey::test_support::{self, FakeDevice};
     use std::collections::BTreeMap;
     use std::path::PathBuf;
+    use turnkey_client::TurnkeyEnvironment;
 
     fn hosted_record() -> OperatorRecord {
         OperatorRecord {
@@ -622,7 +623,7 @@ mod tests {
                 OrgConfig {
                     id: "org-123".to_string(),
                     api_key_path: PathBuf::from("api-key.json"),
-                    api_base_url: "https://api.turnkey.com".to_string(),
+                    api_base_url: TurnkeyEnvironment::Production.api_base_url().to_string(),
                     default_operator_kind: OperatorKind::Local,
                     operators: Vec::new(),
                     extra: toml::Table::new(),

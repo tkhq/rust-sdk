@@ -28,6 +28,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use thiserror::Error;
 use tracing::debug;
+use turnkey_client::TurnkeyEnvironment;
 use uuid::Uuid;
 
 pub const CONFIG_DIR: &str = ".config/turnkey";
@@ -246,28 +247,20 @@ mod disk {
     }
 }
 
-/// Known API base URLs for different environments.
-pub const API_BASE_URL_PROD: &str = "https://api.turnkey.com";
-pub const API_BASE_URL_PREPROD: &str = "https://api.preprod.turnkey.engineering";
-pub const API_BASE_URL_DEV: &str = "https://api.dev.turnkey.engineering";
-pub const API_BASE_URL_LOCAL: &str = "http://localhost:8081";
+pub const API_BASE_URL_PROD: &str = TurnkeyEnvironment::Production.api_base_url();
+pub const API_BASE_URL_PREPROD: &str = TurnkeyEnvironment::Preproduction.api_base_url();
+pub const API_BASE_URL_DEV: &str = TurnkeyEnvironment::Development.api_base_url();
+pub const API_BASE_URL_LOCAL: &str = TurnkeyEnvironment::Local.api_base_url();
 
-/// Dashboard base URLs corresponding to each environment.
-pub const DASHBOARD_URL_PROD: &str = "https://app.turnkey.com";
-pub const DASHBOARD_URL_PREPROD: &str = "https://app.preprod.turnkey.engineering";
-pub const DASHBOARD_URL_DEV: &str = "https://app.dev.turnkey.engineering";
+pub const DASHBOARD_URL_PROD: &str = TurnkeyEnvironment::Production.dashboard_base_url();
+pub const DASHBOARD_URL_PREPROD: &str = TurnkeyEnvironment::Preproduction.dashboard_base_url();
+pub const DASHBOARD_URL_DEV: &str = TurnkeyEnvironment::Development.dashboard_base_url();
 
-/// Maps an API base URL to the dashboard base URL for the same environment.
-///
-/// Any URL that isn't a known Turnkey environment (e.g. a local API) falls back
-/// to the production dashboard.
+/// Maps an API base URL to its dashboard. Custom endpoints use production.
 pub fn dashboard_base_url(api_base_url: &str) -> &'static str {
-    match api_base_url {
-        API_BASE_URL_PROD => DASHBOARD_URL_PROD,
-        API_BASE_URL_PREPROD => DASHBOARD_URL_PREPROD,
-        API_BASE_URL_DEV => DASHBOARD_URL_DEV,
-        _ => DASHBOARD_URL_PROD,
-    }
+    TurnkeyEnvironment::from_api_base_url(api_base_url)
+        .unwrap_or(TurnkeyEnvironment::Production)
+        .dashboard_base_url()
 }
 
 /// The active operator backend for an organization.
@@ -551,7 +544,7 @@ impl OrgConfig {
 }
 
 fn default_api_base_url() -> String {
-    API_BASE_URL_PROD.to_string()
+    TurnkeyEnvironment::Production.api_base_url().to_string()
 }
 
 /// Returns the base config directory: `~/.config/turnkey/`
@@ -753,7 +746,10 @@ default = "app-123"
 default = ["operator-123"]
 "#;
 
-    const MIGRATED_V1_CONFIG: &str = r#"
+    fn migrated_v1_config() -> String {
+        let api_base_url = TurnkeyEnvironment::Production.api_base_url();
+        format!(
+            r#"
 version = 1
 active_org = "default"
 future_root = "keep-root"
@@ -761,7 +757,7 @@ future_root = "keep-root"
 [orgs.default]
 id = "org-123"
 api_key_path = "/keys/api.json"
-api_base_url = "https://api.turnkey.com"
+api_base_url = "{api_base_url}"
 default_operator_kind = "local"
 future_org = 42
 
@@ -775,7 +771,9 @@ default = "app-123"
 
 [last_operator_ids]
 default = ["operator-123"]
-"#;
+"#
+        )
+    }
 
     #[tokio::test]
     async fn migrates_v0_in_memory_and_writes_v1_lazily() {
@@ -800,7 +798,7 @@ default = ["operator-123"]
         config.save_to_path(&path).await.unwrap();
         let saved = tokio::fs::read_to_string(&path).await.unwrap();
         let actual = disk::from_toml(&saved).unwrap();
-        let expected = disk::from_toml(MIGRATED_V1_CONFIG).unwrap();
+        let expected = disk::from_toml(&migrated_v1_config()).unwrap();
         assert_eq!(actual, expected);
     }
 
@@ -867,7 +865,7 @@ serial = "1C95C1F"
 
     #[test]
     fn empty_registry_stays_off_disk() {
-        let config = disk::from_toml(MIGRATED_V1_CONFIG).unwrap();
+        let config = disk::from_toml(&migrated_v1_config()).unwrap();
 
         assert!(!disk::to_toml(&config).unwrap().contains("yubikeys"));
     }
@@ -1038,7 +1036,7 @@ serial = "01c95c1f"
             .add_org(
                 "default",
                 "org-123".to_string(),
-                API_BASE_URL_PROD.to_string(),
+                TurnkeyEnvironment::Production.api_base_url().to_string(),
                 NewOrgOperator::Yubikey(YubiKeySerial::from(0x01c9_5c1f)),
             )
             .unwrap();

@@ -5,6 +5,7 @@ use predicates::prelude::*;
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use tempfile::TempDir;
+use turnkey_client::TurnkeyEnvironment;
 use tvc::config::turnkey::{Config, OperatorKind, OperatorRecord, OrgConfig};
 
 const NON_INTERACTIVE_ENV: &str = "TVC_NON_INTERACTIVE";
@@ -23,7 +24,7 @@ fn write_login_config(
             OrgConfig {
                 id: "org-test".to_string(),
                 api_key_path,
-                api_base_url: "https://api.turnkey.com".to_string(),
+                api_base_url: TurnkeyEnvironment::Production.api_base_url().to_string(),
                 default_operator_kind: OperatorKind::Local,
                 operators: vec![OperatorRecord::local(operator_key_path)],
                 extra: toml::Table::new(),

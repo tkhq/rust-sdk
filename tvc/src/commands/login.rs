@@ -5,11 +5,10 @@ use crate::commands::keys::backup_operator_key::{
     OperatorKeyBackedUp, back_up, prompt_for_backup_destination,
 };
 use crate::config::turnkey::{
-    API_BASE_URL_PROD, Config, KeyCurve, LocalOperatorRecord, NewOrgOperator, OperatorKind,
-    OperatorRecord, OperatorRecordKind, OrgConfig, QosOperatorPublicKey,
-    SelectYubiKeyOperatorError, StoredApiKey, StoredQosOperatorKey, YubiKeyOperatorRecord,
-    YubiKeySerial, dashboard_base_url, default_api_key_path, default_operator_key_path,
-    default_org_dir,
+    Config, KeyCurve, LocalOperatorRecord, NewOrgOperator, OperatorKind, OperatorRecord,
+    OperatorRecordKind, OrgConfig, QosOperatorPublicKey, SelectYubiKeyOperatorError, StoredApiKey,
+    StoredQosOperatorKey, YubiKeyOperatorRecord, YubiKeySerial, dashboard_base_url,
+    default_api_key_path, default_operator_key_path, default_org_dir,
 };
 use crate::outcome::Outcome;
 use crate::output::{MissingRequiredInput, StdCtx};
@@ -24,7 +23,7 @@ use std::fmt::{self, Display, Formatter};
 use std::io::BufRead;
 use tracing::{debug, instrument};
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
-use turnkey_client::generated::GetWhoamiRequest;
+use turnkey_client::{TurnkeyEnvironment, generated::GetWhoamiRequest};
 use uuid::Uuid;
 
 /// Authenticate with Turnkey and set up local credentials.
@@ -650,7 +649,10 @@ fn prompt_for_new_org_inputs(
     api_base_url_override: Option<&str>,
     serial: Option<YubiKeySerial>,
 ) -> Result<OrgPlan> {
-    let dashboard_url = dashboard_base_url(api_base_url_override.unwrap_or(API_BASE_URL_PROD));
+    let dashboard_url = api_base_url_override.map_or(
+        TurnkeyEnvironment::Production.dashboard_base_url(),
+        dashboard_base_url,
+    );
     shell_println!(
         ctx,
         "You can find your Organization ID at: {dashboard_url}/dashboard/welcome"
@@ -768,7 +770,7 @@ fn generate_org(
 
 fn new_org_api_base_url(api_base_url_override: Option<&str>) -> String {
     api_base_url_override
-        .unwrap_or(API_BASE_URL_PROD)
+        .unwrap_or(TurnkeyEnvironment::Production.api_base_url())
         .to_string()
 }
 
@@ -1154,10 +1156,6 @@ Saved to
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::turnkey::{
-        API_BASE_URL_DEV, API_BASE_URL_PREPROD, DASHBOARD_URL_DEV, DASHBOARD_URL_PREPROD,
-        DASHBOARD_URL_PROD, OperatorKind, OperatorRecord,
-    };
     use std::collections::{BTreeMap, HashMap};
     use std::path::PathBuf;
 
@@ -1265,7 +1263,10 @@ mod tests {
 
     #[test]
     fn new_org_api_base_url_defaults_to_prod() {
-        assert_eq!(new_org_api_base_url(None), API_BASE_URL_PROD);
+        assert_eq!(
+            new_org_api_base_url(None),
+            TurnkeyEnvironment::Production.api_base_url()
+        );
     }
 
     #[test]
@@ -1275,22 +1276,28 @@ mod tests {
 
     #[test]
     fn dashboard_url_matches_selected_environment() {
-        assert_eq!(dashboard_base_url(API_BASE_URL_PROD), DASHBOARD_URL_PROD);
-        assert_eq!(
-            dashboard_base_url(API_BASE_URL_PREPROD),
-            DASHBOARD_URL_PREPROD
-        );
-        assert_eq!(dashboard_base_url(API_BASE_URL_DEV), DASHBOARD_URL_DEV);
+        for environment in [
+            TurnkeyEnvironment::Production,
+            TurnkeyEnvironment::Preproduction,
+            TurnkeyEnvironment::Development,
+        ] {
+            assert_eq!(
+                dashboard_base_url(environment.api_base_url()),
+                environment.dashboard_base_url()
+            );
+        }
     }
 
     #[test]
     fn dashboard_url_falls_back_to_prod_for_unknown_hosts() {
-        // Local and other unrecognized hosts fall back to the prod dashboard.
-        assert_eq!(dashboard_base_url(OVERRIDE_URL), DASHBOARD_URL_PROD);
-        assert_eq!(
-            dashboard_base_url("https://api.staging.turnkey.engineering"),
-            DASHBOARD_URL_PROD
-        );
+        let production_dashboard = TurnkeyEnvironment::Production.dashboard_base_url();
+        for api_base_url in [
+            TurnkeyEnvironment::Local.api_base_url(),
+            OVERRIDE_URL,
+            "https://api.staging.turnkey.engineering",
+        ] {
+            assert_eq!(dashboard_base_url(api_base_url), production_dashboard);
+        }
     }
 
     #[test]
@@ -1307,7 +1314,7 @@ mod tests {
 
     #[test]
     fn explicit_override_updates_existing_org_api_base_url() {
-        let mut config = config_with_org(API_BASE_URL_PROD);
+        let mut config = config_with_org(TurnkeyEnvironment::Production.api_base_url());
 
         update_api_base_url_from_override(&mut config, "default", Some(OVERRIDE_URL));
 
