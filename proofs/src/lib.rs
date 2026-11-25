@@ -579,17 +579,9 @@ pub async fn get_boot_proof_for_app_proof<S: Stamp>(
     app_proof: &AppProof,
 ) -> Result<BootProofResponse, TurnkeyClientError> {
     let key = app_proof.public_key.parse::<QuorumPublicKey>()?;
-    get_boot_proof_for_key(client, organization_id, hex::encode(key.as_ref())).await
-}
-
-async fn get_boot_proof_for_key<S: Stamp>(
-    client: &TurnkeyClient<S>,
-    organization_id: String,
-    ephemeral_key: String,
-) -> Result<BootProofResponse, TurnkeyClientError> {
     let request = GetBootProofRequest {
         organization_id,
-        ephemeral_key,
+        ephemeral_key: hex::encode(key.as_ref()),
     };
     client.get_boot_proof(request).await
 }

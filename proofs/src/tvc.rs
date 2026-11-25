@@ -20,7 +20,6 @@ pub use keys::{
     TvcProvenanceError, VerifiedOperatorKeys, VerifiedOperatorParts, VerifiedQuorumKey,
 };
 
-use crate::EphemeralPublicKey;
 use claims::{Claim, Context, OperatorClaim, QuorumClaim};
 use endorsement::{ParsedAppProof, VerifiedBoot};
 use facts::{AcceptanceTrace, BootObservation, CheckOutcome, FailedCheck};
@@ -315,7 +314,7 @@ impl<S: Stamp> TvcProvenance<S> {
                     boot
                 }
                 None => {
-                    let lookup = self.lookup_boot_proof(organization, parsed.key()).await;
+                    let lookup = self.lookup_boot_proof(organization, parsed.proof()).await;
                     let raw = entry.checks.record(lookup)?;
                     let mut evidence = BootObservation::default();
                     let verified = self.endorsement.authenticate_boot(
@@ -342,10 +341,10 @@ impl<S: Stamp> TvcProvenance<S> {
     async fn lookup_boot_proof(
         &self,
         organization: &str,
-        key: &EphemeralPublicKey,
+        proof: &AppProof,
     ) -> CheckOutcome<BootProof> {
         let result =
-            crate::get_boot_proof_for_key(&self.client, organization.to_owned(), key.to_string())
+            crate::get_boot_proof_for_app_proof(&self.client, organization.to_owned(), proof)
                 .await
                 .map_err(|error| TvcProvenanceError::BootProofLookup(error.into()))
                 .and_then(|response| {
@@ -792,6 +791,7 @@ mod fixture {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::EphemeralPublicKey;
     use facts::{
         CheckState::{Fail, Pass},
         CheckTrace,
@@ -2135,7 +2135,6 @@ mod tests {
     #[tokio::test]
     async fn boot_lookup_checks_the_requested_key_and_requires_evidence() {
         let proof = proof(operator_payload(0, vec!["ab".repeat(32)]).to_string());
-        let key = proof.public_key.parse().unwrap();
         for (response, expected_status) in [
             (ResponseTemplate::new(200).set_body_json(json!({})), None),
             (
@@ -2156,7 +2155,7 @@ mod tests {
                 .mount(&server)
                 .await;
             let verifier = verifier(capture_client(server.uri()));
-            let lookup = verifier.lookup_boot_proof(ORGANIZATION_ID, &key).await;
+            let lookup = verifier.lookup_boot_proof(ORGANIZATION_ID, &proof).await;
             let failure = CheckTrace::default().record(lookup).unwrap_err();
             let observed = server.received_requests().await.unwrap();
             assert_eq!(observed.len(), 1);
@@ -2174,7 +2173,7 @@ mod tests {
         }
         let server = boot_server().await;
         let verifier = verifier(capture_client(server.uri()));
-        let lookup = verifier.lookup_boot_proof(ORGANIZATION_ID, &key).await;
+        let lookup = verifier.lookup_boot_proof(ORGANIZATION_ID, &proof).await;
         assert_eq!(
             CheckTrace::default()
                 .record(lookup)

@@ -52,6 +52,10 @@ impl ParsedAppProof {
     pub(super) fn key(&self) -> &EphemeralPublicKey {
         &self.key
     }
+
+    pub(super) fn proof(&self) -> &AppProof {
+        &self.proof
+    }
 }
 
 /// Successful pinned-Signer/AWS binding. Construction is restricted to boot authentication.
