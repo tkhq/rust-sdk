@@ -338,8 +338,6 @@ impl<S: Stamp> TvcProvenance<S> {
         Ok(claims)
     }
 
-    /// Fetches the boot proof for the app proof's ephemeral key in this organization.
-    /// A successful response still has to include a boot proof.
     async fn lookup_boot_proof(
         &self,
         organization: &str,
@@ -423,8 +421,8 @@ impl OperatorRoleClaims {
     fn check_returned_result(&self, returned: &CreateTvcOperatorResult) -> CheckOutcome<()> {
         CheckOutcome::run(ProofCheck::ResultBinding, || {
             if returned.wallet_id != self.encrypt.body.wallet_id
-                || returned.encrypt_public_key != self.encrypt.body.address.to_string()
-                || returned.sign_public_key != self.sign.body.address.to_string()
+                || returned.encrypt_public_key.parse().ok() != Some(self.encrypt.body.address)
+                || returned.sign_public_key.parse().ok() != Some(self.sign.body.address)
             {
                 return Err(TvcProvenanceError::ClaimMismatch(
                     "operator result wallet/keys",
@@ -583,7 +581,7 @@ mod fixture {
 
     pub(super) fn signer() -> SelectedEndorsement {
         with_test_roots(
-            QuorumPublicKey::from_bytes(quorum_key()).unwrap(),
+            QuorumPublicKey::try_from(quorum_key().as_slice()).unwrap(),
             Certificate::from_der(ROOT).unwrap(),
         )
     }
@@ -622,6 +620,11 @@ mod fixture {
                 .to_encoded_point(false)
                 .as_bytes(),
         )
+    }
+
+    pub(super) fn mixed_case_hex(hex: &str) -> String {
+        let (first, second) = hex.split_at(hex.len() / 2);
+        format!("{}{second}", first.to_ascii_uppercase())
     }
 
     pub(super) fn pin() -> [u8; 130] {
@@ -794,7 +797,7 @@ mod tests {
         CheckTrace,
         ProofCheck::*,
     };
-    use fixture::{authenticate_payload, pin, point, proof};
+    use fixture::{authenticate_payload, mixed_case_hex, pin, point, proof};
     use p256::ecdsa::{Signature, SigningKey, signature::Signer};
     use serde_json::{Value, json};
     use sha2::{Digest, Sha256};
@@ -978,7 +981,7 @@ mod tests {
     }
 
     #[test]
-    fn app_envelope_requires_two_canonical_ephemeral_keys() {
+    fn app_envelope_requires_two_valid_ephemeral_points() {
         let valid = proof(operator_payload(0, vec!["ab".repeat(32)]).to_string());
         let check =
             |proof| CheckTrace::default().record(ParsedAppProof::check_ephemeral_key(proof));
@@ -988,7 +991,6 @@ mod tests {
         );
         for key in [
             point(9),
-            valid.public_key.to_uppercase(),
             format!("{}{}", "00".repeat(65), &valid.public_key[130..]),
             format!("{}{}", &valid.public_key[..130], "00".repeat(65)),
         ] {
@@ -1024,6 +1026,16 @@ mod tests {
         assert!(matches!(
             Claim::try_from(authenticate_payload(payload.to_string())),
             Err(TvcProvenanceError::MalformedEvidence(_))
+        ));
+    }
+
+    #[test]
+    fn v1_claim_rejects_mixed_case_request_fingerprint() {
+        let digest = mixed_case_hex(&"ab".repeat(32));
+        let payload = operator_payload(0, vec![digest]);
+        assert!(matches!(
+            Claim::try_from(authenticate_payload(payload.to_string())),
+            Err(TvcProvenanceError::MalformedEvidence(message)) if message.contains("lowercase")
         ));
     }
 
@@ -1125,19 +1137,91 @@ mod tests {
         }
     }
 
+    fn signed_quorum_claim_with_key(key: &str) -> Result<Claim, TvcProvenanceError> {
+        let mut payload = quorum_payload(vec!["ab".repeat(32)]);
+        payload["tvcQuorumKeyCreateProof"]["quorumPublicKey"] = json!(key);
+        Claim::try_from(authenticate_payload(payload.to_string()))
+    }
+
     #[test]
-    fn composite_accepts_mixed_case_hex_for_valid_points() {
-        let key = format!("{}{}", point(1).to_ascii_uppercase(), point(2));
+    fn signed_quorum_claim_accepts_mixed_case_key_hex() {
+        let key = format!("{}{}", point(3), point(4));
+        let Claim::Quorum(claim) = signed_quorum_claim_with_key(&mixed_case_hex(&key)).unwrap()
+        else {
+            panic!("quorum fixture");
+        };
         assert_eq!(
-            claims::composite(&key).unwrap().as_ref(),
-            hex::decode(key).unwrap()
+            claim.body.quorum_public_key.as_ref(),
+            hex::decode(&key).unwrap()
+        );
+        let returned = CreateTvcQuorumKeyResult {
+            quorum_key_id: claim.body.quorum_key_id.clone(),
+            quorum_public_key: format!("{}{}", point(3), point(4).to_ascii_uppercase()),
+            share_ids: vec![],
+        };
+        assert!(
+            CheckTrace::default()
+                .record(check_quorum_result_binding(&returned, &claim))
+                .is_ok()
         );
     }
 
     #[test]
-    fn canonical_points_composites_and_maximum_claim_boundaries() {
+    fn signed_quorum_claim_rejects_malformed_key_hex() {
+        let key = format!("g{}{}", &point(3)[1..], point(4));
+        assert!(matches!(
+            signed_quorum_claim_with_key(&key),
+            Err(TvcProvenanceError::MalformedEvidence(_))
+        ));
+    }
+
+    #[test]
+    fn signed_quorum_claim_rejects_invalid_encryption_point() {
+        let key = format!("04{}{}", "00".repeat(64), point(4));
+        assert!(matches!(
+            signed_quorum_claim_with_key(&key),
+            Err(TvcProvenanceError::MalformedEvidence(_))
+        ));
+    }
+
+    #[test]
+    fn signed_quorum_claim_rejects_invalid_signing_point() {
+        let key = format!("{}04{}", point(3), "00".repeat(64));
+        assert!(matches!(
+            signed_quorum_claim_with_key(&key),
+            Err(TvcProvenanceError::MalformedEvidence(_))
+        ));
+    }
+
+    #[test]
+    fn application_signature_rejects_case_change_inside_quorum_claim_after_signing() {
+        let original = proof(quorum_payload(vec!["ab".repeat(32)]).to_string());
+        let key = format!("{}{}", point(3), point(4));
+        let parsed = ParsedAppProof::try_from(AppProof {
+            proof_payload: original.proof_payload.replace(&key, &mixed_case_hex(&key)),
+            ..original
+        })
+        .unwrap();
+        let boot = fixture::signer()
+            .authenticate_boot(
+                parsed.key(),
+                fixture::boot(),
+                &mut CheckTrace::default(),
+                &mut BootObservation::default(),
+            )
+            .unwrap();
+        assert!(matches!(
+            CheckTrace::default().record(boot.check_application_signature(parsed)),
+            Err(FailedCheck {
+                source: TvcProvenanceError::EndorsementFailure,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn role_key_requires_an_uncompressed_p256_point() {
         for invalid in [
-            point(1).to_uppercase(),
             format!(" {}", point(1)),
             format!("0x{}", point(1)),
             format!("02{}", &point(1)[2..66]),
@@ -1147,15 +1231,10 @@ mod tests {
         ] {
             assert!(invalid.parse::<P256PublicKey>().is_err());
         }
-        for invalid in [
-            point(1),
-            format!("{}{}", point(1), "00".repeat(65)),
-            format!("{}{}", "00".repeat(65), point(1)),
-            "é".repeat(130),
-            format!("{}{}00", point(1), point(2)),
-        ] {
-            assert!(claims::composite(&invalid).is_err());
-        }
+    }
+
+    #[test]
+    fn maximum_quorum_claim_boundaries() {
         let mut largest = quorum_payload(vec!["ab".repeat(32); 1024]);
         let recipients: Vec<String> = (1u32..=255)
             .map(|i| {
@@ -1627,6 +1706,53 @@ mod tests {
     }
 
     #[test]
+    fn operator_result_accepts_equivalent_key_hex_for_each_role() {
+        let mut payload = operator_payload(0, vec!["ab".repeat(32)]);
+        payload["addressDerivationProof"]["address"] = json!(mixed_case_hex(&point(1)));
+        let Claim::Operator(encrypt) =
+            Claim::try_from(authenticate_payload(payload.to_string())).unwrap()
+        else {
+            panic!("operator fixture");
+        };
+        let roles = OperatorRoleClaims {
+            encrypt,
+            sign: operator_claim(1),
+        };
+        let returned = CreateTvcOperatorResult {
+            wallet_id: "wallet-1".into(),
+            operator_id: "routing-label".into(),
+            encrypt_public_key: point(1).to_ascii_uppercase(),
+            sign_public_key: mixed_case_hex(&point(2)),
+        };
+        assert!(
+            CheckTrace::default()
+                .record(roles.check_returned_result(&returned))
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn operator_result_rejects_swapped_key_roles() {
+        let roles = OperatorRoleClaims {
+            encrypt: operator_claim(0),
+            sign: operator_claim(1),
+        };
+        let returned = CreateTvcOperatorResult {
+            wallet_id: "wallet-1".into(),
+            operator_id: "routing-label".into(),
+            encrypt_public_key: mixed_case_hex(&point(2)),
+            sign_public_key: mixed_case_hex(&point(1)),
+        };
+        assert!(matches!(
+            CheckTrace::default().record(roles.check_returned_result(&returned)),
+            Err(FailedCheck {
+                source: TvcProvenanceError::ClaimMismatch("operator result wallet/keys"),
+                ..
+            })
+        ));
+    }
+
+    #[test]
     fn quorum_check_requires_exactly_one_claim_matching_the_request() {
         let expected = QuorumExpectation::new(
             ORGANIZATION_ID.into(),
@@ -1910,7 +2036,6 @@ mod tests {
             json!([null]),
             json!([point(1), point(1)]),
             json!("keys"),
-            json!([point(1), point(2).to_uppercase()]),
         ] {
             let mut value = baseline.clone();
             value["tvcQuorumKeyCreateProof"]["operatorEncryptKeys"] = wrong;
@@ -1947,11 +2072,41 @@ mod tests {
     }
 
     #[test]
+    fn signed_quorum_recipients_keep_their_order_across_hex_spellings() {
+        let mut payload = quorum_payload(vec!["ab".repeat(32)]);
+        payload["tvcQuorumKeyCreateProof"]["operatorEncryptKeys"] =
+            json!([mixed_case_hex(&point(1)), point(2).to_ascii_uppercase()]);
+        let expected = QuorumExpectation::new(
+            ORGANIZATION_ID.into(),
+            2,
+            vec![point(1).parse().unwrap(), point(2).parse().unwrap()],
+        )
+        .unwrap();
+        let claim = Claim::try_from(authenticate_payload(payload.to_string())).unwrap();
+        assert!(
+            CheckTrace::default()
+                .record(check_quorum_claim(vec![claim], &expected))
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn signed_quorum_recipients_reject_duplicates_across_hex_spellings() {
+        let mut payload = quorum_payload(vec!["ab".repeat(32)]);
+        payload["tvcQuorumKeyCreateProof"]["operatorEncryptKeys"] =
+            json!([point(1), mixed_case_hex(&point(1))]);
+        assert!(matches!(
+            Claim::try_from(authenticate_payload(payload.to_string())),
+            Err(TvcProvenanceError::MalformedEvidence(message)) if message == "duplicate quorum recipient"
+        ));
+    }
+
+    #[test]
     fn real_signer_endorsement_vector_fixes_purpose_bytes_and_raw_signature_encoding() {
         let v: Value =
             serde_json::from_str(include_str!("../tests/fixtures/boot_endorsement_v1.json"))
                 .unwrap();
-        let q = claims::composite(v["quorumPublicKeyHex"].as_str().unwrap()).unwrap();
+        let q = v["quorumPublicKeyHex"].as_str().unwrap().parse().unwrap();
         let verifier = fixture::with_test_roots(q, Certificate::from_der(fixture::ROOT).unwrap());
         let document = hex::decode(v["documentHex"].as_str().unwrap()).unwrap();
         assert_eq!(hex::encode(endorsement::ENDORSEMENT_PREFIX), v["prefixHex"]);
@@ -2028,6 +2183,38 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn boot_lookup_uses_the_same_key_for_lowercase_and_mixed_case_app_proofs() {
+        let server = boot_server().await;
+        let client = capture_client(server.uri());
+        let lowercase = proof(operator_payload(0, vec!["ab".repeat(32)]).to_string());
+        let mixed = AppProof {
+            public_key: mixed_case_hex(&lowercase.public_key),
+            ..lowercase.clone()
+        };
+        assert_ne!(lowercase.public_key, mixed.public_key);
+        let lower_response =
+            crate::get_boot_proof_for_app_proof(&client, ORGANIZATION_ID.to_owned(), &lowercase)
+                .await
+                .unwrap();
+        let mixed_response =
+            crate::get_boot_proof_for_app_proof(&client, ORGANIZATION_ID.to_owned(), &mixed)
+                .await
+                .unwrap();
+        assert_eq!(lower_response.boot_proof, Some(fixture::boot()));
+        assert_eq!(mixed_response.boot_proof, lower_response.boot_proof);
+
+        let accepted = verifier(client)
+            .claims_for_test(ORGANIZATION_ID, vec![mixed])
+            .await
+            .unwrap();
+        assert_eq!(
+            accepted.facts().envelopes()[0].ephemeral_key(),
+            Some(&lowercase.public_key.parse().unwrap())
+        );
+        assert_eq!(server.received_requests().await.unwrap().len(), 3);
+    }
+
     fn cause(rejection: &Rejected) -> &TvcProvenanceError {
         std::error::Error::source(rejection)
             .unwrap()
@@ -2098,7 +2285,7 @@ mod tests {
             );
             assert_eq!(
                 facts.signer_quorum_key(),
-                &QuorumPublicKey::from_bytes(fixture::quorum_key()).unwrap()
+                &QuorumPublicKey::try_from(fixture::quorum_key().as_slice()).unwrap()
             );
             assert_eq!(
                 facts.matched_fingerprint(),
@@ -2197,7 +2384,9 @@ mod tests {
             accepted.into_parts(),
             (
                 Uuid::parse_str("11111111-1111-4111-8111-111111111111").unwrap(),
-                claims::composite(&format!("{}{}", point(3), point(4))).unwrap(),
+                format!("{}{}", point(3), point(4))
+                    .parse::<QuorumPublicKey>()
+                    .unwrap(),
                 vec![
                     Uuid::parse_str("22222222-2222-4222-8222-222222222222").unwrap(),
                     Uuid::parse_str("33333333-3333-4333-8333-333333333333").unwrap(),
@@ -2214,7 +2403,9 @@ mod tests {
         };
         assert_eq!(
             public_key,
-            &claims::composite(&format!("{}{}", point(3), point(4))).unwrap()
+            &format!("{}{}", point(3), point(4))
+                .parse::<QuorumPublicKey>()
+                .unwrap()
         );
         assert_eq!(
             recipients,
@@ -2329,7 +2520,9 @@ mod tests {
         };
         assert_eq!(
             public_key,
-            &claims::composite(&format!("{}{}", point(3), point(4))).unwrap()
+            &format!("{}{}", point(3), point(4))
+                .parse::<QuorumPublicKey>()
+                .unwrap()
         );
     }
 

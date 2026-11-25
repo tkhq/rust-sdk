@@ -5,6 +5,8 @@ use turnkey_client::TurnkeyClientError;
 use turnkey_enclave_encrypt::QuorumPublicKey;
 use uuid::Uuid;
 
+const UNCOMPRESSED_POINT_BYTE_LENGTH: usize = 65;
+
 /// A failure to authenticate or accept request-bound TVC output.
 #[derive(Debug, thiserror::Error)]
 pub enum TvcProvenanceError {
@@ -72,17 +74,10 @@ impl FromStr for P256PublicKey {
     type Err = TvcProvenanceError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        if value.len() != 130
-            || !value
-                .bytes()
-                .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
-        {
-            return Err(TvcProvenanceError::MalformedEvidence(
-                "role key must be 65-byte lowercase hex".into(),
-            ));
-        }
-        let bytes = hex::decode(value)
-            .map_err(|_| TvcProvenanceError::MalformedEvidence("invalid role key hex".into()))?;
+        let mut bytes = [0; UNCOMPRESSED_POINT_BYTE_LENGTH];
+        hex::decode_to_slice(value, &mut bytes).map_err(|error| {
+            TvcProvenanceError::MalformedEvidence(format!("invalid role key hex: {error}"))
+        })?;
         // The SEC1 decoder checks the tag against the length. At 65 bytes,
         // the only valid P-256 encoding is an uncompressed point.
         let key = p256::PublicKey::from_sec1_bytes(&bytes).map_err(|_| {
