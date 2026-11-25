@@ -85,7 +85,7 @@ struct ShareInputs {
 fn write_share_inputs(
     dir: &Path,
     operator_pair: &P256Pair,
-    metadata: Value,
+    metadata: &Value,
     manifest_envelope: &VersionedManifestEnvelope,
     ephemeral_public_key: &P256Public,
 ) -> ShareInputs {
@@ -103,7 +103,7 @@ fn write_share_inputs(
     .unwrap();
     fs::write(
         &inputs.metadata,
-        serde_json::to_vec_pretty(&metadata).unwrap(),
+        serde_json::to_vec_pretty(metadata).unwrap(),
     )
     .unwrap();
     fs::write(
@@ -134,7 +134,7 @@ fn assert_share_set_refused(
     let inputs = write_share_inputs(
         dir,
         operator_pair,
-        json!({
+        &json!({
             "quorumKeyPublic": hex::encode(quorum_pair.public_key().to_bytes()),
             "threshold": metadata_threshold,
             "shares": share_holders
@@ -368,7 +368,7 @@ fn re_encrypt_local_share_round_trips_metadata_share() {
     let inputs = write_share_inputs(
         temp.path(),
         &operator_pair,
-        json!({
+        &json!({
             "quorumKeyPublic": hex::encode(quorum_pair.public_key().to_bytes()),
             "threshold": 1,
             "shares": [share_entry(&operator_pair, plaintext_share)],
@@ -578,7 +578,7 @@ fn re_encrypt_local_share_refuses_a_quorum_key_the_manifest_does_not_name() {
     let inputs = write_share_inputs(
         temp.path(),
         &operator_pair,
-        json!({
+        &json!({
             "quorumKeyPublic": hex::encode(quorum_pair.public_key().to_bytes()),
             "threshold": 1,
             "shares": [share_entry(&operator_pair, b"share")],
