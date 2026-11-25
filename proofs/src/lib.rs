@@ -1,6 +1,6 @@
 #![doc = include_str!("../README.md")]
 
-use std::num::ParseIntError;
+use std::{num::ParseIntError, str::FromStr};
 
 use aws_nitro_enclaves_cose::{
     CoseSign1,
@@ -18,6 +18,7 @@ pub use qos_nsm::nitro::{
     AttestError as QosAttestError, ManifestAttestationInput,
     verify_attestation_doc_against_manifest_live, verify_attestation_doc_against_manifest_setup,
 };
+use qos_p256::P256Public;
 use serde_bytes::ByteBuf;
 use turnkey_api_key_stamper::Stamp;
 use turnkey_client::generated::external::data::v1::{AppProof, BootProof, SignatureScheme};
@@ -25,6 +26,9 @@ use turnkey_client::generated::services::coordinator::public::v1::{
     BootProofResponse, GetBootProofRequest,
 };
 use turnkey_client::{TurnkeyClient, TurnkeyClientError};
+use turnkey_enclave_encrypt::QuorumPublicKey;
+
+pub mod tvc;
 
 mod error;
 mod syntactic_validation;
@@ -327,17 +331,69 @@ pub fn verify_app_proof_signature(app_proof: &AppProof) -> Result<(), AppProofEr
     let verifying_key = P256VerifyingKey::from_sec1_bytes(signing_pub_key_bytes)
         .map_err(|e| AppProofError::InvalidSigningPublicKeyBytes(e.to_string()))?;
 
-    let signature_bytes = hex::decode(&app_proof.signature)
-        .map_err(|e| AppProofError::InvalidSignature(e.to_string()))?;
+    verify_payload_signature(
+        app_proof.proof_payload.as_bytes(),
+        &app_proof.signature,
+        &verifying_key,
+    )
+}
+
+fn verify_payload_signature(
+    payload: &[u8],
+    signature_hex: &str,
+    verifying_key: &P256VerifyingKey,
+) -> Result<(), AppProofError> {
+    let signature_bytes =
+        hex::decode(signature_hex).map_err(|e| AppProofError::InvalidSignature(e.to_string()))?;
     let signature = p256::ecdsa::Signature::from_slice(&signature_bytes)
         .map_err(|e| AppProofError::InvalidSignature(e.to_string()))?;
 
-    let msg = app_proof.proof_payload.as_bytes();
     verifying_key
-        .verify(msg, &signature)
-        .map_err(|e| AppProofError::FailedSignatureVerification(e.to_string()))?;
+        .verify(payload, &signature)
+        .map_err(|e| AppProofError::FailedSignatureVerification(e.to_string()))
+}
 
-    Ok(())
+/// A valid composite ephemeral public key parsed from canonical wire hex.
+#[derive(Clone, PartialEq, Eq)]
+pub struct EphemeralPublicKey(P256Public);
+
+/// Failure to parse a canonical composite ephemeral public key.
+#[derive(Debug, thiserror::Error)]
+pub enum EphemeralPublicKeyError {
+    #[error(transparent)]
+    Hex(#[from] hex::FromHexError),
+    #[error("ephemeral public key must use lowercase hex")]
+    NonCanonicalHex,
+    #[error("{0:?}")]
+    InvalidKey(qos_p256::P256Error),
+}
+
+impl FromStr for EphemeralPublicKey {
+    type Err = EphemeralPublicKeyError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        let bytes = hex::decode(value)?;
+        if hex::encode(&bytes) != value {
+            return Err(EphemeralPublicKeyError::NonCanonicalHex);
+        }
+        P256Public::from_bytes(&bytes)
+            .map(Self)
+            .map_err(EphemeralPublicKeyError::InvalidKey)
+    }
+}
+
+impl std::fmt::Debug for EphemeralPublicKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("EphemeralPublicKey")
+            .field(&self.to_string())
+            .finish()
+    }
+}
+
+impl std::fmt::Display for EphemeralPublicKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&hex::encode(self.0.to_bytes()))
+    }
 }
 
 /// Verify the app proof boot proof pair.
@@ -354,11 +410,18 @@ pub fn verify_app_proof_signature(app_proof: &AppProof) -> Result<(), AppProofEr
 ///  - Verify the app proof / boot proof connection - that the ephemeral keys
 ///    match across the app proof, boot proof, and attestation doc
 ///
-/// WARNING: This is demo code. All manifest checks are against the manifest
-/// supplied in the boot proof itself; this function does NOT compare the
-/// supplied manifest contents, manifest-set members, or approval threshold to
-/// an independently pinned/known-good Turnkey trust anchor. See
-/// <https://github.com/tkhq/qos> for the canonical verification checks.
+/// # Trust limitations
+///
+/// Manifest approvals are checked against the members and threshold supplied
+/// in the boot proof, not an independently configured Turnkey approval policy.
+/// This function does not verify a pinned Signer endorsement or bind signed
+/// output claims to a request submitted by this client.
+///
+/// For TVC operator and quorum-key creation, use [`tvc::TvcProvenance`].
+/// Its acceptance methods verify the pinned Signer endorsement and match signed
+/// claims against the caller's expectations and local submission receipt.
+///
+/// See <https://github.com/tkhq/qos> for the QOS verification checks.
 ///
 /// To learn more about verifying app proofs and boot proofs, see:
 /// <https://whitepaper.turnkey.com/foundations/>.
@@ -385,19 +448,76 @@ pub fn verify(app_proof: &AppProof, boot_proof: &BootProof) -> Result<(), Verify
     )
     .map_err(|e| VerifyError::InvalidAttestation(e.to_string()))?;
 
-    let decoded_boot_proof_manifest = base64::decode(&boot_proof.qos_manifest_b64)
-        .map_err(|e| VerifyError::InvalidBootProof(e.to_string()))?;
-    let manifest = VersionedManifest::try_from_slice_compat(&decoded_boot_proof_manifest)
-        .map_err(|e| VerifyError::InvalidBootProof(e.to_string()))?;
-    let decoded_boot_proof_manifest_envelope =
-        base64::decode(&boot_proof.qos_manifest_envelope_b64)
+    let parsed_boot_proof = ParsedBootProof::parse(boot_proof)?;
+    let app_ephemeral_pub_key = app_proof
+        .public_key
+        .parse::<EphemeralPublicKey>()
+        .map_err(|e| AppProofError::InvalidPublicKey(e.to_string()))
+        .map_err(|e| VerifyError::InvalidAppProof(e.to_string()))?;
+    verify_boot_binding(
+        &app_ephemeral_pub_key,
+        parsed_boot_proof,
+        attestation_doc,
+        None,
+    )
+}
+
+/// Decoded boot inputs. Parsing and reporting do not establish their validity.
+struct ParsedBootProof {
+    manifest: VersionedManifest,
+    manifest_envelope: VersionedManifestEnvelope,
+    ephemeral_key: EphemeralPublicKey,
+}
+
+impl ParsedBootProof {
+    fn parse(boot_proof: &BootProof) -> Result<Self, VerifyError> {
+        let decoded_manifest = base64::decode(&boot_proof.qos_manifest_b64)
             .map_err(|e| VerifyError::InvalidBootProof(e.to_string()))?;
-    let manifest_envelope =
-        VersionedManifestEnvelope::try_from_slice_compat(&decoded_boot_proof_manifest_envelope)
+        let manifest = VersionedManifest::try_from_slice_compat(&decoded_manifest)
             .map_err(|e| VerifyError::InvalidBootProof(e.to_string()))?;
+        let decoded_envelope = base64::decode(&boot_proof.qos_manifest_envelope_b64)
+            .map_err(|e| VerifyError::InvalidBootProof(e.to_string()))?;
+        let manifest_envelope = VersionedManifestEnvelope::try_from_slice_compat(&decoded_envelope)
+            .map_err(|e| VerifyError::InvalidBootProof(e.to_string()))?;
+        Ok(Self {
+            manifest,
+            manifest_envelope,
+            ephemeral_key: boot_proof
+                .ephemeral_public_key_hex
+                .parse::<EphemeralPublicKey>()
+                .map_err(|e| VerifyError::InvalidBootProof(e.to_string()))?,
+        })
+    }
+}
+
+/// Checks supplied manifest approvals, commitments, PCRs and the app proof's
+/// ephemeral-key binding. The attestation must already be authenticated.
+///
+/// Activities that support Signer-pinned verification supply `signer_quorum_pub_key`.
+/// When present, any nonempty manifest quorum key must match that trusted pin.
+fn verify_boot_binding(
+    app_ephemeral_pub_key: &EphemeralPublicKey,
+    boot_proof: ParsedBootProof,
+    attestation_doc: AttestationDoc,
+    signer_quorum_pub_key: Option<&QuorumPublicKey>,
+) -> Result<(), VerifyError> {
+    let ParsedBootProof {
+        manifest,
+        manifest_envelope,
+        ephemeral_key,
+    } = boot_proof;
     manifest_envelope
         .check_approvals()
         .map_err(|e| VerifyError::InvalidBootProof(format!("{e:?}")))?;
+
+    if let Some(expected) = signer_quorum_pub_key {
+        let supplied = &manifest.namespace().quorum_key;
+        if !supplied.is_empty() && supplied.as_slice() != expected.as_ref() {
+            return Err(VerifyError::InvalidBootProof(
+                "manifest quorum key differs from the selected Signer quorum key".into(),
+            ));
+        }
+    }
 
     let manifest_hash = manifest_envelope.manifest_hash();
     let standalone_manifest_hash = manifest.manifest_hash();
@@ -426,13 +546,14 @@ pub fn verify(app_proof: &AppProof, boot_proof: &BootProof) -> Result<(), Verify
                 .to_string(),
         )
     })?;
-    let attestation_pub_key = hex::encode(attestation_pub_key_bytes);
-    if !(app_proof.public_key == attestation_pub_key
-        && attestation_pub_key == boot_proof.ephemeral_public_key_hex)
-    {
+    let attestation_pub_key = P256Public::from_bytes(attestation_pub_key_bytes)
+        .map_err(|e| VerifyError::InvalidAttestation(format!("{e:?}")))?;
+    if !(app_ephemeral_pub_key.0 == attestation_pub_key && attestation_pub_key == ephemeral_key.0) {
         return Err(VerifyError::DifferentEphemeralKey(format!(
             "Ephemeral pub keys from app proof: {}, boot proof structure {}, and attestation doc {} should all match",
-            app_proof.public_key, boot_proof.ephemeral_public_key_hex, attestation_pub_key
+            app_ephemeral_pub_key,
+            ephemeral_key,
+            hex::encode(attestation_pub_key.to_bytes())
         )));
     }
 
@@ -624,5 +745,206 @@ mod tests {
             "puwpDDoA3dqZpFV0nDnSgj2iFyy2VDUnDSE7u+awts0=".to_string();
         let result = verify(&app_proof1, &malformed_boot_proof1);
         assert!(matches!(result, Err(VerifyError::InvalidBootProof(_))));
+    }
+
+    fn test_boot_binding_inputs() -> (AppProof, BootProof, AttestationDoc) {
+        let boot = test_boot_proof1();
+        let attestation = parse_and_verify_aws_nitro_attestation(
+            &boot.aws_attestation_doc_b64,
+            Some(get_boot_proof_time(&boot).unwrap()),
+        )
+        .unwrap();
+        // The historical AWS fixture predates the live QOS PCR commitment.
+        // Construct current binding inputs; signature checks are tested separately.
+        let commitment = qos_nsm::nitro::expected_manifest_commitment_pcr::<qos_nsm::nitro::Live>(
+            attestation.user_data.as_ref().unwrap(),
+            attestation.public_key.as_ref().unwrap(),
+        )
+        .unwrap();
+        let pcrs = (0..32)
+            .map(|index| (index, ByteBuf::from(vec![0; 48])))
+            .chain(attestation.pcrs.clone())
+            .chain([(17, ByteBuf::from(commitment.to_vec()))])
+            .collect();
+        let attestation = AttestationDoc {
+            pcrs,
+            ..attestation
+        };
+        (test_app_proof1(), boot, attestation)
+    }
+
+    #[test]
+    fn test_verify_boot_binding_checks_signer_pin_and_reports_evidence() {
+        let (app, boot, attestation) = test_boot_binding_inputs();
+        let parsed = ParsedBootProof::parse(&boot).unwrap();
+        let details = tvc::BootEvidence::from(&parsed);
+        assert_eq!(details.manifest_hash, details.envelope_manifest_hash);
+        assert_eq!(
+            details.manifest_hash,
+            attestation.user_data.as_ref().unwrap().to_vec()
+        );
+        assert_eq!(
+            details.ephemeral_key,
+            app.public_key.parse::<EphemeralPublicKey>().unwrap()
+        );
+        for (index, pcr) in details.pcrs.iter().enumerate() {
+            assert_eq!(pcr, &attestation.pcrs[&index].to_vec());
+        }
+        let app_key = app.public_key.parse::<EphemeralPublicKey>().unwrap();
+        verify_boot_binding(&app_key, parsed, attestation.clone(), None).unwrap();
+
+        let quorum_key = QuorumPublicKey::from_bytes(&details.manifest_quorum_key).unwrap();
+        verify_boot_binding(
+            &app_key,
+            ParsedBootProof::parse(&boot).unwrap(),
+            attestation.clone(),
+            Some(&quorum_key),
+        )
+        .unwrap();
+        let wrong_key = QuorumPublicKey::dev_signer();
+        assert_ne!(wrong_key, quorum_key);
+        assert!(matches!(
+            verify_boot_binding(
+                &app_key,
+                ParsedBootProof::parse(&boot).unwrap(),
+                attestation,
+                Some(&wrong_key),
+            ),
+            Err(VerifyError::InvalidBootProof(_))
+        ));
+    }
+
+    #[test]
+    fn test_verify_boot_binding_rejects_missing_or_wrong_manifest_commitment() {
+        let (app, boot, attestation) = test_boot_binding_inputs();
+        let app_key = app.public_key.parse::<EphemeralPublicKey>().unwrap();
+        let missing = AttestationDoc {
+            user_data: None,
+            ..attestation.clone()
+        };
+        assert!(matches!(
+            verify_boot_binding(
+                &app_key,
+                ParsedBootProof::parse(&boot).unwrap(),
+                missing,
+                None,
+            ),
+            Err(VerifyError::InvalidAttestation(_))
+        ));
+        let wrong = AttestationDoc {
+            user_data: Some(ByteBuf::from(vec![0; 32])),
+            ..attestation
+        };
+        assert!(matches!(
+            verify_boot_binding(
+                &app_key,
+                ParsedBootProof::parse(&boot).unwrap(),
+                wrong,
+                None
+            ),
+            Err(VerifyError::DifferentManifest(_))
+        ));
+    }
+
+    #[test]
+    fn test_verify_boot_binding_requires_all_ephemeral_keys_to_match() {
+        let (app, boot, attestation) = test_boot_binding_inputs();
+        let app_key = app.public_key.parse::<EphemeralPublicKey>().unwrap();
+        let other_key = test_app_proof2().public_key;
+        assert!(matches!(
+            verify_boot_binding(
+                &other_key.parse::<EphemeralPublicKey>().unwrap(),
+                ParsedBootProof::parse(&boot).unwrap(),
+                attestation.clone(),
+                None,
+            ),
+            Err(VerifyError::DifferentEphemeralKey(_))
+        ));
+        let wrong_boot = BootProof {
+            ephemeral_public_key_hex: other_key.clone(),
+            ..boot.clone()
+        };
+        let wrong_parsed = ParsedBootProof::parse(&wrong_boot).unwrap();
+        assert!(matches!(
+            verify_boot_binding(&app_key, wrong_parsed, attestation.clone(), None),
+            Err(VerifyError::DifferentEphemeralKey(_))
+        ));
+        let wrong_attestation = AttestationDoc {
+            public_key: Some(ByteBuf::from(hex::decode(other_key).unwrap())),
+            ..attestation.clone()
+        };
+        assert!(matches!(
+            verify_boot_binding(
+                &app_key,
+                ParsedBootProof::parse(&boot).unwrap(),
+                wrong_attestation,
+                None,
+            ),
+            Err(VerifyError::DifferentEphemeralKey(_))
+        ));
+        let missing = AttestationDoc {
+            public_key: None,
+            ..attestation
+        };
+        assert!(matches!(
+            verify_boot_binding(
+                &app_key,
+                ParsedBootProof::parse(&boot).unwrap(),
+                missing,
+                None
+            ),
+            Err(VerifyError::InvalidAttestation(_))
+        ));
+    }
+
+    #[test]
+    fn test_verify_boot_binding_rejects_wrong_pcrs() {
+        let (app, boot, attestation) = test_boot_binding_inputs();
+        let app_key = app.public_key.parse::<EphemeralPublicKey>().unwrap();
+        for index in [0, 1, 2, 3, 17] {
+            let mut wrong = attestation.clone();
+            wrong.pcrs.insert(index, ByteBuf::from(vec![0; 48]));
+            assert!(
+                matches!(
+                    verify_boot_binding(
+                        &app_key,
+                        ParsedBootProof::parse(&boot).unwrap(),
+                        wrong,
+                        None,
+                    ),
+                    Err(VerifyError::InvalidAttestation(_))
+                ),
+                "PCR {index} must match the manifest commitment"
+            );
+        }
+    }
+
+    #[test]
+    fn test_ephemeral_public_key_conversion_requires_a_canonical_composite_key() {
+        let key = test_app_proof1().public_key;
+        assert_eq!(key.parse::<EphemeralPublicKey>().unwrap().to_string(), key);
+        for invalid in [
+            key.to_uppercase(),
+            format!("{}{}", "00".repeat(65), &key[130..]),
+            key[130..].to_owned(),
+        ] {
+            assert!(invalid.parse::<EphemeralPublicKey>().is_err());
+            let app = AppProof {
+                public_key: invalid.clone(),
+                ..test_app_proof1()
+            };
+            assert!(matches!(
+                verify(&app, &test_boot_proof1()),
+                Err(VerifyError::InvalidAppProof(message)) if message.starts_with("InvalidPublicKey(")
+            ));
+            let boot = BootProof {
+                ephemeral_public_key_hex: invalid,
+                ..test_boot_proof1()
+            };
+            assert!(matches!(
+                ParsedBootProof::parse(&boot),
+                Err(VerifyError::InvalidBootProof(_))
+            ));
+        }
     }
 }

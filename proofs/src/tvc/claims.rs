@@ -1,0 +1,257 @@
+//! Reads the JSON that TKMS signs in TVC app proofs. The signed JSON puts each
+//! claim directly in the payload, while generated protobuf types wrap the claim.
+use super::{
+    P256PublicKey, TvcProvenanceError,
+    endorsement::AuthenticatedPayload,
+    facts::{CheckOutcome, ProofCheck},
+};
+use serde::Deserialize;
+use turnkey_client::RequestFingerprint;
+use turnkey_enclave_encrypt::QuorumPublicKey;
+
+#[derive(Deserialize)]
+#[serde(tag = "type", deny_unknown_fields)]
+enum ClaimWire {
+    #[serde(rename = "APP_PROOF_TYPE_ADDRESS_DERIVATION")]
+    Operator {
+        #[serde(rename = "timestampMs")]
+        timestamp_ms: String,
+        #[serde(rename = "requestContext")]
+        request_context: ContextWire<u32>,
+        #[serde(rename = "addressDerivationProof")]
+        body: OperatorBodyWire,
+    },
+    #[serde(rename = "APP_PROOF_TYPE_TVC_QUORUM_KEY_CREATE")]
+    Quorum {
+        #[serde(rename = "timestampMs")]
+        timestamp_ms: String,
+        #[serde(rename = "requestContext")]
+        request_context: ContextWire<u32>,
+        #[serde(rename = "tvcQuorumKeyCreateProof")]
+        body: QuorumBodyWire,
+    },
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ContextWire<Version> {
+    version: Version,
+    verified_signature_digests: Vec<String>,
+}
+
+struct V1;
+
+impl ContextWire<u32> {
+    fn into_v1(self) -> Result<ContextWire<V1>, TvcProvenanceError> {
+        if self.version != 1 {
+            return Err(TvcProvenanceError::UnsupportedContext);
+        }
+        Ok(ContextWire {
+            version: V1,
+            verified_signature_digests: self.verified_signature_digests,
+        })
+    }
+
+    fn into_digests(self) -> Result<Vec<RequestFingerprint>, TvcProvenanceError> {
+        let ContextWire {
+            version: V1,
+            verified_signature_digests,
+        } = self.into_v1()?;
+        if verified_signature_digests.is_empty()
+            || verified_signature_digests.len() > 1024
+            || verified_signature_digests.iter().any(|d| {
+                d.len() != 64
+                    || !d
+                        .bytes()
+                        .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+            })
+        {
+            return Err(TvcProvenanceError::MalformedEvidence(
+                "expected 1 through 1024 lowercase 32-byte signature digests".into(),
+            ));
+        }
+        verified_signature_digests
+            .into_iter()
+            .map(|digest| {
+                RequestFingerprint::try_from(digest)
+                    .map_err(|error| TvcProvenanceError::MalformedEvidence(error.into()))
+            })
+            .collect()
+    }
+}
+
+/// Authenticated creation claims with parsed public keys and request fingerprints.
+#[derive(Debug)]
+pub enum ClaimEvidence {
+    Operator {
+        organization: String,
+        wallet: String,
+        path: String,
+        public_key: P256PublicKey,
+        digests: Vec<RequestFingerprint>,
+    },
+    Quorum {
+        organization: String,
+        id: String,
+        public_key: QuorumPublicKey,
+        threshold: u32,
+        recipients: Vec<P256PublicKey>,
+        digests: Vec<RequestFingerprint>,
+    },
+}
+
+impl ClaimEvidence {
+    /// Reads the already-authenticated payload. It must describe a supported
+    /// key operation and include valid request fingerprints.
+    pub(super) fn decode(payload: AuthenticatedPayload) -> CheckOutcome<Self> {
+        CheckOutcome::new(ProofCheck::ClaimDecode, Self::try_from(payload))
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct OperatorBodyWire {
+    organization_id: String,
+    wallet_id: String,
+    derivation_path: String,
+    address: String,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct QuorumBodyWire {
+    organization_id: String,
+    quorum_key_id: String,
+    quorum_public_key: String,
+    threshold: u32,
+    operator_encrypt_keys: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct Routing {
+    #[serde(rename = "type")]
+    kind: String,
+}
+
+/// Caps the payload size and reads the type so policy proofs can be skipped.
+/// The type label alone cannot establish a key claim.
+pub(super) fn policy_envelope(bytes: &str) -> CheckOutcome<bool> {
+    CheckOutcome::run(ProofCheck::EnvelopeRouting, || {
+        if bytes.len() > 256 * 1024 {
+            return Err(TvcProvenanceError::MalformedEvidence(
+                "inner proof exceeds 256 KiB".into(),
+            ));
+        }
+        // Unauthenticated routing only excludes policy envelopes. It cannot produce a claim.
+        let routing: Routing = serde_json::from_str(bytes)?;
+        Ok(routing.kind == "APP_PROOF_TYPE_POLICY_OUTCOME")
+    })
+}
+
+impl From<serde_json::Error> for TvcProvenanceError {
+    fn from(error: serde_json::Error) -> Self {
+        Self::MalformedEvidence(format!(
+            "invalid {:?} claim JSON at line {}, column {}",
+            error.classify(),
+            error.line(),
+            error.column(),
+        ))
+    }
+}
+
+fn validate_timestamp(value: &str) -> Result<(), TvcProvenanceError> {
+    if value.is_empty()
+        || !value.bytes().all(|c| c.is_ascii_digit())
+        || value.parse::<u64>().is_err()
+    {
+        return Err(TvcProvenanceError::MalformedEvidence(
+            "timestampMs must be a decimal u64 string".into(),
+        ));
+    }
+    Ok(())
+}
+pub(super) fn composite(value: &str) -> Result<QuorumPublicKey, TvcProvenanceError> {
+    let key = QuorumPublicKey::from_string(value)
+        .map_err(|_| TvcProvenanceError::MalformedEvidence("invalid composite key".into()))?;
+    key.encrypt_public_key().map_err(|_| {
+        TvcProvenanceError::MalformedEvidence("invalid composite encryption point".into())
+    })?;
+    key.verifying_key().map_err(|_| {
+        TvcProvenanceError::MalformedEvidence("invalid composite signing point".into())
+    })?;
+    Ok(key)
+}
+impl TryFrom<AuthenticatedPayload> for ClaimEvidence {
+    type Error = TvcProvenanceError;
+    fn try_from(payload: AuthenticatedPayload) -> Result<Self, Self::Error> {
+        match serde_json::from_str::<ClaimWire>(&payload.into_inner())? {
+            ClaimWire::Operator {
+                timestamp_ms,
+                request_context,
+                body,
+            } => {
+                validate_timestamp(&timestamp_ms)?;
+                if [
+                    &body.organization_id,
+                    &body.wallet_id,
+                    &body.derivation_path,
+                    &body.address,
+                ]
+                .iter()
+                .any(|v| v.is_empty())
+                {
+                    return Err(TvcProvenanceError::MalformedEvidence(
+                        "operator body fields must be nonempty".into(),
+                    ));
+                }
+                let address = body.address.parse()?;
+                Ok(Self::Operator {
+                    digests: request_context.into_digests()?,
+                    organization: body.organization_id,
+                    wallet: body.wallet_id,
+                    path: body.derivation_path,
+                    public_key: address,
+                })
+            }
+            ClaimWire::Quorum {
+                timestamp_ms,
+                request_context,
+                body,
+            } => {
+                validate_timestamp(&timestamp_ms)?;
+                if body.organization_id.is_empty()
+                    || body.quorum_key_id.is_empty()
+                    || body.threshold < 2
+                    || body.operator_encrypt_keys.len() < body.threshold as usize
+                    || body.operator_encrypt_keys.len() > super::MAX_QUORUM_RECIPIENTS
+                {
+                    return Err(TvcProvenanceError::MalformedEvidence(
+                        "invalid quorum fields or cardinality".into(),
+                    ));
+                }
+                let quorum_public_key = composite(&body.quorum_public_key)?;
+                let operator_encrypt_keys = body
+                    .operator_encrypt_keys
+                    .iter()
+                    .map(|key| key.parse())
+                    .collect::<Result<Vec<_>, _>>()?;
+                if operator_encrypt_keys
+                    .iter()
+                    .collect::<std::collections::HashSet<_>>()
+                    .len()
+                    != operator_encrypt_keys.len()
+                {
+                    return Err(TvcProvenanceError::MalformedEvidence(
+                        "duplicate quorum recipient".into(),
+                    ));
+                }
+                Ok(Self::Quorum {
+                    digests: request_context.into_digests()?,
+                    organization: body.organization_id,
+                    id: body.quorum_key_id,
+                    public_key: quorum_public_key,
+                    threshold: body.threshold,
+                    recipients: operator_encrypt_keys,
+                })
+            }
+        }
+    }
+}
