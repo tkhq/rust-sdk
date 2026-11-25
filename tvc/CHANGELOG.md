@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- Hosted creation and `verify-result` accept `--verbose-proofs` to explain proof checks in human output.
+  When verification is skipped, both commands warn before displaying the activity result.
+
 ### Changed
 
 - **Breaking:** By default, TVC verifies that the Signer produced the returned hosted operator

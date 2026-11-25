@@ -31,10 +31,11 @@ fn quorum_key_args(recipients: &str) -> [&str; 6] {
     ]
 }
 
-fn run(home: &Path, url: &str, format: &str, args: &[&str]) -> Output {
+fn run(home: &Path, url: &str, format: &str, args: &[&str], env: &[(&str, &str)]) -> Output {
     let api_key = TurnkeyP256ApiKey::generate();
     cargo_bin_cmd!("tvc")
         .env_clear()
+        .envs(env.iter().copied())
         .env("HOME", home)
         .env("TVC_API_BASE_URL", url)
         .env("TVC_ORG_ID", ORGANIZATION_ID)
@@ -53,7 +54,7 @@ fn assert_refused_before_post(home: &Path, args: &[&str]) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
-    let output = run(home, &url, "json", args);
+    let output = run(home, &url, "json", args, &[]);
 
     assert_eq!(output.status.code(), Some(1));
     assert!(output.stderr.is_empty());
@@ -106,6 +107,9 @@ fn quorum_key_creation_refuses_unknown_environment_and_preserves_config() {
 const ACTIVITY_ID: &str = "synthetic-activity";
 const GET_ACTIVITY: &str = "/public/v1/query/get_activity";
 const SKIP: &str = "--dangerous-skip-verification";
+const SKIP_ENV: &[(&str, &str)] = &[("TVC_DANGEROUS_SKIP_VERIFICATION", "true")];
+const VERBOSE: &str = "--verbose-proofs";
+const WARNING: &str = "warning: Proof verification: SKIPPED";
 const OPERATOR_LOOKUP: [&str; 6] = [
     "operator",
     "create",
@@ -154,6 +158,16 @@ async fn run_with_activity(
     format: &str,
     args: &[&str],
 ) -> Output {
+    run_with_activity_env(endpoint, activity, format, args, &[]).await
+}
+
+async fn run_with_activity_env(
+    endpoint: &str,
+    activity: &Value,
+    format: &str,
+    args: &[&str],
+    env: &[(&str, &str)],
+) -> Output {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path(endpoint))
@@ -168,7 +182,7 @@ async fn run_with_activity(
         .replace(common::LOCAL_API_BASE_URL, &server.uri());
     fs::write(&config_path, &profile).unwrap();
 
-    let output = run(home.path(), &server.uri(), format, args);
+    let output = run(home.path(), &server.uri(), format, args, env);
     assert_eq!(fs::read_to_string(config_path).unwrap(), profile);
     let requests = server.received_requests().await.unwrap();
     let [only] = requests.as_slice() else {
@@ -193,38 +207,43 @@ async fn run_with_activity(
 fn success_json(output: Output) -> Value {
     assert!(output.status.success(), "{output:?}");
     assert!(output.stderr.is_empty(), "{output:?}");
-    serde_json::from_slice(&output.stdout).unwrap()
+    let stdout = std::str::from_utf8(&output.stdout).unwrap();
+    assert_eq!(stdout.lines().count(), 1, "{stdout}");
+    serde_json::from_str(stdout).unwrap()
 }
 
 fn assert_operator_output(output: Output, activity: &Value) {
     let value = success_json(output);
     let result = &activity["result"]["createTvcOperatorResult"];
-    assert_eq!(value["reason"], "unverified_operator_result");
-    assert_eq!(value["verificationStatus"], "unverified");
-    assert_eq!(value["activityId"], ACTIVITY_ID);
-    assert_eq!(value["walletId"], result["walletId"]);
-    assert_eq!(value["operatorId"], result["operatorId"]);
-    assert_eq!(value["encryptPublicKey"], result["encryptPublicKey"]);
-    assert_eq!(value["signPublicKey"], result["signPublicKey"]);
     assert_eq!(
-        value["compositePublicKey"],
-        format!(
-            "{}{}",
-            result["encryptPublicKey"].as_str().unwrap(),
-            result["signPublicKey"].as_str().unwrap()
-        )
+        value,
+        json!({
+            "reason": "unverified_operator_result",
+            "verificationStatus": "unverified",
+            "activityId": ACTIVITY_ID,
+            "walletId": result["walletId"],
+            "operatorId": result["operatorId"],
+            "encryptPublicKey": result["encryptPublicKey"],
+            "signPublicKey": result["signPublicKey"],
+            "compositePublicKey": format!("{}{}", result["encryptPublicKey"].as_str().unwrap(), result["signPublicKey"].as_str().unwrap()),
+        })
     );
 }
 
 fn assert_quorum_output(output: Output, activity: &Value) {
     let value = success_json(output);
     let result = &activity["result"]["createTvcQuorumKeyResult"];
-    assert_eq!(value["reason"], "unverified_quorum_key_result");
-    assert_eq!(value["verificationStatus"], "unverified");
-    assert_eq!(value["activityId"], ACTIVITY_ID);
-    assert_eq!(value["quorumKeyId"], result["quorumKeyId"]);
-    assert_eq!(value["quorumPublicKey"], result["quorumPublicKey"]);
-    assert_eq!(value["shareIds"], result["shareIds"]);
+    assert_eq!(
+        value,
+        json!({
+            "reason": "unverified_quorum_key_result",
+            "verificationStatus": "unverified",
+            "activityId": ACTIVITY_ID,
+            "quorumKeyId": result["quorumKeyId"],
+            "quorumPublicKey": result["quorumPublicKey"],
+            "shareIds": result["shareIds"],
+        })
+    );
 }
 
 #[tokio::test]
@@ -270,31 +289,119 @@ async fn skipped_quorum_lookup_reports_unsigned_keys_without_a_checkpoint() {
     assert_quorum_output(output, &activity);
 }
 
-fn assert_human_key_is_unverified(output: Output, key: &Value) {
+fn assert_skipped_report(output: Output, verbose: bool) -> String {
     assert!(output.status.success(), "{output:?}");
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    if verbose {
+        let lines: Vec<_> = stderr.trim_end().lines().collect();
+        assert_eq!(lines[0], WARNING);
+        assert!(lines[1].contains("Signer and AWS Nitro proofs were not checked"));
+        assert!(lines[1].contains("not verified against the original request"));
+        assert!(lines[2].starts_with("____"));
+        assert_eq!(lines.len(), 3, "{stderr}");
+    } else {
+        assert_eq!(stderr.trim_end(), WARNING);
+    }
     let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(stdout.to_lowercase().contains("unverified"), "{stdout}");
-    assert!(stdout.contains(key.as_str().unwrap()), "{stdout}");
+    assert!(!stdout.contains("PASS"), "{stdout}");
+    stdout
 }
 
 #[tokio::test]
-async fn skipped_quorum_lookup_labels_the_key_unverified_in_human_output() {
+async fn skipped_quorum_lookup_warns_before_displaying_the_key() {
     let activity = quorum_activity();
     let output = run_with_activity(GET_ACTIVITY, &activity, "human", &QUORUM_LOOKUP).await;
-    assert_human_key_is_unverified(
-        output,
-        &activity["result"]["createTvcQuorumKeyResult"]["quorumPublicKey"],
+    let result = assert_skipped_report(output, false);
+    assert!(result.starts_with("Unverified quorum key result."));
+    assert!(
+        result.contains(
+            activity["result"]["createTvcQuorumKeyResult"]["quorumPublicKey"]
+                .as_str()
+                .unwrap()
+        )
     );
 }
 
 #[tokio::test]
-async fn skipped_operator_lookup_labels_the_keys_unverified_in_human_output() {
+async fn verbose_operator_lookup_explains_skipped_checks_without_saving_keys() {
     let activity = operator_activity();
-    let output = run_with_activity(GET_ACTIVITY, &activity, "human", &OPERATOR_LOOKUP).await;
-    assert_human_key_is_unverified(
-        output,
-        &activity["result"]["createTvcOperatorResult"]["encryptPublicKey"],
+    let args = [OPERATOR_LOOKUP.as_slice(), &[VERBOSE]].concat();
+    let output = run_with_activity(GET_ACTIVITY, &activity, "human", &args).await;
+    let result = assert_skipped_report(output, true);
+    assert!(result.starts_with("Unverified hosted operator result. No operator was saved."));
+    assert!(
+        result.contains(
+            activity["result"]["createTvcOperatorResult"]["encryptPublicKey"]
+                .as_str()
+                .unwrap()
+        )
     );
+}
+
+#[tokio::test]
+async fn env_skipped_operator_creation_warns_without_saving_keys() {
+    let activity = operator_activity();
+    let output = run_with_activity_env(
+        "/public/v1/submit/create_tvc_operator",
+        &activity,
+        "human",
+        &["operator", "create"],
+        SKIP_ENV,
+    )
+    .await;
+    let result = assert_skipped_report(output, false);
+    assert!(result.starts_with("Unverified hosted operator result. No operator was saved."));
+}
+
+#[tokio::test]
+async fn verbose_quorum_creation_explains_skipped_checks_before_displaying_the_key() {
+    let activity = quorum_activity();
+    let recipients = recipients();
+    let args = [quorum_key_args(&recipients).as_slice(), &[SKIP, VERBOSE]].concat();
+    let output = run_with_activity(
+        "/public/v1/submit/create_tvc_quorum_key",
+        &activity,
+        "human",
+        &args,
+    )
+    .await;
+    let result = assert_skipped_report(output, true);
+    assert!(result.starts_with("Unverified quorum key result."));
+}
+
+#[tokio::test]
+async fn env_skipped_quorum_lookup_preserves_verbose_ndjson() {
+    let activity = quorum_activity();
+    let args = [&QUORUM_LOOKUP[..5], &[VERBOSE]].concat();
+    let output = run_with_activity_env(GET_ACTIVITY, &activity, "json", &args, SKIP_ENV).await;
+    assert_quorum_output(output, &activity);
+}
+
+#[tokio::test]
+async fn pending_operator_creation_warns_and_prints_the_lookup_command() {
+    let mut activity = operator_activity();
+    activity["status"] = json!("ACTIVITY_STATUS_CONSENSUS_NEEDED");
+    let output = run_with_activity(
+        "/public/v1/submit/create_tvc_operator",
+        &activity,
+        "human",
+        &["operator", "create", SKIP],
+    )
+    .await;
+    let result = assert_skipped_report(output, false);
+    assert!(result.contains("Creation is pending (consensus_needed). No keys are available."));
+    assert!(result.contains("tvc operator create verify-result"));
+}
+
+#[tokio::test]
+async fn pending_quorum_lookup_explains_env_skipped_checks() {
+    let mut activity = quorum_activity();
+    activity["status"] = json!("ACTIVITY_STATUS_PENDING");
+    let args = [&QUORUM_LOOKUP[..5], &[VERBOSE]].concat();
+    let output = run_with_activity_env(GET_ACTIVITY, &activity, "human", &args, SKIP_ENV).await;
+    let result = assert_skipped_report(output, true);
+    assert!(result.contains("Creation is pending (processing). No keys are available."));
+    assert!(result.contains("tvc keys create-quorum-key verify-result"));
 }
 
 async fn assert_operator_lookup_refused(field: &str, replacement: &str) {

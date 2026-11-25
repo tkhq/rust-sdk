@@ -24,6 +24,10 @@ pub struct Args {
     #[arg(long, value_parser = NonEmptyStringValueParser::new())]
     activity_id: String,
 
+    /// Expand human output with the checks and public proof evidence.
+    #[arg(long)]
+    verbose_proofs: bool,
+
     /// Display the API result without verifying proofs or using a saved creation.
     #[arg(long, env = "TVC_DANGEROUS_SKIP_VERIFICATION")]
     dangerous_skip_verification: bool,
@@ -39,9 +43,11 @@ impl Run for Args {
                 "an operation ID cannot be used with --dangerous-skip-verification"
             );
             return pending_creation::lookup_unverified(
+                ctx,
                 &config,
                 self.activity_id,
                 CreationKind::Operator,
+                self.verbose_proofs,
             )
             .await;
         }
@@ -54,6 +60,7 @@ impl Run for Args {
             operation_id,
             self.activity_id,
             CreationKind::Operator,
+            self.verbose_proofs,
         )
         .await
     }

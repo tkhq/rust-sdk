@@ -71,6 +71,10 @@ pub struct Args {
     /// Display the API result without verifying quorum key proofs.
     #[arg(long, env = "TVC_DANGEROUS_SKIP_VERIFICATION")]
     dangerous_skip_verification: bool,
+
+    /// Expand human output with the checks and public proof evidence.
+    #[arg(long)]
+    verbose_proofs: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -132,6 +136,7 @@ impl Run for Args {
             operator_encrypt_keys,
             operator_ids,
             dangerous_skip_verification,
+            verbose_proofs,
         } = self;
         let threshold = threshold.context("missing --threshold for quorum-key creation")?;
         // The required, mutually exclusive Clap group guarantees exactly one
@@ -153,7 +158,7 @@ impl Run for Args {
             auth.ensure_configured_org(&configured_org_id)?;
         }
         let creation = PreparedCreation::quorum(auth.org_id, u32::from(threshold), recipients)?;
-        pending_creation::submit(ctx, config, auth, creation, timestamp_ms()?).await
+        pending_creation::submit(ctx, config, auth, creation, timestamp_ms()?, verbose_proofs).await
     }
 }
 

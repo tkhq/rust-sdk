@@ -189,7 +189,10 @@ tvc keys create-quorum-key verify-result <LOCAL_OPERATION_UUID> --activity-id <A
 ```
 
 Use the IDs printed by the original command. If the activity ID was missing
-from the output, find it in Turnkey and pass it explicitly.
+from the output, find it in Turnkey and pass it explicitly. Add
+`--verbose-proofs` to either command to see the Signer and AWS checks, the
+match to the original request, and the binding to the returned keys. The
+activity ID in the report identifies which activity was queried.
 
 Pending creation returns `creation_pending` with `operationId`, nullable
 `activityId`, and `status` (`processing`, `consensus_needed`, or
@@ -209,7 +212,8 @@ tvc operator create verify-result --dangerous-skip-verification --activity-id <A
 tvc keys create-quorum-key verify-result --dangerous-skip-verification --activity-id <ACTIVITY_ID>
 ```
 
-These lookups never resubmit creation. In JSON, `verificationStatus` is `"unverified"`
+These lookups never resubmit creation. Human output shows `Proof verification: SKIPPED`.
+With `--verbose-proofs`, it lists the omitted checks. In JSON, `verificationStatus` is `"unverified"`
 on `unverified_operator_result` or `unverified_quorum_key_result`.
 While approval is pending, the command returns `unverified_creation_pending`
 without keys. Treat completed results as values supplied by the API. An unverified

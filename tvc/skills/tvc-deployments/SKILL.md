@@ -19,10 +19,18 @@ verify returned keys against the submitted request before saving or returning
 success. The supported API environments are production, preproduction and
 development, each with its own pinned Signer quorum key.
 
-Human output confirms `Proof verification: passed` after acceptance. JSON output
-contains the existing command result without proof diagnostics. Acceptance does
-not establish an independent manifest/PCR allowlist, current attestation freshness
-or revocation status. Operator IDs and share IDs remain unsigned routing labels.
+Human output confirms `Proof verification: passed` after acceptance. Add
+`--verbose-proofs` to a hosted creation or `verify-result` command to see which Signer
+endorsed the attestation, what verified against the AWS Nitro root, and how the
+signed claims matched the saved request and returned keys. With a saved receipt, the
+report includes the local operation ID and the activity ID queried. A pending
+activity still reports its status and `verify-result` command. If proof verification
+fails, the report identifies the failed check and shows differing claim values
+when available.
+
+The AWS certificate chain is verified at attestation issuance. Operator IDs
+and share IDs are unsigned routing labels. The flag is for hosted creation
+and `verify-result` in human output. JSON emits the command result or error.
 
 Missing or invalid proof evidence fails as `proof_verification_failed`.
 Unsupported API environments fail before submission. After submission, remote
@@ -30,7 +38,9 @@ creation may already have succeeded even when verification fails. Investigate
 before repeating creation; the CLI does not recreate keys to retry verification.
 See [the error reference](references/error-reference.md).
 
-An explicit `--dangerous-skip-verification` opts into unverified API results.
+`--dangerous-skip-verification` or `TVC_DANGEROUS_SKIP_VERIFICATION=true`
+opts into unverified API results. Human output shows `Proof verification: SKIPPED`
+for both pending and completed activities.
 Use it for unsigned test results or, with `verify-result --activity-id`, to
 look up a result after losing the local receipt. This mode cannot establish
 Signer provenance or a match to the original request. It returns keys labeled

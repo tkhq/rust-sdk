@@ -15,14 +15,17 @@ Hosted creation saves its original request receipt under
 with the same organization and API environment. Supply the required
 `--activity-id`. If the original response was lost, find the activity ID in
 Turnkey. The command verifies the result against the saved receipt before
-accepting keys. Completed receipts remain available for later verification.
+accepting keys. Add `--verbose-proofs` to creation or `verify-result` for the
+Signer and AWS checks and the match to the original request. Completed receipts
+remain available for later verification.
 
 For testing with unsigned results, pass `--dangerous-skip-verification` to the
 creation command. It still submits the creation request to Turnkey. If you lose
 a receipt, use `verify-result` with that flag and `--activity-id` to look up
 the existing activity. Omit the local operation ID. On completion, both commands
 show the public keys from the API as unverified. For a hosted operator, the CLI
-leaves the operator out of your local TVC profile.
+leaves the operator out of your local TVC profile. Human output shows
+`Proof verification: SKIPPED`, including while the activity is pending.
 
 ## Installation
 
