@@ -208,6 +208,8 @@ pub mod intent {
         MintJwtIntent(super::MintJwtIntent),
         AddNotificationDomainsIntent(super::AddNotificationDomainsIntent),
         DeleteNotificationDomainsIntent(super::DeleteNotificationDomainsIntent),
+        InitOauth2AuthenticateIntent(super::InitOauth2AuthenticateIntent),
+        Oauth2AuthenticateIntentV2(super::Oauth2AuthenticateIntentV2),
     }
 }
 #[derive(Debug)]
@@ -941,6 +943,8 @@ pub struct SolSendTransactionIntentV2 {
     pub caip2: ::prost::alloc::string::String,
     #[serde(default)]
     pub recent_blockhash: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub external_signer_pubkey: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -1012,6 +1016,8 @@ pub struct EthSendTransactionIntentV2 {
     /// @inject_tag: validate:"required,min=1,max=50,dive"
     #[serde(default)]
     pub calls: ::prost::alloc::vec::Vec<EthCallParams>,
+    #[serde(default)]
+    pub external_signer_pubkey: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -2543,6 +2549,29 @@ pub struct DeleteOauth2CredentialIntent {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct InitOauth2AuthenticateIntent {
+    /// @inject_tag: validate:"required,uuid"
+    pub oauth2_credential_id: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub encryption_suite: super::super::models::v1::TransportEncryptionSuite,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct Oauth2AuthenticateIntentV2 {
+    /// @inject_tag: validate:"required,uuid"
+    pub oauth2_credential_id: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub encrypted_message: ::prost::alloc::string::String,
+    /// @inject_tag: validate:"required"
+    pub target_public_key: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+/// Deprecated: use InitOauth2AuthenticateIntent and Oauth2AuthenticateIntentV2.
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct Oauth2AuthenticateIntent {
     /// @inject_tag: validate:"required"
     pub oauth2_credential_id: ::prost::alloc::string::String,
@@ -2696,6 +2725,8 @@ pub struct CreateTvcAppIntent {
     pub enable_debug_mode_deployments: ::core::option::Option<bool>,
     #[serde(default)]
     pub region: ::core::option::Option<::prost::alloc::string::String>,
+    #[serde(default)]
+    pub enable_static_egress_ips: ::core::option::Option<bool>,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -3074,6 +3105,7 @@ pub mod result {
         MintJwtResult(super::MintJwtResult),
         AddNotificationDomainsResult(super::AddNotificationDomainsResult),
         DeleteNotificationDomainsResult(super::DeleteNotificationDomainsResult),
+        InitOauth2AuthenticateResult(super::InitOauth2AuthenticateResult),
     }
 }
 #[derive(Debug)]
@@ -3961,6 +3993,14 @@ pub struct UpdateOauth2CredentialResult {
 #[derive(Clone, PartialEq)]
 pub struct DeleteOauth2CredentialResult {
     pub oauth2_credential_id: ::prost::alloc::string::String,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
+pub struct InitOauth2AuthenticateResult {
+    /// @inject_tag: validate:"required"
+    pub enclave_target_message: ::prost::alloc::string::String,
 }
 #[derive(Debug)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -5980,6 +6020,10 @@ pub enum ActivityType {
     AddNotificationDomains = 189,
     #[serde(rename = "ACTIVITY_TYPE_DELETE_NOTIFICATION_DOMAINS")]
     DeleteNotificationDomains = 190,
+    #[serde(rename = "ACTIVITY_TYPE_INIT_OAUTH2_AUTHENTICATE")]
+    InitOauth2Authenticate = 191,
+    #[serde(rename = "ACTIVITY_TYPE_OAUTH2_AUTHENTICATE_V2")]
+    Oauth2AuthenticateV2 = 192,
 }
 impl ActivityType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -6215,6 +6259,8 @@ impl ActivityType {
             Self::DeleteNotificationDomains => {
                 "ACTIVITY_TYPE_DELETE_NOTIFICATION_DOMAINS"
             }
+            Self::InitOauth2Authenticate => "ACTIVITY_TYPE_INIT_OAUTH2_AUTHENTICATE",
+            Self::Oauth2AuthenticateV2 => "ACTIVITY_TYPE_OAUTH2_AUTHENTICATE_V2",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -6499,6 +6545,10 @@ impl ActivityType {
             "ACTIVITY_TYPE_DELETE_NOTIFICATION_DOMAINS" => {
                 Some(Self::DeleteNotificationDomains)
             }
+            "ACTIVITY_TYPE_INIT_OAUTH2_AUTHENTICATE" => {
+                Some(Self::InitOauth2Authenticate)
+            }
+            "ACTIVITY_TYPE_OAUTH2_AUTHENTICATE_V2" => Some(Self::Oauth2AuthenticateV2),
             _ => None,
         }
     }

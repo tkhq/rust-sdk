@@ -155,6 +155,12 @@ enum SignatureScheme {
   // The message is the hex-encoded signed payload bytes (protobuf for external signer proofs),
   // and the signature is an ECDSA-P256-SHA256 signature over those bytes.
   SIGNATURE_SCHEME_TK_QUORUM_P256_SIGNING_KEY = 8;
+  // ECDSA-P256-SHA256 with ASN.1 DER signatures, hex-encoded in Signature.signature.
+  // Signature.message is hex of the exact blob bytes; public_key is hex SEC1.
+  // The signed input is a per-type domain prefix followed by the blob bytes.
+  // The verifier supplies the expected prefix. A new blob type gets a new prefix, not a new scheme.
+  // First blob type: external signer key records use "TURNKEY_EXTERNAL_SIGNER_KEY_RECORD_V1\n".
+  SIGNATURE_SCHEME_TK_SIGNED_BLOB_P256 = 9;
 }
 
 message Signature {

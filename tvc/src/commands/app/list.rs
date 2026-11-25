@@ -68,6 +68,7 @@ struct AppSummary {
     quorum_public_key: String,
     live_deployment_id: Option<String>,
     egress_enabled: bool,
+    static_egress_ips_enabled: bool,
     debug_mode_deployments_enabled: bool,
     /// `None` when the server returns an empty region, meaning it cannot map the app's cluster to a region.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -88,6 +89,7 @@ impl From<TvcApp> for AppSummary {
             live_deployment_id,
             public_domain,
             enable_egress: egress_enabled,
+            enable_static_egress_ips: static_egress_ips_enabled,
             enable_debug_mode_deployments: debug_mode_deployments_enabled,
             organization_id: _,
             manifest_set: _,
@@ -103,6 +105,7 @@ impl From<TvcApp> for AppSummary {
             quorum_public_key,
             live_deployment_id,
             egress_enabled,
+            static_egress_ips_enabled,
             debug_mode_deployments_enabled,
             region: Some(region).filter(|r| !r.is_empty()),
             public_domain,
@@ -136,11 +139,13 @@ ID: {}
 Quorum Public Key: {}
 Live Deployment: {live}
 {}
+Static Egress IPs: {}
 Debug Mode Deployments: {}"#,
             self.name,
             self.id,
             self.quorum_public_key,
             format_egress_enabled(self.egress_enabled),
+            yes_no(self.static_egress_ips_enabled),
             yes_no(self.debug_mode_deployments_enabled),
         )?;
 
@@ -170,6 +175,7 @@ mod tests {
             manifest_set: None,
             share_set: None,
             enable_egress: false,
+            enable_static_egress_ips: false,
             created_at: None,
             updated_at: None,
             live_deployment_id: None,
@@ -262,6 +268,7 @@ mod tests {
             quorum_public_key: "04abcd".to_string(),
             live_deployment_id: Some("dep-9".to_string()),
             egress_enabled: true,
+            static_egress_ips_enabled: true,
             debug_mode_deployments_enabled: true,
             region: Some("ap-southeast-1".to_string()),
             public_domain: "my-app.example.com".to_string(),
@@ -275,6 +282,7 @@ mod tests {
             quorum_public_key: "04ef".to_string(),
             live_deployment_id: None,
             egress_enabled: false,
+            static_egress_ips_enabled: false,
             debug_mode_deployments_enabled: false,
             region: None,
             public_domain: String::new(),
@@ -290,6 +298,7 @@ ID: app-1
 Quorum Public Key: 04abcd
 Live Deployment: dep-9
 Egress Enabled: yes
+Static Egress IPs: yes
 Debug Mode Deployments: yes
 Region: ap-southeast-1
 Public Domain: my-app.example.com
@@ -306,6 +315,7 @@ ID: app-2
 Quorum Public Key: 04ef
 Live Deployment: (none)
 Egress Enabled: no
+Static Egress IPs: no
 Debug Mode Deployments: no
 ────────────────────────────────────────"#
         );
@@ -321,6 +331,7 @@ Debug Mode Deployments: no
                 "quorumPublicKey": "04abcd",
                 "liveDeploymentId": "dep-9",
                 "egressEnabled": true,
+                "staticEgressIpsEnabled": true,
                 "debugModeDeploymentsEnabled": true,
                 "region": "ap-southeast-1",
                 "publicDomain": "my-app.example.com",
@@ -338,6 +349,7 @@ Debug Mode Deployments: no
                 "quorumPublicKey": "04ef",
                 "liveDeploymentId": null,
                 "egressEnabled": false,
+                "staticEgressIpsEnabled": false,
                 "debugModeDeploymentsEnabled": false,
             })
         );

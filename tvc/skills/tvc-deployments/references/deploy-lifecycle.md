@@ -40,9 +40,10 @@ Fill the remaining `<FILL_IN_*>` sentinels (app name, manifest set name; leave t
 tvc app create --config-file app.json --message-format json   # reason: app_created
 ```
 
-`app create` output carries `appId`, `region`, `manifestSetId`, and `manifestSetOperatorIds`. Save the `appId` **and** the `manifestSetOperatorIds`: the latter are the operator ids allowed to approve this app's deployments, this output is the only place that returns them, and step 4 needs one.
+`app create` output carries `appId`, `region`, `enableStaticEgressIps`, `manifestSetId`, and `manifestSetOperatorIds`. Save the `appId` **and** the `manifestSetOperatorIds`: the latter are the operator ids allowed to approve this app's deployments, this output is the only place that returns them, and step 4 needs one.
 
 - `--config-file` / `-c` is **required** for `app create` (env `TVC_APP_CONFIG`).
+- `--enable-static-egress-ips` (env `TVC_ENABLE_STATIC_EGRESS_IPS=true`) enables static outbound IPs, overriding `enableStaticEgressIps` in `app.json`. Defaults to false, requires `enableEgress: true`, and is fixed at creation. See [config-files.md](config-files.md#static-egress-ips).
 - `--region <REGION>` (env `TVC_APP_REGION`) overrides `region` in `app.json`: `us-east-1` (default) or `ap-southeast-1`, the latter only for organizations Turnkey has enabled. The region is decided at `app create` and can never be changed afterward. See [config-files.md](config-files.md#region).
 - `app create` needs a `tvc login` profile even when the three `TVC_*` env vars are set: with env-only auth it creates the app at the API and then fails with `command_error` "no active organization set" while saving the last app id, so `appId` and `manifestSetOperatorIds` are never printed. Do not retry; recover the id with `tvc app list -n <name>`, and approve with `--operator-seed-path` since the operator ids are gone. Observed on tvc 0.17.1 (2026-11-04).
 - `--no-operator-reuse` stops the CLI from swapping an existing operator id into the config before sending it. The backend still returns the existing operator when the key *and* operator name match, and reuses an operator set with identical members, threshold, and name; a new operator record appears only when the operator name differs.
@@ -135,6 +136,7 @@ tvc app list --message-format json
       "quorumPublicKey": "04cdff...",
       "liveDeploymentId": "<DEPLOY_ID>",
       "egressEnabled": false,
+      "staticEgressIpsEnabled": false,
       "debugModeDeploymentsEnabled": false,
       "region": "us-east-1",
       "publicDomain": "app-<APP_ID>.<environment-specific-domain>"

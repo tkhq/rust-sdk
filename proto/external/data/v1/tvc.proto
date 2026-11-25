@@ -53,6 +53,10 @@ message TvcApp {
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "region this TVC App is deployed in, e.g. us-east-1 or ap-southeast-1. Set at app creation."}
   ];
+  bool enable_static_egress_ips = 14 [
+    (google.api.field_behavior) = REQUIRED,
+    (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {description: "Whether this TVC app has static egress IPs enabled. Set at app creation."}
+  ];
 }
 
 message TvcDeployment {

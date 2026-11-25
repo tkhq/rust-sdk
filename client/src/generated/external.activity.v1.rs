@@ -1482,13 +1482,28 @@ pub struct PolicyEvaluation {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone, PartialEq)]
+pub struct InitOauth2AuthenticateRequest {
+    pub r#type: ::prost::alloc::string::String,
+    pub timestamp_ms: ::prost::alloc::string::String,
+    pub organization_id: ::prost::alloc::string::String,
+    #[serde(default)]
+    pub parameters: ::core::option::Option<
+        super::super::super::immutable::activity::v1::InitOauth2AuthenticateIntent,
+    >,
+    #[serde(default)]
+    pub generate_app_proofs: ::core::option::Option<bool>,
+}
+#[derive(Debug)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq)]
 pub struct Oauth2AuthenticateRequest {
     pub r#type: ::prost::alloc::string::String,
     pub timestamp_ms: ::prost::alloc::string::String,
     pub organization_id: ::prost::alloc::string::String,
     #[serde(default)]
     pub parameters: ::core::option::Option<
-        super::super::super::immutable::activity::v1::Oauth2AuthenticateIntent,
+        super::super::super::immutable::activity::v1::Oauth2AuthenticateIntentV2,
     >,
     #[serde(default)]
     pub generate_app_proofs: ::core::option::Option<bool>,

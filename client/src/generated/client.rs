@@ -3502,6 +3502,49 @@ impl<S: Stamp> TurnkeyClient<S> {
         )
         .await
     }
+    /// Initialize OAuth 2.0 authentication
+    ///
+    /// Create an encryption target for confidential OAuth 2.0 authentication inputs.
+    pub async fn init_oauth2_authenticate(
+        &self,
+        organization_id: String,
+        timestamp_ms: u128,
+        params: immutable_activity::InitOauth2AuthenticateIntent,
+    ) -> Result<ActivityResult<immutable_activity::InitOauth2AuthenticateResult>, TurnkeyClientError>
+    {
+        let request = external_activity::InitOauth2AuthenticateRequest {
+            r#type: "ACTIVITY_TYPE_INIT_OAUTH2_AUTHENTICATE".to_string(),
+            timestamp_ms: timestamp_ms.to_string(),
+            parameters: Some(params),
+            organization_id,
+            generate_app_proofs: self.generate_app_proofs(),
+        };
+        let activity: external_activity::Activity = self
+            .process_activity(
+                &request,
+                "/public/v1/submit/init_oauth2_authenticate".to_string(),
+            )
+            .await?;
+        let inner = activity
+            .result
+            .ok_or_else(|| TurnkeyClientError::MissingResult)?
+            .inner
+            .ok_or_else(|| TurnkeyClientError::MissingInnerResult)?;
+        let result = match inner {
+            immutable_activity::result::Inner::InitOauth2AuthenticateResult(res) => res,
+            other => {
+                return Err(TurnkeyClientError::UnexpectedInnerActivityResult(
+                    serde_json::to_string(&other)?,
+                ));
+            }
+        };
+        Ok(ActivityResult {
+            result,
+            activity_id: activity.id,
+            status: activity.status,
+            app_proofs: activity.app_proofs,
+        })
+    }
     /// OAuth 2.0 authentication
     ///
     /// Authenticate a user with an OAuth 2.0 provider and receive an OIDC token to use with the LoginWithOAuth or CreateSubOrganization activities.
@@ -3509,11 +3552,11 @@ impl<S: Stamp> TurnkeyClient<S> {
         &self,
         organization_id: String,
         timestamp_ms: u128,
-        params: immutable_activity::Oauth2AuthenticateIntent,
+        params: immutable_activity::Oauth2AuthenticateIntentV2,
     ) -> Result<ActivityResult<immutable_activity::Oauth2AuthenticateResult>, TurnkeyClientError>
     {
         let request = external_activity::Oauth2AuthenticateRequest {
-            r#type: "ACTIVITY_TYPE_OAUTH2_AUTHENTICATE".to_string(),
+            r#type: "ACTIVITY_TYPE_OAUTH2_AUTHENTICATE_V2".to_string(),
             timestamp_ms: timestamp_ms.to_string(),
             parameters: Some(params),
             organization_id,
