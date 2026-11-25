@@ -22,11 +22,11 @@ resolver = "2"
 
 [workspace.dependencies]
 # QuorumOS
-qos_client = { version = "0.15.0", default-features = false, features = ["smartcard"] }
-qos_core = { version = "0.15.0", default-features = false }
-qos_crypto = { version = "0.15.0", default-features = false }
-qos_nsm = { version = "0.15.0", default-features = false }
-qos_p256 = { version = "0.15.0", default-features = false }
+qos_client = { version = "0.16.3", default-features = false, features = ["smartcard"] }
+qos_core = { version = "0.16.3", default-features = false }
+qos_crypto = { version = "0.16.3", default-features = false }
+qos_nsm = { version = "0.16.3", default-features = false }
+qos_p256 = { version = "0.16.3", default-features = false }
 
 # Encoding and serialization
 base64 = { version = "0.22.0", default-features = false, features = ["std"] }
@@ -124,3 +124,11 @@ turnkey_client = { path = "client", version = "0.20.0" }
 turnkey_enclave_encrypt = { path = "enclave_encrypt", version = "0.20.0" }
 turnkey_jwt_verify = { path = "jwt_verify", version = "0.20.0" }
 turnkey_proofs = { path = "proofs", version = "0.20.0" }
+
+# TODO: drop once qos 0.17.0 is published (tkhq/qos#881).
+[patch.crates-io]
+qos_client = { git = "https://github.com/tkhq/qos", rev = "d759a422f98e54740a5a2dc6f4cf9a60e0a3f1a3" }
+qos_core = { git = "https://github.com/tkhq/qos", rev = "d759a422f98e54740a5a2dc6f4cf9a60e0a3f1a3" }
+qos_crypto = { git = "https://github.com/tkhq/qos", rev = "d759a422f98e54740a5a2dc6f4cf9a60e0a3f1a3" }
+qos_nsm = { git = "https://github.com/tkhq/qos", rev = "d759a422f98e54740a5a2dc6f4cf9a60e0a3f1a3" }
+qos_p256 = { git = "https://github.com/tkhq/qos", rev = "d759a422f98e54740a5a2dc6f4cf9a60e0a3f1a3" }
