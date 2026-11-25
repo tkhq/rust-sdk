@@ -234,13 +234,14 @@ fn main() {
                         ///
                         /// The callback must durably save the checkpoint before succeeding.
                         /// Pending hints require caller persistence. Returned proofs remain unverified.
-                        pub async fn {fn_name}_with_receipt(&self, organization_id: uuid::Uuid, timestamp_ms: u128, params: immutable_activity::{activity_intent}, save: impl AsyncFnMut(&SubmissionCheckpoint) -> Result<(), CheckpointSaveError>) -> Result<SubmissionOutcome<SubmittedActivityResult<immutable_activity::{activity_result}>>, TurnkeyClientError> {{
+                        pub async fn {fn_name}_with_receipt<E>(&self, organization_id: uuid::Uuid, timestamp_ms: u128, params: immutable_activity::{activity_intent}, save: impl AsyncFnMut(&SubmissionCheckpoint) -> Result<(), E>) -> Result<SubmissionOutcome<SubmittedActivityResult<immutable_activity::{activity_result}>>, ReceiptCreationError<E>> {{
                             let request = self.{fn_name}_request(organization_id.to_string(), timestamp_ms, params);
                             self.process_activity_with_receipt(&request, "{route}".to_string(), organization_id, SubmissionKind::{submission_kind}, save)
                                 .await?
                                 .try_map_completed(|receipt| {{
                                     SubmittedActivityResult::from_receipt(receipt, Self::parse_{fn_name}_result)
                                 }})
+                                .map_err(ReceiptCreationError::Client)
                         }}
                     "#));
                     format!(
@@ -571,7 +572,10 @@ mod tests {
         let mut public_receipt_methods: Vec<_> = generated
             .lines()
             .filter_map(|line| {
-                let (name, _) = line.trim().strip_prefix("pub async fn ")?.split_once('(')?;
+                let (name, _) = line
+                    .trim()
+                    .strip_prefix("pub async fn ")?
+                    .split_once(['<', '('])?;
                 name.ends_with("_with_receipt").then_some(name)
             })
             .collect();

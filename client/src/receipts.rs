@@ -136,8 +136,6 @@ pub enum SubmissionFailureCause {
     ClientVersionTooOld(u16),
     #[error("activity requires approval")]
     ApprovalRequired,
-    #[error("submission checkpoint persistence failed")]
-    CheckpointSaveFailed,
     #[error("activity did not complete successfully")]
     ActivityNotCompleted,
     #[error("submission retry limit was reached")]
@@ -209,7 +207,6 @@ impl From<TurnkeyClientError> for SubmissionFailureCause {
             TurnkeyClientError::BuilderMissingApiKey
             | TurnkeyClientError::ReqwestBuilder(_)
             | TurnkeyClientError::SerdeJsonFailure(_) => Self::InvalidRequest,
-            TurnkeyClientError::CheckpointSaveFailed(_) => Self::CheckpointSaveFailed,
             TurnkeyClientError::ActivityRequiresApproval(_) => Self::ApprovalRequired,
             TurnkeyClientError::ActivityFailed(_)
             | TurnkeyClientError::UnexpectedActivityStatus(_) => Self::ActivityNotCompleted,
@@ -232,10 +229,34 @@ impl From<TurnkeyClientError> for SubmissionFailureCause {
     }
 }
 
-/// Sanitized persistence failure. Keep storage-specific diagnostics in the caller.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-#[error("submission checkpoint persistence failed")]
-pub struct CheckpointSaveError;
+/// An error submitting a creation request or saving its checkpoint.
+#[derive(Debug, thiserror::Error)]
+pub enum ReceiptCreationError<E> {
+    #[error("{0}")]
+    Client(#[from] TurnkeyClientError),
+    /// The current attempt was not sent. After an earlier send, the checkpoint
+    /// contains the previous fingerprints and any activity ID returned by the API.
+    #[error("{state}: submission checkpoint persistence failed")]
+    CheckpointSave {
+        #[source]
+        source: E,
+        state: SubmissionState,
+        checkpoint: Option<SubmissionCheckpoint>,
+    },
+}
+
+impl<E> ReceiptCreationError<E> {
+    /// Returns the API's untrusted lookup hint if an earlier attempt received one.
+    pub fn activity_id(&self) -> Option<&str> {
+        match self {
+            Self::Client(TurnkeyClientError::SubmissionFailed(failure)) => failure.activity_id(),
+            Self::Client(_) => None,
+            Self::CheckpointSave { checkpoint, .. } => checkpoint
+                .as_ref()
+                .and_then(SubmissionCheckpoint::activity_id),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum SubmissionKind {
@@ -350,14 +371,18 @@ struct SubmissionInvocation {
 }
 
 impl SubmissionInvocation {
+    fn state(&self) -> SubmissionState {
+        if self.attempted {
+            SubmissionState::MayHaveSubmitted
+        } else {
+            SubmissionState::NeverSubmitted
+        }
+    }
+
     fn fail(&self, error: TurnkeyClientError) -> TurnkeyClientError {
         TurnkeyClientError::SubmissionFailed(SubmissionFailure::new(
             error,
-            if self.attempted {
-                SubmissionState::MayHaveSubmitted
-            } else {
-                SubmissionState::NeverSubmitted
-            },
+            self.state(),
             self.checkpoint.clone(),
         ))
     }
@@ -413,7 +438,7 @@ impl ActivityReceipt {
 ///     }
 /// }
 /// async fn unsupported(client: TurnkeyClient<Custom>, operator: CreateTvcOperatorIntent) {
-///     client.create_tvc_operator_with_receipt(Uuid::from_u128(1), 100, operator, async |_| Ok(())).await;
+///     client.create_tvc_operator_with_receipt(Uuid::from_u128(1), 100, operator, async |_| Ok::<(), std::convert::Infallible>(())).await;
 /// }
 /// ```
 ///
@@ -429,7 +454,7 @@ impl ActivityReceipt {
 /// #     }
 /// # }
 /// async fn unsupported(client: TurnkeyClient<Custom>, quorum: CreateTvcQuorumKeyIntent) {
-///     client.create_tvc_quorum_key_with_receipt(Uuid::from_u128(1), 100, quorum, async |_| Ok(())).await;
+///     client.create_tvc_quorum_key_with_receipt(Uuid::from_u128(1), 100, quorum, async |_| Ok::<(), std::convert::Infallible>(())).await;
 /// }
 /// ```
 #[derive(Debug, Clone)]
@@ -472,14 +497,14 @@ impl<T> SubmittedActivityResult<T> {
 
 impl<S: UniqueStamp> TurnkeyClient<S> {
     /// Saves each signed attempt's fingerprint before sending the request.
-    pub(crate) async fn process_activity_with_receipt<Request: Serialize>(
+    pub(crate) async fn process_activity_with_receipt<Request: Serialize, E>(
         &self,
         request: Request,
         path: String,
         organization_id: Uuid,
         kind: SubmissionKind,
-        mut save: impl AsyncFnMut(&SubmissionCheckpoint) -> Result<(), CheckpointSaveError>,
-    ) -> Result<SubmissionOutcome<ActivityReceipt>, TurnkeyClientError> {
+        mut save: impl AsyncFnMut(&SubmissionCheckpoint) -> Result<(), E>,
+    ) -> Result<SubmissionOutcome<ActivityReceipt>, ReceiptCreationError<E>> {
         let mut submission = SubmissionInvocation::default();
         let mut retry_count = 0;
         loop {
@@ -506,9 +531,13 @@ impl<S: UniqueStamp> TurnkeyClient<S> {
                     .as_ref()
                     .and_then(|checkpoint| checkpoint.0.activity_id.clone()),
             });
-            save(&candidate)
-                .await
-                .map_err(|error| submission.fail(error.into()))?;
+            if let Err(source) = save(&candidate).await {
+                return Err(ReceiptCreationError::CheckpointSave {
+                    source,
+                    state: submission.state(),
+                    checkpoint: submission.checkpoint,
+                });
+            }
             let checkpoint = candidate;
             submission.attempted = true;
             let response: ActivityResponse = self
@@ -542,12 +571,15 @@ impl<S: UniqueStamp> TurnkeyClient<S> {
                 }
                 ActivityStatus::Failed | ActivityStatus::Rejected => {
                     return Err(checkpoint
-                        .submission_error(TurnkeyClientError::ActivityFailed(activity.failure)));
+                        .submission_error(TurnkeyClientError::ActivityFailed(activity.failure))
+                        .into());
                 }
                 ActivityStatus::Unspecified => {
-                    return Err(checkpoint.submission_error(
-                        TurnkeyClientError::InvalidSubmissionActivity("unspecified status"),
-                    ));
+                    return Err(checkpoint
+                        .submission_error(TurnkeyClientError::InvalidSubmissionActivity(
+                            "unspecified status",
+                        ))
+                        .into());
                 }
             };
             return Ok(SubmissionOutcome::Pending { checkpoint, reason });
@@ -663,6 +695,7 @@ mod tests {
         atomic::{AtomicUsize, Ordering},
     };
     use std::time::Duration;
+    use std::{convert::Infallible, io};
     use turnkey_api_key_stamper::{Stamp, StamperError};
     use wiremock::{
         Mock, MockServer, Request, Respond, ResponseTemplate,
@@ -685,13 +718,13 @@ mod tests {
             &self,
             request: Request,
             path: String,
-        ) -> Result<SubmissionOutcome<ActivityReceipt>, TurnkeyClientError> {
+        ) -> Result<SubmissionOutcome<ActivityReceipt>, ReceiptCreationError<Infallible>> {
             self.process_activity_with_receipt(
                 request,
                 path,
                 ORGANIZATION_ID,
                 SubmissionKind::CreateTvcOperator,
-                async |_| Ok(()),
+                async |_| Ok::<(), Infallible>(()),
             )
             .await
         }
@@ -760,7 +793,7 @@ mod tests {
                     path: "path".into(),
                     operator_name: "operator".into(),
                 },
-                async |_| Ok(()),
+                async |_| Ok::<(), Infallible>(()),
             )
             .await;
         let SubmissionOutcome::Pending { checkpoint, reason } = result.unwrap() else {
@@ -783,21 +816,35 @@ mod tests {
             &server,
             TurnkeyP256ApiKey::from_bytes([1; 32], None).unwrap(),
         );
-        let first = failure(
-            client
-                .process_activity_with_receipt(
-                    (),
-                    "/submit".into(),
-                    ORGANIZATION_ID,
-                    SubmissionKind::CreateTvcOperator,
-                    async |_| Err(CheckpointSaveError),
-                )
-                .await
-                .unwrap_err(),
-        );
-        assert_eq!(first.submission_state(), SubmissionState::NeverSubmitted);
-        assert_eq!(first.cause(), &SubmissionFailureCause::CheckpointSaveFailed);
-        assert!(first.checkpoint().is_none());
+        let error = client
+            .create_tvc_quorum_key_with_receipt(
+                ORGANIZATION_ID,
+                100,
+                crate::generated::CreateTvcQuorumKeyIntent {
+                    threshold: 2,
+                    operator_encrypt_keys: vec!["one".into(), "two".into()],
+                },
+                async |_| {
+                    Err(io::Error::new(
+                        io::ErrorKind::PermissionDenied,
+                        "test checkpoint path",
+                    ))
+                },
+            )
+            .await
+            .unwrap_err();
+        let ReceiptCreationError::CheckpointSave {
+            source,
+            state,
+            checkpoint,
+        } = error
+        else {
+            panic!("expected a checkpoint save failure")
+        };
+        assert_eq!(source.kind(), io::ErrorKind::PermissionDenied);
+        assert_eq!(source.to_string(), "test checkpoint path");
+        assert_eq!(state, SubmissionState::NeverSubmitted);
+        assert!(checkpoint.is_none());
         assert!(server.received_requests().await.unwrap().is_empty());
     }
 
@@ -812,40 +859,42 @@ mod tests {
             &server,
             TurnkeyP256ApiKey::from_bytes([1; 32], None).unwrap(),
         );
-        let mut saved = Vec::new();
-        let later = failure(
-            client
-                .process_activity_with_receipt(
-                    (),
-                    "/submit".into(),
-                    ORGANIZATION_ID,
-                    SubmissionKind::CreateTvcOperator,
-                    async |checkpoint: &SubmissionCheckpoint| {
-                        assert_eq!(server.received_requests().await.unwrap().len(), saved.len());
-                        assert_eq!(checkpoint.sent_fingerprints().count(), saved.len() + 1);
-                        if saved.is_empty() {
-                            saved.push(serde_json::to_vec(checkpoint).unwrap());
-                            Ok(())
-                        } else {
-                            Err(CheckpointSaveError)
-                        }
-                    },
-                )
-                .await
-                .unwrap_err(),
-        );
-        assert_eq!(later.submission_state(), SubmissionState::MayHaveSubmitted);
-        assert_eq!(later.cause(), &SubmissionFailureCause::CheckpointSaveFailed);
-        let previous: SubmissionCheckpoint = serde_json::from_slice(&saved[0]).unwrap();
-        assert_eq!(
-            later
-                .checkpoint()
-                .unwrap()
-                .sent_fingerprints()
-                .collect::<Vec<_>>(),
-            previous.sent_fingerprints().collect::<Vec<_>>()
-        );
-        assert_eq!(later.activity_id(), Some("synthetic-activity"));
+        let error = client
+            .create_tvc_operator_with_receipt(
+                ORGANIZATION_ID,
+                100,
+                crate::generated::CreateTvcOperatorIntent {
+                    wallet_id: None,
+                    wallet_name: Some("wallet".into()),
+                    path: "path".into(),
+                    operator_name: "operator".into(),
+                },
+                async |candidate| {
+                    if candidate.sent_fingerprints().count() == 1 {
+                        Ok(())
+                    } else {
+                        Err(io::Error::new(
+                            io::ErrorKind::StorageFull,
+                            "test retry checkpoint",
+                        ))
+                    }
+                },
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(error.activity_id(), Some("synthetic-activity"));
+        let ReceiptCreationError::CheckpointSave {
+            source,
+            state,
+            checkpoint,
+        } = error
+        else {
+            panic!("expected a checkpoint save failure")
+        };
+        assert_eq!(source.kind(), io::ErrorKind::StorageFull);
+        assert_eq!(source.to_string(), "test retry checkpoint");
+        assert_eq!(state, SubmissionState::MayHaveSubmitted);
+        let previous = checkpoint.expect("first attempt's checkpoint");
         let requests = server.received_requests().await.unwrap();
         assert_eq!(requests.len(), 1);
         assert_eq!(
@@ -871,7 +920,7 @@ mod tests {
                 SubmissionKind::CreateTvcOperator,
                 async |checkpoint: &SubmissionCheckpoint| {
                     saved = Some(serde_json::to_vec(checkpoint).unwrap());
-                    std::future::pending::<Result<(), CheckpointSaveError>>().await
+                    std::future::pending::<Result<(), Infallible>>().await
                 },
             ),
         )
@@ -904,7 +953,7 @@ mod tests {
                 async |checkpoint: &SubmissionCheckpoint| {
                     assert_eq!(server.received_requests().await.unwrap().len(), saved.len());
                     saved.push(checkpoint.clone());
-                    Ok(())
+                    Ok::<(), Infallible>(())
                 },
             )
             .await
@@ -977,7 +1026,7 @@ mod tests {
                 kind,
                 async |checkpoint: &SubmissionCheckpoint| {
                     saved = Some(serde_json::to_vec(checkpoint).unwrap());
-                    Ok(())
+                    Ok::<(), Infallible>(())
                 },
             )
             .await
@@ -1525,7 +1574,7 @@ mod tests {
                 SubmissionKind::CreateTvcOperator,
                 async |checkpoint: &SubmissionCheckpoint| {
                     saved = Some(serde_json::to_vec(checkpoint).unwrap());
-                    Ok(())
+                    Ok::<(), Infallible>(())
                 },
             );
             tokio::select! {
@@ -1794,7 +1843,9 @@ mod tests {
             .await
             .unwrap();
         let submitted = client
-            .create_tvc_operator_with_receipt(ORGANIZATION_ID, 100, params, async |_| Ok(()))
+            .create_tvc_operator_with_receipt(ORGANIZATION_ID, 100, params, async |_| {
+                Ok::<(), Infallible>(())
+            })
             .await
             .unwrap()
             .completed();
@@ -1838,7 +1889,9 @@ mod tests {
             .await
             .unwrap();
         let submitted = client
-            .create_tvc_quorum_key_with_receipt(ORGANIZATION_ID, 100, params, async |_| Ok(()))
+            .create_tvc_quorum_key_with_receipt(ORGANIZATION_ID, 100, params, async |_| {
+                Ok::<(), Infallible>(())
+            })
             .await
             .unwrap()
             .completed();
@@ -1852,9 +1905,9 @@ mod tests {
         .await;
     }
 
-    fn failure(error: TurnkeyClientError) -> SubmissionFailure {
-        match error {
-            TurnkeyClientError::SubmissionFailed(failure) => failure,
+    fn failure(error: impl Into<ReceiptCreationError<Infallible>>) -> SubmissionFailure {
+        match error.into() {
+            ReceiptCreationError::Client(TurnkeyClientError::SubmissionFailed(failure)) => failure,
             other => panic!("expected submission failure, got {other:?}"),
         }
     }
@@ -1917,7 +1970,7 @@ mod tests {
                         path: "path".into(),
                         operator_name: "operator".into(),
                     },
-                    async |_| Ok(()),
+                    async |_| Ok::<(), Infallible>(()),
                 )
                 .await
                 .unwrap_err(),
@@ -1983,7 +2036,7 @@ mod tests {
                     SubmissionKind::CreateTvcOperator,
                     async |checkpoint: &SubmissionCheckpoint| {
                         saved.push(checkpoint.clone());
-                        Ok(())
+                        Ok::<(), Infallible>(())
                     },
                 )
                 .await

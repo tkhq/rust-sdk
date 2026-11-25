@@ -53,9 +53,10 @@ turnkey_client = { version = "0.0.2", features = ["reqwest_native_tls", "reqwest
 The built-in P-256 and secp256k1 keys support
 `create_tvc_operator_with_receipt` and `create_tvc_quorum_key_with_receipt`.
 Both accept a `uuid::Uuid` as the organization ID and require an async callback
-from `&SubmissionCheckpoint` to `Result<(), CheckpointSaveError>`.
+from `&SubmissionCheckpoint` to `Result<(), E>`.
 Durably persist the checkpoint before returning
-`Ok(())`. A failed save forbids that POST. The SDK owns no storage paths.
+`Ok(())`. If saving fails, the SDK returns your original error in
+`ReceiptCreationError::CheckpointSave` and skips that POST.
 Receipt methods also accept custom stampers that implement
 [`UniqueStamp`](../api_key_stamper/README.md#randomized-request-signing).
 Ordinary methods accept any stamper that implements `Stamp`.
@@ -73,17 +74,18 @@ the original organization and never resubmits creation or adds query fingerprint
 An explicit candidate ID can replace a missing hint. Both IDs remain untrusted,
 and a completed receipt still requires independent proof acceptance.
 
+SDK failures use `ReceiptCreationError::Client`. Its
 `TurnkeyClientError::SubmissionFailed` exposes sanitized causes,
-`submission_state()`, and an optional `checkpoint()` for recovery. A failed first
-save is `NeverSubmitted`; failure after an earlier send is `MayHaveSubmitted` and
-retains the earlier checkpoint. Cancellation returns no outcome but leaves the
+`submission_state()`, and an optional `checkpoint()` for recovery. For save failures, `CheckpointSave` carries
+the same recovery information. A failed first save is `NeverSubmitted`. A
+failed retry save is `MayHaveSubmitted` and retains the earlier checkpoint. Cancellation returns no outcome but leaves the
 last persisted evidence usable. A callback that writes and then fails or is
 canceled can leave an extra prepared, unsent fingerprint on disk. Save updated
 hints from errors when available. Do not infer creation failure from missing hints.
 
 ## Release compatibility
 
-The receipt APIs add `InvalidReceiptStamp`, `CheckpointSaveFailed`,
+The receipt APIs add `InvalidReceiptStamp`,
 `InvalidSubmissionActivity`, and `SubmissionFailed` to `TurnkeyClientError`.
 Downstream exhaustive matches must handle these variants, including callers of
 ordinary methods. This change and the new stamper error variant require a

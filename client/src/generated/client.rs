@@ -5,7 +5,7 @@ use crate::generated::immutable::activity::v1 as immutable_activity;
 use crate::generated::services::coordinator::public::v1 as coordinator;
 use crate::receipts::SubmissionKind;
 use crate::{
-    ActivityResult, CheckpointSaveError, Stamp, SubmissionCheckpoint, SubmissionOutcome,
+    ActivityResult, ReceiptCreationError, Stamp, SubmissionCheckpoint, SubmissionOutcome,
     SubmittedActivityResult, TurnkeyClient, TurnkeyClientError, UniqueStamp,
 };
 impl<S: Stamp> TurnkeyClient<S> {
@@ -6091,15 +6091,15 @@ impl<S: UniqueStamp> TurnkeyClient<S> {
     ///
     /// The callback must durably save the checkpoint before succeeding.
     /// Pending hints require caller persistence. Returned proofs remain unverified.
-    pub async fn create_tvc_operator_with_receipt(
+    pub async fn create_tvc_operator_with_receipt<E>(
         &self,
         organization_id: uuid::Uuid,
         timestamp_ms: u128,
         params: immutable_activity::CreateTvcOperatorIntent,
-        save: impl AsyncFnMut(&SubmissionCheckpoint) -> Result<(), CheckpointSaveError>,
+        save: impl AsyncFnMut(&SubmissionCheckpoint) -> Result<(), E>,
     ) -> Result<
         SubmissionOutcome<SubmittedActivityResult<immutable_activity::CreateTvcOperatorResult>>,
-        TurnkeyClientError,
+        ReceiptCreationError<E>,
     > {
         let request =
             self.create_tvc_operator_request(organization_id.to_string(), timestamp_ms, params);
@@ -6114,20 +6114,21 @@ impl<S: UniqueStamp> TurnkeyClient<S> {
         .try_map_completed(|receipt| {
             SubmittedActivityResult::from_receipt(receipt, Self::parse_create_tvc_operator_result)
         })
+        .map_err(ReceiptCreationError::Client)
     }
     /// Create TVC Quorum Key. Persists local origin evidence before each signed POST.
     ///
     /// The callback must durably save the checkpoint before succeeding.
     /// Pending hints require caller persistence. Returned proofs remain unverified.
-    pub async fn create_tvc_quorum_key_with_receipt(
+    pub async fn create_tvc_quorum_key_with_receipt<E>(
         &self,
         organization_id: uuid::Uuid,
         timestamp_ms: u128,
         params: immutable_activity::CreateTvcQuorumKeyIntent,
-        save: impl AsyncFnMut(&SubmissionCheckpoint) -> Result<(), CheckpointSaveError>,
+        save: impl AsyncFnMut(&SubmissionCheckpoint) -> Result<(), E>,
     ) -> Result<
         SubmissionOutcome<SubmittedActivityResult<immutable_activity::CreateTvcQuorumKeyResult>>,
-        TurnkeyClientError,
+        ReceiptCreationError<E>,
     > {
         let request =
             self.create_tvc_quorum_key_request(organization_id.to_string(), timestamp_ms, params);
@@ -6142,5 +6143,6 @@ impl<S: UniqueStamp> TurnkeyClient<S> {
         .try_map_completed(|receipt| {
             SubmittedActivityResult::from_receipt(receipt, Self::parse_create_tvc_quorum_key_result)
         })
+        .map_err(ReceiptCreationError::Client)
     }
 }

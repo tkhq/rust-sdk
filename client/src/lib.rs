@@ -80,7 +80,7 @@ pub mod generated;
 
 mod receipts;
 pub use receipts::{
-    ActivityReceipt, CheckpointSaveError, RequestFingerprint, SubmissionCheckpoint,
+    ActivityReceipt, ReceiptCreationError, RequestFingerprint, SubmissionCheckpoint,
     SubmissionFailure, SubmissionFailureCause, SubmissionOutcome, SubmissionPendingReason,
     SubmissionState, SubmittedActivityResult,
 };
@@ -156,9 +156,6 @@ pub enum TurnkeyClientError {
 
     #[error("invalid stamp for a submission receipt: {0}")]
     InvalidReceiptStamp(&'static str),
-
-    #[error("submission checkpoint persistence failed")]
-    CheckpointSaveFailed(#[from] CheckpointSaveError),
 
     #[error("invalid activity for submission: {0}")]
     InvalidSubmissionActivity(&'static str),

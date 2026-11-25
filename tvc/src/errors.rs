@@ -298,10 +298,9 @@ fn classify_turnkey_client_error(error: &TurnkeyClientError) -> Classification {
                 | Cause::ActivityResultMismatch
                 | Cause::ActivityNotCompleted
                 | Cause::ExceededRetries => Classification::new(ErrorCode::ApiError, None),
-                Cause::RandomizedSigningFailed
-                | Cause::StampRejected
-                | Cause::InvalidRequest
-                | Cause::CheckpointSaveFailed => Classification::new(ErrorCode::CommandError, None),
+                Cause::RandomizedSigningFailed | Cause::StampRejected | Cause::InvalidRequest => {
+                    Classification::new(ErrorCode::CommandError, None)
+                }
             }
         }
         TurnkeyClientError::ActivityRequiresApproval(_) => {
@@ -339,7 +338,6 @@ fn classify_turnkey_client_error(error: &TurnkeyClientError) -> Classification {
         | TurnkeyClientError::Http(_)
         | TurnkeyClientError::SerdeJsonFailure(_)
         | TurnkeyClientError::InvalidReceiptStamp(_)
-        | TurnkeyClientError::CheckpointSaveFailed(_)
         | TurnkeyClientError::StamperError(_)
         | TurnkeyClientError::EnclaveEncrypt(_) => {
             Classification::new(ErrorCode::CommandError, None)
@@ -607,17 +605,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn checkpoint_save_error_maps_to_command_error() {
-        let error = client_error(TurnkeyClientError::CheckpointSaveFailed(
-            turnkey_client::CheckpointSaveError,
-        ));
-        assert_eq!(
-            classify(&error),
-            Classification::new(ErrorCode::CommandError, None)
-        );
-    }
-
     #[tokio::test]
     async fn receipt_classifies_unauthorized_response() {
         assert_receipt_http_failure(401, ErrorCode::Unauthorized).await;
@@ -649,7 +636,7 @@ mod tests {
     async fn receipt_classifies_checkpoint_save_failure() {
         let server = wiremock::MockServer::start().await;
         let error =
-            create_operator_receipt_error(&server, Err(turnkey_client::CheckpointSaveError)).await;
+            create_operator_receipt_error(&server, Err(std::io::ErrorKind::PermissionDenied)).await;
 
         assert_eq!(
             classify(&error),
@@ -690,7 +677,7 @@ mod tests {
 
     async fn create_operator_receipt_error(
         server: &wiremock::MockServer,
-        save: Result<(), turnkey_client::CheckpointSaveError>,
+        save: Result<(), std::io::ErrorKind>,
     ) -> anyhow::Error {
         use turnkey_client::{
             TurnkeyClient, TurnkeyP256ApiKey, generated::CreateTvcOperatorIntent,
@@ -702,22 +689,21 @@ mod tests {
             .base_url(server.uri())
             .build()
             .unwrap();
-        client_error(
-            client
-                .create_tvc_operator_with_receipt(
-                    Uuid::from_u128(1),
-                    100,
-                    CreateTvcOperatorIntent {
-                        wallet_id: None,
-                        wallet_name: Some("wallet".into()),
-                        path: "path".into(),
-                        operator_name: "operator".into(),
-                    },
-                    async |_| save,
-                )
-                .await
-                .unwrap_err(),
-        )
+        client
+            .create_tvc_operator_with_receipt(
+                Uuid::from_u128(1),
+                100,
+                CreateTvcOperatorIntent {
+                    wallet_id: None,
+                    wallet_name: Some("wallet".into()),
+                    path: "path".into(),
+                    operator_name: "operator".into(),
+                },
+                async |_| save.map_err(std::io::Error::from),
+            )
+            .await
+            .unwrap_err()
+            .into()
     }
 
     #[test]
