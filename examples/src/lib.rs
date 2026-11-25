@@ -1,6 +1,6 @@
 use std::env;
 use std::error::Error;
-use turnkey_client::TurnkeyP256ApiKey;
+use turnkey_client::{TurnkeyEnvironment, TurnkeyP256ApiKey};
 
 // Convenience function shared across examples to load a Turnkey API key from the local `examples/.env` file, or from env vars.
 pub fn load_api_key_from_env() -> Result<TurnkeyP256ApiKey, Box<dyn Error>> {
@@ -26,9 +26,6 @@ pub fn load_api_key_from_env() -> Result<TurnkeyP256ApiKey, Box<dyn Error>> {
     )?)
 }
 
-// Convenience function to load the correct base URL. We allow overriding base URL with env vars or via TURNKEY_BASE_URL env vars
-// This is useful in cases where you want to run examples against a local Turnkey stack, or dev/preprod.
-// If nothing is specified or something errors, defaults to running against prod ("https://api.turnkey.com")
 pub fn load_base_url_from_env() -> String {
     // Load .env file from the example folder (examples/.env)
     let current_dir =
@@ -42,5 +39,6 @@ pub fn load_base_url_from_env() -> String {
         println!("Continuing because env might already be populated with the right variables");
     }
 
-    env::var("TURNKEY_API_BASE_URL").unwrap_or_else(|_| "https://api.turnkey.com".to_string())
+    env::var("TURNKEY_API_BASE_URL")
+        .unwrap_or_else(|_| TurnkeyEnvironment::Production.api_base_url().to_string())
 }

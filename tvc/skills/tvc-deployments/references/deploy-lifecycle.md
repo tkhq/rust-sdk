@@ -8,7 +8,7 @@ Set auth once (all three, or use a `tvc login` profile):
 export TVC_ORG_ID=<org-uuid>
 export TVC_API_KEY_PUBLIC=<hex>
 export TVC_API_KEY_PRIVATE=<hex>
-# export TVC_API_BASE_URL=https://api.turnkey.com   # optional; this is the default
+# export TVC_API_BASE_URL=<api-base-url>   # optional, defaults to the Turnkey production API
 ```
 
 Add `--message-format json` to every command (also forces non-interactive). Parse stdout as NDJSON.

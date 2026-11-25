@@ -7,7 +7,7 @@ use reqwest::header::{HeaderMap, HeaderValue};
 use tracing::{debug, instrument};
 use turnkey_api_key_stamper::TurnkeyP256ApiKey;
 use turnkey_client::{
-    TurnkeyClient, TurnkeyClientError,
+    TurnkeyClient, TurnkeyClientError, TurnkeyEnvironment,
     generated::{
         GetTvcAppRequest, GetTvcDeploymentRequest,
         external::data::v1::{TvcApp, TvcDeployment},
@@ -15,13 +15,11 @@ use turnkey_client::{
 };
 
 /// Number of *required* auth env vars: org_id, api_key_public, api_key_private.
-/// `TVC_API_BASE_URL` is optional and defaults to `DEFAULT_API_BASE_URL`.
 const NUM_AUTH_ENV_VARS: usize = 3;
 const ENV_ORG_ID: &str = "TVC_ORG_ID";
 const ENV_API_BASE_URL: &str = "TVC_API_BASE_URL";
 const ENV_API_KEY_PUBLIC: &str = "TVC_API_KEY_PUBLIC";
 const ENV_API_KEY_PRIVATE: &str = "TVC_API_KEY_PRIVATE";
-const DEFAULT_API_BASE_URL: &str = "https://api.turnkey.com";
 
 /// An authenticated Turnkey client with organization context.
 pub struct AuthenticatedClient {
@@ -37,7 +35,7 @@ pub struct AuthenticatedClient {
 ///
 /// Prefers env auth (CI use case): if `TVC_ORG_ID`, `TVC_API_KEY_PUBLIC`, and
 /// `TVC_API_KEY_PRIVATE` are all set, builds the client from env vars.
-/// `TVC_API_BASE_URL` is optional and defaults to `https://api.turnkey.com`.
+/// `TVC_API_BASE_URL` is optional and defaults to the production API.
 ///
 /// Otherwise, falls back to the active org's stored credentials in `config`
 /// (set up by `tvc login`).
@@ -211,8 +209,8 @@ fn load_credentials_from_env_vars() -> Result<Option<(String, String, String, St
     let api_key_public = read_env_var(ENV_API_KEY_PUBLIC);
     let api_key_private = read_env_var(ENV_API_KEY_PRIVATE);
     // Optional; defaults to prod if unset.
-    let api_base_url =
-        read_env_var(ENV_API_BASE_URL).unwrap_or_else(|| DEFAULT_API_BASE_URL.to_string());
+    let api_base_url = read_env_var(ENV_API_BASE_URL)
+        .unwrap_or_else(|| TurnkeyEnvironment::Production.api_base_url().to_string());
 
     let mut missing: Vec<&str> = Vec::new();
     if org_id.is_none() {
