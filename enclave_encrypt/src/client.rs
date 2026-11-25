@@ -678,17 +678,16 @@ mod test {
 
     fn test_quorum_public_key() -> QuorumPublicKey {
         let quorum_public_key = concat!(
-            // first key -- does not matter
-            "04", // uncompressed prefix
-            "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899", // x
-            "99887766554433221100ffeeddccbbaa99887766554433221100ffeeddccbbaa", // y
+            "04",
+            "ca7c0d624c75de6f34af342e87a21e0d8c83efd1bd5b5da0c0177c147f744fba6",
+            "f01f9f37356f9c617659aafa55f6e0af8d169a8f054d153ab3201901fb63ecb",
             // our _actual_ signing key
             // generated with https://r-n-o.github.io/p256-keygen/
             "04", // uncompressed prefix
             "8ee67fa8ae8e5fac0e343c84fa0921ecb3a31a67aee2e6a0880a09072eaaf2ae", // x
             "ffa43f73fa021fa4d0b550072ba1f9011ff7cf917e4bf2708670e5ac57a81c78"  // y
         );
-        QuorumPublicKey::from_string(quorum_public_key).unwrap()
+        quorum_public_key.parse().unwrap()
     }
 
     #[test]

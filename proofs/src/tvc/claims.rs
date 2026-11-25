@@ -189,17 +189,6 @@ impl TryFrom<ContextWire<u32>> for Context {
         })
     }
 }
-pub(super) fn composite(value: &str) -> Result<QuorumPublicKey, TvcProvenanceError> {
-    let key = QuorumPublicKey::from_string(value)
-        .map_err(|_| TvcProvenanceError::MalformedEvidence("invalid composite key".into()))?;
-    key.encrypt_public_key().map_err(|_| {
-        TvcProvenanceError::MalformedEvidence("invalid composite encryption point".into())
-    })?;
-    key.verifying_key().map_err(|_| {
-        TvcProvenanceError::MalformedEvidence("invalid composite signing point".into())
-    })?;
-    Ok(key)
-}
 impl TryFrom<AuthenticatedPayload> for Claim {
     type Error = TvcProvenanceError;
     fn try_from(payload: AuthenticatedPayload) -> Result<Self, Self::Error> {
@@ -250,7 +239,9 @@ impl TryFrom<AuthenticatedPayload> for Claim {
                         "invalid quorum fields or cardinality".into(),
                     ));
                 }
-                let quorum_public_key = composite(&body.quorum_public_key)?;
+                let quorum_public_key = body.quorum_public_key.parse().map_err(|error| {
+                    TvcProvenanceError::MalformedEvidence(format!("invalid composite key: {error}"))
+                })?;
                 let operator_encrypt_keys = body
                     .operator_encrypt_keys
                     .iter()

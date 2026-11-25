@@ -1,4 +1,6 @@
 //! Contains the definition and data for Turnkey Quorum key public keys.
+use std::str::FromStr;
+
 use p256::ecdsa::VerifyingKey;
 
 use crate::errors::EnclaveEncryptError;
@@ -16,31 +18,25 @@ pub const TURNKEY_DEV_SIGNER_QUORUM_PUBLIC_KEY: &str = "046101205064b86e23b9619d
 
 /// Expected Quorum public key length: twice the length of a SEC1 uncompressed public key (65 * 2)
 pub const QUORUM_PUBLIC_KEY_BYTE_LENGTH: usize = 130;
+const UNCOMPRESSED_POINT_BYTE_LENGTH: usize = QUORUM_PUBLIC_KEY_BYTE_LENGTH / 2;
 
-/// Represents a Quorum key public key component.
+/// A quorum public key with uncompressed P-256 encryption and signing points, in that order.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct QuorumPublicKey {
     bytes: Vec<u8>,
 }
 
 impl QuorumPublicKey {
-    /// Create a new `QuorumPublicKey` from an array of bytes
+    /// Parses a quorum public key from bytes and validates both points.
+    #[deprecated(note = "use QuorumPublicKey::try_from with a byte slice")]
     pub fn from_bytes<B: AsRef<[u8]>>(b: B) -> Result<Self, EnclaveEncryptError> {
-        if b.as_ref().len() != QUORUM_PUBLIC_KEY_BYTE_LENGTH {
-            return Err(EnclaveEncryptError::IncorrectQuorumPublicKeyBytesLength(
-                b.as_ref().len(),
-            ));
-        }
-        Ok(Self {
-            bytes: b.as_ref().to_vec(),
-        })
+        Self::try_from(b.as_ref())
     }
 
-    /// Create a new `QuorumPublicKey` from a str
+    /// Parses a hex-encoded quorum public key and validates both points.
+    #[deprecated(note = "use str::parse::<QuorumPublicKey>")]
     pub fn from_string<S: AsRef<str>>(s: S) -> Result<Self, EnclaveEncryptError> {
-        let b =
-            hex::decode(s.as_ref()).map_err(|e| EnclaveEncryptError::HexDecode(e.to_string()))?;
-        Self::from_bytes(b)
+        s.as_ref().parse()
     }
 
     /// Quorum Public Key for Turnkey's production signer.
@@ -49,7 +45,8 @@ impl QuorumPublicKey {
     /// Not expected given the public keys are static and valid
     #[must_use]
     pub fn production_signer() -> Self {
-        Self::from_string(TURNKEY_PRODUCTION_SIGNER_QUORUM_PUBLIC_KEY)
+        TURNKEY_PRODUCTION_SIGNER_QUORUM_PUBLIC_KEY
+            .parse()
             .expect("static public key should be valid")
     }
 
@@ -59,7 +56,8 @@ impl QuorumPublicKey {
     /// Not expected given the public keys are static and valid
     #[must_use]
     pub fn preprod_signer() -> Self {
-        Self::from_string(TURNKEY_PREPROD_SIGNER_QUORUM_PUBLIC_KEY)
+        TURNKEY_PREPROD_SIGNER_QUORUM_PUBLIC_KEY
+            .parse()
             .expect("static public key should be valid")
     }
 
@@ -69,23 +67,20 @@ impl QuorumPublicKey {
     /// Not expected given the public key is static and valid.
     #[must_use]
     pub fn dev_signer() -> Self {
-        Self::from_string(TURNKEY_DEV_SIGNER_QUORUM_PUBLIC_KEY)
+        TURNKEY_DEV_SIGNER_QUORUM_PUBLIC_KEY
+            .parse()
             .expect("static public key should be valid")
     }
 
     /// Returns a `VerifyingKey` for this `QuorumPublicKey`
     pub fn verifying_key(&self) -> Result<VerifyingKey, EnclaveEncryptError> {
-        // Quorum public keys are actually 2 keys concatenated together
-        // The first key is the encryption key, used to encrypt data to the enclave.
-        // The second public key is the signing key, used to sign data coming out of the enclave, for authenticity.
-        // The verifying key thus only uses the second part of the public key,
-        VerifyingKey::from_sec1_bytes(&self.bytes[65..])
+        VerifyingKey::from_sec1_bytes(&self.bytes[UNCOMPRESSED_POINT_BYTE_LENGTH..])
             .map_err(|_| EnclaveEncryptError::InvalidVerifyingKeyBytes)
     }
 
     /// Returns the encryption target `PublicKey` for this `QuorumPublicKey`
     pub fn encrypt_public_key(&self) -> Result<p256::PublicKey, EnclaveEncryptError> {
-        p256::PublicKey::from_sec1_bytes(&self.bytes[..65])
+        p256::PublicKey::from_sec1_bytes(&self.bytes[..UNCOMPRESSED_POINT_BYTE_LENGTH])
             .map_err(|_| EnclaveEncryptError::InvalidEncryptionKey)
     }
 }
@@ -96,11 +91,39 @@ impl AsRef<[u8]> for QuorumPublicKey {
     }
 }
 
+impl FromStr for QuorumPublicKey {
+    type Err = EnclaveEncryptError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        let bytes =
+            hex::decode(value).map_err(|e| EnclaveEncryptError::HexDecode(e.to_string()))?;
+        Self::try_from(bytes.as_slice())
+    }
+}
+
+impl TryFrom<&[u8]> for QuorumPublicKey {
+    type Error = EnclaveEncryptError;
+
+    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
+        if bytes.len() != QUORUM_PUBLIC_KEY_BYTE_LENGTH {
+            return Err(EnclaveEncryptError::IncorrectQuorumPublicKeyBytesLength(
+                bytes.len(),
+            ));
+        }
+        let key = Self {
+            bytes: bytes.to_vec(),
+        };
+        key.encrypt_public_key()?;
+        key.verifying_key()?;
+        Ok(key)
+    }
+}
+
 impl TryFrom<qos_p256::P256Public> for QuorumPublicKey {
     type Error = EnclaveEncryptError;
 
     fn try_from(value: qos_p256::P256Public) -> Result<Self, Self::Error> {
-        QuorumPublicKey::from_bytes(value.to_bytes())
+        Self::try_from(value.to_bytes().as_slice())
     }
 }
 
@@ -109,76 +132,82 @@ impl TryFrom<qos_p256::P256Public> for QuorumPublicKey {
 mod tests {
     use super::*;
 
-    #[test]
-    fn from_bytes_and_from_str_valid() {
-        let prod_pub1 = QuorumPublicKey::from_bytes(
-            hex::decode(TURNKEY_PRODUCTION_SIGNER_QUORUM_PUBLIC_KEY).unwrap(),
-        )
-        .unwrap();
-        let prod_pub2 =
-            QuorumPublicKey::from_string(TURNKEY_PRODUCTION_SIGNER_QUORUM_PUBLIC_KEY).unwrap();
-        let prod_pub3 = QuorumPublicKey::production_signer();
-        assert!(prod_pub1.verifying_key().is_ok());
-        assert_eq!(prod_pub1, prod_pub2);
-        assert_eq!(prod_pub2, prod_pub3);
-
-        let preprod_pub1 = QuorumPublicKey::from_bytes(
-            hex::decode(TURNKEY_PREPROD_SIGNER_QUORUM_PUBLIC_KEY).unwrap(),
-        )
-        .unwrap();
-        let preprod_pub2 =
-            QuorumPublicKey::from_string(TURNKEY_PREPROD_SIGNER_QUORUM_PUBLIC_KEY).unwrap();
-        let preprod_pub3 = QuorumPublicKey::preprod_signer();
-        assert!(preprod_pub1.verifying_key().is_ok());
-        assert_eq!(preprod_pub1, preprod_pub2);
-        assert_eq!(preprod_pub2, preprod_pub3);
-
-        let dev_pub = QuorumPublicKey::dev_signer();
-        assert_eq!(
-            dev_pub,
-            QuorumPublicKey::from_string(TURNKEY_DEV_SIGNER_QUORUM_PUBLIC_KEY).unwrap()
-        );
-        assert!(dev_pub.encrypt_public_key().is_ok());
-        assert!(dev_pub.verifying_key().is_ok());
-        assert_eq!(
-            dev_pub.as_ref(),
-            hex::decode(TURNKEY_DEV_SIGNER_QUORUM_PUBLIC_KEY).unwrap()
-        );
-        assert_ne!(dev_pub, prod_pub3);
-        assert_ne!(dev_pub, preprod_pub3);
+    fn assert_signer_key(hex_key: &str, signer: QuorumPublicKey) {
+        let bytes = hex::decode(hex_key).unwrap();
+        assert_eq!(QuorumPublicKey::try_from(bytes.as_slice()).unwrap(), signer);
+        assert_eq!(hex_key.parse::<QuorumPublicKey>().unwrap(), signer);
+        assert_eq!(signer.as_ref(), bytes);
+        assert!(signer.encrypt_public_key().is_ok());
+        assert!(signer.verifying_key().is_ok());
     }
 
     #[test]
-    fn from_bytes_invalid_length() {
-        let bytes = vec![0u8; 64]; // too short
+    fn production_signer_conversions_preserve_bytes() {
+        assert_signer_key(
+            TURNKEY_PRODUCTION_SIGNER_QUORUM_PUBLIC_KEY,
+            QuorumPublicKey::production_signer(),
+        );
+    }
+
+    #[test]
+    fn preprod_signer_conversions_preserve_bytes() {
+        assert_signer_key(
+            TURNKEY_PREPROD_SIGNER_QUORUM_PUBLIC_KEY,
+            QuorumPublicKey::preprod_signer(),
+        );
+    }
+
+    #[test]
+    fn dev_signer_conversions_preserve_bytes() {
+        let key = QuorumPublicKey::dev_signer();
+        assert_ne!(key, QuorumPublicKey::production_signer());
+        assert_ne!(key, QuorumPublicKey::preprod_signer());
+        assert_signer_key(TURNKEY_DEV_SIGNER_QUORUM_PUBLIC_KEY, key);
+    }
+
+    #[test]
+    fn from_str_accepts_mixed_case() {
+        let (encryption, signing) = TURNKEY_PRODUCTION_SIGNER_QUORUM_PUBLIC_KEY
+            .split_at(2 * UNCOMPRESSED_POINT_BYTE_LENGTH);
+        let mixed = format!("{}{signing}", encryption.to_ascii_uppercase());
         assert_eq!(
-            QuorumPublicKey::from_bytes(&bytes).unwrap_err(),
+            mixed.parse::<QuorumPublicKey>().unwrap(),
+            QuorumPublicKey::production_signer()
+        );
+    }
+
+    #[test]
+    fn try_from_rejects_incorrect_length() {
+        assert_eq!(
+            QuorumPublicKey::try_from([0; 64].as_slice()).unwrap_err(),
             EnclaveEncryptError::IncorrectQuorumPublicKeyBytesLength(64)
         );
     }
 
     #[test]
-    fn from_str_valid() {
-        const VALID_HEX_KEY: &str = concat!(
-            "04",                                                               // uncompressed prefix
-            "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899", // x
-            "99887766554433221100ffeeddccbbaa99887766554433221100ffeeddccbbaa", // y
-            // second key
-            "04", // uncompressed prefix
-            "11223344556677889900aabbccddeeff11223344556677889900aabbccddeeff", // x
-            "ffeeddccbbaa00998877665544332211ffeeddccbbaa00998877665544332211"  // y
-        );
-        let quorum_pub = QuorumPublicKey::from_string(VALID_HEX_KEY).unwrap();
+    fn try_from_rejects_invalid_encryption_point() {
+        let mut bytes = hex::decode(TURNKEY_PRODUCTION_SIGNER_QUORUM_PUBLIC_KEY).unwrap();
+        bytes[1..UNCOMPRESSED_POINT_BYTE_LENGTH].fill(0);
         assert_eq!(
-            quorum_pub.verifying_key().unwrap_err(),
+            QuorumPublicKey::try_from(bytes.as_slice()).unwrap_err(),
+            EnclaveEncryptError::InvalidEncryptionKey
+        );
+    }
+
+    #[test]
+    fn try_from_rejects_invalid_signing_point() {
+        let mut bytes = hex::decode(TURNKEY_PRODUCTION_SIGNER_QUORUM_PUBLIC_KEY).unwrap();
+        bytes[UNCOMPRESSED_POINT_BYTE_LENGTH + 1..].fill(0);
+        assert_eq!(
+            QuorumPublicKey::try_from(bytes.as_slice()).unwrap_err(),
             EnclaveEncryptError::InvalidVerifyingKeyBytes
         );
     }
 
     #[test]
-    fn from_str_invalid_hex() {
+    fn from_str_rejects_malformed_hex() {
         assert_eq!(
-            QuorumPublicKey::from_string("not hex!").unwrap_err(),
+            "not hex!".parse::<QuorumPublicKey>().unwrap_err(),
             EnclaveEncryptError::HexDecode("Invalid character 'n' at position 0".to_string()),
         );
     }

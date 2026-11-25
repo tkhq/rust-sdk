@@ -5,9 +5,9 @@ use super::{
     },
 };
 use crate::{
-    AWS_ROOT_CERT_PEM, EXPECTED_EPHEMERAL_PUBLIC_KEY_LENGTH, EphemeralPublicKey, ParsedBootProof,
-    cert_from_pem, parse_and_verify_der_attestation, unsafe_attestation_doc_from_der,
-    verify_boot_binding, verify_payload_signature,
+    AWS_ROOT_CERT_PEM, EphemeralPublicKey, ParsedBootProof, cert_from_pem,
+    parse_and_verify_der_attestation, unsafe_attestation_doc_from_der, verify_boot_binding,
+    verify_payload_signature,
 };
 use aws_nitro_enclaves_nsm_api::api::AttestationDoc;
 use p256::ecdsa::{Signature, signature::Verifier};
@@ -30,7 +30,6 @@ impl AuthenticatedPayload {
     }
 }
 
-/// App envelope with its canonical full composite key parsed once at the boundary.
 pub(super) struct ParsedAppProof {
     proof: AppProof,
     key: EphemeralPublicKey,
@@ -38,16 +37,9 @@ pub(super) struct ParsedAppProof {
 impl TryFrom<AppProof> for ParsedAppProof {
     type Error = TvcProvenanceError;
     fn try_from(proof: AppProof) -> Result<Self, Self::Error> {
-        // Bound the hex input before decoding. EphemeralPublicKey validates both SEC1 points.
-        if proof.public_key.len() != EXPECTED_EPHEMERAL_PUBLIC_KEY_LENGTH * 2 {
-            return Err(TvcProvenanceError::MalformedEvidence(
-                "composite key must contain two uncompressed 65-byte points".into(),
-            ));
-        }
-        let key = proof
-            .public_key
-            .parse::<EphemeralPublicKey>()
-            .map_err(|e| TvcProvenanceError::MalformedEvidence(e.to_string()))?;
+        let key = proof.public_key.parse().map_err(|error| {
+            TvcProvenanceError::MalformedEvidence(format!("invalid ephemeral public key: {error}"))
+        })?;
         Ok(Self { proof, key })
     }
 }
@@ -59,9 +51,6 @@ impl ParsedAppProof {
 
     pub(super) fn key(&self) -> &EphemeralPublicKey {
         &self.key
-    }
-    pub(super) fn proof(&self) -> &AppProof {
-        &self.proof
     }
 }
 
@@ -240,17 +229,11 @@ impl SelectedEndorsement {
         document: &[u8],
         signature: &str,
     ) -> Result<(), TvcProvenanceError> {
-        if signature.len() != 128
-            || !signature
-                .bytes()
-                .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
-        {
-            return Err(TvcProvenanceError::EndorsementFailure);
-        }
-        let signature =
-            hex::decode(signature).map_err(|_| TvcProvenanceError::EndorsementFailure)?;
-        let signature = Signature::from_slice(&signature)
+        let mut bytes = [0; 64];
+        hex::decode_to_slice(signature, &mut bytes)
             .map_err(|_| TvcProvenanceError::EndorsementFailure)?;
+        let signature =
+            Signature::from_slice(&bytes).map_err(|_| TvcProvenanceError::EndorsementFailure)?;
         let key = self
             .quorum_key
             .verifying_key()
@@ -271,6 +254,50 @@ mod tests {
         fixture::{self, signer},
     };
     use x509_cert::{Certificate, der::Decode};
+
+    #[test]
+    fn boot_endorsement_accepts_mixed_case_signature_hex() {
+        let boot = fixture::boot();
+        let signature = boot
+            .quorum_key_attestation_signature_hex
+            .as_deref()
+            .unwrap();
+        let mixed = BootProof {
+            quorum_key_attestation_signature_hex: Some(fixture::mixed_case_hex(signature)),
+            ..boot
+        };
+        let document = CheckTrace::default()
+            .record(signer().verify_document_endorsement(&mixed))
+            .unwrap();
+        assert_eq!(
+            document,
+            base64::decode(&mixed.aws_attestation_doc_b64).unwrap()
+        );
+    }
+
+    #[test]
+    fn boot_endorsement_rejects_an_altered_signature() {
+        let boot = fixture::boot();
+        let signature = boot
+            .quorum_key_attestation_signature_hex
+            .as_deref()
+            .unwrap();
+        let (prefix, last) = signature.split_at(signature.len() - 1);
+        let changed = BootProof {
+            quorum_key_attestation_signature_hex: Some(format!(
+                "{prefix}{}",
+                if last == "0" { "1" } else { "0" }
+            )),
+            ..boot
+        };
+        assert!(matches!(
+            CheckTrace::default().record(signer().verify_document_endorsement(&changed)),
+            Err(FailedCheck {
+                source: TvcProvenanceError::EndorsementFailure,
+                ..
+            })
+        ));
+    }
 
     #[test]
     fn document_endorsement_requires_the_pinned_signer_and_exact_document_bytes() {
@@ -322,7 +349,7 @@ mod tests {
         };
         assert!(check(&changed).is_err());
         let wrong_signer = fixture::with_test_roots(
-            QuorumPublicKey::from_bytes(fixture::pin()).unwrap(),
+            QuorumPublicKey::try_from(fixture::pin().as_slice()).unwrap(),
             Certificate::from_der(fixture::ROOT).unwrap(),
         );
         assert!(
@@ -353,7 +380,7 @@ mod tests {
         *bad_signature.last_mut().unwrap() ^= 1;
         assert!(check(&bad_signature).is_err());
         let wrong_root = fixture::with_test_roots(
-            QuorumPublicKey::from_bytes(fixture::quorum_key()).unwrap(),
+            QuorumPublicKey::try_from(fixture::quorum_key().as_slice()).unwrap(),
             Certificate::from_der(fixture::LEAF).unwrap(),
         );
         assert!(

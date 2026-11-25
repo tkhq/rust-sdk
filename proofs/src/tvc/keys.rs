@@ -72,13 +72,9 @@ impl FromStr for P256PublicKey {
     type Err = TvcProvenanceError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        if value.len() != 130
-            || !value
-                .bytes()
-                .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
-        {
+        if value.len() != 130 {
             return Err(TvcProvenanceError::MalformedEvidence(
-                "role key must be 65-byte lowercase hex".into(),
+                "role key must be 65-byte hex".into(),
             ));
         }
         let bytes = hex::decode(value)

@@ -355,17 +355,15 @@ fn verify_payload_signature(
     Ok(())
 }
 
-/// A valid composite ephemeral public key parsed from canonical wire hex.
+/// A valid composite ephemeral public key. Its text display uses lowercase hex.
 #[derive(Clone, PartialEq, Eq)]
 pub struct EphemeralPublicKey(P256Public);
 
-/// Failure to parse a canonical composite ephemeral public key.
+/// Failure to parse a composite ephemeral public key.
 #[derive(Debug, thiserror::Error)]
 pub enum EphemeralPublicKeyError {
     #[error(transparent)]
     Hex(#[from] hex::FromHexError),
-    #[error("ephemeral public key must use lowercase hex")]
-    NonCanonicalHex,
     #[error("{0:?}")]
     InvalidKey(qos_p256::P256Error),
 }
@@ -374,10 +372,8 @@ impl FromStr for EphemeralPublicKey {
     type Err = EphemeralPublicKeyError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        let bytes = hex::decode(value)?;
-        if hex::encode(&bytes) != value {
-            return Err(EphemeralPublicKeyError::NonCanonicalHex);
-        }
+        let mut bytes = [0; EXPECTED_EPHEMERAL_PUBLIC_KEY_LENGTH];
+        hex::decode_to_slice(value, &mut bytes)?;
         P256Public::from_bytes(&bytes)
             .map(Self)
             .map_err(EphemeralPublicKeyError::InvalidKey)
@@ -576,15 +572,24 @@ fn verify_boot_binding(
     Ok(())
 }
 
-/// Wrapper around TurnkeyClient::get_boot_proof that fetches the boot proof for the given app proof
+/// Fetches the boot proof for the app proof's ephemeral key using its lowercase hex encoding.
 pub async fn get_boot_proof_for_app_proof<S: Stamp>(
     client: &TurnkeyClient<S>,
     organization_id: String,
     app_proof: &AppProof,
 ) -> Result<BootProofResponse, TurnkeyClientError> {
+    let key = app_proof.public_key.parse::<QuorumPublicKey>()?;
+    get_boot_proof_for_key(client, organization_id, hex::encode(key.as_ref())).await
+}
+
+async fn get_boot_proof_for_key<S: Stamp>(
+    client: &TurnkeyClient<S>,
+    organization_id: String,
+    ephemeral_key: String,
+) -> Result<BootProofResponse, TurnkeyClientError> {
     let request = GetBootProofRequest {
         organization_id,
-        ephemeral_key: app_proof.public_key.clone(),
+        ephemeral_key,
     };
     client.get_boot_proof(request).await
 }
@@ -795,7 +800,7 @@ mod tests {
         let app_key = app.public_key.parse::<EphemeralPublicKey>().unwrap();
         verify_boot_binding(&app_key, parsed, attestation.clone(), None).unwrap();
 
-        let quorum_key = QuorumPublicKey::from_bytes(&details.manifest_quorum_key).unwrap();
+        let quorum_key = QuorumPublicKey::try_from(details.manifest_quorum_key.as_slice()).unwrap();
         verify_boot_binding(
             &app_key,
             ParsedBootProof::parse(&boot).unwrap(),
@@ -922,11 +927,10 @@ mod tests {
     }
 
     #[test]
-    fn test_ephemeral_public_key_conversion_requires_a_canonical_composite_key() {
+    fn test_ephemeral_public_key_conversion_requires_a_valid_composite_key() {
         let key = test_app_proof1().public_key;
         assert_eq!(key.parse::<EphemeralPublicKey>().unwrap().to_string(), key);
         for invalid in [
-            key.to_uppercase(),
             format!("{}{}", "00".repeat(65), &key[130..]),
             key[130..].to_owned(),
         ] {
