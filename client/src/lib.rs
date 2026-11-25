@@ -1524,7 +1524,7 @@ mod test {
 
             match result.unwrap_err() {
                 TurnkeyClientError::ExceededRetries(n) => {
-                    // Our retry configuration has 5 retries configured
+                    // Our retry configuration has 3 retries configured
                     assert_eq!(n, 3);
                 }
                 other => panic!("unexpected error: {other:?}"),
