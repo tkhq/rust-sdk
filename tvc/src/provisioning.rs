@@ -80,7 +80,7 @@ pub(crate) async fn fetch_provisioning_details(
 
     let response = auth
         .client
-        .get_tvc_deployment_provisioning_details(request)
+        .get_tvc_deployment_provisioning_details(&request)
         .await
         .context("failed to fetch deployment provisioning details")?;
 

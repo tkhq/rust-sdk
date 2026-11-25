@@ -67,7 +67,7 @@ pub async fn build_client(config: &Config) -> Result<AuthenticatedClient> {
 pub async fn fetch_tvc_app(auth: &AuthenticatedClient, app_id: &str) -> Result<TvcApp> {
     let response = auth
         .client
-        .get_tvc_app(GetTvcAppRequest {
+        .get_tvc_app(&GetTvcAppRequest {
             organization_id: auth.org_id.clone(),
             tvc_app_id: app_id.to_string(),
         })
@@ -94,7 +94,7 @@ pub async fn fetch_tvc_deployment(
         deployment_id: deployment_id.clone(),
     };
 
-    let response = match auth.client.get_tvc_deployment(request).await {
+    let response = match auth.client.get_tvc_deployment(&request).await {
         Ok(response) => response,
         Err(source @ TurnkeyClientError::UnexpectedHttpStatus(404, _)) => {
             return Err(NotFoundInOrganization::new(
@@ -278,7 +278,7 @@ mod tests {
         let client = build_turnkey_client(TurnkeyP256ApiKey::generate(), &server.uri())
             .expect("client builds");
         let response: serde_json::Value = client
-            .process_request(&serde_json::json!({}), "/any/path".to_string())
+            .process_request(&serde_json::json!({}), "/any/path")
             .await
             .expect("request carrying the version header matches the mock");
 

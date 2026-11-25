@@ -15,7 +15,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         organization_id: env::var("TURNKEY_ORGANIZATION_ID").unwrap(),
     };
 
-    let res = client.get_whoami(req).await?;
+    let res = client.get_whoami(&req).await?;
     println!(
         "Organization: \"{}\" ({})",
         res.organization_name, res.organization_id

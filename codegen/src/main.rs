@@ -223,7 +223,7 @@ fn main() {
                                     {app_proofs_field}
                                 }};
 
-                                self.process_activity(&request, "{route}".to_string()).await
+                                self.process_activity(&request, "{route}").await
                             }}
                         "#
                     )
@@ -243,7 +243,7 @@ fn main() {
                                     {app_proofs_field}
                                 }};
 
-                                let activity: external_activity::Activity = self.process_activity(&request, "{route}".to_string()).await?;
+                                let activity: external_activity::Activity = self.process_activity(&request, "{route}").await?;
 
                                 let inner = activity
                                     .result
@@ -277,8 +277,8 @@ fn main() {
                             /// {summary}
                             ///
                             /// {description}
-                            pub async fn {fn_name}(&self, request: coordinator::{req_type}) -> Result<coordinator::{res_type}, TurnkeyClientError> {{
-                                self.process_request(&request, "{route}".to_string()).await
+                            pub async fn {fn_name}(&self, request: &coordinator::{req_type}) -> Result<coordinator::{res_type}, TurnkeyClientError> {{
+                                self.process_request(request, "{route}").await
                             }}
                         "#
                     ),
