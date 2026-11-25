@@ -708,9 +708,9 @@ impl Config {
     }
 
     /// Get the last created app ID for the active org, if any
-    pub fn get_last_app_id(&self) -> Option<String> {
+    pub fn get_last_app_id(&self) -> Option<&str> {
         let alias = self.active_org.as_ref()?;
-        self.last_created_app_id.get(alias).cloned()
+        self.last_created_app_id.get(alias).map(String::as_str)
     }
 
     /// Store the last manifest set operator IDs for the active org

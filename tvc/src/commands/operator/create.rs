@@ -210,7 +210,7 @@ impl Run for Args {
 
                 let result = auth
                     .client
-                    .create_tvc_operator(auth.org_id.clone(), timestamp_ms()?, intent)
+                    .create_tvc_operator(auth.org_id, timestamp_ms()?, intent)
                     .await
                     .map_err(|error| hosted_activity_error("create hosted TVC operator", error))?;
 

@@ -719,7 +719,7 @@ mod tests {
                 open_fake(device),
                 OperatorSelection::Hosted(
                     config
-                        .find_hosted_operator(&HOSTED_ID.parse().unwrap())
+                        .find_hosted_operator(HOSTED_ID.parse().unwrap())
                         .unwrap()
                         .unwrap(),
                 ),

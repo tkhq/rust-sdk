@@ -78,7 +78,7 @@ pub async fn run(ctx: &mut StdCtx, args: Args, config: turnkey::Config) -> Resul
     match decide_operator_reuse(
         args.no_operator_reuse,
         app_config.manifest_set_params.as_ref(),
-        &candidates,
+        candidates,
     ) {
         OperatorReuse::KeepConfig => {}
         OperatorReuse::Reuse(operator) => apply_operator_reuse(ctx, &mut app_config, operator)?,
@@ -122,7 +122,7 @@ enum OperatorReuse {
 fn decide_operator_reuse(
     no_reuse: bool,
     manifest_set_params: Option<&OperatorSetParams>,
-    candidates: &[OperatorCandidate],
+    candidates: Vec<OperatorCandidate>,
 ) -> OperatorReuse {
     // Opt-out: the user explicitly wants a fresh operator.
     if no_reuse {
@@ -146,15 +146,14 @@ fn decide_operator_reuse(
         return OperatorReuse::KeepConfig;
     };
     let matching = candidates
-        .iter()
+        .into_iter()
         .filter(|candidate| candidate.public_key == Some(requested_key))
-        .cloned()
         .collect::<Vec<_>>();
 
-    match matching.as_slice() {
-        [] => OperatorReuse::KeepConfig,
-        [sole] => OperatorReuse::Reuse(sole.clone()),
-        _ => OperatorReuse::MultipleCandidates(matching),
+    match <[OperatorCandidate; 1]>::try_from(matching) {
+        Ok([sole]) => OperatorReuse::Reuse(sole),
+        Err(matching) if matching.is_empty() => OperatorReuse::KeepConfig,
+        Err(matching) => OperatorReuse::MultipleCandidates(matching),
     }
 }
 
@@ -335,7 +334,15 @@ Use one of the Manifest Set Operator IDs above with `tvc deploy approve --operat
 }
 
 fn build_create_tvc_app_intent(app_config: AppConfig) -> CreateTvcAppIntent {
-    let share_set_params = app_config.effective_share_set_params();
+    let share_set_params = if app_config.share_set_id.is_some() {
+        None
+    } else {
+        Some(
+            app_config
+                .share_set_params
+                .unwrap_or_else(AppConfig::share_set_params),
+        )
+    };
 
     CreateTvcAppIntent {
         name: app_config.name,
@@ -642,7 +649,7 @@ mod tests {
     fn decide_reuse_keeps_config_when_flag_set() {
         let params = manifest_params_with_new_operator();
         assert_eq!(
-            decide_operator_reuse(true, Some(&params), &[candidate("op-1")]),
+            decide_operator_reuse(true, Some(&params), vec![candidate("op-1")]),
             OperatorReuse::KeepConfig
         );
     }
@@ -652,7 +659,7 @@ mod tests {
     fn decide_reuse_keeps_config_without_candidates() {
         let params = manifest_params_with_new_operator();
         assert_eq!(
-            decide_operator_reuse(false, Some(&params), &[]),
+            decide_operator_reuse(false, Some(&params), vec![]),
             OperatorReuse::KeepConfig
         );
     }
@@ -665,7 +672,7 @@ mod tests {
             decide_operator_reuse(
                 false,
                 Some(&params),
-                &[
+                vec![
                     unmatched_candidate("hosted"),
                     unknown_key_candidate("saved")
                 ],
@@ -683,7 +690,7 @@ mod tests {
         });
 
         assert_eq!(
-            decide_operator_reuse(false, Some(&params), &[candidate("op-1")]),
+            decide_operator_reuse(false, Some(&params), vec![candidate("op-1")]),
             OperatorReuse::KeepConfig
         );
     }
@@ -697,7 +704,7 @@ mod tests {
             decide_operator_reuse(
                 false,
                 Some(&params),
-                &[candidate("op-1"), candidate("op-2")]
+                vec![candidate("op-1"), candidate("op-2")]
             ),
             OperatorReuse::KeepConfig
         );
@@ -707,7 +714,7 @@ mod tests {
     #[test]
     fn decide_reuse_keeps_config_without_manifest_params() {
         assert_eq!(
-            decide_operator_reuse(false, None, &[candidate("op-1")]),
+            decide_operator_reuse(false, None, vec![candidate("op-1")]),
             OperatorReuse::KeepConfig
         );
     }
@@ -717,7 +724,7 @@ mod tests {
     fn decide_reuse_reuses_the_sole_candidate() {
         let params = manifest_params_with_new_operator();
         assert_eq!(
-            decide_operator_reuse(false, Some(&params), &[candidate("op-1")]),
+            decide_operator_reuse(false, Some(&params), vec![candidate("op-1")]),
             OperatorReuse::Reuse(candidate("op-1"))
         );
     }
@@ -726,14 +733,14 @@ mod tests {
     #[test]
     fn decide_reuse_returns_candidates_for_multiple_known_operators() {
         let params = manifest_params_with_new_operator();
-        let candidates = [
+        let candidates = vec![
             candidate("op-1"),
             unmatched_candidate("unrelated"),
             candidate("op-2"),
             unknown_key_candidate("saved"),
         ];
         assert_eq!(
-            decide_operator_reuse(false, Some(&params), &candidates),
+            decide_operator_reuse(false, Some(&params), candidates),
             OperatorReuse::MultipleCandidates(vec![candidate("op-1"), candidate("op-2")])
         );
     }

@@ -412,24 +412,22 @@ impl Run for Args {
             let selected_key = candidate.public_key;
 
             let expected_operator = if !args.skip_post {
-                fetched.as_ref().map(|fetched| {
-                    let matches = fetched
-                        .operators
-                        .iter()
+                fetched.as_mut().map(|fetched| {
+                    let matches = mem::take(&mut fetched.operators)
+                        .into_iter()
                         .filter(|operator| {
                             operator.public_key == selected_key
                                 && requested_operator_id
                                     .is_none_or(|requested| operator.id == requested)
                         })
-                        .cloned()
                         .collect::<Vec<_>>();
 
-                    match matches.as_slice() {
-                        [operator] => Ok(operator.clone()),
-                        [] => bail!(
+                    match <[DeploymentOperator; 1]>::try_from(matches) {
+                        Ok([operator]) => Ok(operator),
+                        Err(matches) if matches.is_empty() => bail!(
                             "selected operator public key is not linked to an operator in the deployment's manifest set"
                         ),
-                        _ => bail!(
+                        Err(_) => bail!(
                             "selected operator public key is linked to multiple operators in the deployment's manifest set"
                         ),
                     }
@@ -529,10 +527,10 @@ impl Run for Args {
 // and is almost 1k lines before the tests mod
 // it should probably be split up into submodules
 
-struct PostApprovalPlan<'a> {
+struct PostApprovalPlan {
     manifest_id: Uuid,
-    operator_id: &'a Uuid,
-    deploy_id: Option<&'a Uuid>,
+    operator_id: Uuid,
+    deploy_id: Option<Uuid>,
 }
 
 /// What `post_approval_to_api` learned from the API: the created approval IDs
@@ -1030,8 +1028,8 @@ async fn run_with_resolved_inputs(
 
             let plan = PostApprovalPlan {
                 manifest_id: target.manifest_id,
-                operator_id: &operator_id,
-                deploy_id: target.deploy_id.as_ref(),
+                operator_id,
+                deploy_id: target.deploy_id,
             };
             let posted =
                 post_approval_to_api(ctx, plan, &approval, &inputs.manifest, config).await?;
@@ -1061,8 +1059,7 @@ async fn load_manifest(
             fetched: None,
         }),
         (_, Some(deploy_id)) => {
-            let (manifest, fetched) =
-                fetch_manifest_from_deploy(ctx, &deploy_id.to_string(), config).await?;
+            let (manifest, fetched) = fetch_manifest_from_deploy(ctx, *deploy_id, config).await?;
             Ok(LoadedManifest {
                 manifest,
                 fetched: Some(fetched),
@@ -1075,7 +1072,7 @@ async fn load_manifest(
 #[instrument(skip_all, fields(manifest_id = %plan.manifest_id, operator_id = %plan.operator_id, deploy_id = ?plan.deploy_id))]
 async fn post_approval_to_api(
     ctx: &mut StdCtx,
-    plan: PostApprovalPlan<'_>,
+    plan: PostApprovalPlan,
     approval: &Approval,
     manifest: &ValidatedManifest<'_>,
     config: &Config,
@@ -1372,7 +1369,7 @@ async fn read_manifest_from_path(path: &Path) -> anyhow::Result<VersionedManifes
 #[instrument(skip(ctx, config))]
 async fn fetch_manifest_from_deploy(
     ctx: &mut StdCtx,
-    deploy_id: &str,
+    deploy_id: Uuid,
     config: &Config,
 ) -> anyhow::Result<(VersionedManifest, FetchedManifest)> {
     shell_println!(ctx, "Fetching deployment {deploy_id}...")?;

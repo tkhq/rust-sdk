@@ -245,18 +245,6 @@ impl AppConfig {
 
         AppConfigValidationErrors::ok_or_errors(errors)
     }
-
-    pub fn effective_share_set_params(&self) -> Option<OperatorSetParams> {
-        if self.share_set_id.is_some() {
-            None
-        } else {
-            Some(
-                self.share_set_params
-                    .clone()
-                    .unwrap_or_else(Self::share_set_params),
-            )
-        }
-    }
 }
 
 fn collect_operator_set_placeholder_errors(
@@ -382,7 +370,6 @@ mod tests {
         let config: AppConfig = serde_json::from_value(valid_config_json()).unwrap();
 
         config.validate().unwrap();
-        assert_eq!(config.effective_share_set_params().unwrap().threshold, 2);
     }
 
     #[test]
@@ -457,7 +444,6 @@ mod tests {
 
         config.validate().unwrap();
         assert_eq!(config.share_set_id.as_deref(), Some("share-set-id"));
-        assert!(config.effective_share_set_params().is_none());
     }
 
     #[test]

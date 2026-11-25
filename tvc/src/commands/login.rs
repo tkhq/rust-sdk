@@ -591,7 +591,7 @@ async fn execute_login(ctx: &mut StdCtx, mut config: Config, plan: LoginPlan) ->
         username: whoami.username,
         user_id: whoami.user_id,
         alias,
-        api_public_key: api_key.public_key.clone(),
+        api_public_key: api_key.public_key,
         config_file_path: crate::config::turnkey::config_file_path()?
             .display()
             .to_string(),

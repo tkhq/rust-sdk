@@ -64,7 +64,7 @@ const SUMMARY_PCR_MAX_INDEX: usize = 18;
 #[instrument(skip_all)]
 pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Result<Outcome> {
     let auth = crate::client::build_client(&config).await?;
-    let details = fetch_provisioning_details(&auth, &args.deploy_id).await?;
+    let details = fetch_provisioning_details(&auth, args.deploy_id).await?;
 
     let summary = build_summary_with_optional_verify(
         details.attestation_document(),
@@ -101,7 +101,7 @@ pub async fn run(_ctx: &mut StdCtx, args: Args, config: Config) -> anyhow::Resul
             deployment_id.to_string(),
             verification_status,
             bundle_path,
-            &summary,
+            summary,
         ),
     ))
 }
@@ -126,8 +126,6 @@ fn build_summary_with_optional_verify(
         verify_provisioning_details(cose_sign1_der, manifest_envelope, validation_time_override)?
     };
 
-    let manifest = manifest_envelope.clone().manifest();
-
     Ok(AttestationSummary {
         ephemeral_key: extract_ephemeral_public_key_bytes(
             attestation_doc
@@ -147,7 +145,7 @@ fn build_summary_with_optional_verify(
             .collect(),
         certificate_len: attestation_doc.certificate.len(),
         ca_bundle_cert_count: attestation_doc.cabundle.len(),
-        manifest_set_threshold: manifest.manifest_set().threshold,
+        manifest_set_threshold: manifest_envelope.manifest_set().threshold,
         manifest_set_approvals: approval_summaries(manifest_envelope.manifest_set_approvals()),
         share_set_approvals: approval_summaries(manifest_envelope.share_set_approvals()),
         module_id: attestation_doc.module_id,
@@ -210,41 +208,55 @@ impl ProvisioningDetails {
         deployment_id: String,
         verification: &str,
         bundle_path: Option<String>,
-        summary: &AttestationSummary,
+        summary: AttestationSummary,
     ) -> Self {
+        let AttestationSummary {
+            ephemeral_key,
+            module_id,
+            digest,
+            timestamp_ms,
+            user_data,
+            nonce,
+            pcrs,
+            certificate_len,
+            ca_bundle_cert_count,
+            manifest_set_threshold,
+            manifest_set_approvals,
+            share_set_approvals,
+        } = summary;
+
         Self {
             deployment_id,
             verification: verification.to_string(),
-            ephemeral_key: hex::encode(&summary.ephemeral_key),
-            module_id: summary.module_id.clone(),
-            digest: format!("{:?}", summary.digest),
-            timestamp_ms: summary.timestamp_ms,
-            user_data: summary.user_data.as_ref().map(hex::encode),
-            nonce: summary.nonce.as_ref().map(hex::encode),
-            pcrs: summary
-                .pcrs
-                .iter()
+            ephemeral_key: hex::encode(ephemeral_key),
+            module_id,
+            digest: format!("{digest:?}"),
+            timestamp_ms,
+            user_data: user_data.map(hex::encode),
+            nonce: nonce.map(hex::encode),
+            pcrs: pcrs
+                .into_iter()
                 .map(|(index, pcr)| PcrEntry {
-                    index: *index,
+                    index,
                     value: hex::encode(pcr),
                 })
                 .collect(),
-            certificate_length: summary.certificate_len,
-            ca_bundle_certificates: summary.ca_bundle_cert_count,
-            manifest_set_threshold: summary.manifest_set_threshold,
-            manifest_set_approvals: approval_entries(&summary.manifest_set_approvals),
-            share_set_approvals: approval_entries(&summary.share_set_approvals),
+            certificate_length: certificate_len,
+            ca_bundle_certificates: ca_bundle_cert_count,
+            manifest_set_threshold,
+            manifest_set_approvals: approval_entries(manifest_set_approvals),
+            share_set_approvals: approval_entries(share_set_approvals),
             bundle_path,
         }
     }
 }
 
-fn approval_entries(approvals: &[ApprovalSummary]) -> Vec<ApprovalEntry> {
+fn approval_entries(approvals: Vec<ApprovalSummary>) -> Vec<ApprovalEntry> {
     approvals
-        .iter()
+        .into_iter()
         .map(|approval| ApprovalEntry {
-            alias: approval.alias.clone(),
-            public_key: hex::encode(&approval.public_key),
+            alias: approval.alias,
+            public_key: hex::encode(approval.public_key),
         })
         .collect()
 }
