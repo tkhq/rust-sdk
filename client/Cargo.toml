@@ -12,6 +12,9 @@ keywords = ["turnkey", "api", "client", "cryptography"]
 categories = ["api-bindings"]
 
 [dependencies]
+base64.workspace = true
+borsh.workspace = true
+sha2.workspace = true
 hex.workspace = true
 mime.workspace = true
 chrono.workspace = true
@@ -25,6 +28,7 @@ thiserror.workspace = true
 tokio.workspace = true
 turnkey_api_key_stamper.workspace = true
 turnkey_enclave_encrypt.workspace = true
+uuid.workspace = true
 
 [features]
 reqwest_native_tls = ["reqwest/native-tls-vendored", "reqwest/native-tls-alpn"]

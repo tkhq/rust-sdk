@@ -51,6 +51,19 @@ let stamp = api_key.stamp("POST request body goes here".as_bytes());
 
 The stamp produced is a base64-encoded value, ready to be used as a stamp header. See [our documentation](https://docs.turnkey.com/developer-reference/api-overview/stamps#api-keys) for more information.
 
+## Randomized request signing
+
+If you sign the same request twice with a built-in P-256 or secp256k1 key, each
+signature gives that attempt a different fingerprint. When you create a hosted
+operator or quorum key, you can use the fingerprint to check that the app proof
+matches the specific request you sent.
+
+Both key types implement `UniqueStamp`, which the SDK requires when you create
+an operator or quorum key with a receipt. A custom stamper can implement it if
+it produces a fresh signature each time and returns a Turnkey `X-Stamp` for
+P-256 or secp256k1. See the [proofs README](../proofs/README.md) for how to verify
+the app proof.
+
 ## Error handling
 
 Errors are centralized in `StamperError`.
