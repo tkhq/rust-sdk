@@ -20,6 +20,7 @@ pub mod operator;
 pub mod outcome;
 pub mod output;
 pub mod pair;
+pub(crate) mod pending_creation;
 pub mod prompts;
 pub(crate) mod provisioning;
 pub mod pull_secret;

@@ -328,9 +328,8 @@ impl ErrorMessage {
 
     /// Build an emitted error from an [`anyhow::Error`].
     ///
-    /// The message is the full, size-capped error chain, not just the top
-    /// context layer. The `code` (and, when known, `httpStatus`) is derived by
-    /// walking the cause chain for the first typed error we recognize.
+    /// The message summarizes a saved-creation failure or includes the size-capped
+    /// error chain. Classification always uses the retained typed causes.
     pub fn from_error(error: &anyhow::Error) -> Self {
         // Preserve the historical special case first: missing required input
         // keeps its own dedicated `reason`.
@@ -448,6 +447,17 @@ mod tests {
         shell.emit(&TestMessage { value: "ok" }).unwrap();
 
         assert_eq!(shell.into_stdout(), "value: ok\n".as_bytes());
+    }
+
+    #[test]
+    fn human_status_leaves_both_streams_empty_in_json_mode() {
+        let mut shell = TestShell::with_json_formatter();
+        shell
+            .human()
+            .status("Proof verification", "passed")
+            .unwrap();
+        assert!(shell.stdout.is_empty());
+        assert!(shell.stderr.is_empty());
     }
 
     #[test]

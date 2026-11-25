@@ -1,20 +1,21 @@
 //! Create a TVC operator — hosted (the default) or YubiKey — and save it to
 //! the active organization.
 
+pub mod verify_result;
+
 use crate::{
     client::build_client,
     commands::Run,
     config::turnkey::{
-        Config, OperatorKind, OperatorRecord, OperatorRecordKind, QosOperatorPublicKey,
-        YubiKeyOperatorRecord, YubiKeySerial,
+        Config, HostedOperatorRecord, OperatorKind, OperatorRecord, OperatorRecordKind,
+        QosOperatorPublicKey, YubiKeyOperatorRecord, YubiKeySerial,
     },
-    operator::{
-        DEFAULT_HOSTED_OPERATOR_BASE_PATH, ensure_authenticated_org,
-        hosted::CreateOperatorRequestResult, hosted_activity_error, timestamp_ms,
-    },
+    operator::{DEFAULT_HOSTED_OPERATOR_BASE_PATH, timestamp_ms},
     outcome::Outcome,
     output::StdCtx,
+    pending_creation::{self, CreationClient, PreparedCreation},
     prompts,
+    terminal::TerminalText,
 };
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use clap::{ArgGroup, Args as ClapArgs, ValueEnum, builder::NonEmptyStringValueParser};
@@ -22,6 +23,7 @@ use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
 use tracing::instrument;
 use turnkey_client::generated::CreateTvcOperatorIntent;
+use turnkey_proofs::tvc::{VerifiedOperatorKeys, VerifiedOperatorParts};
 use uuid::Uuid;
 
 const DEFAULT_OPERATOR_NAME: &str = "tvc-operator";
@@ -93,6 +95,10 @@ pub struct Args {
     /// Make the new operator the organization's default operator kind.
     #[arg(long)]
     default: bool,
+
+    /// Display the hosted API result without verifying proofs or saving the operator.
+    #[arg(long, env = "TVC_DANGEROUS_SKIP_VERIFICATION")]
+    dangerous_skip_verification: bool,
 }
 
 /// A parsed `operator create` invocation: kind-specific inputs separated,
@@ -102,6 +108,7 @@ enum CreatePlan {
     Hosted {
         spec: HostedOperatorSpec,
         make_default: bool,
+        dangerous_skip_verification: bool,
     },
     Yubikey {
         name: Option<String>,
@@ -122,10 +129,15 @@ impl TryFrom<Args> for CreatePlan {
             account_path,
             serial,
             default,
+            dangerous_skip_verification,
         } = args;
 
         match kind {
             CreateKind::Hosted => {
+                ensure!(
+                    !(dangerous_skip_verification && default),
+                    "--default cannot be used with --dangerous-skip-verification"
+                );
                 ensure!(
                     serial.is_none(),
                     "--serial is only valid with --kind yubikey"
@@ -146,9 +158,14 @@ impl TryFrom<Args> for CreatePlan {
                             .unwrap_or_else(|| DEFAULT_HOSTED_OPERATOR_BASE_PATH.to_string()),
                     },
                     make_default: default,
+                    dangerous_skip_verification,
                 })
             }
             CreateKind::Yubikey => {
+                ensure!(
+                    !dangerous_skip_verification,
+                    "--dangerous-skip-verification is only valid with --kind hosted"
+                );
                 ensure!(
                     wallet_name.is_none() && wallet_id.is_none() && account_path.is_none(),
                     "--wallet-name, --wallet-id, and --account-path are only valid with --kind hosted"
@@ -164,35 +181,29 @@ impl TryFrom<Args> for CreatePlan {
     }
 }
 
-/// Terminal shapes of `operator create`, mapped onto the outcome vocabulary.
-pub enum CreateOutcome {
-    Hosted(OperatorCreated),
-    Yubikey(YubikeyOperatorAdded),
-}
-
-impl From<CreateOutcome> for Outcome {
-    fn from(outcome: CreateOutcome) -> Self {
-        match outcome {
-            CreateOutcome::Hosted(created) => Outcome::OperatorCreated(created),
-            CreateOutcome::Yubikey(added) => Outcome::YubikeyOperatorAdded(added),
-        }
-    }
-}
-
 impl Run for Args {
-    type Outcome = CreateOutcome;
+    type Outcome = Outcome;
 
     #[instrument(skip_all)]
-    async fn run(self, ctx: &mut StdCtx, mut config: Config) -> Result<CreateOutcome> {
+    async fn run(self, ctx: &mut StdCtx, mut config: Config) -> Result<Outcome> {
         match CreatePlan::try_from(self)? {
-            CreatePlan::Hosted { spec, make_default } => {
-                let (alias, configured_org_id) = config
+            CreatePlan::Hosted {
+                spec,
+                make_default,
+                dangerous_skip_verification,
+            } => {
+                let auth =
+                    CreationClient::new(build_client(&config).await?, dangerous_skip_verification)?;
+                let (alias, configured_org_id, configured_api_base_url) = config
                     .active_org_config()
-                    .map(|(alias, org)| (alias.clone(), org.id.as_str()))
+                    .map(|(alias, org)| (alias.clone(), org.id.as_str(), org.api_base_url.as_str()))
                     .context("No active organization. Run `tvc login` first.")?;
 
-                let auth = build_client(&config).await?;
-                ensure_authenticated_org(&auth.org_id, configured_org_id)?;
+                auth.ensure_configured_org(configured_org_id)?;
+                ensure!(
+                    auth.api_base_url == configured_api_base_url,
+                    "authenticated API environment differs from the operator's configured organization"
+                );
 
                 let HostedOperatorSpec { name, wallet, path } = spec;
 
@@ -204,76 +215,12 @@ impl Run for Args {
                 let intent = CreateTvcOperatorIntent {
                     wallet_name,
                     wallet_id,
-                    path: path.clone(),
-                    operator_name: name.clone(),
-                };
-
-                let result = auth
-                    .client
-                    .create_tvc_operator(auth.org_id.clone(), timestamp_ms()?, intent)
-                    .await
-                    .map_err(|error| hosted_activity_error("create hosted TVC operator", error))?;
-
-                let result = CreateOperatorRequestResult {
-                    name,
                     path,
-                    result: result.result,
+                    operator_name: name,
                 };
-
-                let record = OperatorRecord::try_from(result)?;
-
-                let org = config.orgs.get_mut(&alias).with_context(|| {
-                    format!("active organization '{alias}' disappeared from config")
-                })?;
-                org.operators.push(record.clone());
-
-                if make_default {
-                    org.default_operator_kind = OperatorKind::Hosted;
-                }
-
-                let OperatorRecord { name, kind } = record;
-                let OperatorRecordKind::Hosted(hosted) = kind else {
-                    return Err(anyhow!("hosted operator creation returned a local record"));
-                };
-
-                if let Err(save_error) = config.save().await {
-                    let record = config
-                        .orgs
-                        .get(&alias)
-                        .and_then(|org| org.operators.last())
-                        .with_context(|| {
-                            format!(
-                                "hosted operator disappeared from active organization '{alias}'"
-                            )
-                        })?;
-                    let recovery = recovery_toml(&alias, record)?;
-                    let default_note = if make_default {
-                        "\n\nAlso set default_operator_kind = \"hosted\" in the organization's table."
-                    } else {
-                        ""
-                    };
-
-                    return Err(anyhow!(
-                        r#"hosted operator {} was created remotely, but saving the local config failed: {save_error}
-Do not retry creation blindly; doing so would create another remote operator. Restore this record under the active organization in tvc.config.toml:
-
-{recovery}{default_note}"#,
-                        hosted.operator_id
-                    ));
-                }
-
-                Ok(CreateOutcome::Hosted(OperatorCreated {
-                    name,
-                    composite_public_key: format!(
-                        "{}{}",
-                        hosted.encrypt_public_key, hosted.sign_public_key
-                    ),
-                    operator_id: hosted.operator_id,
-                    wallet_id: hosted.wallet_id,
-                    encrypt_public_key: hosted.encrypt_public_key,
-                    sign_public_key: hosted.sign_public_key,
-                    saved: true,
-                }))
+                let creation =
+                    PreparedCreation::operator(auth.org_id, intent, alias, make_default)?;
+                pending_creation::submit(ctx, config, auth, creation, timestamp_ms()?).await
             }
             CreatePlan::Yubikey {
                 name,
@@ -358,10 +305,141 @@ Do not retry creation blindly; doing so would create another remote operator. Re
                     )
                 })?;
 
-                Ok(CreateOutcome::Yubikey(added))
+                Ok(Outcome::YubikeyOperatorAdded(added))
             }
         }
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("{field} must be a UUID")]
+pub(crate) struct MalformedHostedOperatorResponse {
+    field: &'static str,
+    #[source]
+    source: uuid::Error,
+}
+
+pub(crate) struct AcceptedHostedOperator(HostedOperatorRecord);
+
+impl TryFrom<VerifiedOperatorKeys> for AcceptedHostedOperator {
+    type Error = MalformedHostedOperatorResponse;
+
+    fn try_from(verified: VerifiedOperatorKeys) -> Result<Self, Self::Error> {
+        let VerifiedOperatorParts {
+            wallet,
+            base_path,
+            encrypt,
+            sign,
+            untrusted_operator_id,
+        } = verified.into_parts();
+        let wallet_id =
+            Uuid::parse_str(&wallet).map_err(|source| MalformedHostedOperatorResponse {
+                field: "accepted wallet ID",
+                source,
+            })?;
+        let operator_id = Uuid::parse_str(&untrusted_operator_id).map_err(|source| {
+            MalformedHostedOperatorResponse {
+                field: "unsigned operator routing label",
+                source,
+            }
+        })?;
+        Ok(Self(HostedOperatorRecord {
+            wallet_id,
+            operator_id,
+            path: base_path,
+            encrypt_public_key: encrypt.to_string(),
+            sign_public_key: sign.to_string(),
+            extra: toml::Table::new(),
+        }))
+    }
+}
+
+pub(crate) async fn save_hosted_operator(
+    mut config: Config,
+    alias: &str,
+    organization_id: Uuid,
+    api_base_url: &str,
+    name: String,
+    make_default: bool,
+    AcceptedHostedOperator(hosted): AcceptedHostedOperator,
+) -> Result<OperatorCreated> {
+    if register_hosted_operator(
+        &mut config,
+        alias,
+        organization_id,
+        api_base_url,
+        name.clone(),
+        hosted.clone(),
+        make_default,
+    )? {
+        config.save().await.context("accepted hosted operator could not be saved; run verify-result for the saved creation to finish registration")?;
+    }
+    Ok(OperatorCreated {
+        name,
+        composite_public_key: format!("{}{}", hosted.encrypt_public_key, hosted.sign_public_key),
+        operator_id: hosted.operator_id,
+        wallet_id: hosted.wallet_id,
+        encrypt_public_key: hosted.encrypt_public_key,
+        sign_public_key: hosted.sign_public_key,
+        saved: true,
+    })
+}
+
+fn register_hosted_operator(
+    config: &mut Config,
+    alias: &str,
+    organization_id: Uuid,
+    api_base_url: &str,
+    name: String,
+    hosted: HostedOperatorRecord,
+    make_default: bool,
+) -> Result<bool> {
+    let org = config.orgs.get_mut(alias).with_context(|| {
+        format!(
+            "original organization '{}' disappeared from config",
+            TerminalText(alias).single_line()
+        )
+    })?;
+    let configured_id =
+        Uuid::parse_str(&org.id).context("configured organization ID must be a UUID")?;
+    ensure!(
+        configured_id == organization_id,
+        "original organization alias now refers to a different organization"
+    );
+    ensure!(
+        org.api_base_url == api_base_url,
+        "original organization alias now refers to a different API environment"
+    );
+    let mut matched = false;
+    for existing in &org.operators {
+        if let OperatorRecordKind::Hosted(previous) = &existing.kind
+            && (previous.operator_id == hosted.operator_id
+                || (previous.encrypt_public_key == hosted.encrypt_public_key
+                    && previous.sign_public_key == hosted.sign_public_key))
+        {
+            ensure!(
+                existing.name == name
+                    && previous.operator_id == hosted.operator_id
+                    && previous.wallet_id == hosted.wallet_id
+                    && previous.path == hosted.path
+                    && previous.encrypt_public_key == hosted.encrypt_public_key
+                    && previous.sign_public_key == hosted.sign_public_key,
+                "saved operator conflicts with an existing local operator; no config was changed"
+            );
+            matched = true;
+        }
+    }
+    if matched {
+        return Ok(false);
+    }
+    org.operators.push(OperatorRecord {
+        name,
+        kind: OperatorRecordKind::Hosted(hosted),
+    });
+    if make_default {
+        org.default_operator_kind = OperatorKind::Hosted;
+    }
+    Ok(true)
 }
 
 /// A resolved YubiKey create using an existing local registry entry.
@@ -435,7 +513,7 @@ Encryption public key: {}
 Signing public key: {}
 Composite public key: {}
 Saved: true"#,
-            self.name,
+            TerminalText(&self.name).single_line(),
             self.operator_id,
             self.wallet_id,
             self.encrypt_public_key,
@@ -479,7 +557,9 @@ impl Display for YubikeyOperatorAdded {
 Operator name:       {}
 Serial:              {}
 Operator public key: {}{default_note}"#,
-            self.name, self.serial, self.operator_public_key
+            TerminalText(&self.name).single_line(),
+            self.serial,
+            self.operator_public_key
         )
     }
 }
@@ -536,6 +616,152 @@ mod tests {
         }
     }
 
+    const ORGANIZATION_ID: Uuid = uuid::uuid!("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+
+    /// Builds a config and hosted operator record for testing registration and repeated verification.
+    fn finalization_config() -> (Config, HostedOperatorRecord) {
+        let public = qos_p256::P256Pair::generate().unwrap().public_key();
+        let hosted = HostedOperatorRecord {
+            encrypt_public_key: hex::encode(public.encryption_public_key_bytes()),
+            sign_public_key: hex::encode(public.signing_public_key_bytes()),
+            ..match hosted_record().kind {
+                OperatorRecordKind::Hosted(hosted) => hosted,
+                _ => panic!("expected hosted fixture"),
+            }
+        };
+        (
+            Config {
+                orgs: BTreeMap::from([(
+                    "original".into(),
+                    OrgConfig {
+                        id: ORGANIZATION_ID.to_string(),
+                        api_key_path: PathBuf::from("unused"),
+                        api_base_url: "https://api.turnkey.com".into(),
+                        default_operator_kind: OperatorKind::Local,
+                        operators: Vec::new(),
+                        extra: toml::Table::new(),
+                    },
+                )]),
+                ..Config::default()
+            },
+            hosted,
+        )
+    }
+
+    fn register(config: &mut Config, hosted: HostedOperatorRecord) -> Result<bool> {
+        register_hosted_operator(
+            config,
+            "original",
+            ORGANIZATION_ID,
+            "https://api.turnkey.com",
+            "operator".into(),
+            hosted,
+            true,
+        )
+    }
+
+    #[test]
+    fn registration_adds_the_hosted_operator_and_sets_it_as_default() {
+        let (mut config, hosted) = finalization_config();
+        assert!(register(&mut config, hosted.clone()).unwrap());
+        let org = &config.orgs["original"];
+        assert_eq!(
+            org.operators,
+            vec![OperatorRecord {
+                name: "operator".into(),
+                kind: OperatorRecordKind::Hosted(hosted)
+            }]
+        );
+        assert_eq!(org.default_operator_kind, OperatorKind::Hosted);
+    }
+
+    #[test]
+    fn repeated_registration_preserves_later_edits_and_skips_save() {
+        let (mut config, hosted) = finalization_config();
+        assert!(register(&mut config, hosted.clone()).unwrap());
+        let org = config.orgs.get_mut("original").unwrap();
+        org.default_operator_kind = OperatorKind::Local;
+        let OperatorRecordKind::Hosted(existing) = &mut org.operators[0].kind else {
+            panic!("expected hosted record")
+        };
+        existing.extra.insert(
+            "future_field".into(),
+            toml::Value::String("preserve".into()),
+        );
+        let before = config.clone();
+        assert!(!register(&mut config, hosted).unwrap());
+        assert_eq!(config, before);
+    }
+
+    fn assert_registration_refused(config: &mut Config, hosted: HostedOperatorRecord) {
+        let before = config.clone();
+        assert!(register(config, hosted).is_err());
+        assert_eq!(*config, before);
+    }
+
+    #[test]
+    fn registration_refuses_an_operator_id_with_different_keys() {
+        let (mut config, hosted) = finalization_config();
+        assert!(register(&mut config, hosted.clone()).unwrap());
+        assert_registration_refused(
+            &mut config,
+            HostedOperatorRecord {
+                sign_public_key: "different-key".into(),
+                ..hosted
+            },
+        );
+    }
+
+    #[test]
+    fn registration_refuses_keys_already_registered_under_another_id() {
+        let (mut config, hosted) = finalization_config();
+        assert!(register(&mut config, hosted.clone()).unwrap());
+        assert_registration_refused(
+            &mut config,
+            HostedOperatorRecord {
+                operator_id: Uuid::from_u128(2),
+                ..hosted
+            },
+        );
+    }
+
+    #[test]
+    fn registration_refuses_a_renamed_operator() {
+        let (mut config, hosted) = finalization_config();
+        assert!(register(&mut config, hosted.clone()).unwrap());
+        config.orgs.get_mut("original").unwrap().operators[0].name = "different-name".into();
+        assert_registration_refused(&mut config, hosted);
+    }
+
+    #[test]
+    fn registration_refuses_a_different_organization() {
+        let (mut config, hosted) = finalization_config();
+        config.orgs.get_mut("original").unwrap().id = Uuid::from_u128(2).to_string();
+        assert_registration_refused(&mut config, hosted);
+    }
+
+    #[test]
+    fn registration_refuses_a_different_api_environment() {
+        let (mut config, hosted) = finalization_config();
+        config.orgs.get_mut("original").unwrap().api_base_url =
+            "https://api.preprod.turnkey.engineering".into();
+        assert_registration_refused(&mut config, hosted);
+    }
+
+    #[test]
+    fn malformed_routing_labels_preserve_classification() {
+        let error: anyhow::Error = MalformedHostedOperatorResponse {
+            field: "unsigned operator routing label",
+            source: Uuid::parse_str("not-a-uuid").unwrap_err(),
+        }
+        .into();
+        assert_eq!(
+            serde_json::to_value(crate::errors::classify(&error).code).unwrap(),
+            serde_json::json!("malformed_response")
+        );
+        assert!(error.chain().any(|cause| cause.is::<uuid::Error>()));
+    }
+
     #[test]
     fn recovery_toml_contains_complete_hosted_record() {
         #[derive(serde::Deserialize)]
@@ -563,6 +789,7 @@ mod tests {
             account_path: None,
             serial: None,
             default: false,
+            dangerous_skip_verification: false,
         }
     }
 
@@ -570,7 +797,12 @@ mod tests {
     fn a_hosted_plan_applies_the_hosted_defaults() {
         let plan = CreatePlan::try_from(args(CreateKind::Hosted)).unwrap();
 
-        let CreatePlan::Hosted { spec, make_default } = plan else {
+        let CreatePlan::Hosted {
+            spec,
+            make_default,
+            dangerous_skip_verification,
+        } = plan
+        else {
             panic!("a hosted invocation must produce a hosted plan");
         };
         assert_eq!(
@@ -582,6 +814,7 @@ mod tests {
             }
         );
         assert!(!make_default);
+        assert!(!dangerous_skip_verification);
     }
 
     #[test]

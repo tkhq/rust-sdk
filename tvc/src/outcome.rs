@@ -18,6 +18,9 @@ use crate::commands::deploy::approve::{
     ApprovalAlreadyPosted, ApprovalDryRun, ApprovalGenerated, ApprovalPosted,
 };
 use crate::commands::{app, deploy, keys, login, operator, skills, version, yubikey};
+use crate::pending_creation::unverified::{
+    UnverifiedCreationPending, UnverifiedOperatorResult, UnverifiedQuorumKeyResult,
+};
 use serde::Serialize;
 use std::fmt::{self, Display, Formatter};
 
@@ -32,6 +35,10 @@ use std::fmt::{self, Display, Formatter};
 pub enum Outcome {
     LoggedIn(login::LoggedIn),
     OperatorCreated(operator::create::OperatorCreated),
+    CreationPending(crate::pending_creation::CreationPending),
+    UnverifiedCreationPending(UnverifiedCreationPending),
+    UnverifiedOperatorResult(UnverifiedOperatorResult),
+    UnverifiedQuorumKeyResult(UnverifiedQuorumKeyResult),
     YubikeyOperatorAdded(operator::create::YubikeyOperatorAdded),
     ProfileDeleted(login::ProfileDeleted),
     ManifestApprovalPosted(ApprovalPosted),
@@ -75,6 +82,10 @@ impl Display for Outcome {
         match self {
             Outcome::LoggedIn(msg) => msg.fmt(f),
             Outcome::OperatorCreated(msg) => msg.fmt(f),
+            Outcome::CreationPending(msg) => msg.fmt(f),
+            Outcome::UnverifiedCreationPending(msg) => msg.fmt(f),
+            Outcome::UnverifiedOperatorResult(msg) => msg.fmt(f),
+            Outcome::UnverifiedQuorumKeyResult(msg) => msg.fmt(f),
             Outcome::YubikeyOperatorAdded(msg) => msg.fmt(f),
             Outcome::ProfileDeleted(msg) => msg.fmt(f),
             Outcome::ManifestApprovalPosted(msg) => msg.fmt(f),

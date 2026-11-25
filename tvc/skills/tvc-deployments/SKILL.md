@@ -12,6 +12,47 @@ metadata:
 
 > **This skill drives the `tvc` CLI, not the HTTP API.** Everything here runs `tvc <command> --message-format json` and reads NDJSON from stdout. Auth uses `TVC_*` env vars, not the `TURNKEY_API_*` set the HTTP-API skills use. Do not mix the two.
 
+## Hosted creation verification
+
+By default, hosted `operator create` and `keys create-quorum-key` request app proofs and
+verify returned keys against the submitted request before saving or returning
+success. The supported API environments are production, preproduction and
+development, each with its own pinned Signer quorum key.
+
+Human output confirms `Proof verification: passed` after acceptance. JSON output
+contains the existing command result without proof diagnostics. Acceptance does
+not establish an independent manifest/PCR allowlist, current attestation freshness
+or revocation status. Operator IDs and share IDs remain unsigned routing labels.
+
+Missing or invalid proof evidence fails as `proof_verification_failed`.
+Unsupported API environments fail before submission. After submission, remote
+creation may already have succeeded even when verification fails. Investigate
+before repeating creation; the CLI does not recreate keys to retry verification.
+See [the error reference](references/error-reference.md).
+
+An explicit `--dangerous-skip-verification` opts into unverified API results.
+Use it for unsigned test results or, with `verify-result --activity-id`, to
+look up a result after losing the local receipt. This mode cannot establish
+Signer provenance or a match to the original request. It returns keys labeled
+unverified. A fresh create still submits the request to Turnkey. The CLI leaves
+an unverified operator out of the local TVC profile.
+
+Hosted creation saves a local receipt before sending each signed request.
+If approvals or processing remain, read `reason: creation_pending`, save its
+`operationId`, and arrange approval of the untrusted `activityId` lookup hint.
+After approval, run `tvc operator create verify-result` or
+`tvc keys create-quorum-key verify-result` in the original organization and API
+environment. Supply the saved `operationId` and required `--activity-id`. If no
+activity ID was received, find it in Turnkey. The command fetches the existing
+activity and checks the result against the saved creation request.
+
+Receipts stay in `~/.config/turnkey/pending-creations/`, including after success.
+They contain the original intent and public request fingerprints, without
+credentials or private keys. Treat them as trusted local state. Each ordinary invocation
+of `verify-result` fetches and verifies the result again. An existing matching
+operator keeps its current default selection. See the
+[command reference](references/deploy-lifecycle.md#verify-a-hosted-creation-result).
+
 ## When to use
 
 Driving the `tvc` CLI: shipping a TVC deployment, maintaining an established TVC project, cutting traffic to a new version, checking runtime status, or scripting any of that in CI or an agent loop. First-time human onboarding (org setup, `tvc login`, dashboard key registration) belongs to the [TVC quickstart](https://docs.turnkey.com/features/verifiable-cloud/quickstart). Wallet, signing, and policy work over the HTTP API belongs to the other Turnkey skills.
@@ -110,7 +151,7 @@ Hostname: read `publicDomain` from `tvc app list --message-format json`. It is a
 5. **Branch on `code`, never on `message`.**
 6. **Bound every streaming command.** `debug-logs --poll` runs until killed.
 
-## Known gaps in the CLI (verified against tvc 0.17.1)
+## Known gaps in the CLI (verified against tvc 0.18.0)
 
 Inventing these fails with `usage_error`. Each names the `--help` check for your installed version; when check and text disagree, trust the check.
 
@@ -121,7 +162,6 @@ Inventing these fails with `usage_error`. Each names the `--help` check for your
 - **No `--wait` / phase flag on `deploy get-status`** (check: `tvc deploy get-status --help`). Poll (Rule 3).
 - **No `--version` flag** (check: `tvc --help`). Use `tvc version`.
 - **No command lists supported QOS versions** (check: `tvc deploy --help`). The API endpoint exists (`get_tvc_qos_versions`) but the CLI does not call it. Keep the `qosVersion` that `deploy init` scaffolds; if `deploy create` rejects one, the `api_error` message lists the accepted releases.
-- **`code: invalid_input` is never emitted.** It is in the taxonomy `tvc --help` prints, but the classifier does not produce it; do not branch on it.
 - **`app status` and `deploy get-status` answer HTTP 500 for an app with no live deployment yet.** A backend gap, not an outage: keep polling after approve (observed 25 to 50 seconds of 500s before the first real status), and do not read a 500 from `app status` on a never-deployed app as a failure.
 - **`app create` under env-var auth with no profile creates the app, then fails with `command_error` "no active organization set".** The API call succeeded; the CLI died saving the last app id to a profile that does not exist, and the `app_created` line with `appId` and `manifestSetOperatorIds` is lost. Do **not** retry (you would mint a duplicate). Recover the id with `tvc app list -n <name> --message-format json`; the operator ids are not recoverable, so approve with `--operator-seed-path` instead of `--operator-id`. Create apps from a machine with a `tvc login` profile when you can.
 

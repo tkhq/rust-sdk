@@ -5,13 +5,15 @@
 //! [`MissingResource`] error, and the [`classify`] logic that walks an
 //! [`anyhow::Error`] chain and maps recognized causes to a [`Classification`]
 //! `(code, http_status)`. It also owns [`render_error_chain`], the shared
-//! human/JSON renderer that preserves the full source chain and caps messages
-//! before they cross the CLI output boundary.
+//! human/JSON renderer that summarizes saved-creation failures, preserves other
+//! source chains, and caps messages before they cross the CLI output boundary.
 
+use crate::pending_creation::CreationFailure;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use turnkey_client::TurnkeyClientError;
+use turnkey_proofs::tvc::TvcProvenanceError;
 
 /// Cap on rendered error messages. Large enough for any real API error body
 /// (typical Turnkey error JSON is < 1 KB); small enough that a runaway body
@@ -84,9 +86,12 @@ pub enum ErrorCode {
     MissingRequiredInput,
     /// Bad flags/args — a clap parse failure
     UsageError,
-    #[allow(dead_code)]
     /// Semantic validation failure in command code.
     InvalidInput,
+    /// Coordinator routing metadata cannot be converted to the required types.
+    MalformedResponse,
+    /// Required evidence could not authenticate the returned TVC output.
+    ProofVerificationFailed,
     /// HTTP 401/403.
     Unauthorized,
     /// HTTP 404, or an OK response with an empty resource.
@@ -125,6 +130,26 @@ impl Classification {
 /// status; callers still render the complete original chain.
 pub fn classify(error: &anyhow::Error) -> Classification {
     for cause in error.chain() {
+        if cause
+            .downcast_ref::<crate::commands::operator::create::MalformedHostedOperatorResponse>()
+            .is_some()
+        {
+            return Classification::new(ErrorCode::MalformedResponse, None);
+        }
+        if let Some(error) = cause.downcast_ref::<TvcProvenanceError>() {
+            let code = match error {
+                TvcProvenanceError::InvalidExpectation(_) => ErrorCode::InvalidInput,
+                TvcProvenanceError::UnsupportedEnvironment
+                | TvcProvenanceError::ProofUnavailable
+                | TvcProvenanceError::BootProofLookup(_)
+                | TvcProvenanceError::UnsupportedContext
+                | TvcProvenanceError::MalformedEvidence(_)
+                | TvcProvenanceError::EndorsementFailure
+                | TvcProvenanceError::ReceiptMismatch
+                | TvcProvenanceError::ClaimMismatch(_) => ErrorCode::ProofVerificationFailed,
+            };
+            return Classification::new(code, None);
+        }
         if cause.downcast_ref::<MissingResource>().is_some() {
             return Classification::new(ErrorCode::NotFound, None);
         }
@@ -166,12 +191,7 @@ pub(crate) fn binary_name() -> String {
         .unwrap_or_else(|| "tvc".to_string())
 }
 
-/// Render an error's complete cause chain like anyhow's alternate
-/// `{error:#}` display (links joined with `": "`), then truncate the result to
-/// [`MAX_ERROR_MESSAGE_CHARS`].
-///
-/// Every source link is preserved, even when a parent error's `Display`
-/// already embeds the source text.
+/// Summarize saved-creation failures or render the complete cause chain, with a size cap.
 pub(crate) fn render_error_chain(error: &anyhow::Error) -> String {
     let mut rendered = String::new();
     for cause in error.chain() {
@@ -180,6 +200,10 @@ pub(crate) fn render_error_chain(error: &anyhow::Error) -> String {
             rendered.push_str(": ");
         }
         rendered.push_str(&text);
+        if cause.is::<CreationFailure>() {
+            // The creation error already renders its SDK cause and recovery guidance.
+            break;
+        }
     }
     truncate_message(rendered)
 }
@@ -571,6 +595,16 @@ mod tests {
         assert_eq!(
             classify(&error),
             Classification::new(ErrorCode::ApprovalRequired, None)
+        );
+    }
+
+    #[test]
+    fn proof_failure_is_classifiable_through_context() {
+        let error = anyhow::Error::new(turnkey_proofs::tvc::TvcProvenanceError::ReceiptMismatch)
+            .context("proof acceptance failed; no keys were saved");
+        assert_eq!(
+            classify(&error),
+            Classification::new(ErrorCode::ProofVerificationFailed, None)
         );
     }
 

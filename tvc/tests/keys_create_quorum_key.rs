@@ -12,6 +12,26 @@ fn operator_encrypt_key() -> String {
 }
 
 #[test]
+fn quorum_key_verify_result_requires_operation_id_when_skip_env_is_false() {
+    cargo_bin_cmd!("tvc")
+        .env_clear()
+        .env("TVC_DANGEROUS_SKIP_VERIFICATION", "false")
+        .args([
+            "keys",
+            "create-quorum-key",
+            "verify-result",
+            "--activity-id",
+            "candidate",
+        ])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains(
+            r"the following required arguments were not provided:
+  <OPERATION_ID>",
+        ));
+}
+
+#[test]
 fn create_quorum_key_help_lists_required_explicit_inputs() {
     cargo_bin_cmd!("tvc")
         .arg("keys")
@@ -24,21 +44,31 @@ fn create_quorum_key_help_lists_required_explicit_inputs() {
         .stdout(predicate::str::contains("--operator-encrypt-keys <HEX>"))
         .stdout(predicate::str::contains("TVC_OPERATOR_ENCRYPT_KEYS"))
         .stdout(predicate::str::contains("--operator-ids <UUID>"))
-        .stdout(predicate::str::contains("TVC_OPERATOR_IDS"));
+        .stdout(predicate::str::contains("TVC_OPERATOR_IDS"))
+        .stdout(predicate::str::contains("--verbose-proofs").not());
 }
 
 #[test]
-fn create_quorum_key_requires_threshold_and_one_operator_source() {
+fn create_quorum_key_requires_threshold_with_operator_ids() {
     cargo_bin_cmd!("tvc")
         .env_clear()
-        .arg("keys")
-        .arg("create-quorum-key")
+        .args(["keys", "create-quorum-key", "--operator-ids"])
+        .arg(format!("{FIRST_OPERATOR_ID},{SECOND_OPERATOR_ID}"))
         .assert()
-        .failure()
+        .code(2)
         .stderr(predicate::str::contains(
-            "the following required arguments were not provided",
-        ))
-        .stderr(predicate::str::contains("--threshold <THRESHOLD>"))
+            r"the following required arguments were not provided:
+  --threshold <THRESHOLD>",
+        ));
+}
+
+#[test]
+fn create_quorum_key_requires_an_operator_source_with_threshold() {
+    cargo_bin_cmd!("tvc")
+        .env_clear()
+        .args(["keys", "create-quorum-key", "--threshold", "2"])
+        .assert()
+        .code(2)
         .stderr(predicate::str::contains(
             "<--operator-encrypt-keys <HEX>|--operator-ids <UUID>>",
         ));
