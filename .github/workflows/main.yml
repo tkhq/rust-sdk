@@ -42,6 +42,6 @@ jobs:
       - name: Run examples
         env:
           TURNKEY_ORGANIZATION_ID: 651b573c-861b-4f10-a478-cbcfe0c226af
-          TURNKEY_API_PUBLIC_KEY: 023d55c1a94d22f780602f427484578583d3c1d9d0226133e20651c96ac5cb3e6c
+          TURNKEY_API_PUBLIC_KEY: 0243df9d55fa88cd80b4ab3698e64f42389d6be75a477e3dd47eeb2826c22aa7b6
           TURNKEY_API_PRIVATE_KEY: ${{ secrets.TURNKEY_API_PRIVATE_KEY }}
         run: make examples
