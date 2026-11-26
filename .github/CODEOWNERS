@@ -1,6 +1,16 @@
 # Cargo.lock changes should trigger dependency reviewers
 Cargo.lock @tkhq/dependency-reviewers
 
+# CI workflows.
+/.github/workflows/ @tkhq/dependency-reviewers
+
+# Build and release config that CI runs: toolchain, Cross images and
+# pre-build scripts, cargo config, and release-plz settings.
+/rust-toolchain.toml @tkhq/dependency-reviewers
+/Cross.toml @tkhq/dependency-reviewers
+/.cargo/ @tkhq/dependency-reviewers
+/release-plz.toml @tkhq/dependency-reviewers
+
 # TVC's musl build downloads and pins dependencies outside Cargo.lock
 /.github/cross/install-pcsc-lite.sh @tkhq/dependency-reviewers
 /.github/workflows/tvc-pcsc-release-check.yml @tkhq/dependency-reviewers
