@@ -16,7 +16,9 @@ jobs:
     name: Release-plz release
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # This environment releases crates on crates.io, requires approval
+    # crates.io trusted publishing must require this environment. Its only
+    # protection is a `main` branch policy; there are no required reviewers,
+    # so the review gate is the merge of the labelled PR.
     environment: release
     # only trigger this job if the push to main is from a merged PR with a "release" label
     if: >
@@ -34,8 +36,20 @@ jobs:
           # `fetch-depth: 0` is needed to clone all the git history, which is necessary to
           # release from the latest commit of the release PR.
           fetch-depth: 0
+      # A merged PR's run checks out the tip of main when the job starts, not
+      # the PR's merge commit. Refuse to publish if anything else landed since.
+      - name: Verify main is the release PR merge commit
+        env:
+          MERGE_COMMIT_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          set -euo pipefail
+          head_sha=$(git rev-parse HEAD)
+          if [[ "${head_sha}" != "${MERGE_COMMIT_SHA}" ]]; then
+            echo "main is at ${head_sha}, not the release PR merge commit ${MERGE_COMMIT_SHA}" >&2
+            exit 1
+          fi
       - name: install Rust
-        uses: dtolnay/rust-toolchain@v1
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
           toolchain: stable
           components: clippy,rustfmt
@@ -53,7 +67,12 @@ jobs:
     name: Release-plz PR
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: ${{ github.repository_owner == 'tkhq' }}
+    # Skip PRs closed without merging: their runs check out unmerged PR code,
+    # and a fork branch named release-plz-* would otherwise start the TVC
+    # binaries workflow_run.
+    if: >
+      github.repository_owner == 'tkhq' &&
+      github.event.pull_request.merged == true
     permissions:
       contents: write
       pull-requests: write
@@ -68,7 +87,7 @@ jobs:
           # determine the next version and build the changelog.
           fetch-depth: 0
       - name: install Rust
-        uses: dtolnay/rust-toolchain@v1
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
           toolchain: stable
           components: clippy,rustfmt

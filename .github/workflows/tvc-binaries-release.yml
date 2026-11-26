@@ -14,9 +14,8 @@ permissions:
   contents: read
 
 jobs:
-  build:
-    # PR and manual runs always build. Release runs build only after
-    # the triggering Release-plz workflow succeeds.
+  verify_source:
+    name: Verify release source
     if: >
       github.repository_owner == 'tkhq' &&
       (
@@ -27,6 +26,38 @@ jobs:
           github.event.workflow_run.conclusion == 'success'
         )
       )
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    outputs:
+      head_sha: ${{ steps.verified.outputs.head_sha || steps.current.outputs.head_sha }}
+    steps:
+      - name: Use event source commit
+        if: github.event_name != 'workflow_run'
+        id: current
+        run: echo "head_sha=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
+
+      - name: Checkout trusted verification script
+        if: github.event_name == 'workflow_run'
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Verify release source commit
+        if: github.event_name == 'workflow_run'
+        id: verified
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
+          EXPECTED_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: bash .github/scripts/verify-tvc-release-source.sh
+
+  build:
+    # Release builds require a verified source commit.
+    needs: verify_source
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
@@ -54,7 +85,7 @@ jobs:
         with:
           # workflow_run's github.sha points at the default branch, so release
           # builds must explicitly use the commit that release-plz ran against.
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ needs.verify_source.outputs.head_sha }}
           # drop creds since we don't need them later - https://release-plz.dev/docs/github/persist-credentials
           persist-credentials: false
 
@@ -153,39 +184,23 @@ jobs:
       github.event_name == 'workflow_run' &&
       github.event.workflow_run.name == 'Release-plz' &&
       github.event.workflow_run.conclusion == 'success'
-    needs: build
+    needs: [verify_source, build]
     runs-on: ubuntu-latest
     permissions:
       actions: read
       contents: write
     steps:
-      # The `Release-plz` workflow can succeed while its `release-plz-release` job was skipped.
-      # For example, if a `release-plz-*` PR that was opened but closed without being merged.
-      # The `workflow_run` context (used above in the `if`) only exposes the overall conclusion,
-      # so we must query with `gh api` below
-      - name: Verify release-plz-release job succeeded
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_PLZ_RUN_ID: ${{ github.event.workflow_run.id }}
-        run: |
-          set -euo pipefail
-          conclusion=$(gh api \
-            "repos/${GITHUB_REPOSITORY}/actions/runs/${RELEASE_PLZ_RUN_ID}/jobs?filter=latest" \
-            --jq '[.jobs[] | select(.name == "Release-plz release") | .conclusion] | first // ""')
-
-          if [[ "${conclusion}" != "success" ]]; then
-            echo "Release-plz release did not succeed: ${conclusion:-not found}" >&2
-            exit 1
-          fi
-
       - name: Checkout release source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ needs.verify_source.outputs.head_sha }}
           persist-credentials: false
 
       - name: Read tvc version
         id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERIFIED_HEAD_SHA: ${{ needs.verify_source.outputs.head_sha }}
         run: |
           set -euo pipefail
           version=$(cargo metadata --no-deps --format-version 1 |
@@ -195,6 +210,11 @@ jobs:
             exit 1
           fi
           echo "tag=tvc-v${version}" >> "${GITHUB_OUTPUT}"
+          tag_sha=$(gh api "repos/${GITHUB_REPOSITORY}/commits/tvc-v${version}" --jq .sha)
+          if [[ "${tag_sha}" != "${VERIFIED_HEAD_SHA}" ]]; then
+            echo "TVC release tag does not point at the verified commit" >&2
+            exit 1
+          fi
 
       - name: Download build artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -212,5 +232,4 @@ jobs:
           gh release view "${RELEASE_TAG}" >/dev/null
           gh release upload "${RELEASE_TAG}" \
             artifacts/*.tar.gz \
-            artifacts/*.tar.gz.sha256 \
-            --clobber
+            artifacts/*.tar.gz.sha256
