@@ -188,6 +188,9 @@ Default guidance for coding-agent runs in this repository.
   should not expand the release API.
 - Avoid `unreachable!()` in tests; use exact equality, pattern assertions, or a
   descriptive failure.
+- Don't write table tests: a loop over a hand-written list of cases inside one
+  `#[test]`. Give each case its own named test, so a failure names the case
+  and does not hide the cases after it.
 - Test CLI parsing for the defaults, conflicts, and typed values that form part
   of our interface. Avoid duplicating Clap's validation as deeper command
   validation tests.
